@@ -235,4 +235,73 @@ const EXP_1: WorkedExample = {
   result: { cash: 487_50, card: 60_00, netWorth: 427_50 },
 };
 
-export const EXAMPLES: WorkedExample[] = [EXP_1, BAL_1];
+const AVL_1: WorkedExample = {
+  id: 'AVL-1',
+  rule: 'Available balance',
+  title: 'Available = cash + savings − upcoming bills − reserved limits',
+  today: '2026-10-14',
+  data: ex.snapshot({
+    profile: [
+      ex.profile({ openingDate: '2026-10-01', openingCash: 1_200_00, openingSavings: 3_000_00 }),
+    ],
+    debt: [
+      ex.card({
+        id: 'card-1',
+        name: 'Visa',
+        openingDate: '2026-10-01',
+        openingBalance: 230_00,
+        dueDay: 21,
+      }),
+    ],
+    expense: [ex.expense({ amount: 100_00, date: '2026-10-13', note: 'Groceries' })],
+    subscription: [
+      ex.subscription({ name: 'Streamflix', amount: 15_99, nextRenewal: '2026-10-20' }),
+      ex.subscription({
+        name: 'FitHub Gym',
+        amount: 39_00,
+        nextRenewal: '2026-11-02',
+        category: 'health',
+      }),
+    ],
+    budgetLimit: [
+      ex.limit({ category: 'rent', period: 'monthly', amount: 1_200_00, reserve: true }),
+      ex.limit({ category: 'food', period: 'weekly', amount: 120_00 }),
+    ],
+  }),
+  steps: [
+    'Cash is $1,100.00 after $100.00 of groceries; savings are $3,000.00.',
+    'Bills still due this month: Streamflix $15.99 on Oct 20 and the Visa balance of $230.00 on Oct 21. The gym renews in November, so it waits.',
+    'Your rent limit of $1,200.00 is reserved and nothing is spent yet, so $1,200.00 is held back.',
+    '$1,100.00 + $3,000.00 − $245.99 − $1,200.00 = $2,654.01 available to spend.',
+  ],
+  result: {
+    billsTotal: 245_99,
+    reserved: 1_200_00,
+    available: 2_654_01,
+    foodSpent: 100_00,
+    foodPct: 83,
+  },
+};
+
+const LIM_1: WorkedExample = {
+  id: 'LIM-1',
+  rule: 'Spending limit',
+  title: 'Limits warn at 80%, 100% and 120%',
+  today: '2026-10-14',
+  data: ex.snapshot({
+    budgetLimit: [ex.limit({ category: 'food', period: 'monthly', amount: 100_00 })],
+    expense: [
+      ex.expense({ amount: 60_00, date: '2026-10-05', note: 'Groceries' }),
+      ex.expense({ amount: 25_00, date: '2026-10-09', note: 'Takeout' }),
+    ],
+  }),
+  steps: [
+    'Your Food limit is $100.00 for October.',
+    'You have spent $85.00, which is 85%: past the 80% warning, so Funancial gives you a heads-up.',
+    'A $20.00 lunch would take you to $105.00, which is 105%: over the limit.',
+    'Past 120% Funancial tells you the limit is well exceeded. Subscriptions and card purchases count too.',
+  ],
+  result: { spent: 85_00, pct: 85, levelRank: 1, pctAfterLunch: 105, levelRankAfterLunch: 2 },
+};
+
+export const EXAMPLES: WorkedExample[] = [EXP_1, LIM_1, BAL_1, AVL_1];
