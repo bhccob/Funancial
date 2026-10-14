@@ -268,6 +268,7 @@ export function buildDemoSnapshot(today: LocalDate, seed = 42): DataSnapshot {
       amount: s.amount,
       cycle: 'monthly',
       nextRenewal: thisMonth > today ? thisMonth : nextMonthDay(today, s.day),
+      anchorDay: s.day,
       category: s.category,
       paymentMethod: s.paymentMethod,
       cardId: s.paymentMethod === 'credit_card' ? CARD_ID : null,

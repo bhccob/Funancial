@@ -122,6 +122,8 @@ export const SubscriptionSchema = z
     amount: PositiveMoney,
     cycle: CycleSchema,
     nextRenewal: LocalDateSchema,
+    /** Day of month renewals return to (a 31st sub renews on Feb 28, then Mar 31). */
+    anchorDay: DayOfMonth,
     category: CategorySchema,
     paymentMethod: PaymentMethodSchema,
     cardId: z.string().min(1).nullable(),

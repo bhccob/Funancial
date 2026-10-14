@@ -413,3 +413,36 @@ describe('review fixes: demo start failing midway', () => {
     ).toEqual(['after', 'mine']);
   });
 });
+
+describe('data changes across tabs', () => {
+  it('put posts a data change', async () => {
+    const { store, posts } = await freshStore();
+    await store.getState().put('expense', makeExpense({ id: 'e1' }));
+    expect(posts).toContainEqual({ type: 'reload', reason: 'data' });
+  });
+
+  it('putMany saves several records and posts once', async () => {
+    const { deps, store, posts } = await freshStore();
+    const before = posts.length;
+    await store.getState().putMany([
+      { table: 'expense', record: makeExpense({ id: 'e1' }) },
+      { table: 'expense', record: makeExpense({ id: 'e2' }) },
+    ]);
+    expect(posts.length - before).toBe(1);
+    expect(
+      (await reboot(deps))
+        .getState()
+        .data.tables.expense.map((e) => e.id)
+        .sort(),
+    ).toEqual(['e1', 'e2']);
+  });
+
+  it('refresh picks up another tab’s write', async () => {
+    const { deps, store } = await freshStore();
+    const other = await reboot(deps);
+    await store.getState().put('expense', makeExpense({ id: 'from-a' }));
+    expect(other.getState().data.tables.expense).toEqual([]);
+    await other.getState().refresh();
+    expect(other.getState().data.tables.expense.map((e) => e.id)).toEqual(['from-a']);
+  });
+});

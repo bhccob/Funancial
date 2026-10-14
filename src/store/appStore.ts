@@ -26,7 +26,13 @@ import type { Repository, SkippedRecord } from '@/data/repository';
 import { createWebRepository } from '@/data/webRepository';
 import { toLocalDate, type LocalDate } from '@/domain/dates';
 import { defaultSettings } from '@/domain/entities';
-import { emptySnapshot, type DataSnapshot, type EntityOf, type TableName } from '@/domain/snapshot';
+import {
+  emptySnapshot,
+  type DataSnapshot,
+  type EntityOf,
+  type TableName,
+  type TableRecord,
+} from '@/domain/snapshot';
 import { tabChannel, type SyncMessage } from '@/lib/broadcast';
 import { safeStorage, type SafeStorage } from '@/lib/safeStorage';
 
@@ -68,6 +74,10 @@ export interface AppState {
   setSecret(secret: string, kind: SecretKind): Promise<void>;
   clearSecret(): Promise<void>;
   put<T extends TableName>(table: T, record: EntityOf<T>): Promise<void>;
+  /** Several records in one transaction (all or nothing). */
+  putMany(items: TableRecord[]): Promise<void>;
+  /** Reload data from storage, e.g. after another tab wrote. */
+  refresh(): Promise<void>;
   remove(table: TableName, id: string): Promise<void>;
   createBackup(passphrase: string): Promise<{ fileName: string; text: string }>;
   restoreBackup(text: string, passphrase: string): Promise<void>;
@@ -284,13 +294,28 @@ export function createAppStore(deps: AppDeps): StoreApi<AppState> {
       },
 
       async put(table, record) {
-        await unlocked().repo.put(table, record);
+        await get().putMany([{ table, record } as TableRecord]);
+      },
+
+      async putMany(items) {
+        if (items.length === 0) return;
+        await unlocked().repo.putMany(items);
         const data = get().data;
-        const rows = data.tables[table] as Array<{ id: string }>;
-        const next = rows.some((r) => r.id === record.id)
-          ? rows.map((r) => (r.id === record.id ? record : r))
-          : [...rows, record];
-        set({ data: { ...data, tables: { ...data.tables, [table]: next } } });
+        const tables = { ...data.tables } as Record<TableName, Array<{ id: string }>>;
+        for (const { table, record } of items) {
+          const rows = tables[table];
+          tables[table] = rows.some((r) => r.id === record.id)
+            ? rows.map((r) => (r.id === record.id ? record : r))
+            : [...rows, record];
+        }
+        set({ data: { ...data, tables: tables as DataSnapshot['tables'] } });
+        deps.channel.post({ type: 'reload', reason: 'data' });
+      },
+
+      async refresh() {
+        if (get().phase !== 'unlocked' || !session?.repo) return;
+        const { snapshot, skipped } = await session.repo.loadAll();
+        set({ data: snapshot, skipped });
       },
 
       async remove(table, id) {
@@ -300,6 +325,7 @@ export function createAppStore(deps: AppDeps): StoreApi<AppState> {
         set({
           data: { ...data, tables: { ...data.tables, [table]: rows.filter((r) => r.id !== id) } },
         });
+        deps.channel.post({ type: 'reload', reason: 'data' });
       },
 
       async createBackup(passphrase) {

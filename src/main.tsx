@@ -9,8 +9,11 @@ import '@/styles/index.css';
 
 initTheme();
 
-// Another tab replaced, re-keyed or deleted the data: start over from storage.
-tabChannel().subscribe(() => window.location.reload());
+// Another tab changed data: reload it. If it replaced, re-keyed or deleted the data, start over.
+tabChannel().subscribe((m) => {
+  if (m.reason === 'data') void appStore.getState().refresh();
+  else window.location.reload();
+});
 
 const container = document.getElementById('root');
 if (!container) throw new Error('Missing #root element');

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { emptySnapshot, type DataSnapshot } from '@/domain/snapshot';
-import { makeExpense, makeGoal } from '@/test/fixtures';
+import { makeExpense, makeGoal, makeSubscription } from '@/test/fixtures';
 import {
   backupFileName,
   createBackup,
@@ -93,7 +93,7 @@ describe('plain export', () => {
     const parsed = JSON.parse(exportPlainJson(snap, new Date('2026-10-14T10:00:00.000Z')));
     expect(parsed).toEqual({
       format: 'funancial-export',
-      schemaVersion: 1,
+      schemaVersion: 2,
       exportedAt: '2026-10-14T10:00:00.000Z',
       data: snap,
     });
@@ -106,5 +106,21 @@ describe('file names', () => {
       'funancial-backup-2026-10-14.funbak',
     );
     expect(exportFileName(new Date(2026, 0, 2))).toBe('funancial-export-2026-01-02.json');
+  });
+});
+
+describe('older backups', () => {
+  it('restores a v1 backup with subscription anchor days', async () => {
+    const v1 = emptySnapshot() as unknown as DataSnapshot;
+    v1.schemaVersion = 1;
+    const sub = { ...makeSubscription({ id: 's1', nextRenewal: '2026-12-31' }) } as Record<
+      string,
+      unknown
+    >;
+    delete sub.anchorDay;
+    (v1.tables as unknown as Record<string, unknown[]>).subscription = [sub];
+    const restored = await readBackup(await createBackup(v1, PASS, FAST), PASS);
+    expect(restored.schemaVersion).toBe(2);
+    expect(restored.tables.subscription[0]?.anchorDay).toBe(31);
   });
 });

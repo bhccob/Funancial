@@ -11,6 +11,7 @@ import {
   SubscriptionSchema,
   TransactionSchema,
 } from './entities';
+import { migrateRecord } from './migrations';
 
 export const TABLES = [
   'profile',
@@ -42,7 +43,10 @@ export const SCHEMAS = {
 export type EntityMap = { [K in TableName]: z.infer<(typeof SCHEMAS)[K]> };
 export type EntityOf<T extends TableName> = EntityMap[T];
 
-export const CURRENT_SCHEMA_VERSION = 1;
+export const CURRENT_SCHEMA_VERSION = 2;
+
+/** One record tagged with its table, for batch writes. */
+export type TableRecord = { [K in TableName]: { table: K; record: EntityOf<K> } }[TableName];
 
 const SINGLETONS = new Set<TableName>(['profile', 'settings']);
 
@@ -105,8 +109,8 @@ export class SchemaVersionError extends Error {
 
 /**
  * Bring stored or imported data up to the current schema, then validate it.
- * v1 is the first version, so there are no steps yet. Throws SchemaVersionError for data
- * from a newer app, and ZodError for anything malformed.
+ * Older snapshots are upgraded record by record (see migrations.ts). Throws SchemaVersionError
+ * for data from a newer app, and ZodError for anything malformed.
  */
 export function migrateSnapshot(raw: unknown): DataSnapshot {
   const version =
@@ -116,5 +120,21 @@ export function migrateSnapshot(raw: unknown): DataSnapshot {
   if (typeof version === 'number' && version > CURRENT_SCHEMA_VERSION) {
     throw new SchemaVersionError(version);
   }
+  if (typeof version === 'number' && version < CURRENT_SCHEMA_VERSION) {
+    raw = upgradeTables(raw as { tables?: unknown }, version);
+  }
   return SnapshotSchema.parse(raw);
+}
+
+function upgradeTables(raw: { tables?: unknown }, fromVersion: number): unknown {
+  const tables = raw.tables;
+  if (typeof tables !== 'object' || tables === null) return raw;
+  const upgraded: Record<string, unknown> = {};
+  for (const [name, rows] of Object.entries(tables)) {
+    upgraded[name] =
+      Array.isArray(rows) && (TABLES as readonly string[]).includes(name)
+        ? rows.map((r) => migrateRecord(name as TableName, r, fromVersion))
+        : rows;
+  }
+  return { ...raw, tables: upgraded, schemaVersion: CURRENT_SCHEMA_VERSION };
 }

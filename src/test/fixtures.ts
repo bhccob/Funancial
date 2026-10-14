@@ -72,13 +72,15 @@ export function makeIncome(overrides: Partial<Income> = {}): Income {
 }
 
 export function makeSubscription(overrides: Partial<Subscription> = {}): Subscription {
+  const nextRenewal = overrides.nextRenewal ?? today();
   return {
     id: newId(),
     ...stamp(),
     name: 'Streamflix',
     amount: 15_99,
     cycle: 'monthly',
-    nextRenewal: today(),
+    nextRenewal,
+    anchorDay: Number(nextRenewal.slice(8, 10)),
     category: 'entertainment',
     paymentMethod: 'debit',
     cardId: null,
