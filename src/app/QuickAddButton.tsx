@@ -1,8 +1,10 @@
 import { Plus } from 'lucide-react';
-import { Link } from 'react-router';
+import { Link, useLocation } from 'react-router';
 
-/** Logging is the core loop, so a quick-add button sits on every screen. */
+/** Logging is the core loop, so a quick-add button sits on every screen but Add itself. */
 export function QuickAddButton() {
+  const { pathname } = useLocation();
+  if (pathname === '/add') return null;
   return (
     <Link
       to="/add"

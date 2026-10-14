@@ -18,6 +18,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { AddScreen } from '@/features/add/AddScreen';
 import { DashboardScreen } from '@/features/dashboard/DashboardScreen';
 import { PlaceholderScreen } from '@/features/placeholder/PlaceholderScreen';
 import { SettingsScreen } from '@/features/settings/SettingsScreen';
@@ -62,7 +63,7 @@ export const APP_ROUTES: AppRoute[] = [
     nav: 'more',
     element: <SettingsScreen />,
   },
-  placeholder('/add', 'Add Expense', Plus, 'hidden'),
+  { path: '/add', label: 'Add Expense', icon: Plus, nav: 'hidden', element: <AddScreen /> },
 ];
 
 export const TAB_ROUTES = APP_ROUTES.filter((r) => r.nav === 'tab');

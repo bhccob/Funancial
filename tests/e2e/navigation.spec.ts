@@ -38,5 +38,6 @@ test('unknown route shows not found with a way home', async ({ page }) => {
 test('quick add is reachable and opens Add Expense', async ({ page }) => {
   await startFresh(page, '/goals');
   await page.getByRole('link', { name: 'Quick add' }).click();
-  await expect(page.getByRole('heading', { level: 1, name: 'Add Expense' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'Add' })).toBeVisible();
+  await expect(page.getByRole('radio', { name: 'Expense' })).toBeChecked();
 });
