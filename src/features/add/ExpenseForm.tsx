@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Dialog } from '@/components/ui/Dialog';
 import { MoneyField } from '@/components/ui/MoneyField';
@@ -7,12 +7,13 @@ import { Select } from '@/components/ui/Select';
 import { TextField } from '@/components/ui/TextField';
 import { limitMessage } from '@/domain/alerts';
 import { categoryLabel, type LimitStatus } from '@/domain/budget';
-import { CategorySchema, type Category, type Cycle, type PaymentMethod } from '@/domain/entities';
+import { CategorySchema, type Category, type Cycle } from '@/domain/entities';
 import { toast } from '@/lib/toast';
 import { useAction } from '@/lib/useAction';
 import { useApp } from '@/store/AppStoreProvider';
 import type { ExpenseInput } from '@/store/financeActions';
 import { useCurrency, useFinanceActions, useToday } from '@/store/useFinance';
+import { isCardChoice, parsePaidWith, usePaidWithOptions } from '@/features/shared/paidWith';
 import { DateField } from './DateField';
 import { pastDateProblem } from './pastDate';
 
@@ -26,14 +27,11 @@ const REPEAT_OPTIONS = [
   { value: 'yearly', label: 'Yearly' },
 ];
 
-const CARD_PREFIX = 'card:';
-
 export function ExpenseForm({ onDone }: { onDone(): void }) {
   const actions = useFinanceActions();
   const currency = useCurrency();
   const today = useToday();
   const tone = useApp((s) => s.data.tables.settings[0]?.warningTone ?? 'motivational');
-  const debts = useApp((s) => s.data.tables.debt);
   const run = useAction();
 
   const [amount, setAmount] = useState<number | null>(null);
@@ -46,27 +44,15 @@ export function ExpenseForm({ onDone }: { onDone(): void }) {
   const [crossing, setCrossing] = useState<LimitStatus[] | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const paidWithOptions = useMemo(
-    () => [
-      { value: 'cash', label: 'Cash' },
-      { value: 'debit', label: 'Debit card' },
-      ...debts
-        .filter((d) => d.kind === 'credit_card')
-        .map((d) => ({ value: `${CARD_PREFIX}${d.id}`, label: d.name })),
-      { value: 'other', label: 'Other' },
-    ],
-    [debts],
-  );
+  const paidWithOptions = usePaidWithOptions();
 
   function input(): ExpenseInput {
-    const onCard = paidWith.startsWith(CARD_PREFIX);
     return {
       amount: amount ?? 0,
       category,
       date,
       note: note.trim(),
-      paymentMethod: onCard ? 'credit_card' : (paidWith as PaymentMethod),
-      cardId: onCard ? paidWith.slice(CARD_PREFIX.length) : null,
+      ...parsePaidWith(paidWith),
       repeat: repeat === 'none' ? null : (repeat as Cycle),
     };
   }
@@ -143,7 +129,7 @@ export function ExpenseForm({ onDone }: { onDone(): void }) {
         onChange={setPaidWith}
         options={paidWithOptions}
         hint={
-          paidWith.startsWith(CARD_PREFIX)
+          isCardChoice(paidWith)
             ? 'Adds to the card balance. Paying the card later moves the cash.'
             : undefined
         }

@@ -1,0 +1,164 @@
+import { useState } from 'react';
+import { Button } from '@/components/ui/Button';
+import { EmptyState } from '@/components/ui/EmptyState';
+import { Menu } from '@/components/ui/Menu';
+import { PageHeader } from '@/components/ui/PageHeader';
+import { Section } from '@/components/ui/Section';
+import type { Cycle, Subscription } from '@/domain/entities';
+import { paidWithLabel } from '@/features/shared/paidWith';
+import { cn } from '@/lib/cn';
+import { daysUntil, formatDay, relativeDays } from '@/lib/format';
+import { useAction } from '@/lib/useAction';
+import { useApp } from '@/store/AppStoreProvider';
+import { useFinanceActions, useFinanceView, useMoney, useToday } from '@/store/useFinance';
+import { SubscriptionDialog } from './SubscriptionDialog';
+
+const PER: Record<Cycle, string> = {
+  weekly: 'week',
+  monthly: 'month',
+  quarterly: 'quarter',
+  yearly: 'year',
+};
+
+const AUDITS = [
+  { value: 'keep', label: 'Keep' },
+  { value: 'review', label: 'Review' },
+  { value: 'cancel', label: 'Cancel' },
+] as const;
+
+function renewsText(today: string, date: string): string {
+  const days = daysUntil(today, date);
+  return days >= 0 && days <= 7
+    ? `Renews ${relativeDays(today, date)}`
+    : `Renews ${formatDay(date)}`;
+}
+
+export function SubscriptionsScreen() {
+  const view = useFinanceView();
+  const money = useMoney();
+  const today = useToday();
+  const subscriptions = useApp((s) => s.data.tables.subscription);
+  const debts = useApp((s) => s.data.tables.debt);
+  const { setSubscriptionAudit, setSubscriptionStatus } = useFinanceActions();
+  const run = useAction();
+  // undefined = dialog closed, null = adding a new one.
+  const [editing, setEditing] = useState<Subscription | null | undefined>(undefined);
+
+  const byRenewal = (a: Subscription, b: Subscription) =>
+    a.nextRenewal.localeCompare(b.nextRenewal) || a.name.localeCompare(b.name);
+  const active = subscriptions.filter((s) => s.status === 'active').sort(byRenewal);
+  const cancelled = subscriptions
+    .filter((s) => s.status === 'cancelled')
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  return (
+    <div>
+      <PageHeader
+        title="Subscriptions & bills"
+        action={
+          <Button size="sm" onClick={() => setEditing(null)}>
+            Add
+          </Button>
+        }
+      >
+        {`${money(view.subscriptionsMonthly)} a month · ${active.length} active`}
+      </PageHeader>
+
+      <Section title="Active">
+        {active.length > 0 ? (
+          <ul className="divide-border -my-4 divide-y">
+            {active.map((sub) => (
+              <li key={sub.id} className="py-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate font-bold">{sub.name}</p>
+                    <p className="text-muted text-sm font-semibold tabular-nums">
+                      {`${money(sub.amount)} / ${PER[sub.cycle]} · ${renewsText(today, sub.nextRenewal)} · ${paidWithLabel(sub.paymentMethod, sub.cardId, debts)}`}
+                    </p>
+                  </div>
+                  <Menu
+                    label={`Actions for ${sub.name}`}
+                    items={[
+                      { label: 'Edit', onSelect: () => setEditing(sub) },
+                      {
+                        label: 'Cancel subscription',
+                        danger: true,
+                        onSelect: () =>
+                          void run(() => setSubscriptionStatus(sub.id, 'cancelled'), {
+                            success: `${sub.name} cancelled. No more renewals are added.`,
+                          }),
+                      },
+                    ]}
+                  />
+                </div>
+                <div role="group" aria-label={`Audit ${sub.name}`} className="mt-2.5 flex gap-1.5">
+                  {AUDITS.map((a) => {
+                    const pressed = sub.audit === a.value;
+                    return (
+                      <button
+                        key={a.value}
+                        type="button"
+                        aria-pressed={pressed}
+                        onClick={() =>
+                          void run(() => setSubscriptionAudit(sub.id, pressed ? null : a.value))
+                        }
+                        className={cn(
+                          'h-8 rounded-full border px-3 text-xs font-bold',
+                          pressed
+                            ? 'bg-primary text-primary-contrast border-transparent'
+                            : 'border-border-strong text-muted hover:text-text',
+                        )}
+                      >
+                        {a.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <EmptyState
+            title="No subscriptions yet"
+            action={
+              <Button size="sm" variant="secondary" onClick={() => setEditing(null)}>
+                Add a subscription
+              </Button>
+            }
+          >
+            Renewals are added as expenses on their date and count as upcoming bills until then.
+          </EmptyState>
+        )}
+      </Section>
+
+      {cancelled.length > 0 && (
+        <Section title="Cancelled">
+          <ul className="divide-border -my-3 divide-y">
+            {cancelled.map((sub) => (
+              <li key={sub.id} className="flex items-center justify-between gap-3 py-3">
+                <div className="text-muted min-w-0">
+                  <p className="truncate font-semibold">{sub.name}</p>
+                  <p className="text-sm tabular-nums">{`${money(sub.amount)} / ${PER[sub.cycle]}`}</p>
+                </div>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  aria-label={`Resume ${sub.name}`}
+                  onClick={() =>
+                    void run(() => setSubscriptionStatus(sub.id, 'active'), {
+                      success: `${sub.name} resumed.`,
+                    })
+                  }
+                >
+                  Resume
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </Section>
+      )}
+
+      <SubscriptionDialog sub={editing} onClose={() => setEditing(undefined)} />
+    </div>
+  );
+}

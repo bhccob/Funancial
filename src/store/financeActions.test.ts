@@ -269,3 +269,34 @@ describe('onboarding', () => {
     });
   });
 });
+
+describe('subscriptions', () => {
+  it('resuming a long-cancelled subscription skips the renewals missed while it was off', async () => {
+    const { store, actions } = await setup();
+    const sub = makeSubscription({
+      id: 'sub-gym',
+      name: 'Gym',
+      nextRenewal: '2026-07-05',
+      anchorDay: 5,
+      status: 'cancelled',
+    });
+    await store.getState().put('subscription', sub);
+    await actions.setSubscriptionStatus('sub-gym', 'active');
+    await store.getState().sync();
+    const data = store.getState().data;
+    expect(data.tables.subscription.find((s) => s.id === 'sub-gym')?.nextRenewal).toBe(
+      '2026-11-05',
+    );
+    expect(data.tables.expense.filter((e) => e.subscriptionId === 'sub-gym')).toEqual([]);
+  });
+
+  it('cancelling keeps the renewal date as it was', async () => {
+    const { store, actions } = await setup();
+    await store
+      .getState()
+      .put('subscription', makeSubscription({ id: 'sub-tv', nextRenewal: '2026-10-20' }));
+    await actions.setSubscriptionStatus('sub-tv', 'cancelled');
+    const sub = store.getState().data.tables.subscription.find((s) => s.id === 'sub-tv');
+    expect(sub).toMatchObject({ status: 'cancelled', nextRenewal: '2026-10-20' });
+  });
+});

@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { EmptyState } from './EmptyState';
+import { Menu } from './Menu';
 import { PageHeader } from './PageHeader';
 import { ProgressBar } from './ProgressBar';
 import { Select } from './Select';
@@ -68,5 +69,38 @@ describe('PageHeader and EmptyState', () => {
     expect(screen.getByRole('button', { name: 'Add limit' })).toBeInTheDocument();
     expect(screen.getByText('No limits yet')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Set a limit' })).toBeInTheDocument();
+  });
+});
+
+describe('Menu', () => {
+  it('opens a menu of actions, runs the chosen one and closes', async () => {
+    const onEdit = vi.fn();
+    render(<Menu label="Actions for Gym" items={[{ label: 'Edit', onSelect: onEdit }]} />);
+    const trigger = screen.getByRole('button', { name: 'Actions for Gym' });
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    await userEvent.click(trigger);
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByRole('menuitem', { name: 'Edit' })).toHaveFocus();
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Edit' }));
+    expect(onEdit).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+  });
+
+  it('moves with the arrow keys and closes on Escape, back on its button', async () => {
+    render(
+      <Menu
+        label="Actions"
+        items={[
+          { label: 'Edit', onSelect: vi.fn() },
+          { label: 'Cancel subscription', onSelect: vi.fn() },
+        ]}
+      />,
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Actions' }));
+    await userEvent.keyboard('{ArrowDown}');
+    expect(screen.getByRole('menuitem', { name: 'Cancel subscription' })).toHaveFocus();
+    await userEvent.keyboard('{Escape}');
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Actions' })).toHaveFocus();
   });
 });

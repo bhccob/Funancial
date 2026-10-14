@@ -22,6 +22,7 @@ import { AddScreen } from '@/features/add/AddScreen';
 import { BudgetScreen } from '@/features/budget/BudgetScreen';
 import { DashboardScreen } from '@/features/dashboard/DashboardScreen';
 import { PlaceholderScreen } from '@/features/placeholder/PlaceholderScreen';
+import { SubscriptionsScreen } from '@/features/subscriptions/SubscriptionsScreen';
 import { SettingsScreen } from '@/features/settings/SettingsScreen';
 
 export interface AppRoute {
@@ -48,7 +49,13 @@ export const APP_ROUTES: AppRoute[] = [
   placeholder('/invest', 'Invest', TrendingUp, 'tab'),
   placeholder('/buy', 'Buy It?', ShoppingBag, 'tab', 'Should I Buy It?'),
   placeholder('/quests', 'Quests', Trophy, 'tab'),
-  placeholder('/subscriptions', 'Subscriptions', Repeat, 'more'),
+  {
+    path: '/subscriptions',
+    label: 'Subscriptions',
+    icon: Repeat,
+    nav: 'more',
+    element: <SubscriptionsScreen />,
+  },
   placeholder('/freeze', 'Salary Freeze', Snowflake, 'more'),
   placeholder('/dividends', 'Dividends', Coins, 'more'),
   placeholder('/news', 'News', Newspaper, 'more'),

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatDay, formatMonth, relativeDays } from './format';
+import { daysUntil, formatDay, formatMonth, relativeDays } from './format';
 
 describe('date display', () => {
   it('shows a short day and a month name, whatever the time zone', () => {
@@ -14,5 +14,6 @@ describe('date display', () => {
     expect(relativeDays('2026-10-14', '2026-10-20')).toBe('in 6 days');
     expect(relativeDays('2026-10-30', '2026-11-02')).toBe('in 3 days');
     expect(relativeDays('2026-10-14', '2026-10-13')).toBe('1 day ago');
+    expect(daysUntil('2026-10-14', '2027-03-01')).toBe(138);
   });
 });

@@ -274,11 +274,14 @@ export function createFinanceActions(store: StoreApi<AppState>) {
     },
 
     async setSubscriptionStatus(id: string, status: Subscription['status']) {
-      await state().put('subscription', {
-        ...find('subscription', id),
-        status,
-        updatedAt: nowIso(),
-      });
+      const sub = find('subscription', id);
+      let nextRenewal = sub.nextRenewal;
+      // Resuming: renewals missed while cancelled were never paid, so don't charge them now.
+      if (status === 'active') {
+        while (nextRenewal < today())
+          nextRenewal = nextOccurrence(nextRenewal, sub.cycle, sub.anchorDay);
+      }
+      await state().put('subscription', { ...sub, status, nextRenewal, updatedAt: nowIso() });
     },
 
     async setSubscriptionAudit(id: string, audit: Subscription['audit']) {
