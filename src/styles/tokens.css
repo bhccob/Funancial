@@ -1,0 +1,60 @@
+/*
+ * Design tokens — direction C "Cozy RPG". Values and usage rules: docs/design/visual-direction.md.
+ * Light values live in @theme (they are the defaults and generate Tailwind utilities);
+ * dark values override the same variables when <html data-theme="dark">.
+ */
+@theme static {
+  --color-bg: #f6efe1;
+  --color-surface: #fffbf2;
+  --color-surface-2: #f0e6d2;
+  --color-text: #2b2118;
+  --color-text-muted: #6b5b49;
+  --color-border: #e2d3b8;
+  --color-border-strong: #cdb994;
+  --color-primary: #2f6b4f;
+  --color-primary-shade: #1f4a36;
+  --color-primary-contrast: #fffbf2;
+  --color-xp: #c98a1b;
+  --color-xp-light: #e9b44c;
+  --color-xp-shade: #8a5d0f;
+  --color-xp-text: #8a5d0f;
+  --color-success: #3c7d3a;
+  --color-warning: #a3561a;
+  --color-danger: #b23a2e;
+  --color-focus: #2f6b4f;
+  --color-texture: rgb(120 90 50 / 0.09);
+
+  --radius-sm: 4px;
+  --radius-md: 10px;
+  --radius-lg: 12px;
+
+  --font-sans: 'Nunito Variable', system-ui, sans-serif;
+  --font-display: 'Pixelify Sans', 'Nunito Variable', system-ui, sans-serif;
+}
+
+/* Short utility alias: text-muted */
+@theme inline {
+  --color-muted: var(--color-text-muted);
+}
+
+:root[data-theme='dark'] {
+  --color-bg: #15130f;
+  --color-surface: #211d17;
+  --color-surface-2: #2b261e;
+  --color-text: #f3e9d6;
+  --color-text-muted: #b9a88c;
+  --color-border: #3a3328;
+  --color-border-strong: #4b4334;
+  --color-primary: #7cc39b;
+  --color-primary-shade: #4f8f6b;
+  --color-primary-contrast: #15130f;
+  --color-xp: #f0b84a;
+  --color-xp-light: #f6cf7c;
+  --color-xp-shade: #a8741a;
+  --color-xp-text: #f0b84a;
+  --color-success: #8bcb7e;
+  --color-warning: #e8a25a;
+  --color-danger: #e07a6b;
+  --color-focus: #f0b84a;
+  --color-texture: rgb(240 184 74 / 0.05);
+}

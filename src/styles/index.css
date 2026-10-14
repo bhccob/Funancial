@@ -1,0 +1,32 @@
+@import 'tailwindcss';
+@import '@fontsource-variable/nunito';
+@import '@fontsource/pixelify-sans/500.css';
+@import '@fontsource/pixelify-sans/600.css';
+@import '@fontsource/pixelify-sans/700.css';
+@import './tokens.css';
+
+@custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));
+
+@layer base {
+  html {
+    color-scheme: light;
+    background-color: var(--color-bg);
+    -webkit-tap-highlight-color: transparent;
+  }
+  html[data-theme='dark'] {
+    color-scheme: dark;
+  }
+  body {
+    min-height: 100dvh;
+    background-color: var(--color-bg);
+    background-image: radial-gradient(var(--color-texture) 1px, transparent 1.2px);
+    background-size: 7px 7px;
+    color: var(--color-text);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-focus);
+    outline-offset: 2px;
+  }
+}

@@ -1,0 +1,74 @@
+/** Cross-tab signal: when one tab rewrites or deletes the data, other open tabs reload. */
+export type SyncMessage = {
+  type: 'reload';
+  reason: 'start' | 'secret' | 'restore' | 'delete' | 'namespace';
+};
+
+export interface SyncChannel {
+  post(m: SyncMessage): void;
+  subscribe(fn: (m: SyncMessage) => void): () => void;
+  close(): void;
+}
+
+const REASONS = new Set(['start', 'secret', 'restore', 'delete', 'namespace']);
+
+function isSyncMessage(v: unknown): v is SyncMessage {
+  return (
+    typeof v === 'object' &&
+    v !== null &&
+    'type' in v &&
+    v.type === 'reload' &&
+    'reason' in v &&
+    typeof v.reason === 'string' &&
+    REASONS.has(v.reason)
+  );
+}
+
+/** Lazily opens a BroadcastChannel; a no-op where the API is missing. */
+export function createChannel(name = 'funancial'): SyncChannel {
+  let channel: BroadcastChannel | null | undefined;
+  const get = () => {
+    if (channel === undefined) {
+      try {
+        channel = typeof BroadcastChannel === 'function' ? new BroadcastChannel(name) : null;
+      } catch {
+        channel = null;
+      }
+    }
+    return channel;
+  };
+
+  return {
+    post(m) {
+      try {
+        get()?.postMessage(m);
+      } catch {
+        // Another tab missing a reload is recoverable; never fail the write over it.
+      }
+    },
+    subscribe(fn) {
+      const c = get();
+      if (!c) return () => {};
+      const handler = (e: MessageEvent) => {
+        if (isSyncMessage(e.data)) fn(e.data);
+      };
+      c.addEventListener('message', handler);
+      return () => c.removeEventListener('message', handler);
+    },
+    close() {
+      channel?.close();
+      channel = null;
+    },
+  };
+}
+
+let shared: SyncChannel | null = null;
+
+/**
+ * The one channel this tab posts and listens on. BroadcastChannel delivers to every *other*
+ * instance — including other instances in the same tab — so posting and listening must share
+ * an instance or a tab would reload itself after its own write.
+ */
+export function tabChannel(): SyncChannel {
+  return (shared ??= createChannel());
+}
