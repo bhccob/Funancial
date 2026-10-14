@@ -17,7 +17,7 @@
 
 **Tech Stack:** as M0+M1 (React 19, TS 6, Vite 8, Tailwind 4, zustand, Dexie, zod 4, Vitest 5, Playwright). No new runtime dependencies.
 
-**Spec:** `docs/superpowers/specs/2026-10-14-funancial-design.md` (product spec `docs/spec/original-spec.md`; visual rules `docs/design/visual-direction.md`). Builds on `docs/superpowers/plans/2026-10-14-funancial-m0-m1-foundation-data.md`.
+**Spec:** `docs/superpowers/specs/2026-10-14-funancial-design.md` (product spec `docs/spec/original-spec.md`; visual rules `docs/design/visual-direction.md` — direction **D · Pro Ledger**, chosen in round 2; mockup `design/directions-v2/index.html`). Builds on `docs/superpowers/plans/2026-10-14-funancial-m0-m1-foundation-data.md`.
 
 ## Global Constraints
 
@@ -54,6 +54,12 @@
     - `nextRenewal` then advances by cycle, keeping the original day of month (`anchorDay`) so a 31st subscription doesn't drift to the 28th.
   - **Recurring expenses:** "Repeats" on Add Expense creates a Subscription (the recurring-bill engine) and links the first expense to it.
   - **Expense dates:** no later than today (no future-dated expenses in M2).
+- **Styling follows `docs/design/visual-direction.md` (Pro Ledger).**
+  - No box cards on screens: sections are separated by hairlines and whitespace, and boxes are only for dialogs, menus, toasts and the floating tab bar.
+  - Primary buttons are ink pills.
+  - Green `accent` is for fills and positive values; violet is the game layer.
+  - Charts use `--chart-*`.
+  - Screens use `Section` (Task 0), not `Card`.
 - **Warning copy** is fixed below in Task 9 and used verbatim.
 - **Schema v2:**
   - `Subscription` gains `anchorDay: 1–31`.
@@ -112,6 +118,53 @@ tests/e2e/onboarding.spec.ts finance.spec.ts (helpers.ts updated)
 ```
 
 ---
+
+### Task 0: Restyle to "Pro Ledger" (user-chosen direction D)
+
+**Files:**
+- Modify:
+  - `package.json`: add `@fontsource-variable/manrope@5.3.0`; remove `@fontsource-variable/nunito` and `@fontsource/pixelify-sans`;
+  - `src/styles/tokens.css`, `src/styles/index.css`: Manrope only, no dot texture;
+  - in `src/components/ui/`: `Button`, `Card`, `TextField`, `Dialog`, `Banner`, `RadioGroup`;
+  - in `src/app/`: `Sidebar`, `BottomTabs`, `QuickAddButton`, `NotFound`;
+  - every screen that uses `font-display` or `Card` for page layout: Welcome, Lock, StorageUnavailable, BootSplash, Placeholder, Settings sections.
+- Create: `src/components/ui/Section.tsx` (+ test in `ui.test.tsx`), `src/styles/tokens.test.ts`.
+
+**Interfaces:**
+- **Tokens:** exactly the table in `docs/design/visual-direction.md`.
+  - Token names kept from M1: `bg`, `surface`, `surface-2`, `text`, `text-muted`, `border`, `border-strong`, `primary`, `primary-contrast`, `xp`, `xp-text`, `success`, `warning`, `danger`, `focus`.
+  - Added: `overlay`, `track`, `accent`, `accent-text`, `chart-1`..`chart-6`.
+  - Removed: `primary-shade`, `xp-light`, `xp-shade`, `texture`.
+- **`Section`:**
+  - props `{ title?: string; action?: ReactNode; children: ReactNode; className?: string }`;
+  - renders `<section aria-labelledby>` with an h2 (14px, 800) and the action at the right;
+  - vertical padding 24px, `border-b border-border` (last one none).
+- **`Button`:** pill (`rounded-full`), no pressable edge.
+  - primary = `bg-primary text-primary-contrast`;
+  - secondary = transparent with a 1px `border-border-strong`;
+  - ghost = text only;
+  - danger = `bg-danger` with white text.
+  - Sizes as before.
+- **`Card`:** `bg-surface-2 rounded-lg p-5`, no border or shadow. Only for grouped content inside a page (e.g. the Welcome and Lock panels).
+- **`TextField` and other inputs:** `h-11 rounded-md border border-border-strong bg-transparent`; the error border is `danger`.
+- **`Dialog`:** `bg-overlay rounded-lg` with a large soft shadow, no border; backdrop `bg-black/40`.
+- **`Banner`:** a flat `bg-surface-2 rounded-md` row with a 3px left bar in the tone color; `demo` uses `xp`.
+- **`RadioGroup`:** a segmented control on a `surface-2` pill track; the selected segment is `bg-overlay` with a soft shadow; native radios are visually hidden but focusable.
+- **Navigation:**
+  - `Sidebar` is 210px wide, with a logo ("Fun" + "ancial" in `accent-text`) and icon + label links; active = `bg-surface-2 text-text`; right hairline.
+  - `BottomTabs` is a floating bar: `fixed`, 10px from the bottom and sides plus the safe area, `rounded-lg bg-overlay` with a shadow, active tab `text-accent-text`.
+  - `QuickAddButton` is a 56px ink circle (`bg-primary text-primary-contrast`).
+- **Fonts:** headings use `font-extrabold` Manrope, and `font-display` is removed from the codebase.
+- **Game HUD strip:** not built until M4 (no fake XP).
+
+- [ ] **Step 1: Write failing tests:**
+  - `ui.test.tsx` "Section is labelled by its title and shows its action";
+  - `src/styles/tokens.test.ts` (node env): read `tokens.css` as text and assert it defines `--color-accent-text: #007a55` and `--color-chart-6: #008300` and contains no `Pixelify`.
+- [ ] **Step 2: Run `npm test`.** Expected: FAIL.
+- [ ] **Step 3: Implement the restyle.** Behavior and accessible names are unchanged, so the existing unit and e2e tests must keep passing untouched.
+- [ ] **Step 4: Run `npm run typecheck && npm run lint && npm test && npm run test:e2e`.** Expected: PASS.
+- [ ] **Step 5: Manual check in the browser pane** against mockup D at 375px and 1280px, light and dark: Welcome, Lock, the shell and Settings.
+- [ ] **Step 6: Commit** `style: restyle to Pro Ledger — flat sections, ink pills, Manrope, floating tab bar`.
 
 ### Task 1: Schema v2, record migrations, putMany, refresh across tabs
 
@@ -553,7 +606,7 @@ expect(monthlyEquivalent(9_99, 'yearly')).toBe(83);
   - `role="progressbar"`, `aria-valuemin 0`, `aria-valuemax 100`, `aria-valuenow min(value, 100)`, `aria-valuetext`;
   - fill colors `ok` primary, `warn` warning, `over`/`way-over` danger;
   - the inset track from visual-direction.
-- `PageHeader`: `{ title: string; action?: ReactNode; children? }`, an h1 in `font-display`.
+- `PageHeader`: `{ title: string; action?: ReactNode; children? }`, an h1 (28px, 800) with the action at the right and a bottom hairline. (`Section` comes from Task 0.)
 - `EmptyState`: `{ title; children?; action? }`.
 
 - [ ] **Step 1: Write failing tests:**
@@ -609,18 +662,22 @@ expect(monthlyEquivalent(9_99, 'yearly')).toBe(83);
 - Create: `src/features/dashboard/DashboardScreen.tsx` (+ test).
 - Modify: `src/app/routes.tsx` (`/` → Dashboard).
 
-**Interfaces:**
-- **Layout:** PageHeader title "Home" with a greeting line `` `Hi, ${name}` `` when a name is set.
-- **Banners:**
+**Interfaces (layout per mockup D):**
+- **Header:** PageHeader title "Home" (13px muted, so the KPI row leads); the greeting is "Hi, {name}" when a name is set.
+- **Banners (above the KPIs):**
   - **Pending salary:** for each `pendingSalary` income: "Your {Month} salary is expected: {amount}. Did it arrive?" with a "Confirm" button.
     - The button opens a Dialog "Confirm salary" with MoneyField "Amount received" (prefilled) and Confirm, which calls `confirmIncome`.
   - **Active freeze:** "Salary freeze until {end date}. Bills and subscriptions still apply."
-- **Cards:**
-  - **Available balance:** big money figure; caption "Cash + savings − upcoming bills − reserved limits"; then rows Net worth, Cash, Savings, Debts.
-  - **Spending:** Today / This week / This month / This year.
-  - **Limits:** up to 3 ProgressBars with "See all" → `/budget`; EmptyState "No limits yet" with action "Set a limit" → `/budget`.
-  - **Upcoming bills:** a list of the bills; EmptyState "Nothing due this month".
-- **Quick actions:** "Add expense" (`/add`), "Add income" (`/add?type=income`), "Should I buy it?" (`/buy`).
+- **KPI row:** 3 columns divided by vertical hairlines; it stacks with horizontal hairlines below `md`.
+  1. **"Available to spend":** 48px/800 figure; caption "Cash + savings − upcoming bills − reserved limits"; then the pill buttons "Add expense" (primary, `/add`), "Income" (secondary, `/add?type=income`), "Buy it?" (secondary, `/buy`).
+  2. **"Net worth":** 34px figure; muted line "Cash {cash} · Savings {savings} · Debts {debtTotal}".
+  3. **"Spent in {Month}":** 34px figure (`spending.month`); muted line "{pct}% of your {amount} limit" when an overall monthly limit exists, else "This year {spending.year}".
+- **Grid (`md:grid-cols-[7fr_5fr]`, sections divided by hairlines):**
+  - **Limits** (7fr): up to 4 ProgressBars sorted by pct, with "See all" → `/budget`; EmptyState "No limits yet" with action "Set a limit" → `/budget`.
+  - **Spending** (5fr): Today / This week / This month / This year, plus the top 3 categories this month.
+  - **Upcoming bills** (7fr): list rows with an icon well (`surface-2`), name, date and amount; the header action is the total; EmptyState "Nothing due this month".
+  - **Goals** (5fr): the top 2 goals with ProgressBar and "{current} of {target}", and "All goals" → `/goals`.
+- **Later milestones:** Portfolio (with the interactive donut from mockup D) joins the grid in M5; the game HUD strip and Quests in M4.
 
 - [ ] **Step 1: Write failing tests** (render with a stub store holding AVL-1 data and `today`):
   - shows `$1,654.01` as available;
