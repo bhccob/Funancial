@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Funancial — Direction B: Playful Game</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@500;600;700;800&display=swap" rel="stylesheet" />
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Nunito', system-ui, sans-serif; background: #e4defa; color: #1e1537; padding: 24px 16px 48px; }
+  .intro { max-width: 790px; margin: 0 auto 20px; }
+  .intro h1 { font-family: 'Fredoka', sans-serif; font-size: 24px; font-weight: 700; }
+  .intro p { color: #4b4265; margin-top: 4px; font-size: 14px; line-height: 1.5; }
+  .stage { display: flex; flex-wrap: wrap; gap: 32px; justify-content: center; }
+  .caption { font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; color: #4b4265; margin-bottom: 8px; text-align: center; }
+
+  [data-theme="light"] {
+    --bg: #F4F1FF; --surface: #FFFFFF; --surface-2: #EFEAFF; --text: #1E1537; --muted: #625A7C; --border: #E2DAFB;
+    --primary: #6D3EF2; --primary-shade: #4F22CF; --on-primary: #FFFFFF; --xp: #F5A70B; --xp-shade: #C27F00;
+    --success: #067647; --warning: #B54708; --warning-fill: #F79009; --danger: #D92D20; --flame: #FF6B2C;
+  }
+  [data-theme="dark"] {
+    --bg: #130D26; --surface: #1F1640; --surface-2: #2A1F55; --text: #F3EFFF; --muted: #B1A6D6; --border: #3A2D6E;
+    --primary: #A88BFF; --primary-shade: #7A5BE0; --on-primary: #130D26; --xp: #FFC23D; --xp-shade: #C7901A;
+    --success: #32D583; --warning: #FDB022; --warning-fill: #FDB022; --danger: #F97066; --flame: #FF8A57;
+  }
+
+  .phone { width: 375px; height: 812px; border-radius: 44px; overflow: hidden; position: relative; background: var(--bg); color: var(--text);
+    border: 10px solid #1b1430; box-shadow: 0 20px 50px rgba(30,21,55,.3); }
+  .screen { height: 100%; overflow: auto; scrollbar-width: none; padding: 18px 16px 112px; display: flex; flex-direction: column; gap: 14px; }
+  .display { font-family: 'Fredoka', sans-serif; }
+  .num { font-variant-numeric: tabular-nums; }
+  svg { fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+
+  .top { display: flex; align-items: center; justify-content: space-between; padding-top: 8px; }
+  .who { display: flex; align-items: center; gap: 10px; }
+  .shield { width: 46px; height: 50px; display: grid; place-items: center; color: var(--on-primary); font-family: 'Fredoka'; font-weight: 700; font-size: 18px;
+    background: var(--primary); clip-path: polygon(50% 0, 100% 15%, 100% 60%, 50% 100%, 0 60%, 0 15%); }
+  .greet { font-size: 13px; color: var(--muted); font-weight: 700; }
+  .level { font-family: 'Fredoka'; font-size: 18px; font-weight: 600; }
+  .streak { display: inline-flex; align-items: center; gap: 5px; font-family: 'Fredoka'; font-size: 16px; font-weight: 700; color: var(--flame);
+    background: var(--surface); border: 2px solid var(--border); padding: 6px 12px; border-radius: 999px; box-shadow: 0 3px 0 var(--border); }
+  .streak svg { width: 20px; height: 20px; fill: var(--flame); stroke: none; }
+
+  .xp { background: var(--surface); border: 2px solid var(--border); border-radius: 18px; padding: 10px 12px; display: flex; align-items: center; gap: 10px; box-shadow: 0 3px 0 var(--border); }
+  .coin { width: 26px; height: 26px; border-radius: 50%; background: var(--xp); box-shadow: inset 0 -3px 0 var(--xp-shade); display: grid; place-items: center; color: #1E1537; font-family: 'Fredoka'; font-weight: 700; font-size: 12px; flex: none; }
+  .xp-bar { flex: 1; height: 14px; border-radius: 99px; background: var(--surface-2); overflow: hidden; }
+  .xp-bar span { display: block; height: 100%; border-radius: 99px; background: repeating-linear-gradient(135deg, var(--xp) 0 10px, #FFD36E 10px 20px); }
+  .xp-label { font-family: 'Fredoka'; font-size: 13px; font-weight: 600; color: var(--muted); }
+
+  .card { background: var(--surface); border: 2px solid var(--border); border-radius: 24px; padding: 16px; box-shadow: 0 4px 0 var(--border); }
+  .hero { background: var(--primary); border-color: var(--primary-shade); box-shadow: 0 5px 0 var(--primary-shade); color: var(--on-primary); }
+  .label { font-size: 14px; font-weight: 700; opacity: .85; }
+  .big { font-family: 'Fredoka'; font-size: 40px; font-weight: 700; margin-top: 2px; }
+  .row { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 14px; font-weight: 700; }
+  .pill { margin-left: auto; background: rgba(255,255,255,.2); border-radius: 99px; padding: 4px 10px; font-size: 13px; }
+  [data-theme="dark"] .pill { background: rgba(19,13,38,.18); }
+
+  h3 { font-family: 'Fredoka'; font-size: 18px; font-weight: 600; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; }
+  h3 a { font-family: 'Nunito'; font-size: 13px; color: var(--primary); text-decoration: none; font-weight: 800; }
+  .limit + .limit { margin-top: 14px; }
+  .limit-top { display: flex; justify-content: space-between; font-size: 14px; font-weight: 700; }
+  .limit-top span:last-child { color: var(--muted); }
+  .bar { height: 16px; border-radius: 99px; background: var(--surface-2); margin-top: 8px; overflow: hidden; border: 2px solid var(--border); }
+  .bar span { display: block; height: 100%; border-radius: 99px; background: var(--primary); }
+  .warn .bar span { background: repeating-linear-gradient(135deg, var(--warning-fill) 0 10px, #FFB547 10px 20px); }
+  .note { font-size: 13px; color: var(--warning); margin-top: 6px; font-weight: 800; }
+
+  .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .action { font-family: 'Fredoka'; font-weight: 600; font-size: 16px; border-radius: 18px; padding: 14px 10px; display: flex; flex-direction: column; align-items: center; gap: 6px; cursor: pointer;
+    background: var(--surface); color: var(--text); border: 2px solid var(--border); box-shadow: 0 4px 0 var(--border); }
+  .action.primary { background: var(--xp); color: #1E1537; border-color: var(--xp-shade); box-shadow: 0 4px 0 var(--xp-shade); }
+  .action svg { width: 26px; height: 26px; }
+
+  .quest { display: flex; align-items: center; gap: 12px; }
+  .quest .ico { width: 44px; height: 44px; border-radius: 14px; background: var(--surface-2); color: var(--primary); display: grid; place-items: center; }
+  .quest .ico svg { width: 24px; height: 24px; }
+  .quest .t { font-family: 'Fredoka'; font-size: 16px; font-weight: 600; }
+  .quest .s { font-size: 13px; color: var(--muted); font-weight: 700; }
+  .dots { display: flex; gap: 4px; margin-top: 4px; }
+  .dots i { width: 18px; height: 6px; border-radius: 3px; background: var(--primary); }
+  .dots i.off { background: var(--surface-2); }
+  .quest .xp-chip { margin-left: auto; font-family: 'Fredoka'; font-size: 14px; font-weight: 700; color: #1E1537; background: var(--xp); border-radius: 99px; padding: 5px 10px; box-shadow: 0 2px 0 var(--xp-shade); }
+
+  .tabs { position: absolute; left: 0; right: 0; bottom: 0; height: 86px; background: var(--surface); border-top: 2px solid var(--border); display: flex; justify-content: space-around; padding: 10px 6px 24px; }
+  .tab { display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 11px; font-weight: 800; color: var(--muted); width: 64px; border-radius: 14px; padding-top: 2px; }
+  .tab svg { width: 24px; height: 24px; }
+  .tab.on { color: var(--primary); background: var(--surface-2); }
+  .fab { position: absolute; right: 16px; bottom: 102px; width: 60px; height: 60px; border-radius: 20px; background: var(--primary); color: var(--on-primary); display: grid; place-items: center; border: 0; box-shadow: 0 5px 0 var(--primary-shade); }
+  .fab svg { width: 30px; height: 30px; stroke-width: 3; }
+</style>
+</head>
+<body>
+  <div class="intro">
+    <h1>B — Playful game</h1>
+    <p>Bold violet, coin-gold XP, chunky rounded cards with "pressable" 3D edges and striped progress bars. It feels like a game you want to open every day. Fonts: Fredoka for headings and numbers, Nunito for text.</p>
+  </div>
+  <div class="stage">
+    <div><div class="caption">Light</div><div class="phone" data-theme="light"></div></div>
+    <div><div class="caption">Dark</div><div class="phone" data-theme="dark"></div></div>
+  </div>
+
+<template id="screen">
+  <div class="screen">
+    <header class="top">
+      <div class="who">
+        <div class="shield">12</div>
+        <div><div class="greet">Good evening!</div><div class="level">Silver Budgeter</div></div>
+      </div>
+      <div class="streak"><svg viewBox="0 0 24 24"><path d="M12 2c1.2 3.4 6 5.6 6 11a6 6 0 0 1-12 0c0-2.5 1.2-4.2 2.4-5.4 0 2.4 1.2 3.6 2.4 3.6 0-3.6-1.2-6 1.2-9.2z"/></svg>9</div>
+    </header>
+
+    <div class="xp"><div class="coin">XP</div><div class="xp-bar"><span style="width:69%"></span></div><div class="xp-label num">1,240/1,800</div></div>
+
+    <section class="card hero">
+      <div class="label">Available balance</div>
+      <div class="big num">$3,482.15</div>
+      <div class="row"><span>Net worth $24,960</span><span class="pill num">▲ $312 this month</span></div>
+    </section>
+
+    <section class="card">
+      <h3>Your limits <a href="#">See all</a></h3>
+      <div class="limit warn">
+        <div class="limit-top"><span>Food · this week</span><span class="num">$102 / $120</span></div>
+        <div class="bar"><span style="width:85%"></span></div>
+        <div class="note">85% — careful, 3 days to go!</div>
+      </div>
+      <div class="limit">
+        <div class="limit-top"><span>Overall · October</span><span class="num">$1,214 / $2,600</span></div>
+        <div class="bar"><span style="width:47%"></span></div>
+      </div>
+    </section>
+
+    <div class="actions">
+      <button class="action primary"><svg viewBox="0 0 24 24"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/></svg>Add expense</button>
+      <button class="action"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .8-1 1.5v.7"/><path d="M12 17h.01"/></svg>Should I buy it?</button>
+    </div>
+
+    <section class="card quest">
+      <div class="ico"><svg viewBox="0 0 24 24"><path d="M8 4h8v5a4 4 0 0 1-8 0z"/><path d="M8 6H5a3 3 0 0 0 3 4M16 6h3a3 3 0 0 1-3 4"/><path d="M12 13v4M8 20h8"/></svg></div>
+      <div><div class="t">Log today's expenses</div><div class="dots"><i></i><i></i><i class="off"></i></div></div>
+      <div class="xp-chip">+20 XP</div>
+    </section>
+
+    <button class="fab" aria-label="Quick add"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+    <nav class="tabs">
+      <div class="tab on"><svg viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>Home</div>
+      <div class="tab"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 3v9h9"/></svg>Budget</div>
+      <div class="tab"><svg viewBox="0 0 24 24"><path d="m3 17 6-6 4 4 8-8"/><path d="M14 7h7v7"/></svg>Invest</div>
+      <div class="tab"><svg viewBox="0 0 24 24"><path d="M6 7h12l-1 13H7z"/><path d="M9 7a3 3 0 0 1 6 0"/></svg>Buy It?</div>
+      <div class="tab"><svg viewBox="0 0 24 24"><path d="M8 4h8v5a4 4 0 0 1-8 0z"/><path d="M8 6H5a3 3 0 0 0 3 4M16 6h3a3 3 0 0 1-3 4"/><path d="M12 13v4M8 20h8"/></svg>Quests</div>
+    </nav>
+  </div>
+</template>
+<script>
+  document.querySelectorAll('.phone').forEach((p) => p.appendChild(document.getElementById('screen').content.cloneNode(true)));
+</script>
+</body>
+</html>

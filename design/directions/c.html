@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Funancial — Direction C: Cozy RPG</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@500;600;700&family=Nunito:wght@500;600;700;800&display=swap" rel="stylesheet" />
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Nunito', system-ui, sans-serif; background: #e7dcc6; color: #2b2118; padding: 24px 16px 48px; }
+  .intro { max-width: 790px; margin: 0 auto 20px; }
+  .intro h1 { font-family: 'Pixelify Sans', sans-serif; font-size: 26px; font-weight: 700; }
+  .intro p { color: #5a4a39; margin-top: 4px; font-size: 14px; line-height: 1.5; }
+  .stage { display: flex; flex-wrap: wrap; gap: 32px; justify-content: center; }
+  .caption { font-family: 'Pixelify Sans'; font-size: 15px; letter-spacing: .06em; color: #5a4a39; margin-bottom: 8px; text-align: center; }
+
+  [data-theme="light"] {
+    --bg: #F6EFE1; --surface: #FFFBF2; --surface-2: #F0E6D2; --text: #2B2118; --muted: #6B5B49; --border: #E2D3B8; --border-strong: #CDB994;
+    --primary: #2F6B4F; --primary-shade: #1F4A36; --on-primary: #FFFBF2; --xp: #C98A1B; --xp-light: #E9B44C; --success: #3C7D3A; --warning: #A3561A; --danger: #B23A2E;
+    --dot: rgba(120, 90, 50, .09);
+  }
+  [data-theme="dark"] {
+    --bg: #15130F; --surface: #211D17; --surface-2: #2B261E; --text: #F3E9D6; --muted: #B9A88C; --border: #3A3328; --border-strong: #4B4334;
+    --primary: #7CC39B; --primary-shade: #4F8F6B; --on-primary: #15130F; --xp: #F0B84A; --xp-light: #F6CF7C; --success: #8BCB7E; --warning: #E8A25A; --danger: #E07A6B;
+    --dot: rgba(240, 184, 74, .05);
+  }
+
+  .phone { width: 375px; height: 812px; border-radius: 44px; overflow: hidden; position: relative; color: var(--text);
+    background-color: var(--bg); background-image: radial-gradient(var(--dot) 1px, transparent 1.2px); background-size: 7px 7px;
+    border: 10px solid #2b2118; box-shadow: 0 20px 50px rgba(43,33,24,.3); }
+  .screen { height: 100%; overflow: auto; scrollbar-width: none; padding: 18px 16px 112px; display: flex; flex-direction: column; gap: 14px; }
+  .pix { font-family: 'Pixelify Sans', sans-serif; }
+  .num { font-variant-numeric: tabular-nums; }
+  svg { fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: square; stroke-linejoin: miter; }
+  svg.px { stroke: none; shape-rendering: crispEdges; }
+
+  .top { display: flex; align-items: center; justify-content: space-between; padding-top: 8px; }
+  .who { display: flex; align-items: center; gap: 10px; }
+  .lv { width: 48px; height: 48px; display: grid; place-items: center; background: var(--primary); color: var(--on-primary);
+    border: 3px solid var(--primary-shade); box-shadow: 0 3px 0 var(--primary-shade); border-radius: 8px; line-height: 1; text-align: center; }
+  .lv small { display: block; font-size: 10px; }
+  .lv b { font-size: 20px; }
+  .greet { font-size: 13px; color: var(--muted); font-weight: 700; }
+  .level { font-family: 'Pixelify Sans'; font-size: 19px; font-weight: 600; }
+  .streak { display: inline-flex; align-items: center; gap: 6px; font-family: 'Pixelify Sans'; font-size: 17px; color: var(--warning);
+    background: var(--surface); border: 2px solid var(--border-strong); padding: 5px 10px; border-radius: 8px; box-shadow: 0 3px 0 var(--border-strong); }
+  .streak svg { width: 20px; height: 20px; }
+
+  .xp { display: flex; align-items: center; gap: 10px; }
+  .xp svg { width: 22px; height: 22px; flex: none; }
+  .xp-bar { flex: 1; height: 14px; background: var(--surface-2); border: 2px solid var(--border-strong); border-radius: 4px; padding: 2px; }
+  .xp-bar span { display: block; height: 100%; background: repeating-linear-gradient(90deg, var(--xp) 0 8px, var(--xp-light) 8px 10px); border-radius: 2px; }
+  .xp-label { font-family: 'Pixelify Sans'; font-size: 14px; color: var(--muted); }
+
+  .card { background: var(--surface); border: 2px solid var(--border-strong); border-radius: 12px; padding: 16px; box-shadow: 0 3px 0 var(--border-strong), inset 0 0 0 3px var(--surface), inset 0 0 0 4px var(--border); }
+  .label { font-size: 14px; color: var(--muted); font-weight: 800; }
+  .big { font-size: 36px; font-weight: 800; letter-spacing: -.01em; margin-top: 2px; }
+  .row { display: flex; align-items: baseline; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 2px dashed var(--border); font-size: 14px; font-weight: 700; }
+  .row span:first-child { color: var(--muted); }
+  .up { margin-left: auto; color: var(--success); font-size: 13px; }
+
+  h3 { font-family: 'Pixelify Sans'; font-size: 18px; font-weight: 600; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; }
+  h3 a { font-family: 'Nunito'; font-size: 13px; color: var(--primary); text-decoration: none; font-weight: 800; }
+  .limit + .limit { margin-top: 14px; }
+  .limit-top { display: flex; justify-content: space-between; font-size: 14px; font-weight: 700; }
+  .limit-top span:last-child { color: var(--muted); }
+  .bar { height: 14px; background: var(--surface-2); border: 2px solid var(--border-strong); border-radius: 4px; padding: 2px; margin-top: 8px; }
+  .bar span { display: block; height: 100%; background: var(--primary); border-radius: 2px; }
+  .warn .bar span { background: var(--warning); }
+  .note { font-size: 13px; color: var(--warning); margin-top: 6px; font-weight: 800; }
+
+  .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .action { font: inherit; font-weight: 800; font-size: 14px; border-radius: 10px; padding: 13px 10px; display: flex; align-items: center; gap: 8px; justify-content: center; cursor: pointer;
+    background: var(--surface); color: var(--text); border: 2px solid var(--border-strong); box-shadow: 0 3px 0 var(--border-strong); }
+  .action.primary { background: var(--primary); color: var(--on-primary); border-color: var(--primary-shade); box-shadow: 0 3px 0 var(--primary-shade); }
+  .action svg { width: 18px; height: 18px; }
+
+  .quest { display: flex; align-items: center; gap: 12px; }
+  .quest .ico { width: 44px; height: 44px; border-radius: 8px; background: var(--surface-2); border: 2px solid var(--border); display: grid; place-items: center; }
+  .quest .ico svg { width: 28px; height: 28px; }
+  .quest .k { font-family: 'Pixelify Sans'; font-size: 12px; color: var(--xp); letter-spacing: .05em; }
+  .quest .t { font-size: 15px; font-weight: 800; }
+  .quest .xp-chip { margin-left: auto; font-family: 'Pixelify Sans'; font-size: 15px; color: var(--xp); }
+
+  .tabs { position: absolute; left: 0; right: 0; bottom: 0; height: 86px; background: var(--surface); border-top: 3px solid var(--border-strong); display: flex; justify-content: space-around; padding: 10px 6px 24px; }
+  .tab { display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 11px; font-weight: 800; color: var(--muted); width: 64px; }
+  .tab svg { width: 22px; height: 22px; }
+  .tab.on { color: var(--primary); }
+  .tab.on span { border-bottom: 2px solid var(--primary); }
+  .fab { position: absolute; right: 16px; bottom: 102px; width: 58px; height: 58px; border-radius: 12px; background: var(--xp); color: #2B2118; display: grid; place-items: center;
+    border: 3px solid #8a5d0f; box-shadow: 0 4px 0 #8a5d0f; }
+  .fab svg { width: 28px; height: 28px; stroke-width: 3; }
+</style>
+</head>
+<body>
+  <div class="intro">
+    <h1>C — Cozy RPG</h1>
+    <p>Warm parchment and forest green by day, lantern-lit by night. Pixel-art accents (level, streak, XP coin, quest chest) and "inventory slot" cards, while every money number stays in a clean readable font. Fonts: Pixelify Sans for game accents, Nunito for everything else.</p>
+  </div>
+  <div class="stage">
+    <div><div class="caption">Light</div><div class="phone" data-theme="light"></div></div>
+    <div><div class="caption">Dark</div><div class="phone" data-theme="dark"></div></div>
+  </div>
+
+<template id="screen">
+  <div class="screen">
+    <header class="top">
+      <div class="who">
+        <div class="lv pix"><div><small>LV</small><b>12</b></div></div>
+        <div><div class="greet">Good evening, adventurer</div><div class="level">Silver Budgeter</div></div>
+      </div>
+      <div class="streak"><svg class="px" data-px="flame" viewBox="0 0 8 8"></svg>9</div>
+    </header>
+
+    <div class="xp"><svg class="px" data-px="coin" viewBox="0 0 8 8"></svg><div class="xp-bar"><span style="width:69%"></span></div><div class="xp-label num">1240/1800 XP</div></div>
+
+    <section class="card">
+      <div class="label">Available balance</div>
+      <div class="big num">$3,482.15</div>
+      <div class="row"><span>Net worth</span><strong class="num">$24,960.40</strong><span class="up num">+$312 this month</span></div>
+    </section>
+
+    <section class="card">
+      <h3>Limits <a href="#">See all</a></h3>
+      <div class="limit warn">
+        <div class="limit-top"><span>Food · this week</span><span class="num">$102 of $120</span></div>
+        <div class="bar"><span style="width:85%"></span></div>
+        <div class="note">85% used · 3 days left this week</div>
+      </div>
+      <div class="limit">
+        <div class="limit-top"><span>Overall · October</span><span class="num">$1,214 of $2,600</span></div>
+        <div class="bar"><span style="width:47%"></span></div>
+      </div>
+    </section>
+
+    <div class="actions">
+      <button class="action primary"><svg viewBox="0 0 24 24"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/></svg>Add expense</button>
+      <button class="action"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .8-1 1.5v.7"/><path d="M12 17h.01"/></svg>Should I buy it?</button>
+    </div>
+
+    <section class="card quest">
+      <div class="ico"><svg class="px" data-px="chest" viewBox="0 0 8 8"></svg></div>
+      <div><div class="k">DAILY QUEST · 2/3</div><div class="t">Log today's expenses</div></div>
+      <div class="xp-chip">+20 XP</div>
+    </section>
+
+    <button class="fab" aria-label="Quick add"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+    <nav class="tabs">
+      <div class="tab on"><svg viewBox="0 0 24 24"><path d="M3 11 12 4l9 7v10h-6v-6H9v6H3z"/></svg><span>Home</span></div>
+      <div class="tab"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18"/><path d="M12 3v9h9"/></svg><span>Budget</span></div>
+      <div class="tab"><svg viewBox="0 0 24 24"><path d="m3 17 6-6 4 4 8-8"/><path d="M14 7h7v7"/></svg><span>Invest</span></div>
+      <div class="tab"><svg viewBox="0 0 24 24"><path d="M5 7h14l-1 14H6z"/><path d="M9 7V4h6v3"/></svg><span>Buy It?</span></div>
+      <div class="tab"><svg viewBox="0 0 24 24"><path d="M14 4h6v6L9 21l-6-6z"/><path d="m7 13 4 4"/></svg><span>Quests</span></div>
+    </nav>
+  </div>
+</template>
+<script>
+  // 8×8 pixel sprites: a = outline, b = fill, c = highlight
+  const SPRITES = {
+    flame: { rows: ['...a....', '..aa....', '..aba.a.', '.abbba..', '.abbbba.', 'abbccbba', '.abccba.', '..aaaa..'], a: '#B4410F', b: '#F07C2B', c: '#FFD45C' },
+    coin:  { rows: ['..aaaa..', '.abbbba.', 'abbaabba', 'abbccbba', 'abbccbba', 'abbaabba', '.abbbba.', '..aaaa..'], a: '#8A5D0F', b: '#E9B44C', c: '#FFF0B8' },
+    chest: { rows: ['.aaaaaa.', 'abbbbbba', 'abbbbbba', 'aaaaaaaa', 'abbccbba', 'abbccbba', 'abbbbbba', 'aaaaaaaa'], a: '#5A3A1A', b: '#A8692E', c: '#E9B44C' },
+  };
+  function paint(svg) {
+    const s = SPRITES[svg.dataset.px];
+    s.rows.forEach((row, y) => [...row].forEach((ch, x) => {
+      if (ch === '.') return;
+      const r = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      r.setAttribute('x', x); r.setAttribute('y', y); r.setAttribute('width', 1); r.setAttribute('height', 1); r.setAttribute('fill', s[ch]);
+      svg.appendChild(r);
+    }));
+  }
+  document.querySelectorAll('.phone').forEach((p) => {
+    p.appendChild(document.getElementById('screen').content.cloneNode(true));
+    p.querySelectorAll('svg[data-px]').forEach(paint);
+  });
+</script>
+</body>
+</html>
