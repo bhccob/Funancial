@@ -1,0 +1,151 @@
+import { toLocalDate } from '@/domain/dates';
+import {
+  defaultSettings,
+  type BudgetLimit,
+  type Debt,
+  type Expense,
+  type Goal,
+  type Income,
+  type Profile,
+  type Settings,
+  type Subscription,
+  type Transaction,
+} from '@/domain/entities';
+import { newId, nowIso } from '@/domain/ids';
+
+const stamp = () => {
+  const now = nowIso();
+  return { createdAt: now, updatedAt: now };
+};
+const today = () => toLocalDate(new Date());
+
+export function makeProfile(overrides: Partial<Profile> = {}): Profile {
+  return {
+    id: 'profile',
+    ...stamp(),
+    name: 'Test Player',
+    currency: 'USD',
+    openingDate: today(),
+    openingCash: 100_000,
+    openingSavings: 500_000,
+    salary: { monthlyAmount: 420_000, payDay: 25 },
+    onboardedAt: null,
+    ...overrides,
+  };
+}
+
+export function makeSettings(overrides: Partial<Settings> = {}): Settings {
+  return { ...defaultSettings(nowIso()), ...overrides };
+}
+
+export function makeExpense(overrides: Partial<Expense> = {}): Expense {
+  return {
+    id: newId(),
+    ...stamp(),
+    amount: 12_50,
+    category: 'food',
+    date: today(),
+    note: '',
+    paymentMethod: 'cash',
+    cardId: null,
+    recurrence: null,
+    subscriptionId: null,
+    ...overrides,
+  };
+}
+
+export function makeIncome(overrides: Partial<Income> = {}): Income {
+  return {
+    id: newId(),
+    ...stamp(),
+    amount: 420_000,
+    source: 'salary',
+    label: 'Salary',
+    date: today(),
+    status: 'confirmed',
+    bucket: 'cash',
+    recurrence: null,
+    period: today().slice(0, 7),
+    note: '',
+    ...overrides,
+  };
+}
+
+export function makeSubscription(overrides: Partial<Subscription> = {}): Subscription {
+  return {
+    id: newId(),
+    ...stamp(),
+    name: 'Streamflix',
+    amount: 15_99,
+    cycle: 'monthly',
+    nextRenewal: today(),
+    category: 'entertainment',
+    paymentMethod: 'debit',
+    cardId: null,
+    status: 'active',
+    audit: null,
+    note: '',
+    ...overrides,
+  };
+}
+
+export function makeLimit(overrides: Partial<BudgetLimit> = {}): BudgetLimit {
+  return {
+    id: newId(),
+    ...stamp(),
+    scope: 'category',
+    category: 'food',
+    period: 'weekly',
+    amount: 120_00,
+    warnAt: [80, 100, 120],
+    reserve: false,
+    includeInvestments: false,
+    ...overrides,
+  };
+}
+
+export function makeDebt(overrides: Partial<Debt> = {}): Debt {
+  return {
+    id: newId(),
+    ...stamp(),
+    name: 'Visa',
+    kind: 'credit_card',
+    openingBalance: 0,
+    openingDate: today(),
+    interestRate: 22.9,
+    minimumPayment: 25_00,
+    creditLimit: 300_000,
+    statementDay: 1,
+    dueDay: 21,
+    payInFull: true,
+    ...overrides,
+  };
+}
+
+export function makeGoal(overrides: Partial<Goal> = {}): Goal {
+  return {
+    id: newId(),
+    ...stamp(),
+    name: 'Emergency fund',
+    kind: 'emergency',
+    target: 1_000_000,
+    current: 300_000,
+    deadline: null,
+    ...overrides,
+  };
+}
+
+export function makeTransaction(overrides: Partial<Transaction> = {}): Transaction {
+  return {
+    id: newId(),
+    ...stamp(),
+    type: 'transfer',
+    amount: 100_00,
+    date: today(),
+    from: 'cash',
+    to: 'savings',
+    debtId: null,
+    note: '',
+    ...overrides,
+  };
+}
