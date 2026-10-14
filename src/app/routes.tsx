@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { PlaceholderScreen } from '@/features/placeholder/PlaceholderScreen';
+import { SettingsScreen } from '@/features/settings/SettingsScreen';
 
 export interface AppRoute {
   path: string;
@@ -53,7 +54,13 @@ export const APP_ROUTES: AppRoute[] = [
   placeholder('/shop', 'Shop', Store, 'more'),
   placeholder('/inbox', 'Inbox', Inbox, 'more'),
   placeholder('/help', 'Help', CircleQuestionMark, 'more'),
-  placeholder('/settings', 'Settings', Settings, 'more'),
+  {
+    path: '/settings',
+    label: 'Settings',
+    icon: Settings,
+    nav: 'more',
+    element: <SettingsScreen />,
+  },
   placeholder('/add', 'Add Expense', Plus, 'hidden'),
 ];
 

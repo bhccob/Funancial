@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { createChannel, type SyncMessage } from './broadcast';
+import { createChannel, tabChannel, type SyncMessage } from './broadcast';
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -41,4 +41,21 @@ it('is a harmless no-op where BroadcastChannel is unavailable', () => {
   const stop = ch.subscribe(() => {});
   expect(() => stop()).not.toThrow();
   ch.close();
+});
+
+it('gives each tab one shared channel, so a tab never reloads itself', async () => {
+  const tab = tabChannel();
+  expect(tabChannel()).toBe(tab);
+  const otherTab = createChannel();
+  const heardBySelf: SyncMessage[] = [];
+  const heardByOther: SyncMessage[] = [];
+  tab.subscribe((m) => heardBySelf.push(m));
+  otherTab.subscribe((m) => heardByOther.push(m));
+
+  tab.post({ type: 'reload', reason: 'restore' });
+  await vi.waitFor(() => expect(heardByOther).toEqual([{ type: 'reload', reason: 'restore' }]));
+  expect(heardBySelf).toEqual([]);
+
+  tab.close();
+  otherTab.close();
 });

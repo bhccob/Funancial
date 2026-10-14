@@ -26,7 +26,7 @@ import { createWebRepository } from '@/data/webRepository';
 import { toLocalDate, type LocalDate } from '@/domain/dates';
 import { defaultSettings } from '@/domain/entities';
 import { emptySnapshot, type DataSnapshot, type EntityOf, type TableName } from '@/domain/snapshot';
-import { createChannel, type SyncMessage } from '@/lib/broadcast';
+import { tabChannel, type SyncMessage } from '@/lib/broadcast';
 import { safeStorage, type SafeStorage } from '@/lib/safeStorage';
 
 export type Phase = 'booting' | 'unavailable' | 'welcome' | 'locked' | 'unlocked';
@@ -302,7 +302,7 @@ export const appStore = createAppStore({
   today: () => toLocalDate(new Date()),
   now: () => Date.now(),
   storage: safeStorage,
-  channel: createChannel(),
+  channel: tabChannel(),
   requestPersistence: requestPersistentStorage,
   db: { open: (ns) => openDb(ns), remove: (ns) => deleteDb(ns) },
 });

@@ -61,3 +61,14 @@ export function createChannel(name = 'funancial'): SyncChannel {
     },
   };
 }
+
+let shared: SyncChannel | null = null;
+
+/**
+ * The one channel this tab posts and listens on. BroadcastChannel delivers to every *other*
+ * instance — including other instances in the same tab — so posting and listening must share
+ * an instance or a tab would reload itself after its own write.
+ */
+export function tabChannel(): SyncChannel {
+  return (shared ??= createChannel());
+}
