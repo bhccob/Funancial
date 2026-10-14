@@ -1,6 +1,7 @@
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
+import { Toaster } from '@/components/ui/Toaster';
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
 import { WelcomeScreen } from './WelcomeScreen';
 
@@ -26,4 +27,25 @@ it('starts with real data', async () => {
   const { store } = renderWithStore(<WelcomeScreen />, createStubStore({ phase: 'welcome' }));
   await userEvent.click(screen.getByRole('button', { name: 'Start with my real data' }));
   expect(store.getState().startFresh).toHaveBeenCalledTimes(1);
+});
+
+it('tells the user when starting fails instead of doing nothing', async () => {
+  const store = createStubStore({
+    phase: 'welcome',
+    startFresh: vi.fn(async () => {
+      throw new Error('This browser blocks encryption here.');
+    }),
+  });
+  renderWithStore(
+    <>
+      <WelcomeScreen />
+      <Toaster />
+    </>,
+    store,
+  );
+  await userEvent.click(screen.getByRole('button', { name: 'Start with my real data' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'This browser blocks encryption here.',
+  );
+  expect(screen.getByRole('button', { name: 'Start with my real data' })).toBeEnabled();
 });

@@ -39,7 +39,9 @@ test('backup → leave demo → restore round-trip', async ({ page }) => {
   };
 
   await restore('wrong pass!');
-  await expect(page.getByRole('alert')).toHaveText("That didn't match. Try again.");
+  await expect(page.getByRole('alert')).toHaveText(
+    "That passphrase didn't open this backup. Check it, or the file may be damaged.",
+  );
   await expect(page.getByText('No entries yet.')).toBeVisible();
 
   await restore('correct horse');

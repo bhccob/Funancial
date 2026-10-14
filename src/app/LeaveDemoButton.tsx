@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Dialog } from '@/components/ui/Dialog';
+import { useAction } from '@/lib/useAction';
 import { useApp } from '@/store/AppStoreProvider';
 
 /** "Start with my real data" — confirms, then deletes the demo data and returns to real data. */
 export function LeaveDemoButton({ size = 'sm' }: { size?: 'sm' | 'md' }) {
   const exitDemo = useApp((s) => s.exitDemo);
+  const run = useAction();
   const [confirming, setConfirming] = useState(false);
 
   return (
@@ -26,7 +28,7 @@ export function LeaveDemoButton({ size = 'sm' }: { size?: 'sm' | 'md' }) {
             <Button
               onClick={() => {
                 setConfirming(false);
-                void exitDemo();
+                void run(exitDemo);
               }}
             >
               Leave demo

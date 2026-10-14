@@ -124,3 +124,12 @@ describe('older backups', () => {
     expect(restored.tables.subscription[0]?.anchorDay).toBe(31);
   });
 });
+
+describe('wrong passphrase copy', () => {
+  it('suggests the file may be damaged', async () => {
+    const text = await createBackup(sampleSnapshot(), PASS, FAST);
+    await expect(readBackup(text, 'battery staple')).rejects.toThrow(
+      "That passphrase didn't open this backup. Check it, or the file may be damaged.",
+    );
+  });
+});

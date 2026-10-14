@@ -23,8 +23,8 @@ export type VaultRecord = {
 };
 
 export class WrongSecretError extends Error {
-  constructor(cause?: unknown) {
-    super("That didn't match. Try again.", { cause });
+  constructor(cause?: unknown, message = "That didn't match. Try again.") {
+    super(message, { cause });
     this.name = 'WrongSecretError';
   }
 }
@@ -54,9 +54,13 @@ export async function deriveKey(
   iterations: number,
   usage: 'wrap' | 'encrypt',
 ): Promise<CryptoKey> {
-  const material = await crypto.subtle.importKey('raw', utf8(secret), 'PBKDF2', false, [
-    'deriveKey',
-  ]);
+  const material = await crypto.subtle.importKey(
+    'raw',
+    utf8(secret.normalize('NFC')),
+    'PBKDF2',
+    false,
+    ['deriveKey'],
+  );
   return crypto.subtle.deriveKey(
     { name: 'PBKDF2', hash: 'SHA-256', salt, iterations },
     material,

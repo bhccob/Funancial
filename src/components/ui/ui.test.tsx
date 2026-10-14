@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { Banner } from './Banner';
 import { Button } from './Button';
 import { Dialog } from './Dialog';
+import { ErrorBoundary } from './ErrorBoundary';
 import { Section } from './Section';
 import { TextField } from './TextField';
 
@@ -100,5 +101,22 @@ describe('Section', () => {
     const section = screen.getByRole('region', { name: 'Limits' });
     expect(section).toContainElement(screen.getByRole('link', { name: 'See all' }));
     expect(screen.getByRole('heading', { level: 2, name: 'Limits' })).toBeInTheDocument();
+  });
+});
+
+describe('ErrorBoundary', () => {
+  it('shows a recovery screen when a child crashes', () => {
+    const Boom = () => {
+      throw new Error('kaboom');
+    };
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    render(
+      <ErrorBoundary>
+        <Boom />
+      </ErrorBoundary>,
+    );
+    spy.mockRestore();
+    expect(screen.getByRole('heading', { name: 'Something went wrong' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Reload' })).toBeInTheDocument();
   });
 });

@@ -1,5 +1,6 @@
 import { useId, useState, type FormEvent } from 'react';
 import { LeaveDemoButton } from '@/app/LeaveDemoButton';
+import { Banner } from '@/components/ui/Banner';
 import { Button } from '@/components/ui/Button';
 import { Section } from '@/components/ui/Section';
 import { Dialog } from '@/components/ui/Dialog';
@@ -138,7 +139,7 @@ function RestoreForm() {
         <input
           id={fileId}
           type="file"
-          accept=".funbak,.json"
+          accept=".funbak"
           onChange={(e) => setFile(e.target.files?.[0] ?? null)}
           className="file:border-border-strong file:bg-surface text-sm file:mr-3 file:rounded-md file:border-2 file:px-3 file:py-2 file:font-bold"
         />
@@ -242,6 +243,7 @@ export function DataSection() {
   const namespace = useApp((s) => s.namespace);
   const data = useApp((s) => s.data);
   const persisted = useApp((s) => s.persisted);
+  const skipped = useApp((s) => s.skipped);
   const [backupOpen, setBackupOpen] = useState(false);
   const lastBackupAt = data.tables.settings[0]?.lastBackupAt ?? null;
   const demo = namespace === 'demo';
@@ -249,6 +251,12 @@ export function DataSection() {
   return (
     <Section title="Data">
       <div className="flex flex-col gap-5">
+        {skipped.length > 0 && (
+          <Banner tone="warning">
+            {skipped.length} saved items couldn't be read and are hidden. They're still kept on this
+            device.
+          </Banner>
+        )}
         <div className="flex flex-col gap-1">
           <p className="font-bold">{summarize(data)}</p>
           <p className="text-muted text-sm">

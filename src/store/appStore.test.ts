@@ -446,3 +446,13 @@ describe('data changes across tabs', () => {
     expect(other.getState().data.tables.expense.map((e) => e.id)).toEqual(['from-a']);
   });
 });
+
+describe('backup when storage is full', () => {
+  it('still hands over the file if recording the backup date fails', async () => {
+    const { store } = await freshStore();
+    store.setState({ put: vi.fn().mockRejectedValue(new Error('quota')) });
+    const { fileName, text } = await store.getState().createBackup('correct horse');
+    expect(fileName).toMatch(/^funancial-backup-\d{4}-\d{2}-\d{2}\.funbak$/);
+    expect(JSON.parse(text).format).toBe('funancial-backup');
+  });
+});

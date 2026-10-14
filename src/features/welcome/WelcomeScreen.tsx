@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { useAction } from '@/lib/useAction';
 import { useApp } from '@/store/AppStoreProvider';
 
 export function WelcomeScreen() {
@@ -8,13 +9,11 @@ export function WelcomeScreen() {
   const startFresh = useApp((s) => s.startFresh);
   const [busy, setBusy] = useState(false);
 
+  const act = useAction();
   const run = (action: () => Promise<void>) => async () => {
     setBusy(true);
-    try {
-      await action();
-    } finally {
-      setBusy(false);
-    }
+    await act(action);
+    setBusy(false);
   };
 
   return (

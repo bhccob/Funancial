@@ -1,6 +1,7 @@
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { Toaster } from '@/components/ui/Toaster';
 import { InvalidBackupError } from '@/data/backup';
 import { emptySnapshot } from '@/domain/snapshot';
 import { downloadText } from '@/lib/download';
@@ -201,5 +202,48 @@ describe('Data', () => {
       screen.queryByRole('button', { name: 'Export unencrypted copy' }),
     ).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Delete all data' })).not.toBeInTheDocument();
+  });
+});
+
+describe('Data: unreadable items', () => {
+  it('tells the user when saved items could not be read', () => {
+    renderWithStore(
+      <SettingsScreen />,
+      createStubStore({
+        data: snapshotWith(),
+        skipped: [
+          { table: 'expense', id: 'x', reason: 'decrypt' },
+          { table: 'goal', id: 'y', reason: 'invalid' },
+        ],
+      }),
+    );
+    expect(
+      screen.getByText(
+        "2 saved items couldn't be read and are hidden. They're still kept on this device.",
+      ),
+    ).toBeInTheDocument();
+  });
+});
+
+describe('Security: failures are visible', () => {
+  it('shows a message when saving the PIN fails', async () => {
+    renderWithStore(
+      <>
+        <SettingsScreen />
+        <Toaster />
+      </>,
+      createStubStore({
+        lockMode: 'device',
+        setSecret: vi.fn(async () => {
+          throw new Error('Storage is full.');
+        }),
+      }),
+    );
+    await userEvent.click(screen.getByRole('radio', { name: 'PIN' }));
+    const dialog = screen.getByRole('dialog', { name: 'Set a PIN' });
+    await userEvent.type(within(dialog).getByLabelText('New PIN'), '2468');
+    await userEvent.type(within(dialog).getByLabelText('Confirm PIN'), '2468');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Storage is full.');
   });
 });

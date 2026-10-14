@@ -336,7 +336,10 @@ export function createAppStore(deps: AppDeps): StoreApi<AppState> {
         });
         const at = now.toISOString();
         const settings = get().data.tables.settings[0] ?? defaultSettings(at);
-        await get().put('settings', { ...settings, lastBackupAt: at, updatedAt: at });
+        // Best effort: when storage is full the backup matters more than remembering its date.
+        await get()
+          .put('settings', { ...settings, lastBackupAt: at, updatedAt: at })
+          .catch(() => {});
         return { fileName: backupFileName(now), text };
       },
 

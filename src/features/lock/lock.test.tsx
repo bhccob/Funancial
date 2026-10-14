@@ -125,3 +125,60 @@ describe('LockScreen review fixes', () => {
     expect(screen.getByRole('button', { name: 'Forgot your passphrase?' })).toBeInTheDocument();
   });
 });
+
+describe('useAutoLock activity', () => {
+  it('treats scrolling with the wheel as activity', () => {
+    vi.useFakeTimers();
+    const store = createStubStore();
+    render(
+      <AppStoreProvider store={store}>
+        <AutoLockProbe minutes={1} />
+      </AppStoreProvider>,
+    );
+    act(() => vi.advanceTimersByTime(50_000));
+    window.dispatchEvent(new Event('wheel'));
+    act(() => vi.advanceTimersByTime(50_000));
+    expect(store.getState().lock).not.toHaveBeenCalled();
+  });
+
+  it('locks on return after being hidden longer than the timeout', () => {
+    vi.useFakeTimers();
+    const store = createStubStore();
+    render(
+      <AppStoreProvider store={store}>
+        <AutoLockProbe minutes={1} />
+      </AppStoreProvider>,
+    );
+    const setVisibility = (v: 'hidden' | 'visible') => {
+      Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => v });
+      document.dispatchEvent(new Event('visibilitychange'));
+    };
+    setVisibility('hidden');
+    vi.setSystemTime(Date.now() + 61_000);
+    setVisibility('visible');
+    expect(store.getState().lock).toHaveBeenCalledTimes(1);
+    setVisibility('visible');
+  });
+});
+
+describe('LockScreen after a throttle', () => {
+  it('does not bring back the old error once the countdown ends', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const store = createStubStore({ phase: 'locked', lockMode: 'pin' });
+    store.setState({
+      unlock: vi.fn(async () => {
+        store.setState({ lockedUntil: Date.now() + 2_000 });
+        return 'wrong' as const;
+      }),
+    });
+    renderWithStore(<LockScreen />, store);
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    await user.type(screen.getByLabelText('PIN'), '0000{Enter}');
+    expect(await screen.findByText(/Too many tries/)).toBeInTheDocument();
+    await act(async () => {
+      vi.advanceTimersByTime(3_500);
+    });
+    expect(screen.queryByText("That didn't match. Try again.")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Too many tries/)).not.toBeInTheDocument();
+  });
+});

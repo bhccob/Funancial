@@ -84,7 +84,10 @@ export function LockScreen() {
   const checking = useApp((s) => s.checking);
 
   const throttled = lockedUntil !== null && expired !== lockedUntil;
-  const onCountdownDone = useCallback(() => setExpired(lockedUntil), [lockedUntil]);
+  const onCountdownDone = useCallback(() => {
+    setExpired(lockedUntil);
+    setError(undefined);
+  }, [lockedUntil]);
 
   const submit = async (secret: string) => {
     const result = await unlock(secret);

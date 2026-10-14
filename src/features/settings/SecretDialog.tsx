@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/Button';
 import { Dialog } from '@/components/ui/Dialog';
 import { TextField } from '@/components/ui/TextField';
 import { validateSecret, type LockMode, type SecretKind } from '@/data/keys';
+import { useAction } from '@/lib/useAction';
 import { useApp } from '@/store/AppStoreProvider';
 
 export type LockTarget = 'none' | SecretKind;
@@ -24,6 +25,7 @@ function SecretForm({ target, current, onDone }: FormProps) {
   const verifySecret = useApp((s) => s.verifySecret);
   const setSecret = useApp((s) => s.setSecret);
   const clearSecret = useApp((s) => s.clearSecret);
+  const run = useAction();
   const [currentSecret, setCurrentSecret] = useState('');
   const [next, setNext] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -45,17 +47,18 @@ function SecretForm({ target, current, onDone }: FormProps) {
     if (found.next || found.confirm) return;
 
     setBusy(true);
-    try {
+    let wrongCurrent = false;
+    const saved = await run(async () => {
       if (needsCurrent && !(await verifySecret(currentSecret))) {
-        setErrors({ current: "That didn't match. Try again." });
+        wrongCurrent = true;
         return;
       }
       if (target === 'none') await clearSecret();
       else await setSecret(next, target);
-      onDone();
-    } finally {
-      setBusy(false);
-    }
+    });
+    setBusy(false);
+    if (wrongCurrent) setErrors({ current: "That didn't match. Try again." });
+    else if (saved) onDone();
   }
 
   return (

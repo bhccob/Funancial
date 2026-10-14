@@ -5,6 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="description" content="Funancial — level up your real financial life." />
     <title>Funancial</title>
+    <script>
+      try {
+        var p = localStorage.getItem('funancial.theme');
+        var dark =
+          p === 'dark' || (p !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches);
+        document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>
