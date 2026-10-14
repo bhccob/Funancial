@@ -10,6 +10,7 @@ import { formatMoney, minorDigits } from '@/domain/money';
 import { cn } from '@/lib/cn';
 import { useAction } from '@/lib/useAction';
 import { useApp } from '@/store/AppStoreProvider';
+import { currencyOptions } from '@/features/shared/currencies';
 import type { CardInput } from '@/store/financeActions';
 import { useFinanceActions } from '@/store/useFinance';
 
@@ -22,17 +23,6 @@ const TITLES = [
   'Credit cards',
   'Lock Funancial?',
 ];
-
-const COMMON_CURRENCIES = ['USD', 'EUR', 'GBP', 'CAD', 'AUD', 'JPY', 'CHF', 'INR', 'SGD', 'ZAR'];
-
-function currencyOptions(): Array<{ value: string; label: string }> {
-  const names = new Intl.DisplayNames(undefined, { type: 'currency' });
-  const rest = Intl.supportedValuesOf('currency').filter((c) => !COMMON_CURRENCIES.includes(c));
-  return [...COMMON_CURRENCIES, ...rest].map((code) => ({
-    value: code,
-    label: `${code} · ${names.of(code) ?? code}`,
-  }));
-}
 
 const DAY_OPTIONS = Array.from({ length: 31 }, (_, i) => ({
   value: String(i + 1),
@@ -117,7 +107,7 @@ export function OnboardingWizard() {
   const setSecret = useApp((s) => s.setSecret);
   const run = useAction();
   const heading = useRef<HTMLHeadingElement>(null);
-  const [options] = useState(currencyOptions);
+  const [options] = useState(() => currencyOptions());
 
   const [step, setStep] = useState(1);
   const [understood, setUnderstood] = useState(false);

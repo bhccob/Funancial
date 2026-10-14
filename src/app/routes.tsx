@@ -21,6 +21,7 @@ import type { ReactNode } from 'react';
 import { AddScreen } from '@/features/add/AddScreen';
 import { BudgetScreen } from '@/features/budget/BudgetScreen';
 import { DashboardScreen } from '@/features/dashboard/DashboardScreen';
+import { FreezeScreen } from '@/features/freeze/FreezeScreen';
 import { PlaceholderScreen } from '@/features/placeholder/PlaceholderScreen';
 import { SubscriptionsScreen } from '@/features/subscriptions/SubscriptionsScreen';
 import { SettingsScreen } from '@/features/settings/SettingsScreen';
@@ -56,7 +57,13 @@ export const APP_ROUTES: AppRoute[] = [
     nav: 'more',
     element: <SubscriptionsScreen />,
   },
-  placeholder('/freeze', 'Salary Freeze', Snowflake, 'more'),
+  {
+    path: '/freeze',
+    label: 'Salary Freeze',
+    icon: Snowflake,
+    nav: 'more',
+    element: <FreezeScreen />,
+  },
   placeholder('/dividends', 'Dividends', Coins, 'more'),
   placeholder('/news', 'News', Newspaper, 'more'),
   placeholder('/goals', 'Goals', Target, 'more'),
