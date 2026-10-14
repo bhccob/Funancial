@@ -330,4 +330,38 @@ const SAL_1: WorkedExample = {
   },
 };
 
-export const EXAMPLES: WorkedExample[] = [EXP_1, LIM_1, SAL_1, BAL_1, AVL_1];
+const SUB_1: WorkedExample = {
+  id: 'SUB-1',
+  rule: 'Subscription',
+  title: 'A subscription is a recurring expense taken from your available balance',
+  today: '2026-10-19',
+  data: ex.snapshot({
+    profile: [ex.profile({ openingDate: '2026-10-01', openingCash: 1_000_00 })],
+    subscription: [
+      ex.subscription({
+        id: 'sub-streamflix',
+        name: 'Streamflix',
+        amount: 15_99,
+        nextRenewal: '2026-10-20',
+        anchorDay: 20,
+      }),
+    ],
+  }),
+  steps: [
+    'Streamflix costs $15.99 and renews on the 20th.',
+    'On Oct 19 it is an upcoming bill: cash is still $1,000.00 but only $984.01 is available to spend.',
+    'On Oct 20 Funancial records the $15.99 charge as an expense, so cash drops to $984.01.',
+    'The next renewal moves to Nov 20, so nothing more is due this month.',
+  ],
+  result: {
+    billsBefore: 15_99,
+    availableBefore: 984_01,
+    cashBefore: 1_000_00,
+    cashAfter: 984_01,
+    billsAfter: 0,
+    nextRenewalMonth: 11,
+    nextRenewalDay: 20,
+  },
+};
+
+export const EXAMPLES: WorkedExample[] = [EXP_1, SUB_1, LIM_1, SAL_1, BAL_1, AVL_1];

@@ -2,6 +2,10 @@ import { useCallback } from 'react';
 import { formatMoney } from '@/domain/money';
 import { useApp } from './AppStoreProvider';
 
+export function useToday(): string {
+  return useApp((s) => s.today);
+}
+
 export function useCurrency(): string {
   return useApp((s) => s.data.tables.profile[0]?.currency ?? 'USD');
 }

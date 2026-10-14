@@ -15,6 +15,13 @@ tabChannel().subscribe((m) => {
   else window.location.reload();
 });
 
+// A new day (or time away) may have brought renewals, pay days and a new budget period.
+const sync = () => void appStore.getState().sync();
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') sync();
+});
+window.addEventListener('focus', sync);
+
 const container = document.getElementById('root');
 if (!container) throw new Error('Missing #root element');
 

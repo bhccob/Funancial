@@ -10,6 +10,7 @@ import {
 import { EXAMPLES, type WorkedExample } from './examples';
 import { expectedSalary, freezeAllocation, freezeLoss } from './salary';
 import { SnapshotSchema } from './snapshot';
+import { applyRecords, dueGenerated } from './sync';
 
 /** How each worked example's numbers are produced from the real domain functions. */
 const RANK: Record<LimitLevel, number> = { ok: 0, warn: 1, over: 2, 'way-over': 3 };
@@ -43,6 +44,21 @@ const COMPUTE: Record<string, (ex: WorkedExample) => Record<string, number>> = {
       total: freezeLoss(freeze.start, freeze.end, monthly),
       expectedSep: expectedSalary(profile, ex.data.tables.salaryFreeze, '2026-09'),
       expectedOct: expectedSalary(profile, ex.data.tables.salaryFreeze, '2026-10'),
+    };
+  },
+  'SUB-1': (ex) => {
+    const sum = (bills: Array<{ amount: number }>) => bills.reduce((s, b) => s + b.amount, 0);
+    const before = upcomingBills(ex.data, ex.today);
+    const after = applyRecords(ex.data, dueGenerated(ex.data, '2026-10-20'));
+    const next = after.tables.subscription[0]!.nextRenewal;
+    return {
+      billsBefore: sum(before),
+      availableBefore: availableBalance(bucketBalances(ex.data, ex.today), before, 0),
+      cashBefore: bucketBalances(ex.data, ex.today).cash,
+      cashAfter: bucketBalances(after, '2026-10-20').cash,
+      billsAfter: sum(upcomingBills(after, '2026-10-20')),
+      nextRenewalMonth: Number(next.slice(5, 7)),
+      nextRenewalDay: Number(next.slice(8, 10)),
     };
   },
   'LIM-1': (ex) => {

@@ -26,6 +26,7 @@ import type { Repository, SkippedRecord } from '@/data/repository';
 import { createWebRepository } from '@/data/webRepository';
 import { toLocalDate, type LocalDate } from '@/domain/dates';
 import { defaultSettings } from '@/domain/entities';
+import { dueGenerated } from '@/domain/sync';
 import {
   emptySnapshot,
   type DataSnapshot,
@@ -63,6 +64,8 @@ export interface AppState {
   lockedUntil: number | null;
   /** An unlock attempt is being checked (the key derivation takes a moment). */
   checking: boolean;
+  /** The app's idea of today; refreshed on boot and whenever the app regains focus. */
+  today: LocalDate;
 
   boot(): Promise<void>;
   startFresh(): Promise<void>;
@@ -78,6 +81,8 @@ export interface AppState {
   putMany(items: TableRecord[]): Promise<void>;
   /** Reload data from storage, e.g. after another tab wrote. */
   refresh(): Promise<void>;
+  /** Refresh `today` and create what has come due (subscription charges, expected salary). */
+  sync(): Promise<void>;
   remove(table: TableName, id: string): Promise<void>;
   createBackup(passphrase: string): Promise<{ fileName: string; text: string }>;
   restoreBackup(text: string, passphrase: string): Promise<void>;
@@ -130,6 +135,7 @@ export function createAppStore(deps: AppDeps): StoreApi<AppState> {
       session.repo = createWebRepository(session.db, key);
       const { snapshot, skipped } = await session.repo.loadAll();
       set({ data: snapshot, skipped, phase: 'unlocked' });
+      await get().sync();
     }
 
     function requireReal(action: string) {
@@ -146,6 +152,7 @@ export function createAppStore(deps: AppDeps): StoreApi<AppState> {
       failedAttempts: 0,
       lockedUntil: null,
       checking: false,
+      today: deps.today(),
 
       async boot() {
         set({ phase: 'booting' });
@@ -310,6 +317,14 @@ export function createAppStore(deps: AppDeps): StoreApi<AppState> {
         }
         set({ data: { ...data, tables: tables as DataSnapshot['tables'] } });
         deps.channel.post({ type: 'reload', reason: 'data' });
+      },
+
+      async sync() {
+        const today = deps.today();
+        set({ today });
+        if (get().phase !== 'unlocked' || !session?.repo) return;
+        const due = dueGenerated(get().data, today);
+        if (due.length > 0) await get().putMany(due);
       },
 
       async refresh() {
