@@ -8,6 +8,7 @@ import {
   type LimitLevel,
 } from './budget';
 import { EXAMPLES, type WorkedExample } from './examples';
+import { expectedSalary, freezeAllocation, freezeLoss } from './salary';
 import { SnapshotSchema } from './snapshot';
 
 /** How each worked example's numbers are produced from the real domain functions. */
@@ -29,6 +30,19 @@ const COMPUTE: Record<string, (ex: WorkedExample) => Record<string, number>> = {
       available: availableBalance(bucketBalances(ex.data, ex.today), bills, reserved),
       foodSpent: food.spent,
       foodPct: food.pct,
+    };
+  },
+  'SAL-1': (ex) => {
+    const profile = ex.data.tables.profile[0]!;
+    const freeze = ex.data.tables.salaryFreeze[0]!;
+    const monthly = profile.salary!.monthlyAmount;
+    const alloc = freezeAllocation(freeze, monthly);
+    return {
+      lossSep: alloc['2026-09']!,
+      lossOct: alloc['2026-10']!,
+      total: freezeLoss(freeze.start, freeze.end, monthly),
+      expectedSep: expectedSalary(profile, ex.data.tables.salaryFreeze, '2026-09'),
+      expectedOct: expectedSalary(profile, ex.data.tables.salaryFreeze, '2026-10'),
     };
   },
   'LIM-1': (ex) => {
