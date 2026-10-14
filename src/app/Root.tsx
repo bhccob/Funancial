@@ -1,7 +1,8 @@
+import { useState } from 'react';
+import { RouterProvider } from 'react-router/dom';
+import { createAppRouter } from './router';
+
 export function Root() {
-  return (
-    <main>
-      <h1>Funancial</h1>
-    </main>
-  );
+  const [router] = useState(createAppRouter);
+  return <RouterProvider router={router} />;
 }
