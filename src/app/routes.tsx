@@ -18,6 +18,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { DashboardScreen } from '@/features/dashboard/DashboardScreen';
 import { PlaceholderScreen } from '@/features/placeholder/PlaceholderScreen';
 import { SettingsScreen } from '@/features/settings/SettingsScreen';
 
@@ -40,7 +41,7 @@ function placeholder(
 }
 
 export const APP_ROUTES: AppRoute[] = [
-  placeholder('/', 'Home', House, 'tab'),
+  { path: '/', label: 'Home', icon: House, nav: 'tab', element: <DashboardScreen /> },
   placeholder('/budget', 'Budget', ChartPie, 'tab'),
   placeholder('/invest', 'Invest', TrendingUp, 'tab'),
   placeholder('/buy', 'Buy It?', ShoppingBag, 'tab', 'Should I Buy It?'),

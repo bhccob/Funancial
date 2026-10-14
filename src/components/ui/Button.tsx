@@ -1,4 +1,5 @@
 import type { ButtonHTMLAttributes } from 'react';
+import { Link, type LinkProps } from 'react-router';
 import { cn } from '@/lib/cn';
 
 export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
@@ -38,4 +39,19 @@ export function Button({
   return (
     <button type={type} className={cn(base, variants[variant], sizes[size], className)} {...rest} />
   );
+}
+
+export interface ButtonLinkProps extends LinkProps {
+  variant?: ButtonVariant;
+  size?: ButtonSize;
+}
+
+/** A router link that looks like a Button: for actions that go to another screen. */
+export function ButtonLink({
+  variant = 'primary',
+  size = 'md',
+  className,
+  ...rest
+}: ButtonLinkProps) {
+  return <Link className={cn(base, variants[variant], sizes[size], className)} {...rest} />;
 }

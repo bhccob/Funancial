@@ -11,6 +11,8 @@ test('a new user sets up money, salary and a PIN, then lands on Home', async ({ 
     salary: { amount: '4200', payDay: '25' },
     pin: '2468',
   });
+  // Cash 1,000 + savings 5,000; no bills or limits yet.
+  await expect(page.getByRole('region', { name: 'Available to spend' })).toContainText('$6,000.00');
 
   // The PIN chosen during onboarding is in force from the next start.
   await page.reload();
