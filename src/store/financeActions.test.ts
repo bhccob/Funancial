@@ -13,17 +13,15 @@ import { createFinanceActions } from './financeActions';
 
 async function setup() {
   const t = await freshRealStore();
-  await t.store
-    .getState()
-    .put(
-      'profile',
-      makeProfile({
-        openingDate: '2026-10-01',
-        openingCash: 1_000_00,
-        openingSavings: 5_000_00,
-        salary: { monthlyAmount: 3_100_00, payDay: 25 },
-      }),
-    );
+  await t.store.getState().put(
+    'profile',
+    makeProfile({
+      openingDate: '2026-10-01',
+      openingCash: 1_000_00,
+      openingSavings: 5_000_00,
+      salary: { monthlyAmount: 3_100_00, payDay: 25 },
+    }),
+  );
   return { ...t, actions: createFinanceActions(t.store) };
 }
 
