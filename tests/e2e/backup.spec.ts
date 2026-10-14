@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { startDemo } from './helpers';
+import { onboard, startDemo } from './helpers';
 
 // No add-expense screen exists yet, so the demo data is the backup's payload.
 test('backup → leave demo → restore round-trip', async ({ page }) => {
@@ -25,6 +25,7 @@ test('backup → leave demo → restore round-trip', async ({ page }) => {
     .click();
   await expect(page.getByRole('button', { name: 'Try with demo money' })).toBeVisible();
   await page.getByRole('button', { name: 'Start with my real data' }).click();
+  await onboard(page);
   await page.goto('/settings');
   await expect(page.getByText('No entries yet.')).toBeVisible();
 

@@ -1,8 +1,10 @@
+import { useEffect } from 'react';
 import { RouterProvider } from 'react-router/dom';
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
 import { Toaster } from '@/components/ui/Toaster';
 import { LockScreen } from '@/features/lock/LockScreen';
 import { useAutoLock } from '@/features/lock/useAutoLock';
+import { OnboardingWizard } from '@/features/onboarding/OnboardingWizard';
 import { BootSplash } from '@/features/system/BootSplash';
 import { StorageUnavailable } from '@/features/system/StorageUnavailable';
 import { WelcomeScreen } from '@/features/welcome/WelcomeScreen';
@@ -22,7 +24,15 @@ function UnlockedApp() {
   const minutes = useApp(
     (s) => s.data.tables.settings[0]?.autoLockMinutes ?? DEFAULT_AUTO_LOCK_MINUTES,
   );
+  const needsOnboarding = useApp(
+    (s) => s.namespace === 'real' && !s.data.tables.profile[0]?.onboardedAt,
+  );
   useAutoLock(minutes);
+  useEffect(() => {
+    // Onboarding ends on the Dashboard, not on a screen an earlier session (say, demo) left open.
+    if (needsOnboarding) void getAppRouter().navigate('/', { replace: true });
+  }, [needsOnboarding]);
+  if (needsOnboarding) return <OnboardingWizard />;
   return <RouterProvider router={getAppRouter()} />;
 }
 

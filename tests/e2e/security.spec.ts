@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { startFresh } from './helpers';
+import { onboard, startFresh } from './helpers';
 
 test('set PIN → reload → locked → wrong → right → unlocked', async ({ page }) => {
   await startFresh(page, '/settings');
@@ -49,6 +49,10 @@ test('two tabs on the welcome screen: starting in one moves the other along', as
   await expect(b.getByRole('button', { name: 'Start with my real data' })).toBeVisible();
 
   await a.getByRole('button', { name: 'Start with my real data' }).click();
-  await expect(a.getByRole('heading', { level: 1, name: 'Home' })).toBeVisible();
+  await expect(a.getByRole('heading', { level: 1, name: 'Before we start' })).toBeVisible();
+  await expect(b.getByRole('heading', { level: 1, name: 'Before we start' })).toBeVisible();
+
+  // Finishing onboarding in one tab takes the other to Home too.
+  await onboard(a);
   await expect(b.getByRole('heading', { level: 1, name: 'Home' })).toBeVisible();
 });

@@ -1,9 +1,18 @@
 import { act, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
+import { emptySnapshot } from '@/domain/snapshot';
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
+import { makeProfile } from '@/test/fixtures';
 import { DemoBanner } from './DemoBanner';
 import { Root } from './Root';
+
+/** Data for someone who finished onboarding. */
+function onboarded() {
+  const data = emptySnapshot();
+  data.tables.profile.push(makeProfile({ onboardedAt: '2026-10-01T09:00:00.000Z' }));
+  return data;
+}
 
 describe('Root', () => {
   it('shows a loading state while booting', () => {
@@ -34,7 +43,19 @@ describe('Root', () => {
   });
 
   it('shows the app when unlocked', async () => {
-    renderWithStore(<Root />, createStubStore({ phase: 'unlocked' }));
+    renderWithStore(<Root />, createStubStore({ phase: 'unlocked', data: onboarded() }));
+    expect(await screen.findByRole('heading', { level: 1, name: 'Home' })).toBeInTheDocument();
+  });
+
+  it('runs onboarding for real data that has not been set up yet', () => {
+    renderWithStore(<Root />, createStubStore({ phase: 'unlocked', namespace: 'real' }));
+    expect(screen.getByRole('heading', { level: 1, name: 'Before we start' })).toBeInTheDocument();
+  });
+
+  it('leaves onboarding as soon as the profile is saved', async () => {
+    const store = createStubStore({ phase: 'unlocked', namespace: 'real' });
+    renderWithStore(<Root />, store);
+    act(() => store.setState({ data: onboarded() }));
     expect(await screen.findByRole('heading', { level: 1, name: 'Home' })).toBeInTheDocument();
   });
 });
@@ -67,7 +88,7 @@ describe('Root across lock cycles', () => {
   it('reuses one router instead of creating a new one per unlock', async () => {
     const routerModule = await import('./router');
     const spy = vi.spyOn(routerModule, 'createAppRouter');
-    const store = createStubStore({ phase: 'unlocked' });
+    const store = createStubStore({ phase: 'unlocked', data: onboarded() });
     renderWithStore(<Root />, store);
     await screen.findByRole('heading', { level: 1, name: 'Home' });
     act(() => store.setState({ phase: 'locked', lockMode: 'pin' }));
@@ -78,6 +99,19 @@ describe('Root across lock cycles', () => {
     await screen.findByRole('heading', { level: 1, name: 'Home' });
     expect(spy.mock.calls.length).toBeLessThanOrEqual(1);
     spy.mockRestore();
+  });
+
+  it('lands on Home after onboarding, wherever the last session left off', async () => {
+    const store = createStubStore({ phase: 'unlocked', data: onboarded() });
+    renderWithStore(<Root />, store);
+    await userEvent.click(
+      (await screen.findAllByRole('link', { name: 'Settings' }))[0] as HTMLElement,
+    );
+    await screen.findByRole('heading', { level: 1, name: 'Settings' });
+    act(() => store.setState({ data: emptySnapshot() }));
+    expect(screen.getByRole('heading', { level: 1, name: 'Before we start' })).toBeInTheDocument();
+    act(() => store.setState({ data: onboarded() }));
+    expect(await screen.findByRole('heading', { level: 1, name: 'Home' })).toBeInTheDocument();
   });
 
   it('shows toasts on every screen', () => {
