@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { Banner } from './Banner';
 import { Button } from './Button';
 import { Dialog } from './Dialog';
+import { Section } from './Section';
 import { TextField } from './TextField';
 
 describe('Button', () => {
@@ -86,5 +87,18 @@ describe('Banner', () => {
       </Banner>,
     );
     expect(screen.getByRole('button', { name: 'Fix it' })).toBeInTheDocument();
+  });
+});
+
+describe('Section', () => {
+  it('is labelled by its title and shows its action', () => {
+    render(
+      <Section title="Limits" action={<a href="/budget">See all</a>}>
+        body
+      </Section>,
+    );
+    const section = screen.getByRole('region', { name: 'Limits' });
+    expect(section).toContainElement(screen.getByRole('link', { name: 'See all' }));
+    expect(screen.getByRole('heading', { level: 2, name: 'Limits' })).toBeInTheDocument();
   });
 });

@@ -1,7 +1,7 @@
 import { useId, useState, type FormEvent } from 'react';
 import { LeaveDemoButton } from '@/app/LeaveDemoButton';
 import { Button } from '@/components/ui/Button';
-import { Card } from '@/components/ui/Card';
+import { Section } from '@/components/ui/Section';
 import { Dialog } from '@/components/ui/Dialog';
 import { TextField } from '@/components/ui/TextField';
 import { EraseDialog } from '@/features/system/EraseDialog';
@@ -243,50 +243,48 @@ export function DataSection() {
   const data = useApp((s) => s.data);
   const persisted = useApp((s) => s.persisted);
   const [backupOpen, setBackupOpen] = useState(false);
-  const headingId = useId();
   const lastBackupAt = data.tables.settings[0]?.lastBackupAt ?? null;
   const demo = namespace === 'demo';
 
   return (
-    <Card as="section" aria-labelledby={headingId} className="flex flex-col gap-5">
-      <div className="flex flex-col gap-1">
-        <h2 id={headingId} className="font-display text-xl font-semibold">
-          Data
-        </h2>
-        <p className="font-bold">{summarize(data)}</p>
-        <p className="text-muted text-sm">
-          {persisted
-            ? 'Storage: protected from automatic clearing'
-            : 'Storage: the browser may clear it if space runs low'}
-        </p>
-      </div>
-
-      <div className="flex flex-col items-start gap-2">
-        <Button onClick={() => setBackupOpen(true)}>Create encrypted backup</Button>
-        <p className="text-muted text-sm">
-          {lastBackupAt
-            ? `Last backup: ${dateTime.format(new Date(lastBackupAt))}`
-            : 'No backup yet.'}
-        </p>
-        <BackupDialog open={backupOpen} onClose={() => setBackupOpen(false)} />
-      </div>
-
-      {demo ? (
-        <div className="flex flex-col items-start gap-2">
-          <p className="text-muted text-sm">This is demo money. Leaving demo deletes it.</p>
-          <LeaveDemoButton size="md" />
+    <Section title="Data">
+      <div className="flex flex-col gap-5">
+        <div className="flex flex-col gap-1">
+          <p className="font-bold">{summarize(data)}</p>
+          <p className="text-muted text-sm">
+            {persisted
+              ? 'Storage: protected from automatic clearing'
+              : 'Storage: the browser may clear it if space runs low'}
+          </p>
         </div>
-      ) : (
-        <>
-          <hr className="border-border border-t-2 border-dashed" />
-          <RestoreForm />
-          <hr className="border-border border-t-2 border-dashed" />
-          <div className="flex flex-wrap gap-3">
-            <ExportButton />
-            <DeleteAllButton />
+
+        <div className="flex flex-col items-start gap-2">
+          <Button onClick={() => setBackupOpen(true)}>Create encrypted backup</Button>
+          <p className="text-muted text-sm">
+            {lastBackupAt
+              ? `Last backup: ${dateTime.format(new Date(lastBackupAt))}`
+              : 'No backup yet.'}
+          </p>
+          <BackupDialog open={backupOpen} onClose={() => setBackupOpen(false)} />
+        </div>
+
+        {demo ? (
+          <div className="flex flex-col items-start gap-2">
+            <p className="text-muted text-sm">This is demo money. Leaving demo deletes it.</p>
+            <LeaveDemoButton size="md" />
           </div>
-        </>
-      )}
-    </Card>
+        ) : (
+          <>
+            <hr className="border-border border-t-2 border-dashed" />
+            <RestoreForm />
+            <hr className="border-border border-t-2 border-dashed" />
+            <div className="flex flex-wrap gap-3">
+              <ExportButton />
+              <DeleteAllButton />
+            </div>
+          </>
+        )}
+      </div>
+    </Section>
   );
 }

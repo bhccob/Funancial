@@ -1,6 +1,6 @@
 import { useId, useState } from 'react';
 import { Button } from '@/components/ui/Button';
-import { Card } from '@/components/ui/Card';
+import { Section } from '@/components/ui/Section';
 import { RadioGroup } from '@/components/ui/RadioGroup';
 import { defaultSettings, type AutoLockMinutes } from '@/domain/entities';
 import { nowIso } from '@/domain/ids';
@@ -27,19 +27,15 @@ export function SecuritySection() {
   const settings = useApp((s) => s.data.tables.settings[0]);
   const put = useApp((s) => s.put);
   const [target, setTarget] = useState<LockTarget | null>(null);
-  const headingId = useId();
   const autoLockId = useId();
 
   const current: LockTarget = lockMode === 'device' ? 'none' : lockMode;
 
   if (namespace === 'demo') {
     return (
-      <Card as="section" aria-labelledby={headingId} className="flex flex-col gap-2">
-        <h2 id={headingId} className="font-display text-xl font-semibold">
-          Security
-        </h2>
+      <Section title="Security">
         <p className="text-muted">Demo data isn't locked.</p>
-      </Card>
+      </Section>
     );
   }
 
@@ -53,10 +49,7 @@ export function SecuritySection() {
   };
 
   return (
-    <Card as="section" aria-labelledby={headingId} className="flex flex-col gap-4">
-      <h2 id={headingId} className="font-display text-xl font-semibold">
-        Security
-      </h2>
+    <Section title="Security">
       <RadioGroup
         legend="Lock method"
         value={current}
@@ -93,6 +86,6 @@ export function SecuritySection() {
         </div>
       )}
       <SecretDialog target={target} current={lockMode} onClose={() => setTarget(null)} />
-    </Card>
+    </Section>
   );
 }

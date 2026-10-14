@@ -1,35 +1,45 @@
 /*
- * Design tokens — direction C "Cozy RPG". Values and usage rules: docs/design/visual-direction.md.
+ * Design tokens — direction D "Pro Ledger". Values and usage rules: docs/design/visual-direction.md.
  * Light values live in @theme (they are the defaults and generate Tailwind utilities);
  * dark values override the same variables when <html data-theme="dark">.
  */
 @theme static {
-  --color-bg: #f6efe1;
-  --color-surface: #fffbf2;
-  --color-surface-2: #f0e6d2;
-  --color-text: #2b2118;
-  --color-text-muted: #6b5b49;
-  --color-border: #e2d3b8;
-  --color-border-strong: #cdb994;
-  --color-primary: #2f6b4f;
-  --color-primary-shade: #1f4a36;
-  --color-primary-contrast: #fffbf2;
-  --color-xp: #c98a1b;
-  --color-xp-light: #e9b44c;
-  --color-xp-shade: #8a5d0f;
-  --color-xp-text: #8a5d0f;
-  --color-success: #3c7d3a;
-  --color-warning: #a3561a;
-  --color-danger: #b23a2e;
-  --color-focus: #2f6b4f;
-  --color-texture: rgb(120 90 50 / 0.09);
+  --color-bg: #ffffff;
+  --color-surface: #ffffff;
+  --color-surface-2: #f2f2f5;
+  --color-overlay: #ffffff;
+  --color-text: #0d0d0f;
+  --color-text-muted: #6f6f78;
+  --color-border: #ebebef;
+  --color-border-strong: #d9d9df;
+  --color-track: #ececf1;
+  --color-primary: #0d0d0f;
+  --color-primary-contrast: #ffffff;
+  --color-accent: #00b37e;
+  --color-accent-text: #007a55;
+  --color-xp: #7c5cff;
+  --color-xp-text: #6b46f5;
+  --color-success: #007a55;
+  --color-warning: #a35f00;
+  --color-danger: #d1373d;
+  --color-focus: #7c5cff;
 
-  --radius-sm: 4px;
+  /* Categorical chart series, fixed order (validated incl. donut wrap-around). */
+  --color-chart-1: #2a78d6;
+  --color-chart-2: #eb6834;
+  --color-chart-3: #1baf7a;
+  --color-chart-4: #eda100;
+  --color-chart-5: #e87ba4;
+  --color-chart-6: #008300;
+
+  --radius-sm: 6px;
   --radius-md: 10px;
-  --radius-lg: 12px;
+  --radius-lg: 16px;
 
-  --font-sans: 'Nunito Variable', system-ui, sans-serif;
-  --font-display: 'Pixelify Sans', 'Nunito Variable', system-ui, sans-serif;
+  --font-sans: 'Manrope Variable', system-ui, sans-serif;
+
+  --shadow-overlay: 0 24px 60px rgb(0 0 0 / 0.18);
+  --shadow-float: 0 10px 30px rgb(0 0 0 / 0.14);
 }
 
 /* Short utility alias: text-muted */
@@ -38,23 +48,33 @@
 }
 
 :root[data-theme='dark'] {
-  --color-bg: #15130f;
-  --color-surface: #211d17;
-  --color-surface-2: #2b261e;
-  --color-text: #f3e9d6;
-  --color-text-muted: #b9a88c;
-  --color-border: #3a3328;
-  --color-border-strong: #4b4334;
-  --color-primary: #7cc39b;
-  --color-primary-shade: #4f8f6b;
-  --color-primary-contrast: #15130f;
-  --color-xp: #f0b84a;
-  --color-xp-light: #f6cf7c;
-  --color-xp-shade: #a8741a;
-  --color-xp-text: #f0b84a;
-  --color-success: #8bcb7e;
-  --color-warning: #e8a25a;
-  --color-danger: #e07a6b;
-  --color-focus: #f0b84a;
-  --color-texture: rgb(240 184 74 / 0.05);
+  --color-bg: #0c0c0e;
+  --color-surface: #0c0c0e;
+  --color-surface-2: #1a1a1f;
+  --color-overlay: #16161a;
+  --color-text: #f4f4f6;
+  --color-text-muted: #9a9aa6;
+  --color-border: #202026;
+  --color-border-strong: #2e2e36;
+  --color-track: #232329;
+  --color-primary: #f4f4f6;
+  --color-primary-contrast: #0c0c0e;
+  --color-accent: #2ee6a6;
+  --color-accent-text: #2ee6a6;
+  --color-xp: #9d85ff;
+  --color-xp-text: #9d85ff;
+  --color-success: #2ee6a6;
+  --color-warning: #f2a93b;
+  --color-danger: #ff6b6f;
+  --color-focus: #9d85ff;
+
+  --color-chart-1: #3987e5;
+  --color-chart-2: #d95926;
+  --color-chart-3: #199e70;
+  --color-chart-4: #c98500;
+  --color-chart-5: #d55181;
+  --color-chart-6: #008300;
+
+  --shadow-overlay: 0 24px 60px rgb(0 0 0 / 0.55);
+  --shadow-float: 0 10px 30px rgb(0 0 0 / 0.5);
 }

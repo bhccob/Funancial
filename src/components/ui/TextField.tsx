@@ -24,7 +24,7 @@ export function TextField({ label, hint, error, id, className, ...rest }: TextFi
         aria-invalid={error ? true : undefined}
         aria-describedby={describedBy}
         className={cn(
-          'bg-surface text-text placeholder:text-muted h-11 rounded-md border-2 px-3 text-base',
+          'text-text placeholder:text-muted h-11 rounded-md border bg-transparent px-3 text-base',
           error ? 'border-danger' : 'border-border-strong',
         )}
         {...rest}

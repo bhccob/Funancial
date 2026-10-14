@@ -5,16 +5,7 @@ export interface CardProps extends HTMLAttributes<HTMLElement> {
   as?: 'section' | 'div' | 'article';
 }
 
-/** "Inventory slot" card: strong border, inner hairline frame, pressable edge. */
+/** A soft grouped panel for content inside a page (e.g. Welcome, Lock). Screens use Section. */
 export function Card({ as: Tag = 'div', className, ...rest }: CardProps) {
-  return (
-    <Tag
-      className={cn(
-        'border-border-strong bg-surface rounded-lg border-2 p-4',
-        'shadow-[0_3px_0_var(--color-border-strong),inset_0_0_0_3px_var(--color-surface),inset_0_0_0_4px_var(--color-border)]',
-        className,
-      )}
-      {...rest}
-    />
-  );
+  return <Tag className={cn('bg-surface-2 rounded-lg p-5', className)} {...rest} />;
 }

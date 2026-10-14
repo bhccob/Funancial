@@ -2,6 +2,7 @@ import { configDefaults, defineConfig, mergeConfig } from 'vitest/config';
 import viteConfig from './vite.config';
 
 const UNIT_TESTS = 'src/{domain,data,store,lib}/**/*.test.ts';
+const CONFIG_TESTS = 'tests/unit/**/*.test.ts';
 
 export default mergeConfig(
   viteConfig,
@@ -14,7 +15,7 @@ export default mergeConfig(
           test: {
             name: 'unit',
             environment: 'node',
-            include: [UNIT_TESTS],
+            include: [UNIT_TESTS, CONFIG_TESTS],
           },
         },
         {

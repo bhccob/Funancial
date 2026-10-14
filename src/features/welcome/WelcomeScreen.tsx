@@ -21,7 +21,9 @@ export function WelcomeScreen() {
     <main className="grid min-h-dvh place-items-center px-4 py-10">
       <Card className="flex w-full max-w-md flex-col items-center gap-6 p-8 text-center">
         <div className="flex flex-col gap-2">
-          <h1 className="font-display text-primary text-5xl font-bold">Funancial</h1>
+          <h1 className="text-5xl font-extrabold tracking-tight">
+            Fun<span className="text-accent-text">ancial</span>
+          </h1>
           <p className="text-lg font-bold">Level up your real financial life.</p>
         </div>
         <div className="flex w-full flex-col gap-3">

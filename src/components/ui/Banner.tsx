@@ -10,11 +10,11 @@ export interface BannerProps {
   className?: string;
 }
 
-const tones: Record<BannerTone, string> = {
-  info: 'border-border-strong bg-surface text-text',
-  warning: 'border-warning bg-surface text-warning',
-  danger: 'border-danger bg-surface text-danger',
-  demo: 'border-dashed border-border-strong bg-surface-2 text-text',
+const bars: Record<BannerTone, string> = {
+  info: 'border-l-text-muted',
+  warning: 'border-l-warning',
+  danger: 'border-l-danger',
+  demo: 'border-l-xp',
 };
 
 export function Banner({ tone, children, action, className }: BannerProps) {
@@ -22,8 +22,9 @@ export function Banner({ tone, children, action, className }: BannerProps) {
     <div
       role={tone === 'danger' ? 'alert' : 'status'}
       className={cn(
-        'flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md border-2 px-4 py-3 text-sm font-bold',
-        tones[tone],
+        'bg-surface-2 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md border-l-[3px] px-4 py-3 text-sm font-semibold',
+        bars[tone],
+        tone === 'danger' && 'text-danger',
         className,
       )}
     >
