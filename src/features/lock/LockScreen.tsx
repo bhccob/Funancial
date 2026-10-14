@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useId, useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { EraseDialog } from '@/features/system/EraseDialog';
 import { useApp } from '@/store/AppStoreProvider';
 import { PinPad } from './PinPad';
 
@@ -79,14 +80,18 @@ export function LockScreen() {
   const lockedUntil = useApp((s) => s.lockedUntil);
   const [error, setError] = useState<string>();
   const [expired, setExpired] = useState<number | null>(null);
+  const [forgotOpen, setForgotOpen] = useState(false);
+  const checking = useApp((s) => s.checking);
 
   const throttled = lockedUntil !== null && expired !== lockedUntil;
   const onCountdownDone = useCallback(() => setExpired(lockedUntil), [lockedUntil]);
 
   const submit = async (secret: string) => {
     const result = await unlock(secret);
+    if (result === 'busy') return;
     setError(result === 'wrong' ? WRONG : undefined);
   };
+  const secretName = lockMode === 'passphrase' ? 'passphrase' : 'PIN';
 
   const message = throttled ? (
     <ThrottleCountdown key={lockedUntil} until={lockedUntil} onDone={onCountdownDone} />
@@ -104,10 +109,24 @@ export function LockScreen() {
           </p>
         </div>
         {lockMode === 'passphrase' ? (
-          <PassphraseForm onSubmit={submit} disabled={throttled} error={message} />
+          <PassphraseForm onSubmit={submit} disabled={throttled || checking} error={message} />
         ) : (
-          <PinPad onSubmit={submit} disabled={throttled} error={message} />
+          <PinPad onSubmit={submit} disabled={throttled || checking} error={message} />
         )}
+        {checking && (
+          <p role="status" className="text-muted text-sm font-bold">
+            Checking…
+          </p>
+        )}
+        <Button variant="ghost" size="sm" onClick={() => setForgotOpen(true)}>
+          Forgot your {secretName}?
+        </Button>
+        <EraseDialog
+          open={forgotOpen}
+          title="Erase this device and start over?"
+          description={`Without your ${secretName}, the data on this device can't be recovered. If you have a backup, you can restore it after starting over.`}
+          onClose={() => setForgotOpen(false)}
+        />
       </Card>
     </main>
   );

@@ -38,3 +38,17 @@ test('a second tab reloads when data is deleted in the first', async ({ context 
   await expect(a.getByRole('button', { name: 'Try with demo money' })).toBeVisible();
   await expect(b.getByRole('button', { name: 'Try with demo money' })).toBeVisible();
 });
+
+test('two tabs on the welcome screen: starting in one moves the other along', async ({
+  context,
+}) => {
+  const a = await context.newPage();
+  const b = await context.newPage();
+  await a.goto('/');
+  await b.goto('/');
+  await expect(b.getByRole('button', { name: 'Start with my real data' })).toBeVisible();
+
+  await a.getByRole('button', { name: 'Start with my real data' }).click();
+  await expect(a.getByRole('heading', { level: 1, name: 'Home' })).toBeVisible();
+  await expect(b.getByRole('heading', { level: 1, name: 'Home' })).toBeVisible();
+});

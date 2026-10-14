@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Dialog } from '@/components/ui/Dialog';
 import { TextField } from '@/components/ui/TextField';
+import { EraseDialog } from '@/features/system/EraseDialog';
 import { validateSecret } from '@/data/keys';
 import type { DataSnapshot, TableName } from '@/domain/snapshot';
 import { downloadText, readFileText } from '@/lib/download';
@@ -219,51 +220,18 @@ function ExportButton() {
 }
 
 function DeleteAllButton() {
-  const deleteAllData = useApp((s) => s.deleteAllData);
   const [open, setOpen] = useState(false);
-  const [typed, setTyped] = useState('');
-  const close = () => {
-    setOpen(false);
-    setTyped('');
-  };
   return (
     <>
       <Button variant="danger" onClick={() => setOpen(true)}>
         Delete all data
       </Button>
-      <Dialog
+      <EraseDialog
         open={open}
         title="Delete all data?"
         description="This erases everything Funancial stores on this device. Make a backup first if you might want it back."
-        onClose={close}
-      >
-        {open && (
-          <div className="flex flex-col gap-4">
-            <TextField
-              label="Type DELETE to confirm"
-              autoComplete="off"
-              autoCapitalize="characters"
-              value={typed}
-              onChange={(e) => setTyped(e.target.value)}
-            />
-            <div className="flex justify-end gap-2">
-              <Button variant="secondary" onClick={close}>
-                Cancel
-              </Button>
-              <Button
-                variant="danger"
-                disabled={typed !== 'DELETE'}
-                onClick={() => {
-                  close();
-                  void deleteAllData();
-                }}
-              >
-                Delete everything
-              </Button>
-            </div>
-          </div>
-        )}
-      </Dialog>
+        onClose={() => setOpen(false)}
+      />
     </>
   );
 }

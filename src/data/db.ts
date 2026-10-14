@@ -45,6 +45,12 @@ export function dexieMetaStore(db: FunancialDb): MetaStore {
   return {
     get: async <T>(key: string) => (await db.meta.get(key))?.value as T | undefined,
     put: async (key, value) => void (await db.meta.put({ key, value })),
+    putIfAbsent: (key, value) =>
+      db.transaction('rw', db.meta, async () => {
+        if ((await db.meta.get(key)) !== undefined) return false;
+        await db.meta.add({ key, value });
+        return true;
+      }),
     delete: (key) => db.meta.delete(key),
   };
 }

@@ -16,6 +16,7 @@ import {
   setVaultSecret,
   unlockVault,
   validateSecret,
+  VaultExistsError,
   WrongSecretError,
   type LockMode,
   type SecretKind,
@@ -37,6 +38,9 @@ export interface AppDeps {
   now(): number;
   storage: SafeStorage;
   channel: { post(m: SyncMessage): void };
+  /** Whether storage is already persistent. Must not prompt. */
+  storageStatus(): Promise<boolean>;
+  /** Ask the browser to keep our storage. May prompt; only call after a user action. */
   requestPersistence(): Promise<boolean>;
   db: { open(ns: Namespace): FunancialDb; remove(ns: Namespace): Promise<void> };
 }
@@ -51,12 +55,14 @@ export interface AppState {
   failedAttempts: number;
   /** Epoch ms until which unlock attempts are refused. */
   lockedUntil: number | null;
+  /** An unlock attempt is being checked (the key derivation takes a moment). */
+  checking: boolean;
 
   boot(): Promise<void>;
   startFresh(): Promise<void>;
   startDemo(): Promise<void>;
   exitDemo(): Promise<void>;
-  unlock(secret: string): Promise<'ok' | 'wrong' | 'throttled'>;
+  unlock(secret: string): Promise<'ok' | 'wrong' | 'throttled' | 'busy'>;
   verifySecret(secret: string): Promise<boolean>;
   lock(): void;
   setSecret(secret: string, kind: SecretKind): Promise<void>;
@@ -72,6 +78,9 @@ export interface AppState {
 const NAMESPACE_KEY = 'funancial.namespace';
 const MAX_ATTEMPTS = 5;
 const THROTTLE_MS = 30_000;
+/** Meta key for the unlock throttle; kept on disk so a reload doesn't reset it. */
+const THROTTLE_KEY = 'throttle';
+type Throttle = { failedAttempts: number; lockedUntil: number | null };
 
 /** Open database + vault for the active namespace. Kept out of state: keys never hit React. */
 type Session = { db: FunancialDb; meta: MetaStore; repo: Repository | null; key: CryptoKey | null };
@@ -80,6 +89,9 @@ export function createAppStore(deps: AppDeps): StoreApi<AppState> {
   let session: Session | null = null;
 
   const nowIsoString = () => new Date(deps.now()).toISOString();
+  /** A throttle deadline that has passed no longer applies. */
+  const activeUntil = (until: number | null) =>
+    until !== null && deps.now() < until ? until : null;
   const readNamespace = (): Namespace =>
     deps.storage.get(NAMESPACE_KEY) === 'demo' ? 'demo' : 'real';
 
@@ -123,10 +135,12 @@ export function createAppStore(deps: AppDeps): StoreApi<AppState> {
       persisted: false,
       failedAttempts: 0,
       lockedUntil: null,
+      checking: false,
 
       async boot() {
         set({ phase: 'booting' });
-        const persisted = await deps.requestPersistence().catch(() => false);
+        // Status only: requesting persistence can prompt (Firefox) and must not block boot.
+        const persisted = await deps.storageStatus().catch(() => false);
         const namespace = readNamespace();
         set({
           namespace,
@@ -135,11 +149,17 @@ export function createAppStore(deps: AppDeps): StoreApi<AppState> {
           skipped: [],
           failedAttempts: 0,
           lockedUntil: null,
+          checking: false,
         });
         try {
           const s = await openSession(namespace);
           const lockMode = await getLockMode(s.meta);
-          set({ lockMode });
+          const throttle = await s.meta.get<Throttle>(THROTTLE_KEY);
+          set({
+            lockMode,
+            failedAttempts: throttle?.failedAttempts ?? 0,
+            lockedUntil: activeUntil(throttle?.lockedUntil ?? null),
+          });
           if (lockMode === null) set({ phase: 'welcome' });
           else if (lockMode === 'device') await openWith(await unlockVault(s.meta));
           else set({ phase: 'locked' });
@@ -151,20 +171,43 @@ export function createAppStore(deps: AppDeps): StoreApi<AppState> {
 
       async startFresh() {
         if (!session) throw new Error('Call boot() first');
-        await openWith(await createVault(session.meta));
+        let key: CryptoKey;
+        try {
+          key = await createVault(session.meta);
+        } catch (e) {
+          // Another tab started first: use its vault rather than replacing it.
+          if (e instanceof VaultExistsError) return get().boot();
+          throw e;
+        }
+        await openWith(key);
         set({ lockMode: 'device' });
         await get().put('settings', defaultSettings(nowIsoString()));
+        deps.channel.post({ type: 'reload', reason: 'start' });
+        deps.requestPersistence().then(
+          (persisted) => set({ persisted }),
+          () => {},
+        );
       },
 
       async startDemo() {
+        // Build first (pure); switch namespace only once the demo database is fully seeded.
+        const snapshot = buildDemoSnapshot(deps.today());
         closeSession();
-        await deps.db.remove('demo');
-        deps.storage.set(NAMESPACE_KEY, 'demo');
-        const s = await openSession('demo');
-        const key = await createVault(s.meta);
-        await createWebRepository(s.db, key).replaceAll(buildDemoSnapshot(deps.today()));
-        set({ namespace: 'demo', lockMode: 'device', failedAttempts: 0, lockedUntil: null });
-        await openWith(key);
+        try {
+          await deps.db.remove('demo');
+          const s = await openSession('demo');
+          const key = await createVault(s.meta);
+          await createWebRepository(s.db, key).replaceAll(snapshot);
+          deps.storage.set(NAMESPACE_KEY, 'demo');
+          set({ namespace: 'demo', lockMode: 'device', failedAttempts: 0, lockedUntil: null });
+          await openWith(key);
+        } catch (e) {
+          closeSession();
+          await deps.db.remove('demo').catch(() => {});
+          deps.storage.remove(NAMESPACE_KEY);
+          await get().boot();
+          throw e;
+        }
         deps.channel.post({ type: 'reload', reason: 'namespace' });
       },
 
@@ -177,23 +220,30 @@ export function createAppStore(deps: AppDeps): StoreApi<AppState> {
       },
 
       async unlock(secret) {
+        if (get().checking) return 'busy';
         const { lockedUntil } = get();
         if (lockedUntil !== null && deps.now() < lockedUntil) return 'throttled';
-        if (!session) throw new Error('Call boot() first');
+        const s = session;
+        if (!s) throw new Error('Call boot() first');
+        set({ checking: true });
         try {
-          const key = await unlockVault(session.meta, secret);
+          const key = await unlockVault(s.meta, secret);
+          await s.meta.delete(THROTTLE_KEY);
           set({ failedAttempts: 0, lockedUntil: null });
           await openWith(key);
           return 'ok';
         } catch (e) {
           if (!(e instanceof WrongSecretError)) throw e;
           const failedAttempts = get().failedAttempts + 1;
-          if (failedAttempts >= MAX_ATTEMPTS) {
-            set({ failedAttempts: 0, lockedUntil: deps.now() + THROTTLE_MS });
-          } else {
-            set({ failedAttempts, lockedUntil: null });
-          }
+          const next: Throttle =
+            failedAttempts >= MAX_ATTEMPTS
+              ? { failedAttempts: 0, lockedUntil: deps.now() + THROTTLE_MS }
+              : { failedAttempts, lockedUntil: activeUntil(get().lockedUntil) };
+          set(next);
+          await s.meta.put(THROTTLE_KEY, next);
           return 'wrong';
+        } finally {
+          set({ checking: false });
         }
       },
 
@@ -289,6 +339,14 @@ export function createAppStore(deps: AppDeps): StoreApi<AppState> {
   });
 }
 
+async function persistentStorageStatus(): Promise<boolean> {
+  try {
+    return (await navigator.storage?.persisted?.()) ?? false;
+  } catch {
+    return false;
+  }
+}
+
 async function requestPersistentStorage(): Promise<boolean> {
   try {
     return (await navigator.storage?.persist?.()) ?? false;
@@ -303,6 +361,7 @@ export const appStore = createAppStore({
   now: () => Date.now(),
   storage: safeStorage,
   channel: tabChannel(),
+  storageStatus: persistentStorageStatus,
   requestPersistence: requestPersistentStorage,
   db: { open: (ns) => openDb(ns), remove: (ns) => deleteDb(ns) },
 });

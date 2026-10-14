@@ -17,6 +17,7 @@ export function createStubStore(overrides: Partial<AppState> = {}): StoreApi<App
     persisted: true,
     failedAttempts: 0,
     lockedUntil: null,
+    checking: false,
     boot: vi.fn(async () => {}),
     startFresh: vi.fn(async () => {}),
     startDemo: vi.fn(async () => {}),

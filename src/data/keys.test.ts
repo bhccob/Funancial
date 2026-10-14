@@ -8,6 +8,7 @@ import {
   setVaultSecret,
   unlockVault,
   validateSecret,
+  VaultExistsError,
   VaultMissingError,
   WrongSecretError,
   type VaultRecord,
@@ -96,5 +97,15 @@ describe('validateSecret', () => {
   it('accepts passphrases of at least 8 characters', () => {
     expect(validateSecret('short', 'passphrase')).toBe('Use at least 8 characters.');
     expect(validateSecret('pässwörd', 'passphrase')).toBeNull();
+  });
+});
+
+describe('createVault', () => {
+  it('refuses to replace an existing vault', async () => {
+    const meta = memoryMetaStore();
+    const key = await createVault(meta);
+    const p = await encryptRecord(key, 'a:1', 'kept');
+    await expect(createVault(meta)).rejects.toBeInstanceOf(VaultExistsError);
+    expect(await decryptRecord(await unlockVault(meta), 'a:1', p)).toBe('kept');
   });
 });

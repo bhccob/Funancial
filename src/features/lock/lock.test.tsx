@@ -1,4 +1,4 @@
-import { act, render, screen } from '@testing-library/react';
+import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AppStoreProvider } from '@/store/AppStoreProvider';
@@ -92,5 +92,36 @@ describe('useAutoLock', () => {
     );
     act(() => vi.advanceTimersByTime(24 * 60 * 60_000));
     expect(store.getState().lock).not.toHaveBeenCalled();
+  });
+});
+
+describe('LockScreen review fixes', () => {
+  it('disables the keypad while a PIN is being checked', () => {
+    renderWithStore(
+      <LockScreen />,
+      createStubStore({ phase: 'locked', lockMode: 'pin', checking: true }),
+    );
+    expect(screen.getByRole('button', { name: '5' })).toBeDisabled();
+    expect(screen.getByText('Checking…')).toBeInTheDocument();
+  });
+
+  it('offers a way out when the PIN is forgotten', async () => {
+    const store = createStubStore({ phase: 'locked', lockMode: 'pin' });
+    renderWithStore(<LockScreen />, store);
+    await userEvent.click(screen.getByRole('button', { name: 'Forgot your PIN?' }));
+    const dialog = screen.getByRole('dialog', { name: 'Erase this device and start over?' });
+    expect(dialog).toHaveAccessibleDescription(
+      "Without your PIN, the data on this device can't be recovered. If you have a backup, you can restore it after starting over.",
+    );
+    const erase = within(dialog).getByRole('button', { name: 'Delete everything' });
+    expect(erase).toBeDisabled();
+    await userEvent.type(within(dialog).getByLabelText('Type DELETE to confirm'), 'DELETE');
+    await userEvent.click(erase);
+    expect(store.getState().deleteAllData).toHaveBeenCalledTimes(1);
+  });
+
+  it('names the passphrase in the forgotten-secret link', () => {
+    renderWithStore(<LockScreen />, createStubStore({ phase: 'locked', lockMode: 'passphrase' }));
+    expect(screen.getByRole('button', { name: 'Forgot your passphrase?' })).toBeInTheDocument();
   });
 });

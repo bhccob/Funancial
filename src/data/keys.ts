@@ -29,6 +29,13 @@ export class WrongSecretError extends Error {
   }
 }
 
+export class VaultExistsError extends Error {
+  constructor() {
+    super('A vault already exists on this device');
+    this.name = 'VaultExistsError';
+  }
+}
+
 export class VaultMissingError extends Error {
   constructor() {
     super('No vault has been set up on this device');
@@ -83,9 +90,12 @@ async function deviceWrapped(dataKey: CryptoKey): Promise<VaultRecord> {
   return { version: 1, mode: 'device', wrappedKey: await wrap(dataKey, deviceKey), deviceKey };
 }
 
+/** Creates the vault, refusing if one exists: replacing it would orphan every encrypted row. */
 export async function createVault(meta: MetaStore): Promise<CryptoKey> {
   const dataKey = await generateDataKey();
-  await meta.put(VAULT_KEY, await deviceWrapped(dataKey));
+  if (!(await meta.putIfAbsent(VAULT_KEY, await deviceWrapped(dataKey)))) {
+    throw new VaultExistsError();
+  }
   return dataKey;
 }
 

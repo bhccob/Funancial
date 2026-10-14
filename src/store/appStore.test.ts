@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { InvalidBackupError } from '@/data/backup';
 import { deleteDb, openDb, type FunancialDb } from '@/data/db';
 import { WrongSecretError } from '@/data/keys';
@@ -26,6 +26,7 @@ function testDeps(overrides: Partial<AppDeps> = {}) {
     now: () => clock,
     storage: memorySafeStorage(),
     channel: { post: (m) => void posts.push(m) },
+    storageStatus: async () => true,
     requestPersistence: async () => true,
     db: { open: (ns) => openDb(ns, prefix), remove: (ns) => deleteDb(ns, prefix) },
     ...overrides,
@@ -269,5 +270,146 @@ describe('delete all data', () => {
     expect(store.getState().data.tables.expense).toEqual([]);
     expect(posts).toContainEqual({ type: 'reload', reason: 'delete' });
     expect((await reboot(deps)).getState().phase).toBe('welcome');
+  });
+});
+
+describe('review fixes', () => {
+  it('a second tab starting fresh never re-keys the vault', async () => {
+    const { deps, posts } = testDeps();
+    const a = createAppStore(deps);
+    const b = createAppStore(deps);
+    await a.getState().boot();
+    await b.getState().boot();
+
+    await a.getState().startFresh();
+    expect(posts).toContainEqual({ type: 'reload', reason: 'start' });
+    await a.getState().put('expense', makeExpense({ id: 'from-a' }));
+
+    await b.getState().startFresh();
+    expect(b.getState().phase).toBe('unlocked');
+    expect(b.getState().data.tables.expense.map((e) => e.id)).toEqual(['from-a']);
+
+    const again = await reboot(deps);
+    expect(again.getState().data.tables.expense.map((e) => e.id)).toEqual(['from-a']);
+    expect(again.getState().skipped).toEqual([]);
+  });
+
+  it('keeps the unlock throttle across a reload', async () => {
+    const { deps, store } = await freshStore();
+    await store.getState().setSecret('2468', 'pin');
+    const first = await reboot(deps);
+    for (let i = 0; i < 5; i++) await first.getState().unlock('0000');
+
+    const second = await reboot(deps);
+    expect(second.getState().lockedUntil).toBe(Date.parse('2026-10-14T10:00:30.000Z'));
+    expect(await second.getState().unlock('2468')).toBe('throttled');
+  });
+
+  it('counts wrong attempts across a reload', async () => {
+    const { deps, store } = await freshStore();
+    await store.getState().setSecret('2468', 'pin');
+    const first = await reboot(deps);
+    for (let i = 0; i < 3; i++) await first.getState().unlock('0000');
+    const second = await reboot(deps);
+    await second.getState().unlock('0000');
+    expect(second.getState().lockedUntil).toBeNull();
+    await second.getState().unlock('0000');
+    expect(second.getState().lockedUntil).not.toBeNull();
+  });
+
+  it('ignores a second attempt while one is being checked', async () => {
+    const { deps, store } = await freshStore();
+    await store.getState().setSecret('2468', 'pin');
+    const again = await reboot(deps);
+    for (let i = 0; i < 4; i++) await again.getState().unlock('0000');
+
+    const results = await Promise.all([
+      again.getState().unlock('0000'),
+      again.getState().unlock('1111'),
+    ]);
+    expect(results).toEqual(['wrong', 'busy']);
+    expect(again.getState().lockedUntil).toBe(Date.parse('2026-10-14T10:00:30.000Z'));
+    expect(again.getState().checking).toBe(false);
+  });
+
+  it('boots without waiting on a storage-permission prompt, asking only after the user starts', async () => {
+    const requestPersistence = vi.fn(() => new Promise<boolean>(() => {}));
+    const { deps } = testDeps({ requestPersistence, storageStatus: async () => false });
+    const store = createAppStore(deps);
+    await store.getState().boot();
+    expect(store.getState()).toMatchObject({ phase: 'welcome', persisted: false });
+    expect(requestPersistence).not.toHaveBeenCalled();
+    await store.getState().startFresh();
+    expect(store.getState().phase).toBe('unlocked');
+    expect(requestPersistence).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows storage as protected once the browser grants it', async () => {
+    const { deps } = testDeps({
+      requestPersistence: async () => true,
+      storageStatus: async () => false,
+    });
+    const store = createAppStore(deps);
+    await store.getState().boot();
+    await store.getState().startFresh();
+    await vi.waitFor(() => expect(store.getState().persisted).toBe(true));
+  });
+
+  it('a failed demo start leaves real data in the real database', async () => {
+    const { deps, store } = await freshStore();
+    await store.getState().put('expense', makeExpense({ id: 'mine' }));
+    deps.today = () => {
+      throw new Error('boom');
+    };
+    await expect(store.getState().startDemo()).rejects.toThrow('boom');
+    expect(store.getState()).toMatchObject({ namespace: 'real', phase: 'unlocked' });
+    expect(deps.storage.get('funancial.namespace')).toBeNull();
+
+    await store.getState().put('expense', makeExpense({ id: 'after' }));
+    const again = await reboot(deps);
+    expect(again.getState().namespace).toBe('real');
+    expect(
+      again
+        .getState()
+        .data.tables.expense.map((e) => e.id)
+        .sort(),
+    ).toEqual(['after', 'mine']);
+  });
+
+  it('can erase everything from the lock screen when the PIN is forgotten', async () => {
+    const { deps, store } = await freshStore();
+    await store.getState().setSecret('2468', 'pin');
+    const locked = await reboot(deps);
+    expect(locked.getState().phase).toBe('locked');
+    await locked.getState().deleteAllData();
+    expect(locked.getState().phase).toBe('welcome');
+  });
+});
+
+describe('review fixes: demo start failing midway', () => {
+  it('rolls back to real data when the demo database cannot be prepared', async () => {
+    const { deps, store } = await freshStore();
+    await store.getState().put('expense', makeExpense({ id: 'mine' }));
+    const realDb = deps.db;
+    deps.db = {
+      open: (ns) => {
+        if (ns === 'demo') throw new Error('quota exceeded');
+        return realDb.open(ns);
+      },
+      remove: realDb.remove,
+    };
+    await expect(store.getState().startDemo()).rejects.toThrow('quota exceeded');
+    expect(store.getState()).toMatchObject({ namespace: 'real', phase: 'unlocked' });
+    expect(deps.storage.get('funancial.namespace')).toBeNull();
+    await store.getState().put('expense', makeExpense({ id: 'after' }));
+    deps.db = realDb;
+    const again = await reboot(deps);
+    expect(again.getState().namespace).toBe('real');
+    expect(
+      again
+        .getState()
+        .data.tables.expense.map((e) => e.id)
+        .sort(),
+    ).toEqual(['after', 'mine']);
   });
 });
