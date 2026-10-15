@@ -103,6 +103,20 @@ describe('bottom bar', () => {
     expect(screen.queryByRole('dialog', { name: 'Menu' })).not.toBeInTheDocument();
   });
 
+  it('tells assistive tech whether the Menu sheet is open', async () => {
+    renderAt('/');
+    const bar = screen.getByRole('navigation', { name: 'Primary' });
+    const menu = within(bar).getByRole('button', { name: 'Menu' });
+    expect(menu).toHaveAttribute('aria-haspopup', 'dialog');
+    expect(menu).toHaveAttribute('aria-expanded', 'false');
+
+    await userEvent.click(menu);
+    expect(menu).toHaveAttribute('aria-expanded', 'true');
+
+    await userEvent.keyboard('{Escape}');
+    expect(menu).toHaveAttribute('aria-expanded', 'false');
+  });
+
   it('opens Add from the bar on any screen', async () => {
     renderAt('/invest');
     const bar = screen.getByRole('navigation', { name: 'Primary' });

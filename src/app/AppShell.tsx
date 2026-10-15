@@ -16,7 +16,7 @@ export function AppShell() {
         <DemoBanner />
         <Outlet />
       </main>
-      <BottomBar className="md:hidden" onMenu={() => setMenuOpen(true)} />
+      <BottomBar className="md:hidden" menuOpen={menuOpen} onMenu={() => setMenuOpen(true)} />
       <MenuSheet open={menuOpen} onClose={() => setMenuOpen(false)} />
       <Celebrations />
     </div>

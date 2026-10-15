@@ -18,7 +18,15 @@ function BarLink({ path, label, icon: Icon }: NavTarget) {
 }
 
 /** Flat bar along the phone's bottom edge: Home, Budget, a round Add, Quests, and the Menu sheet. */
-export function BottomBar({ onMenu, className }: { onMenu(): void; className?: string }) {
+export function BottomBar({
+  menuOpen,
+  onMenu,
+  className,
+}: {
+  menuOpen: boolean;
+  onMenu(): void;
+  className?: string;
+}) {
   return (
     <nav
       aria-label="Primary"
@@ -46,6 +54,7 @@ export function BottomBar({ onMenu, className }: { onMenu(): void; className?: s
       <button
         type="button"
         aria-haspopup="dialog"
+        aria-expanded={menuOpen}
         onClick={onMenu}
         className={cn(slot, 'text-muted')}
       >
