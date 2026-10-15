@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useId, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { Banner } from '@/components/ui/Banner';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { EraseDialog } from '@/features/system/EraseDialog';
+import { usePlatform } from '@/platform/PlatformProvider';
 import { useApp } from '@/store/AppStoreProvider';
 import { PinPad } from './PinPad';
 
@@ -78,10 +80,50 @@ export function LockScreen() {
   const lockMode = useApp((s) => s.lockMode);
   const unlock = useApp((s) => s.unlock);
   const lockedUntil = useApp((s) => s.lockedUntil);
+  const biometric = useApp((s) => s.biometric);
+  const unlockWithBiometric = useApp((s) => s.unlockWithBiometric);
   const [error, setError] = useState<string>();
   const [expired, setExpired] = useState<number | null>(null);
   const [forgotOpen, setForgotOpen] = useState(false);
+  const [enrolmentChanged, setEnrolmentChanged] = useState(false);
   const checking = useApp((s) => s.checking);
+  const platform = usePlatform();
+
+  // A failed or cancelled prompt leaves the PIN pad as it is: nothing to say.
+  const askBiometric = useCallback(async () => {
+    const result = await unlockWithBiometric().catch((e: unknown) => {
+      console.error('Biometric unlock failed', e);
+      return 'cancelled' as const;
+    });
+    if (result === 'changed') setEnrolmentChanged(true);
+  }, [unlockWithBiometric]);
+
+  // Asks once, as soon as the lock screen is on screen; after that, the button asks again. The
+  // idle timer can lock the app while it is behind another app, and a prompt started from there
+  // can land over that app, come back cancelled or never finish, so then it waits for the app to
+  // come back (or the page to be shown, whichever is reported first).
+  const asked = useRef(false);
+  useEffect(() => {
+    if (biometric !== 'on' || asked.current) return;
+    const ask = () => {
+      if (asked.current) return;
+      asked.current = true;
+      void askBiometric();
+    };
+    if (document.visibilityState === 'visible') {
+      ask();
+      return;
+    }
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') ask();
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    const stopResume = platform.onResume(ask);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      stopResume();
+    };
+  }, [biometric, askBiometric, platform]);
 
   const throttled = lockedUntil !== null && expired !== lockedUntil;
   const onCountdownDone = useCallback(() => {
@@ -111,6 +153,12 @@ export function LockScreen() {
             {lockMode === 'passphrase' ? 'Enter your passphrase.' : 'Enter your PIN.'}
           </p>
         </div>
+        {enrolmentChanged && (
+          <Banner tone="warning">
+            Your fingerprints or face changed, so use your {secretName} this time. You can turn
+            biometric unlock back on in Settings.
+          </Banner>
+        )}
         {lockMode === 'passphrase' ? (
           <PassphraseForm onSubmit={submit} disabled={throttled || checking} error={message} />
         ) : (
@@ -120,6 +168,11 @@ export function LockScreen() {
           <p role="status" className="text-muted text-sm font-bold">
             Checking…
           </p>
+        )}
+        {biometric === 'on' && (
+          <Button variant="secondary" onClick={() => void askBiometric()}>
+            Use fingerprint or face
+          </Button>
         )}
         <Button variant="ghost" size="sm" onClick={() => setForgotOpen(true)}>
           Forgot your {secretName}?

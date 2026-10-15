@@ -9,7 +9,9 @@ import { EraseDialog } from '@/features/system/EraseDialog';
 import { validateSecret } from '@/data/keys';
 import type { DataSnapshot, TableName } from '@/domain/snapshot';
 import { expensesToCsv } from '@/data/csv';
-import { downloadText, readFileText } from '@/lib/download';
+import { readFileText } from '@/lib/download';
+import { useAction } from '@/lib/useAction';
+import { usePlatform } from '@/platform/PlatformProvider';
 import { useApp } from '@/store/AppStoreProvider';
 
 /** Order and wording of the summary line. Profile and settings are not "entries". */
@@ -36,6 +38,8 @@ const errorMessage = (e: unknown) => (e instanceof Error ? e.message : 'Somethin
 
 function BackupDialog({ open, onClose }: { open: boolean; onClose(): void }) {
   const createBackup = useApp((s) => s.createBackup);
+  const markBackedUp = useApp((s) => s.markBackedUp);
+  const platform = usePlatform();
   const [pass, setPass] = useState('');
   const [confirm, setConfirm] = useState('');
   const [errors, setErrors] = useState<{ pass?: string; confirm?: string; other?: string }>({});
@@ -53,10 +57,18 @@ function BackupDialog({ open, onClose }: { open: boolean; onClose(): void }) {
     const problem = validateSecret(pass, 'passphrase');
     if (problem) return setErrors({ pass: problem });
     if (pass !== confirm) return setErrors({ confirm: "Those don't match." });
+    setErrors({});
     setBusy(true);
     try {
       const { fileName, text } = await createBackup(pass);
-      downloadText(fileName, text, 'application/octet-stream');
+      const outcome = await platform.files.save(fileName, text, 'application/octet-stream');
+      if (outcome === 'cancelled') {
+        // Backing out of the share sheet saves nothing: it is no backup, so it is not recorded.
+        return setErrors({
+          other: 'Nothing was saved. Choose where to save your backup to finish.',
+        });
+      }
+      await markBackedUp();
       close();
     } catch (err) {
       setErrors({ other: errorMessage(err) });
@@ -111,6 +123,7 @@ function BackupDialog({ open, onClose }: { open: boolean; onClose(): void }) {
 
 function RestoreForm() {
   const restoreBackup = useApp((s) => s.restoreBackup);
+  const platform = usePlatform();
   const [file, setFile] = useState<File | null>(null);
   const [pass, setPass] = useState('');
   const [confirming, setConfirming] = useState(false);
@@ -140,7 +153,9 @@ function RestoreForm() {
         <input
           id={fileId}
           type="file"
-          accept=".funbak"
+          // Android's file chooser crashes on an extension with no MIME type, and `.funbak` has
+          // none. There every file is offered; `restoreBackup` rejects one that isn't a backup.
+          accept={platform.kind === 'web' ? '.funbak' : undefined}
           onChange={(e) => setFile(e.target.files?.[0] ?? null)}
           className="file:border-border-strong file:bg-surface text-sm file:mr-3 file:rounded-md file:border-2 file:px-3 file:py-2 file:font-bold"
         />
@@ -246,6 +261,8 @@ export function DataSection() {
   const skipped = useApp((s) => s.skipped);
   const exportPlain = useApp((s) => s.exportPlain);
   const today = useApp((s) => s.today);
+  const platform = usePlatform();
+  const run = useAction();
   const [backupOpen, setBackupOpen] = useState(false);
   const lastBackupAt = data.tables.settings[0]?.lastBackupAt ?? null;
   const demo = namespace === 'demo';
@@ -291,18 +308,22 @@ export function DataSection() {
             <div className="flex flex-wrap gap-3">
               <ExportButton
                 label="Export unencrypted copy"
-                onExport={() => {
-                  const { fileName, text } = exportPlain();
-                  downloadText(fileName, text, 'application/json');
-                }}
+                onExport={() =>
+                  void run(async () => {
+                    const { fileName, text } = exportPlain();
+                    await platform.files.save(fileName, text, 'application/json');
+                  })
+                }
               />
               <ExportButton
                 label="Export expenses (CSV)"
                 onExport={() =>
-                  downloadText(
-                    `funancial-expenses-${today}.csv`,
-                    expensesToCsv(data, data.tables.profile[0]?.currency ?? 'USD'),
-                    'text/csv',
+                  void run(() =>
+                    platform.files.save(
+                      `funancial-expenses-${today}.csv`,
+                      expensesToCsv(data, data.tables.profile[0]?.currency ?? 'USD'),
+                      'text/csv',
+                    ),
                   )
                 }
               />

@@ -87,7 +87,11 @@ export type Bill = {
   refId: string;
 };
 
-function nextDueDate(today: LocalDate, dueDay: number | null): LocalDate {
+/**
+ * The first date on or after `today` that falls on `dueDay` (clamped to short months), or `today`
+ * itself when there is no due day.
+ */
+export function nextDueDate(today: LocalDate, dueDay: number | null): LocalDate {
   if (dueDay === null) return today;
   const y = Number(today.slice(0, 4));
   const m = Number(today.slice(5, 7));

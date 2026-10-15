@@ -1,11 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
 import { InvalidBackupError } from '@/data/backup';
-import { deleteDb, openDb, type FunancialDb } from '@/data/db';
+import { dexieStorage } from '@/data/db';
+import { browserKeyring } from '@/data/keyring';
 import { WrongSecretError } from '@/data/keys';
 import type { SyncMessage } from '@/lib/broadcast';
 import type { SafeStorage } from '@/lib/safeStorage';
 import { buildDemoSnapshot } from '@/data/demoSeed';
 import { makeExpense, makeSubscription } from '@/test/fixtures';
+import { memoryStorage } from '@/test/memoryStorage';
 import { createAppStore, type AppDeps } from './appStore';
 
 function memorySafeStorage(): SafeStorage {
@@ -25,11 +27,13 @@ function testDeps(overrides: Partial<AppDeps> = {}) {
     kdfIterations: 1_000,
     today: () => '2026-10-14',
     now: () => clock,
-    storage: memorySafeStorage(),
+    safeStorage: memorySafeStorage(),
     channel: { post: (m) => void posts.push(m) },
     storageStatus: async () => true,
     requestPersistence: async () => true,
-    db: { open: (ns) => openDb(ns, prefix), remove: (ns) => deleteDb(ns, prefix) },
+    storage: dexieStorage(prefix),
+    keyring: browserKeyring,
+    biometric: null,
     ...overrides,
   };
   return { deps, posts, advance: (ms: number) => void (clock += ms) };
@@ -68,13 +72,24 @@ describe('first run', () => {
         warningTone: 'motivational',
         autoLockMinutes: 5,
         lastBackupAt: null,
+        reminders: {
+          enabled: false,
+          dailyLog: true,
+          dailyTime: '20:00',
+          bills: true,
+          freeze: true,
+          reviews: true,
+          backup: true,
+          prompted: false,
+        },
       },
     ]);
   });
 
   it('shows the storage-unavailable screen when the database cannot open', async () => {
-    const blocked = { open: () => Promise.reject(new Error('blocked')) } as unknown as FunancialDb;
-    const { deps } = testDeps({ db: { open: () => blocked, remove: async () => {} } });
+    const { deps } = testDeps({
+      storage: { open: () => Promise.reject(new Error('blocked')), remove: async () => {} },
+    });
     const store = createAppStore(deps);
     await store.getState().boot();
     expect(store.getState().phase).toBe('unavailable');
@@ -197,7 +212,7 @@ describe('demo mode', () => {
       lockMode: 'device',
     });
     expect(store.getState().data.tables.expense.length).toBeGreaterThan(100);
-    expect(deps.storage.get('funancial.namespace')).toBe('demo');
+    expect(deps.safeStorage.get('funancial.namespace')).toBe('demo');
 
     await store.getState().exitDemo();
     expect(store.getState()).toMatchObject({ namespace: 'real', phase: 'unlocked' });
@@ -214,12 +229,27 @@ describe('demo mode', () => {
 });
 
 describe('backup and restore', () => {
-  it('creates a dated backup and records when it was made', async () => {
+  it('creates a dated backup without yet recording it, since nothing is saved', async () => {
     const { store } = await freshStore();
     const { fileName, text } = await store.getState().createBackup('correct horse');
     expect(fileName).toMatch(/^funancial-backup-\d{4}-\d{2}-\d{2}\.funbak$/);
     expect(JSON.parse(text).format).toBe('funancial-backup');
-    expect(store.getState().data.tables.settings[0]?.lastBackupAt).toBe('2026-10-14T10:00:00.000Z');
+    expect(store.getState().data.tables.settings[0]?.lastBackupAt).toBeNull();
+  });
+
+  it('records when the backup was saved, at that moment, and keeps it', async () => {
+    const { deps, store, advance } = await freshStore();
+    await store.getState().createBackup('correct horse');
+    advance(90_000);
+
+    await store.getState().markBackedUp();
+
+    const settings = store.getState().data.tables.settings[0];
+    expect(settings?.lastBackupAt).toBe('2026-10-14T10:01:30.000Z');
+    expect(settings?.updatedAt).toBe('2026-10-14T10:01:30.000Z');
+    expect((await reboot(deps)).getState().data.tables.settings[0]?.lastBackupAt).toBe(
+      '2026-10-14T10:01:30.000Z',
+    );
   });
 
   it('restores a backup, replacing data, and tells other tabs', async () => {
@@ -365,7 +395,7 @@ describe('review fixes', () => {
     await expect(store.getState().startDemo()).rejects.toThrow('boom');
     deps.today = () => '2026-10-14';
     expect(store.getState()).toMatchObject({ namespace: 'real', phase: 'unlocked' });
-    expect(deps.storage.get('funancial.namespace')).toBeNull();
+    expect(deps.safeStorage.get('funancial.namespace')).toBeNull();
 
     await store.getState().put('expense', makeExpense({ id: 'after' }));
     const again = await reboot(deps);
@@ -392,19 +422,19 @@ describe('review fixes: demo start failing midway', () => {
   it('rolls back to real data when the demo database cannot be prepared', async () => {
     const { deps, store } = await freshStore();
     await store.getState().put('expense', makeExpense({ id: 'mine' }));
-    const realDb = deps.db;
-    deps.db = {
-      open: (ns) => {
+    const realStorage = deps.storage;
+    deps.storage = {
+      open: async (ns) => {
         if (ns === 'demo') throw new Error('quota exceeded');
-        return realDb.open(ns);
+        return realStorage.open(ns);
       },
-      remove: realDb.remove,
+      remove: realStorage.remove,
     };
     await expect(store.getState().startDemo()).rejects.toThrow('quota exceeded');
     expect(store.getState()).toMatchObject({ namespace: 'real', phase: 'unlocked' });
-    expect(deps.storage.get('funancial.namespace')).toBeNull();
+    expect(deps.safeStorage.get('funancial.namespace')).toBeNull();
     await store.getState().put('expense', makeExpense({ id: 'after' }));
-    deps.db = realDb;
+    deps.storage = realStorage;
     const again = await reboot(deps);
     expect(again.getState().namespace).toBe('real');
     expect(
@@ -450,12 +480,14 @@ describe('data changes across tabs', () => {
 });
 
 describe('backup when storage is full', () => {
-  it('still hands over the file if recording the backup date fails', async () => {
+  it('does not fail a saved backup because its date could not be recorded', async () => {
     const { store } = await freshStore();
-    store.setState({ put: vi.fn().mockRejectedValue(new Error('quota')) });
     const { fileName, text } = await store.getState().createBackup('correct horse');
     expect(fileName).toMatch(/^funancial-backup-\d{4}-\d{2}-\d{2}\.funbak$/);
     expect(JSON.parse(text).format).toBe('funancial-backup');
+
+    store.setState({ put: vi.fn().mockRejectedValue(new Error('quota')) });
+    await expect(store.getState().markBackedUp()).resolves.toBeUndefined();
   });
 });
 
@@ -513,5 +545,29 @@ describe('a sync failure while opening', () => {
     expect(failingSync).toHaveBeenCalled();
     expect(again.getState().phase).toBe('unlocked');
     expect(again.getState().data.tables.expense.map((e) => e.id)).toEqual(['e1']);
+  });
+});
+
+describe('closing storage', () => {
+  it('logs a backend that fails to close instead of hiding it', async () => {
+    const backend = memoryStorage();
+    const failure = new Error('disk gone');
+    const { deps } = testDeps({
+      storage: {
+        open: async () => ({ ...backend, close: () => Promise.reject(failure) }),
+        remove: async () => {},
+      },
+    });
+    const store = createAppStore(deps);
+    await store.getState().boot();
+
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      await store.getState().boot(); // opening the next session closes the failing one
+      expect(logged).toHaveBeenCalledWith('Closing storage failed', failure);
+      expect(store.getState().phase).toBe('welcome');
+    } finally {
+      logged.mockRestore();
+    }
   });
 });

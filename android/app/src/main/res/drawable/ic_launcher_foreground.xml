@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Funancial mark: a rounded white "F" with a green spark, inside the 66dp safe zone of the
+     108dp adaptive icon. Also the monochrome layer, where only its shape is used. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M39.5,32 A4.5,4.5 0 0 1 44,36.5 V71.5 A4.5,4.5 0 0 1 39.5,76 A4.5,4.5 0 0 1 35,71.5 V36.5 A4.5,4.5 0 0 1 39.5,32 Z M39.5,32 H58.5 A4.5,4.5 0 0 1 63,36.5 A4.5,4.5 0 0 1 58.5,41 H39.5 A4.5,4.5 0 0 1 35,36.5 A4.5,4.5 0 0 1 39.5,32 Z M39.5,50 H52.5 A4.5,4.5 0 0 1 57,54.5 A4.5,4.5 0 0 1 52.5,59 H39.5 A4.5,4.5 0 0 1 35,54.5 A4.5,4.5 0 0 1 39.5,50 Z" />
+    <path
+        android:fillColor="#00B37E"
+        android:pathData="M68,48 Q68,54.5 74.5,54.5 Q68,54.5 68,61 Q68,54.5 61.5,54.5 Q68,54.5 68,48 Z" />
+</vector>

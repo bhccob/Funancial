@@ -18,3 +18,8 @@ export function removeDialog(el: HTMLDialogElement): void {
 export function useTopDialog(): HTMLDialogElement | null {
   return useStore(dialogStack, (s) => s.open.at(-1) ?? null);
 }
+
+/** The innermost open dialog right now, for code outside React (the Android back gesture). */
+export function topDialog(): HTMLDialogElement | null {
+  return dialogStack.getState().open.at(-1) ?? null;
+}

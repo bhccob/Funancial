@@ -8,8 +8,10 @@ import { OnboardingWizard } from '@/features/onboarding/OnboardingWizard';
 import { BootSplash } from '@/features/system/BootSplash';
 import { StorageUnavailable } from '@/features/system/StorageUnavailable';
 import { WelcomeScreen } from '@/features/welcome/WelcomeScreen';
+import { usePlatform } from '@/platform/PlatformProvider';
 import { useApp } from '@/store/AppStoreProvider';
 import { createAppRouter } from './router';
+import { useClearRemindersWithoutData, useReminderSync } from './useReminderSync';
 
 const DEFAULT_AUTO_LOCK_MINUTES = 5;
 
@@ -28,6 +30,7 @@ function UnlockedApp() {
     (s) => s.namespace === 'real' && !s.data.tables.profile[0]?.onboardedAt,
   );
   useAutoLock(minutes);
+  useReminderSync(usePlatform().notifier);
   useEffect(() => {
     // Onboarding ends on the Dashboard, not on a screen an earlier session (say, demo) left open.
     if (needsOnboarding) void getAppRouter().navigate('/', { replace: true });
@@ -53,6 +56,11 @@ function Phase() {
 }
 
 export function Root() {
+  const notifier = usePlatform().notifier;
+  // Always listening, locked or not: opening a reminder while the app is locked lines the router
+  // up for after the unlock, and one opened while the app was closed is delivered when this starts.
+  useEffect(() => notifier?.onOpen((route) => void getAppRouter().navigate(route)), [notifier]);
+  useClearRemindersWithoutData(notifier);
   return (
     <ErrorBoundary>
       <Phase />

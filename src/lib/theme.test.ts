@@ -1,7 +1,13 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { memoryStorage, throwingStorage } from '@/test/storage';
-import { getThemePreference, initTheme, resolveTheme, setThemePreference } from './theme';
+import {
+  getThemePreference,
+  initTheme,
+  onThemeApplied,
+  resolveTheme,
+  setThemePreference,
+} from './theme';
 
 function fakeMatchMedia(initiallyDark: boolean) {
   const listeners = new Set<(e: { matches: boolean }) => void>();
@@ -78,5 +84,50 @@ describe('initTheme', () => {
     media.setDark(true);
     expect(document.documentElement.dataset.theme).toBe('light');
     stop();
+  });
+});
+
+describe('onThemeApplied', () => {
+  let media: ReturnType<typeof fakeMatchMedia>;
+  beforeEach(() => {
+    media = fakeMatchMedia(false);
+    vi.stubGlobal('matchMedia', media.matchMedia);
+    vi.stubGlobal('localStorage', memoryStorage());
+  });
+
+  it('reports every applied theme as dark or not until unsubscribed', () => {
+    const stopTheme = initTheme();
+    const applied = vi.fn();
+    const stop = onThemeApplied(applied);
+    applied.mockClear();
+
+    media.setDark(true);
+    expect(applied).toHaveBeenLastCalledWith(true);
+    setThemePreference('light');
+    expect(applied).toHaveBeenLastCalledWith(false);
+    expect(applied).toHaveBeenCalledTimes(2);
+
+    stop();
+    setThemePreference('dark');
+    expect(applied).toHaveBeenCalledTimes(2);
+    stopTheme();
+  });
+
+  it('tells a late subscriber which theme is already on the page', () => {
+    media.setDark(true);
+    const stopTheme = initTheme();
+    const applied = vi.fn();
+
+    const stop = onThemeApplied(applied);
+
+    expect(applied).toHaveBeenCalledExactlyOnceWith(true);
+    stop();
+    stopTheme();
+  });
+
+  it('has nothing to report before a theme is applied', () => {
+    const applied = vi.fn();
+    onThemeApplied(applied)();
+    expect(applied).not.toHaveBeenCalled();
   });
 });

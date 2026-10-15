@@ -152,7 +152,36 @@ describe('Profile and Settings', () => {
       warningTone: 'motivational',
       autoLockMinutes: 5,
       lastBackupAt: null,
+      reminders: {
+        enabled: false,
+        dailyLog: true,
+        dailyTime: '20:00',
+        bills: true,
+        freeze: true,
+        reviews: true,
+        backup: true,
+        prompted: false,
+      },
     });
     expect(ok(SettingsSchema, s)).toBe(true);
+  });
+  it('needs reminder settings, with the time as HH:MM on a 24-hour clock', () => {
+    const { reminders, ...without } = makeSettings();
+    expect(ok(SettingsSchema, without)).toBe(false);
+    for (const dailyTime of ['00:00', '07:30', '20:00', '23:59']) {
+      expect(ok(SettingsSchema, makeSettings({ reminders: { ...reminders, dailyTime } }))).toBe(
+        true,
+      );
+    }
+    for (const dailyTime of ['24:00', '7:30', '20:60', '20:00:00', '2000', '']) {
+      expect(ok(SettingsSchema, makeSettings({ reminders: { ...reminders, dailyTime } }))).toBe(
+        false,
+      );
+    }
+  });
+  it('hands each caller its own reminder defaults', () => {
+    const a = defaultSettings('2026-10-14T10:00:00.000Z');
+    const b = defaultSettings('2026-10-14T10:00:00.000Z');
+    expect(a.reminders).not.toBe(b.reminders);
   });
 });

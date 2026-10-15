@@ -1,8 +1,10 @@
 import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { PlatformProvider } from '@/platform/PlatformProvider';
 import { AppStoreProvider } from '@/store/AppStoreProvider';
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
+import { fakeAppLifecycle } from '@/test/fakeAppLifecycle';
 import { LockScreen } from './LockScreen';
 import { useAutoLock } from './useAutoLock';
 
@@ -158,6 +160,119 @@ describe('useAutoLock activity', () => {
     setVisibility('visible');
     expect(store.getState().lock).toHaveBeenCalledTimes(1);
     setVisibility('visible');
+  });
+});
+
+describe('LockScreen with biometric unlock', () => {
+  const CHANGED =
+    'Your fingerprints or face changed, so use your PIN this time. You can turn biometric unlock back on in Settings.';
+
+  it('offers fingerprint or face and explains a changed enrolment', async () => {
+    const store = createStubStore({ phase: 'locked', lockMode: 'pin', biometric: 'on' });
+    const unlockWithBiometric = vi
+      .fn<() => Promise<'ok' | 'cancelled' | 'changed'>>()
+      .mockResolvedValueOnce('cancelled')
+      .mockImplementationOnce(async () => {
+        store.setState({ biometric: 'off' });
+        return 'changed';
+      });
+    store.setState({ unlockWithBiometric });
+    renderWithStore(<LockScreen />, store);
+
+    // It asks once, on its own, as the lock screen opens.
+    await vi.waitFor(() => expect(unlockWithBiometric).toHaveBeenCalledTimes(1));
+    expect(screen.queryByText(CHANGED)).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Use fingerprint or face' }));
+
+    expect(await screen.findByText(CHANGED)).toBeInTheDocument();
+    expect(unlockWithBiometric).toHaveBeenCalledTimes(2);
+    expect(
+      screen.queryByRole('button', { name: 'Use fingerprint or face' }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '5' })).toBeEnabled();
+  });
+
+  it('neither asks nor offers it when biometric unlock is off', async () => {
+    const store = createStubStore({ phase: 'locked', lockMode: 'pin', biometric: 'off' });
+    renderWithStore(<LockScreen />, store);
+    await act(async () => {});
+    expect(store.getState().unlockWithBiometric).not.toHaveBeenCalled();
+    expect(
+      screen.queryByRole('button', { name: 'Use fingerprint or face' }),
+    ).not.toBeInTheDocument();
+  });
+});
+
+describe('LockScreen biometric prompt and the app being on screen', () => {
+  // The idle timer can lock the app while it is behind another app. A prompt started from there
+  // can land over that app, come back cancelled, or never finish.
+  afterEach(() => Reflect.deleteProperty(document, 'visibilityState'));
+
+  const setVisibility = (state: DocumentVisibilityState) => {
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => state });
+    act(() => void document.dispatchEvent(new Event('visibilitychange')));
+  };
+
+  function renderLocked() {
+    const native = fakeAppLifecycle();
+    const store = createStubStore({ phase: 'locked', lockMode: 'pin', biometric: 'on' });
+    const view = render(
+      <PlatformProvider platform={native.platform}>
+        <AppStoreProvider store={store}>
+          <LockScreen />
+        </AppStoreProvider>
+      </PlatformProvider>,
+    );
+    return { ...native, ...view, asked: store.getState().unlockWithBiometric };
+  }
+
+  it('asks at once when it opens on screen, and only once', async () => {
+    setVisibility('visible');
+    const { asked, resume } = renderLocked();
+    await vi.waitFor(() => expect(asked).toHaveBeenCalledTimes(1));
+
+    resume();
+    await act(async () => {});
+    expect(asked).toHaveBeenCalledTimes(1);
+  });
+
+  it('opened in the background, asks when the app comes back, and only once', async () => {
+    setVisibility('hidden');
+    const { asked, resume } = renderLocked();
+    await act(async () => {});
+    expect(asked).not.toHaveBeenCalled();
+
+    resume();
+    await vi.waitFor(() => expect(asked).toHaveBeenCalledTimes(1));
+    setVisibility('visible');
+    resume();
+    await act(async () => {});
+    expect(asked).toHaveBeenCalledTimes(1);
+  });
+
+  it('opened in the background, asks when the page is shown, should that come first', async () => {
+    setVisibility('hidden');
+    const { asked, resume } = renderLocked();
+    await act(async () => {});
+    expect(asked).not.toHaveBeenCalled();
+
+    setVisibility('visible');
+    await vi.waitFor(() => expect(asked).toHaveBeenCalledTimes(1));
+    resume();
+    await act(async () => {});
+    expect(asked).toHaveBeenCalledTimes(1);
+  });
+
+  it('never asks once it has closed, even for a return already on its way', async () => {
+    setVisibility('hidden');
+    const { asked, queue, unmount } = renderLocked();
+    const resumed = queue('resume');
+    unmount();
+    resumed();
+    await act(async () => {});
+
+    expect(asked).not.toHaveBeenCalled();
   });
 });
 

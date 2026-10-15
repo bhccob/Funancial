@@ -31,6 +31,16 @@ describe('Switch', () => {
     rerender(<Switch label="Reserve what's left" checked onChange={onChange} />);
     expect(screen.getByRole('switch')).toHaveAttribute('aria-checked', 'true');
   });
+
+  it('stays in place but does nothing when disabled', async () => {
+    const onChange = vi.fn();
+    render(<Switch label="Bills" checked={false} onChange={onChange} disabled />);
+    const sw = screen.getByRole('switch', { name: 'Bills' });
+    expect(sw).toBeDisabled();
+    await userEvent.click(sw);
+    await userEvent.click(screen.getByText('Bills'));
+    expect(onChange).not.toHaveBeenCalled();
+  });
 });
 
 describe('Select', () => {
@@ -52,6 +62,19 @@ describe('Select', () => {
     expect(select).toHaveAccessibleDescription('Card spending is paid off later');
     await userEvent.selectOptions(select, 'Visa');
     expect(onChange).toHaveBeenCalledWith('card:c1');
+  });
+
+  it('can be disabled', () => {
+    render(
+      <Select
+        label="At"
+        value="20:00"
+        onChange={vi.fn()}
+        options={[{ value: '20:00', label: '20:00' }]}
+        disabled
+      />,
+    );
+    expect(screen.getByLabelText('At')).toBeDisabled();
   });
 });
 

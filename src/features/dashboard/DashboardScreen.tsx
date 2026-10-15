@@ -16,6 +16,7 @@ import { useApp } from '@/store/AppStoreProvider';
 import { useAction } from '@/lib/useAction';
 import { useFinanceActions, useFinanceView, useMoney, useToday } from '@/store/useFinance';
 import { ConfirmSalaryDialog } from './ConfirmSalaryDialog';
+import { ReminderBanner } from './ReminderBanner';
 
 const sectionLink = 'hover:text-text underline-offset-4 hover:underline';
 
@@ -128,49 +129,48 @@ export function DashboardScreen() {
         action={profile?.name ? <p className="text-[13px] font-bold">Hi, {profile.name}</p> : null}
       />
 
-      {(view.pendingSalary.length > 0 || freeze) && (
-        <div className="flex flex-col gap-2 pt-4">
-          {view.pendingSalary.map((income) => {
-            const m = formatMonth(income.period ?? monthKey(income.date));
-            return (
-              <Banner
-                key={income.id}
-                tone="info"
-                action={
-                  <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      aria-label={`Didn't arrive (${m} salary)`}
-                      onClick={() =>
-                        void run(() => skipIncome(income.id), {
-                          success: `${m} salary marked as not arrived. It isn't counted.`,
-                        })
-                      }
-                    >
-                      Didn&apos;t arrive
-                    </Button>
-                    <Button
-                      size="sm"
-                      aria-label={`Confirm ${m} salary`}
-                      onClick={() => setConfirming(income)}
-                    >
-                      Confirm
-                    </Button>
-                  </div>
-                }
-              >
-                {`Your ${m} salary is expected: ${money(income.amount)}. Did it arrive?`}
-              </Banner>
-            );
-          })}
-          {freeze && (
-            <Banner tone="info">
-              {`Salary freeze until ${formatDay(freeze.end)}. Bills and subscriptions still apply.`}
+      <div className="flex flex-col gap-2 pt-4 empty:hidden">
+        {view.pendingSalary.map((income) => {
+          const m = formatMonth(income.period ?? monthKey(income.date));
+          return (
+            <Banner
+              key={income.id}
+              tone="info"
+              action={
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    aria-label={`Didn't arrive (${m} salary)`}
+                    onClick={() =>
+                      void run(() => skipIncome(income.id), {
+                        success: `${m} salary marked as not arrived. It isn't counted.`,
+                      })
+                    }
+                  >
+                    Didn&apos;t arrive
+                  </Button>
+                  <Button
+                    size="sm"
+                    aria-label={`Confirm ${m} salary`}
+                    onClick={() => setConfirming(income)}
+                  >
+                    Confirm
+                  </Button>
+                </div>
+              }
+            >
+              {`Your ${m} salary is expected: ${money(income.amount)}. Did it arrive?`}
             </Banner>
-          )}
-        </div>
-      )}
+          );
+        })}
+        {freeze && (
+          <Banner tone="info">
+            {`Salary freeze until ${formatDay(freeze.end)}. Bills and subscriptions still apply.`}
+          </Banner>
+        )}
+        <ReminderBanner />
+      </div>
 
       <div className="border-border grid border-b lg:grid-cols-[1.3fr_1fr_1fr]">
         <Kpi label="Available to spend" value={money(view.available)} lead>

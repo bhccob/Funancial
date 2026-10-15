@@ -9,15 +9,26 @@ export interface SelectProps {
   options: Array<{ value: string; label: string }>;
   hint?: string;
   error?: string;
+  /** Dimmed and inert, but still on screen. */
+  disabled?: boolean;
   className?: string;
 }
 
-export function Select({ label, value, onChange, options, hint, error, className }: SelectProps) {
+export function Select({
+  label,
+  value,
+  onChange,
+  options,
+  hint,
+  error,
+  disabled,
+  className,
+}: SelectProps) {
   const id = useId();
   const hintId = hint ? `${id}-hint` : undefined;
   const errorId = error ? `${id}-error` : undefined;
   return (
-    <div className={cn('flex flex-col gap-1.5', className)}>
+    <div className={cn('flex flex-col gap-1.5', disabled && 'opacity-45', className)}>
       <label htmlFor={id} className="text-sm font-bold">
         {label}
       </label>
@@ -26,6 +37,7 @@ export function Select({ label, value, onChange, options, hint, error, className
           id={id}
           value={value}
           onChange={(e) => onChange(e.target.value)}
+          disabled={disabled}
           aria-invalid={error ? true : undefined}
           aria-describedby={[hintId, errorId].filter(Boolean).join(' ') || undefined}
           className={cn(

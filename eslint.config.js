@@ -13,6 +13,7 @@ export default defineConfig([
     'test-results',
     '.superpowers',
     'design',
+    'android',
   ]),
   {
     files: ['**/*.{ts,tsx}'],

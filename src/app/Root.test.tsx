@@ -1,9 +1,11 @@
-import { act, screen } from '@testing-library/react';
+import { act, cleanup, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { emptySnapshot } from '@/domain/snapshot';
+import { toastStore } from '@/lib/toast';
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
-import { makeProfile } from '@/test/fixtures';
+import { fakeNotifier, onPhone } from '@/test/fakeNotifier';
+import { makeProfile, makeSettings } from '@/test/fixtures';
 import { DemoBanner } from './DemoBanner';
 import { Root } from './Root';
 
@@ -117,5 +119,121 @@ describe('Root across lock cycles', () => {
   it('shows toasts on every screen', () => {
     renderWithStore(<Root />, createStubStore({ phase: 'welcome' }));
     expect(document.querySelector('[aria-live="polite"]')).not.toBeNull();
+  });
+});
+
+describe('Root with reminders', () => {
+  let consoleError: ReturnType<typeof vi.spyOn>;
+  beforeEach(() => {
+    consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    toastStore.setState({ toasts: [] });
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    consoleError.mockRestore();
+  });
+
+  it('takes an opened reminder to its screen, listening once across lock cycles', async () => {
+    let open: (route: string) => void = () => {};
+    const stop = vi.fn();
+    const notifier = fakeNotifier({
+      onOpen: vi.fn((cb) => {
+        open = cb;
+        return stop;
+      }),
+    });
+    const store = createStubStore({ phase: 'unlocked', data: onboarded() });
+    const { unmount } = renderWithStore(onPhone(notifier, <Root />), store);
+    await screen.findByRole('heading', { level: 1, name: 'Home' });
+
+    // Tapped while the app is open, and again after it locked and unlocked.
+    act(() => open('/add'));
+    expect(await screen.findByRole('heading', { level: 1, name: 'Add' })).toBeInTheDocument();
+    act(() => store.setState({ phase: 'locked', lockMode: 'pin' }));
+    act(() => store.setState({ phase: 'unlocked' }));
+    act(() => open('/'));
+    expect(await screen.findByRole('heading', { level: 1, name: 'Home' })).toBeInTheDocument();
+
+    expect(notifier.onOpen).toHaveBeenCalledTimes(1);
+    expect(stop).not.toHaveBeenCalled();
+    unmount();
+    expect(stop).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the phone reminders in step with the data once unlocked', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const data = onboarded();
+    data.tables.settings = [
+      makeSettings({ reminders: { ...makeSettings().reminders, enabled: true } }),
+    ];
+    const notifier = fakeNotifier();
+    renderWithStore(
+      onPhone(notifier, <Root />),
+      createStubStore({ phase: 'unlocked', namespace: 'real', data }),
+    );
+    await screen.findByRole('heading', { level: 1, name: 'Home' });
+    expect(notifier.replace).not.toHaveBeenCalled();
+
+    await act(() => vi.advanceTimersByTimeAsync(1_000));
+
+    expect(notifier.replace).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(notifier.replace).mock.calls[0]?.[0].length).toBeGreaterThan(0);
+  });
+
+  it('clears the phone reminders once each time it reaches the welcome screen', async () => {
+    // After "Delete all data" the app goes back to welcome; nothing may keep reminding about it.
+    const notifier = fakeNotifier();
+    const store = createStubStore({ phase: 'welcome' });
+    renderWithStore(onPhone(notifier, <Root />), store);
+
+    expect(notifier.replace).toHaveBeenCalledTimes(1);
+    expect(notifier.replace).toHaveBeenLastCalledWith([]);
+    // Other changes while it stays there do not repeat it.
+    act(() => store.setState({ today: '2026-10-15' }));
+    expect(notifier.replace).toHaveBeenCalledTimes(1);
+
+    // Into the app and back out to welcome (data deleted again): once more.
+    act(() => store.setState({ phase: 'unlocked', data: onboarded() }));
+    await screen.findByRole('heading', { level: 1, name: 'Home' });
+    expect(notifier.replace).toHaveBeenCalledTimes(1);
+    act(() => store.setState({ phase: 'welcome', data: emptySnapshot() }));
+    expect(notifier.replace).toHaveBeenCalledTimes(2);
+    expect(notifier.replace).toHaveBeenLastCalledWith([]);
+  });
+
+  it('does not clear reminders while locked or booting', () => {
+    const notifier = fakeNotifier();
+    const store = createStubStore({ phase: 'booting' });
+    renderWithStore(onPhone(notifier, <Root />), store);
+    act(() => store.setState({ phase: 'locked', lockMode: 'pin' }));
+
+    expect(notifier.replace).not.toHaveBeenCalled();
+  });
+
+  it('keeps going, quietly, when clearing the reminders fails', async () => {
+    const rejecting = fakeNotifier({
+      replace: vi.fn(async () => Promise.reject(new Error('down'))),
+    });
+    const throwing = fakeNotifier({
+      replace: vi.fn(() => {
+        throw new Error('bridge down');
+      }),
+    });
+
+    for (const notifier of [rejecting, throwing]) {
+      renderWithStore(onPhone(notifier, <Root />), createStubStore({ phase: 'welcome' }));
+      await vi.waitFor(() => expect(consoleError).toHaveBeenCalled());
+      consoleError.mockClear();
+      expect(screen.getByRole('button', { name: 'Try with demo money' })).toBeInTheDocument();
+      expect(toastStore.getState().toasts).toEqual([]);
+      cleanup();
+    }
+  });
+
+  it('has nothing to clear on the web, where there is no notifier', () => {
+    renderWithStore(onPhone(null, <Root />), createStubStore({ phase: 'welcome' }));
+
+    expect(screen.getByRole('button', { name: 'Try with demo money' })).toBeInTheDocument();
+    expect(consoleError).not.toHaveBeenCalled();
   });
 });

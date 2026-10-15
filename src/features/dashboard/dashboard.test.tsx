@@ -1,18 +1,22 @@
-import { screen, within } from '@testing-library/react';
+import { act, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { ReminderSettings } from '@/domain/entities';
 import { EXAMPLES } from '@/domain/examples';
 import { formatMoney } from '@/domain/money';
 import { emptySnapshot, type DataSnapshot } from '@/domain/snapshot';
 import { applyRecords, dueGenerated } from '@/domain/sync';
 import { formatDay, formatMonth } from '@/lib/format';
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
+import { fakeNotifier, onPhone, type FakeNotifier } from '@/test/fakeNotifier';
+import { makeSettings } from '@/test/fixtures';
 import { DashboardScreen } from './DashboardScreen';
 
 const actions = vi.hoisted(() => ({
   confirmIncome: vi.fn(async () => {}),
   skipIncome: vi.fn(async () => {}),
+  updateSettings: vi.fn(async () => {}),
 }));
 vi.mock('@/store/useFinance', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/store/useFinance')>()),
@@ -139,5 +143,104 @@ describe('DashboardScreen with nothing set up', () => {
       within(region('Upcoming bills')).getByText('Nothing due this month'),
     ).toBeInTheDocument();
     expect(within(region('Available to spend')).getByText(usd(0))).toBeInTheDocument();
+  });
+});
+
+describe('DashboardScreen reminders invitation', () => {
+  const INVITE = 'Get reminders for bills, renewals and a daily nudge to log spending.';
+  const BLOCKED =
+    'Notifications are blocked for Funancial. Turn them on in Android Settings → Apps → Funancial → Notifications.';
+  /** Nobody has been asked yet: off, and not prompted. */
+  const fresh = makeSettings().reminders;
+
+  function dataWith(reminders: ReminderSettings) {
+    const data = emptySnapshot();
+    data.tables.settings = [makeSettings({ reminders })];
+    return data;
+  }
+
+  function renderOnPhone(
+    notifier: FakeNotifier | null,
+    reminders = fresh,
+    namespace: 'real' | 'demo' = 'real',
+  ) {
+    return renderWithStore(
+      onPhone(
+        notifier,
+        <MemoryRouter>
+          <DashboardScreen />
+        </MemoryRouter>,
+      ),
+      createStubStore({ data: dataWith(reminders), namespace, today: '2026-10-14' }),
+    );
+  }
+
+  it('offers reminders once and remembers Not now', async () => {
+    const notifier = fakeNotifier();
+    const { store } = renderOnPhone(notifier);
+    expect(screen.getByText(INVITE)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Turn on' })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Not now' }));
+
+    expect(actions.updateSettings).toHaveBeenCalledExactlyOnceWith({
+      reminders: { ...fresh, prompted: true },
+    });
+    expect(notifier.request).not.toHaveBeenCalled();
+
+    // Saved, so it is not offered again.
+    act(() => store.setState({ data: dataWith({ ...fresh, prompted: true }) }));
+    expect(screen.queryByText(INVITE)).not.toBeInTheDocument();
+  });
+
+  it('does not offer reminders on the web, in the demo, or once they are on or answered', () => {
+    const web = renderWithStore(
+      <MemoryRouter>
+        <DashboardScreen />
+      </MemoryRouter>,
+      createStubStore({ data: dataWith(fresh), today: '2026-10-14' }),
+    );
+    expect(screen.queryByText(INVITE)).not.toBeInTheDocument();
+    web.unmount();
+
+    const cases: Array<[ReminderSettings, 'real' | 'demo']> = [
+      [fresh, 'demo'],
+      [{ ...fresh, enabled: true }, 'real'],
+      [{ ...fresh, prompted: true }, 'real'],
+      [{ ...fresh, enabled: true, prompted: true }, 'real'],
+    ];
+    for (const [reminders, namespace] of cases) {
+      const view = renderOnPhone(fakeNotifier(), reminders, namespace);
+      expect(screen.queryByText(INVITE)).not.toBeInTheDocument();
+      view.unmount();
+    }
+  });
+
+  it('asks Android on Turn on, then saves reminders as on', async () => {
+    const notifier = fakeNotifier();
+    renderOnPhone(notifier);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Turn on' }));
+
+    expect(notifier.request).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() =>
+      expect(actions.updateSettings).toHaveBeenCalledExactlyOnceWith({
+        reminders: { ...fresh, enabled: true, prompted: true },
+      }),
+    );
+  });
+
+  it('explains how to unblock notifications when Android refuses, and saves nothing', async () => {
+    const notifier = fakeNotifier({ request: async () => false });
+    renderOnPhone(notifier);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Turn on' }));
+
+    expect(await screen.findByText(BLOCKED)).toBeInTheDocument();
+    expect(actions.updateSettings).not.toHaveBeenCalled();
+    // Still on offer: they can fix it in Android's settings and try again, or dismiss it.
+    expect(screen.getByText(INVITE)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Turn on' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Not now' })).toBeInTheDocument();
   });
 });

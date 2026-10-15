@@ -1,13 +1,18 @@
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { Toaster } from '@/components/ui/Toaster';
+import { toastStore } from '@/lib/toast';
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
 import { OnboardingWizard } from './OnboardingWizard';
 
 const actions = vi.hoisted(() => ({ completeOnboarding: vi.fn(async () => {}) }));
 vi.mock('@/store/useFinance', () => ({ useFinanceActions: () => actions }));
 
-beforeEach(() => actions.completeOnboarding.mockClear());
+beforeEach(() => {
+  actions.completeOnboarding.mockClear();
+  toastStore.setState({ toasts: [] });
+});
 
 const next = () => userEvent.click(screen.getByRole('button', { name: 'Next' }));
 
@@ -64,6 +69,10 @@ describe('OnboardingWizard', () => {
 
     expect(screen.getByText('Step 6 of 6')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('radio', { name: 'PIN' }));
+    // A device without fingerprint or face (and the web) is not offered it.
+    expect(
+      screen.queryByRole('switch', { name: 'Also unlock with fingerprint or face' }),
+    ).not.toBeInTheDocument();
     await userEvent.type(screen.getByLabelText('Choose a PIN'), '2468');
     await userEvent.type(screen.getByLabelText('Confirm PIN'), '2468');
     await userEvent.click(screen.getByRole('button', { name: 'Start my adventure' }));
@@ -82,6 +91,7 @@ describe('OnboardingWizard', () => {
     const [onboardedAt] = actions.completeOnboarding.mock.invocationCallOrder;
     const [lockedAt] = setSecret.mock.invocationCallOrder;
     expect(lockedAt).toBeLessThan(onboardedAt ?? 0);
+    expect(store.getState().enableBiometric).not.toHaveBeenCalled();
   });
 
   it('sends no salary when there is no regular salary, and no secret without a lock', async () => {
@@ -100,6 +110,117 @@ describe('OnboardingWizard', () => {
       expect.objectContaining({ salary: null, cards: [], openingCash: 0, openingSavings: 0 }),
     );
     expect(store.getState().setSecret).not.toHaveBeenCalled();
+  });
+
+  it('turns on biometric unlock after setting the PIN', async () => {
+    const { store } = renderWithStore(<OnboardingWizard />, createStubStore({ biometric: 'off' }));
+    await passIntro();
+    await next();
+    await fillBalances('0', '0');
+    await userEvent.click(screen.getByRole('switch', { name: "I don't have a regular salary" }));
+    await next();
+    await next();
+    expect(
+      screen.queryByRole('switch', { name: 'Also unlock with fingerprint or face' }),
+    ).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('radio', { name: 'PIN' }));
+    expect(
+      screen.getByRole('switch', { name: 'Also unlock with fingerprint or face' }),
+    ).toHaveAttribute('aria-checked', 'true');
+    await userEvent.type(screen.getByLabelText('Choose a PIN'), '2468');
+    await userEvent.type(screen.getByLabelText('Confirm PIN'), '2468');
+    await userEvent.click(screen.getByRole('button', { name: 'Start my adventure' }));
+
+    const setSecret = vi.mocked(store.getState().setSecret);
+    const enableBiometric = vi.mocked(store.getState().enableBiometric);
+    await vi.waitFor(() => expect(enableBiometric).toHaveBeenCalledTimes(1));
+    expect(setSecret).toHaveBeenCalledWith('2468', 'pin');
+    const [lockedAt] = setSecret.mock.invocationCallOrder;
+    const [onboardedAt] = actions.completeOnboarding.mock.invocationCallOrder;
+    const [biometricAt] = enableBiometric.mock.invocationCallOrder;
+    expect(lockedAt).toBeLessThan(biometricAt ?? 0);
+    // Last, once set up: it is an extra, and a failure must not stop the person finishing.
+    expect(onboardedAt).toBeLessThan(biometricAt ?? 0);
+  });
+
+  it('finishes setting up, and says so plainly, when biometric unlock cannot be turned on', async () => {
+    const store = createStubStore({
+      biometric: 'off',
+      enableBiometric: vi.fn(async () => {
+        throw new Error('Failed to save data');
+      }),
+    });
+    renderWithStore(
+      <>
+        <OnboardingWizard />
+        <Toaster />
+      </>,
+      store,
+    );
+    await passIntro();
+    await next();
+    await fillBalances('0', '0');
+    await userEvent.click(screen.getByRole('switch', { name: "I don't have a regular salary" }));
+    await next();
+    await next();
+    await userEvent.click(screen.getByRole('radio', { name: 'PIN' }));
+    await userEvent.type(screen.getByLabelText('Choose a PIN'), '2468');
+    await userEvent.type(screen.getByLabelText('Confirm PIN'), '2468');
+    await userEvent.click(screen.getByRole('button', { name: 'Start my adventure' }));
+
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      "Fingerprint or face unlock couldn't be turned on. You can try again in Settings.",
+    );
+    expect(store.getState().setSecret).toHaveBeenCalledWith('2468', 'pin');
+    expect(actions.completeOnboarding).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText('Failed to save data')).not.toBeInTheDocument();
+  });
+
+  it('does not turn biometric unlock on when setting up fails, so a retry without it leaves it off', async () => {
+    actions.completeOnboarding.mockRejectedValueOnce(new Error('Storage is full.'));
+    const { store } = renderWithStore(<OnboardingWizard />, createStubStore({ biometric: 'off' }));
+    await passIntro();
+    await next();
+    await fillBalances('0', '0');
+    await userEvent.click(screen.getByRole('switch', { name: "I don't have a regular salary" }));
+    await next();
+    await next();
+    await userEvent.click(screen.getByRole('radio', { name: 'PIN' }));
+    await userEvent.type(screen.getByLabelText('Choose a PIN'), '2468');
+    await userEvent.type(screen.getByLabelText('Confirm PIN'), '2468');
+    await userEvent.click(screen.getByRole('button', { name: 'Start my adventure' }));
+    await vi.waitFor(() => expect(actions.completeOnboarding).toHaveBeenCalledTimes(1));
+    expect(store.getState().enableBiometric).not.toHaveBeenCalled();
+
+    await userEvent.click(
+      screen.getByRole('switch', { name: 'Also unlock with fingerprint or face' }),
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Start my adventure' }));
+
+    await vi.waitFor(() => expect(actions.completeOnboarding).toHaveBeenCalledTimes(2));
+    expect(store.getState().enableBiometric).not.toHaveBeenCalled();
+  });
+
+  it('leaves biometric unlock off when switched off', async () => {
+    const { store } = renderWithStore(<OnboardingWizard />, createStubStore({ biometric: 'off' }));
+    await passIntro();
+    await next();
+    await fillBalances('0', '0');
+    await userEvent.click(screen.getByRole('switch', { name: "I don't have a regular salary" }));
+    await next();
+    await next();
+    await userEvent.click(screen.getByRole('radio', { name: 'PIN' }));
+    await userEvent.click(
+      screen.getByRole('switch', { name: 'Also unlock with fingerprint or face' }),
+    );
+    await userEvent.type(screen.getByLabelText('Choose a PIN'), '2468');
+    await userEvent.type(screen.getByLabelText('Confirm PIN'), '2468');
+    await userEvent.click(screen.getByRole('button', { name: 'Start my adventure' }));
+
+    await vi.waitFor(() => expect(actions.completeOnboarding).toHaveBeenCalledTimes(1));
+    expect(store.getState().setSecret).toHaveBeenCalledWith('2468', 'pin');
+    expect(store.getState().enableBiometric).not.toHaveBeenCalled();
   });
 
   it('refuses a PIN that does not match its confirmation', async () => {
