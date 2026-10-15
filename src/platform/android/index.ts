@@ -1,7 +1,7 @@
 import { storedKeyring } from '@/data/keyring';
 import { sqliteStorage } from '@/data/sqliteStorage';
 import type { Platform } from '../types';
-import { webFiles } from '../web';
+import { androidFiles } from './files';
 import { listen } from './listen';
 import { installShell } from './shell';
 import { capacitorSqlDriver } from './sqlite';
@@ -19,8 +19,7 @@ export async function createAndroidPlatform(): Promise<Platform> {
     keyring: storedKeyring,
     storageStatus: async () => true,
     requestPersistence: async () => true,
-    // Downloads until the share sheet arrives.
-    files: webFiles,
+    files: androidFiles,
     onPause: (cb) => listen(() => App.addListener('pause', cb), 'the app going to the background'),
     onResume: (cb) => listen(() => App.addListener('resume', cb), 'the app coming back'),
   };

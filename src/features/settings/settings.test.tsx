@@ -5,6 +5,9 @@ import { Toaster } from '@/components/ui/Toaster';
 import { InvalidBackupError } from '@/data/backup';
 import { emptySnapshot } from '@/domain/snapshot';
 import { downloadText } from '@/lib/download';
+import { toastStore } from '@/lib/toast';
+import { PlatformProvider } from '@/platform/PlatformProvider';
+import { createWebPlatform } from '@/platform/web';
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
 import { makeExpense, makeGoal, makeProfile, makeSettings } from '@/test/fixtures';
 import { SettingsScreen } from './SettingsScreen';
@@ -24,6 +27,7 @@ vi.mock('@/store/useFinance', async (importOriginal) => ({
 }));
 
 beforeEach(() => {
+  toastStore.setState({ toasts: [] });
   vi.mocked(downloadText).mockClear();
   finance.updateProfile.mockClear();
   finance.updateSettings.mockClear();
@@ -147,6 +151,98 @@ describe('Data', () => {
       'X',
       'application/octet-stream',
     );
+  });
+
+  it('saves the backup through the platform', async () => {
+    const save = vi.fn(async () => {});
+    const store = createStubStore({
+      data: snapshotWith(),
+      createBackup: vi.fn(async () => ({
+        fileName: 'funancial-backup-2026-10-15.funbak',
+        text: 'ENCRYPTED',
+      })),
+    });
+    renderWithStore(
+      <PlatformProvider platform={{ ...createWebPlatform(), files: { save } }}>
+        <SettingsScreen />
+      </PlatformProvider>,
+      store,
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Create encrypted backup' }));
+    const dialog = screen.getByRole('dialog', { name: 'Create encrypted backup' });
+    await userEvent.type(within(dialog).getByLabelText('Backup passphrase'), 'correct horse');
+    await userEvent.type(within(dialog).getByLabelText('Confirm passphrase'), 'correct horse');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Create backup' }));
+
+    await vi.waitFor(() =>
+      expect(save).toHaveBeenCalledExactlyOnceWith(
+        'funancial-backup-2026-10-15.funbak',
+        'ENCRYPTED',
+        'application/octet-stream',
+      ),
+    );
+    expect(downloadText).not.toHaveBeenCalled();
+  });
+
+  it('keeps the backup dialog open and says why when the file cannot be saved', async () => {
+    const save = vi.fn(async () => {
+      throw new Error('No space left on device');
+    });
+    renderWithStore(
+      <PlatformProvider platform={{ ...createWebPlatform(), files: { save } }}>
+        <SettingsScreen />
+      </PlatformProvider>,
+      createStubStore({ data: snapshotWith() }),
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Create encrypted backup' }));
+    const dialog = screen.getByRole('dialog', { name: 'Create encrypted backup' });
+    await userEvent.type(within(dialog).getByLabelText('Backup passphrase'), 'correct horse');
+    await userEvent.type(within(dialog).getByLabelText('Confirm passphrase'), 'correct horse');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Create backup' }));
+
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('No space left on device');
+  });
+
+  it.each([
+    ['Export unencrypted copy', 'export.json', '{}', 'application/json'],
+    [
+      'Export expenses (CSV)',
+      'funancial-expenses-2026-10-14.csv',
+      'date,amount,currency,category,payment_method,card,note,subscription\r\n',
+      'text/csv',
+    ],
+  ])('saves "%s" through the platform', async (label, fileName, text, mime) => {
+    const save = vi.fn(async () => {});
+    renderWithStore(
+      <PlatformProvider platform={{ ...createWebPlatform(), files: { save } }}>
+        <SettingsScreen />
+      </PlatformProvider>,
+      createStubStore({ data: snapshotWith(), today: '2026-10-14' }),
+    );
+    await userEvent.click(screen.getByRole('button', { name: label }));
+    const dialog = screen.getByRole('dialog', { name: 'Export an unprotected copy?' });
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Export' }));
+
+    await vi.waitFor(() => expect(save).toHaveBeenCalledExactlyOnceWith(fileName, text, mime));
+    expect(downloadText).not.toHaveBeenCalled();
+  });
+
+  it('shows a message when an export cannot be saved', async () => {
+    const save = vi.fn(async () => {
+      throw new Error('No space left on device');
+    });
+    renderWithStore(
+      <PlatformProvider platform={{ ...createWebPlatform(), files: { save } }}>
+        <SettingsScreen />
+        <Toaster />
+      </PlatformProvider>,
+      createStubStore({ data: snapshotWith() }),
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Export unencrypted copy' }));
+    const dialog = screen.getByRole('dialog', { name: 'Export an unprotected copy?' });
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Export' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('No space left on device');
   });
 
   it('restore shows the error message from a bad file', async () => {

@@ -9,7 +9,9 @@ import { EraseDialog } from '@/features/system/EraseDialog';
 import { validateSecret } from '@/data/keys';
 import type { DataSnapshot, TableName } from '@/domain/snapshot';
 import { expensesToCsv } from '@/data/csv';
-import { downloadText, readFileText } from '@/lib/download';
+import { readFileText } from '@/lib/download';
+import { useAction } from '@/lib/useAction';
+import { usePlatform } from '@/platform/PlatformProvider';
 import { useApp } from '@/store/AppStoreProvider';
 
 /** Order and wording of the summary line. Profile and settings are not "entries". */
@@ -36,6 +38,7 @@ const errorMessage = (e: unknown) => (e instanceof Error ? e.message : 'Somethin
 
 function BackupDialog({ open, onClose }: { open: boolean; onClose(): void }) {
   const createBackup = useApp((s) => s.createBackup);
+  const platform = usePlatform();
   const [pass, setPass] = useState('');
   const [confirm, setConfirm] = useState('');
   const [errors, setErrors] = useState<{ pass?: string; confirm?: string; other?: string }>({});
@@ -56,7 +59,7 @@ function BackupDialog({ open, onClose }: { open: boolean; onClose(): void }) {
     setBusy(true);
     try {
       const { fileName, text } = await createBackup(pass);
-      downloadText(fileName, text, 'application/octet-stream');
+      await platform.files.save(fileName, text, 'application/octet-stream');
       close();
     } catch (err) {
       setErrors({ other: errorMessage(err) });
@@ -246,6 +249,8 @@ export function DataSection() {
   const skipped = useApp((s) => s.skipped);
   const exportPlain = useApp((s) => s.exportPlain);
   const today = useApp((s) => s.today);
+  const platform = usePlatform();
+  const run = useAction();
   const [backupOpen, setBackupOpen] = useState(false);
   const lastBackupAt = data.tables.settings[0]?.lastBackupAt ?? null;
   const demo = namespace === 'demo';
@@ -291,18 +296,22 @@ export function DataSection() {
             <div className="flex flex-wrap gap-3">
               <ExportButton
                 label="Export unencrypted copy"
-                onExport={() => {
-                  const { fileName, text } = exportPlain();
-                  downloadText(fileName, text, 'application/json');
-                }}
+                onExport={() =>
+                  void run(async () => {
+                    const { fileName, text } = exportPlain();
+                    await platform.files.save(fileName, text, 'application/json');
+                  })
+                }
               />
               <ExportButton
                 label="Export expenses (CSV)"
                 onExport={() =>
-                  downloadText(
-                    `funancial-expenses-${today}.csv`,
-                    expensesToCsv(data, data.tables.profile[0]?.currency ?? 'USD'),
-                    'text/csv',
+                  void run(() =>
+                    platform.files.save(
+                      `funancial-expenses-${today}.csv`,
+                      expensesToCsv(data, data.tables.profile[0]?.currency ?? 'USD'),
+                      'text/csv',
+                    ),
                   )
                 }
               />
