@@ -22,6 +22,7 @@ import { AddScreen } from '@/features/add/AddScreen';
 import { BudgetScreen } from '@/features/budget/BudgetScreen';
 import { DashboardScreen } from '@/features/dashboard/DashboardScreen';
 import { FreezeScreen } from '@/features/freeze/FreezeScreen';
+import { GoalsScreen } from '@/features/goals/GoalsScreen';
 import { PlaceholderScreen } from '@/features/placeholder/PlaceholderScreen';
 import { SubscriptionsScreen } from '@/features/subscriptions/SubscriptionsScreen';
 import { SettingsScreen } from '@/features/settings/SettingsScreen';
@@ -66,7 +67,7 @@ export const APP_ROUTES: AppRoute[] = [
   },
   placeholder('/dividends', 'Dividends', Coins, 'more'),
   placeholder('/news', 'News', Newspaper, 'more'),
-  placeholder('/goals', 'Goals', Target, 'more'),
+  { path: '/goals', label: 'Goals', icon: Target, nav: 'more', element: <GoalsScreen /> },
   placeholder('/history', 'History', Clock, 'more'),
   placeholder('/shop', 'Shop', Store, 'more'),
   placeholder('/inbox', 'Inbox', Inbox, 'more'),

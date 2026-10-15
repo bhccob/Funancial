@@ -12,6 +12,18 @@ export function formatDay(d: LocalDate, locale?: string): string {
   }).format(utc(d));
 }
 
+/** "Feb 14, 2027" */
+export function formatDate(d: LocalDate, locale?: string): string {
+  return new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeZone: 'UTC' }).format(utc(d));
+}
+
+/** 1 → "1st", 22 → "22nd" (for "due on the 21st"). */
+export function ordinal(n: number): string {
+  const teen = n % 100 >= 11 && n % 100 <= 13;
+  const suffix = teen ? 'th' : ({ 1: 'st', 2: 'nd', 3: 'rd' } as Record<number, string>)[n % 10];
+  return `${n}${suffix ?? 'th'}`;
+}
+
 /** "2026-10" → "October" */
 export function formatMonth(yearMonth: string, locale?: string): string {
   return new Intl.DateTimeFormat(locale, { month: 'long', timeZone: 'UTC' }).format(
