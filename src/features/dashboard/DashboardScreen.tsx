@@ -133,7 +133,7 @@ export function DashboardScreen() {
         action={profile?.name ? <p className="text-[13px] font-bold">Hi, {profile.name}</p> : null}
       />
 
-      <GameHud />
+      <GameHud view={game} />
 
       <div className="flex flex-col gap-2 pt-4 empty:hidden">
         {view.pendingSalary.map((income) => {

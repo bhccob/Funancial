@@ -1,26 +1,39 @@
 import { Coins, Flame } from 'lucide-react';
 import { Link } from 'react-router';
+import type { GameView } from '@/domain/game/engine';
 import { useGameView } from '@/store/useGame';
 import { Avatar } from './Avatar';
 
+/** What the HUD shows from the game view. */
+type HudView = Pick<GameView, 'level' | 'totals' | 'streaks' | 'cosmetics'>;
+
 /**
  * The game layer's one strip: level, XP, the logging streak and coins, as a single link to the
- * quests. Small and quiet, so it never competes with the money figures under it.
+ * quests. Small and quiet, so it never competes with the money figures under it. A screen that has
+ * already worked out the game view hands it in; otherwise the HUD works it out itself.
  */
-export function GameHud() {
-  const { level, totals, streaks, cosmetics } = useGameView();
+export function GameHud({ view }: { view?: HudView }) {
+  return view ? <HudStrip view={view} /> : <OwnViewHud />;
+}
+
+function OwnViewHud() {
+  return <HudStrip view={useGameView()} />;
+}
+
+function HudStrip({ view: { level, totals, streaks, cosmetics } }: { view: HudView }) {
   const logging = streaks.find((s) => s.kind === 'logging');
   const days = logging?.count ?? 0;
   const coins = Math.max(0, totals.coins);
-  const needed = level.xpForNext;
+  const coinsText = `${coins} ${coins === 1 ? 'coin' : 'coins'}`;
+  const span = level.xpForNext;
   const streakText = days > 0 ? `${days}-day streak` : 'Start a streak today';
-  const xpText = needed === null ? 'Max level' : `${num(level.xpIntoLevel)} / ${num(needed)} XP`;
-  const xpSpoken = needed === null ? 'Max level' : `${num(level.xpIntoLevel)} of ${num(needed)} XP`;
+  const xpText = span === null ? 'Max level' : `${num(level.xpIntoLevel)} / ${num(span)} XP`;
+  const xpSpoken = span === null ? 'Max level' : `${num(level.xpIntoLevel)} of ${num(span)} XP`;
 
   return (
     <Link
       to="/quests"
-      aria-label={`Level ${level.level}, ${level.tier}, ${xpSpoken}, ${streakText}, ${coins} coins. Open quests`}
+      aria-label={`Level ${level.level}, ${level.tier}, ${xpSpoken}, ${streakText}, ${coinsText}. Open quests`}
       className="border-border flex flex-wrap items-center gap-x-4 gap-y-2 border-b py-3"
     >
       <Avatar item={cosmetics.avatar} frame={cosmetics.frame} size={32} />
@@ -35,7 +48,7 @@ export function GameHud() {
       {/* Beside the tier on a narrow screen, so the strip is two rows; last on a wide one. */}
       <span className="ml-auto flex items-center gap-1.5 text-xs font-semibold tabular-nums lg:order-last lg:ml-0">
         <Coins aria-hidden="true" className="size-4" />
-        {coins} coins
+        {coinsText}
       </span>
 
       <span className="flex min-w-40 flex-1 items-center gap-2">

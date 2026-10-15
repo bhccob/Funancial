@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { computeGameView } from '@/domain/game/engine';
 import { levelStart } from '@/domain/game/levels';
 import type { QuestView } from '@/domain/game/quests';
 import { purchaseEntry } from '@/domain/game/shop';
@@ -167,6 +168,36 @@ describe('GameHud', () => {
     renderIn(<GameHud />, createStubStore({ data }));
     expect(screen.getByText('0 coins')).toBeInTheDocument();
     expect(screen.queryByText(/-30/)).not.toBeInTheDocument();
+  });
+
+  it('says 1 coin, not 1 coins', () => {
+    const data = dataWith((d) => {
+      d.tables.ledger = [makeLedgerEntry({ key: 'seed', xp: 0, coins: 1 })];
+    });
+    renderIn(<GameHud />, createStubStore({ data }));
+    expect(
+      screen.getByRole('link', {
+        name: 'Level 1, Bronze Saver, 0 of 100 XP, Start a streak today, 1 coin. Open quests',
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByText('1 coin')).toBeInTheDocument();
+  });
+
+  it('shows a game view it is handed', () => {
+    const data = dataWith((d) => {
+      d.tables.ledger = [makeLedgerEntry({ key: 'seed', xp: 250, coins: 7 })];
+    });
+    const view = computeGameView(data, {
+      today: TODAY,
+      now: localIso(TODAY),
+      weekStartsOn: 1,
+      canBackUp: true,
+    });
+    // The store holds nothing: what shows comes from the view.
+    renderIn(<GameHud view={view} />);
+    expect(screen.getByText('LV 2')).toBeInTheDocument();
+    expect(screen.getByText('150 / 264 XP')).toBeInTheDocument();
+    expect(screen.getByText('7 coins')).toBeInTheDocument();
   });
 
   it('says Max level at the top of the curve', () => {

@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ReminderSettings } from '@/domain/entities';
 import { EXAMPLES } from '@/domain/examples';
+import { computeGameView } from '@/domain/game/engine';
 import { formatMoney } from '@/domain/money';
 import { emptySnapshot, type DataSnapshot } from '@/domain/snapshot';
 import { applyRecords, dueGenerated } from '@/domain/sync';
@@ -22,6 +23,11 @@ vi.mock('@/store/useFinance', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/store/useFinance')>()),
   useFinanceActions: () => actions,
 }));
+// The real game view, counted.
+vi.mock('@/domain/game/engine', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/domain/game/engine')>();
+  return { ...actual, computeGameView: vi.fn(actual.computeGameView) };
+});
 
 beforeEach(() => Object.values(actions).forEach((a) => a.mockClear()));
 
@@ -283,6 +289,12 @@ describe('DashboardScreen game layer', () => {
       'Do your weekly check-in',
       "Reconcile this month's salary",
     ]);
+  });
+
+  it('works out the game once for the HUD and the quests together', () => {
+    vi.mocked(computeGameView).mockClear();
+    renderDashboard(emptySnapshot(), '2026-10-14');
+    expect(computeGameView).toHaveBeenCalledTimes(1);
   });
 
   it('records Nothing spent from Home', async () => {
