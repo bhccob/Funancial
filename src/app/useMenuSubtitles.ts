@@ -11,7 +11,8 @@ export function useMenuSubtitles(): Record<string, string> {
   const view = useFinanceView();
   const subscriptions = useApp((s) => s.data.tables.subscription);
   const goals = useApp((s) => s.data.tables.goal);
-  const coins = useGameView().totals.coins;
+  // Reversals can take the ledger below zero; the Shop shows nothing to spend then, never a debt.
+  const coins = Math.max(0, useGameView().totals.coins);
 
   const active = subscriptions.filter((s) => s.status === 'active').length;
   const saved = goals.reduce((sum, g) => sum + g.current, 0);

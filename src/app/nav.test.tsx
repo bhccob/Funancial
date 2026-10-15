@@ -83,6 +83,15 @@ describe('bottom bar', () => {
     expect(within(bar).getByRole('button', { name: 'Menu' })).toBeInTheDocument();
   });
 
+  it('labels the round Add button "Add" like the other slots, inside its "Add expense" name', () => {
+    renderAt('/');
+    const bar = screen.getByRole('navigation', { name: 'Primary' });
+    const add = within(bar).getByRole('link', { name: 'Add expense' });
+    // The visible text is "Add" and the plus is decoration, so the name keeps the label in it.
+    expect(add.textContent).toBe('Add');
+    expect(add.querySelector('svg')?.closest('[aria-hidden="true"]')).not.toBeNull();
+  });
+
   it('marks the current screen and leaves the Menu sheet closed', () => {
     renderAt('/budget');
     const bar = screen.getByRole('navigation', { name: 'Primary' });
@@ -163,6 +172,17 @@ describe('Menu sheet', () => {
     const sheet = await openMenu();
     expect(row(sheet, 'Goals')).toHaveTextContent('1 goal · 25% saved');
     expect(row(sheet, 'Shop')).toHaveTextContent('1 coin to spend');
+  });
+
+  it('never shows a negative coin balance', async () => {
+    const data = emptySnapshot();
+    data.tables.ledger.push(
+      makeLedgerEntry({ key: 'bought', kind: 'purchase', coins: -40, xp: 0 }),
+      makeLedgerEntry({ key: 'earned', coins: 15, xp: 0 }),
+    );
+    renderAt('/', data);
+    const sheet = await openMenu();
+    expect(row(sheet, 'Shop')).toHaveTextContent('0 coins to spend');
   });
 
   it('marks soon items', async () => {

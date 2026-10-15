@@ -1,4 +1,4 @@
-import { act, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { Banner } from './Banner';
@@ -8,6 +8,7 @@ import { ErrorBoundary } from './ErrorBoundary';
 import { Section } from './Section';
 import { TextField } from './TextField';
 import { Toaster } from './Toaster';
+import { topDialog } from '@/lib/dialogStack';
 import { toast, toastStore } from '@/lib/toast';
 
 describe('Button', () => {
@@ -87,6 +88,22 @@ describe('Dialog', () => {
     );
     await userEvent.keyboard('{Escape}');
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('asks to close on the cancel event (Android back) and leaves closing to its owner', () => {
+    const onClose = vi.fn();
+    render(
+      <Dialog open title="Leave demo?" onClose={onClose}>
+        body
+      </Dialog>,
+    );
+    const dialog = screen.getByRole('dialog', { name: 'Leave demo?' });
+    expect(topDialog()).toBe(dialog);
+    const cancel = new Event('cancel', { cancelable: true });
+    fireEvent(dialog, cancel);
+    expect(cancel.defaultPrevented).toBe(true);
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(dialog).toBeVisible();
   });
 
   it('is not reachable when closed', () => {
