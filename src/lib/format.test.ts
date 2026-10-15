@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { daysUntil, formatDate, formatDay, formatMonth, ordinal, relativeDays } from './format';
+import {
+  daysUntil,
+  formatDate,
+  formatDay,
+  formatMonth,
+  formatMonthYear,
+  ordinal,
+  relativeDays,
+} from './format';
 
 describe('date display', () => {
   it('shows a short day and a month name, whatever the time zone', () => {
@@ -7,6 +15,7 @@ describe('date display', () => {
     expect(formatDay('2026-01-01', 'en-US')).toBe('Jan 1');
     expect(formatMonth('2026-10', 'en-US')).toBe('October');
     expect(formatDate('2027-02-14', 'en-US')).toBe('Feb 14, 2027');
+    expect(formatMonthYear('2026-10', 'en-US')).toBe('October 2026');
   });
 
   it('writes day numbers as ordinals', () => {

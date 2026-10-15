@@ -8,6 +8,7 @@ import { TextField } from '@/components/ui/TextField';
 import { EraseDialog } from '@/features/system/EraseDialog';
 import { validateSecret } from '@/data/keys';
 import type { DataSnapshot, TableName } from '@/domain/snapshot';
+import { expensesToCsv } from '@/data/csv';
 import { downloadText, readFileText } from '@/lib/download';
 import { useApp } from '@/store/AppStoreProvider';
 
@@ -186,13 +187,13 @@ function RestoreForm() {
   );
 }
 
-function ExportButton() {
-  const exportPlain = useApp((s) => s.exportPlain);
+/** Any export that writes readable finances to a file asks first. */
+function ExportButton({ label, onExport }: { label: string; onExport(): void }) {
   const [confirming, setConfirming] = useState(false);
   return (
     <>
       <Button variant="secondary" onClick={() => setConfirming(true)}>
-        Export unencrypted copy
+        {label}
       </Button>
       <Dialog
         open={confirming}
@@ -206,8 +207,7 @@ function ExportButton() {
             </Button>
             <Button
               onClick={() => {
-                const { fileName, text } = exportPlain();
-                downloadText(fileName, text, 'application/json');
+                onExport();
                 setConfirming(false);
               }}
             >
@@ -244,6 +244,8 @@ export function DataSection() {
   const data = useApp((s) => s.data);
   const persisted = useApp((s) => s.persisted);
   const skipped = useApp((s) => s.skipped);
+  const exportPlain = useApp((s) => s.exportPlain);
+  const today = useApp((s) => s.today);
   const [backupOpen, setBackupOpen] = useState(false);
   const lastBackupAt = data.tables.settings[0]?.lastBackupAt ?? null;
   const demo = namespace === 'demo';
@@ -287,7 +289,23 @@ export function DataSection() {
             <RestoreForm />
             <hr className="border-border border-t-2 border-dashed" />
             <div className="flex flex-wrap gap-3">
-              <ExportButton />
+              <ExportButton
+                label="Export unencrypted copy"
+                onExport={() => {
+                  const { fileName, text } = exportPlain();
+                  downloadText(fileName, text, 'application/json');
+                }}
+              />
+              <ExportButton
+                label="Export expenses (CSV)"
+                onExport={() =>
+                  downloadText(
+                    `funancial-expenses-${today}.csv`,
+                    expensesToCsv(data, data.tables.profile[0]?.currency ?? 'USD'),
+                    'text/csv',
+                  )
+                }
+              />
               <DeleteAllButton />
             </div>
           </>

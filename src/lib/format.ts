@@ -31,6 +31,15 @@ export function formatMonth(yearMonth: string, locale?: string): string {
   );
 }
 
+/** "2026-10" → "October 2026" */
+export function formatMonthYear(yearMonth: string, locale?: string): string {
+  return new Intl.DateTimeFormat(locale, {
+    month: 'long',
+    year: 'numeric',
+    timeZone: 'UTC',
+  }).format(utc(`${yearMonth}-01`));
+}
+
 /** Whole days from today to d (negative when d has passed). */
 export function daysUntil(today: LocalDate, d: LocalDate): number {
   return Math.round((utc(d).getTime() - utc(today).getTime()) / 86_400_000);

@@ -7,13 +7,18 @@ import { Select } from '@/components/ui/Select';
 import { TextField } from '@/components/ui/TextField';
 import { limitMessage } from '@/domain/alerts';
 import { categoryLabel, type LimitStatus } from '@/domain/budget';
-import { CategorySchema, type Category, type Cycle } from '@/domain/entities';
+import { CategorySchema, type Category, type Cycle, type Expense } from '@/domain/entities';
 import { toast } from '@/lib/toast';
 import { useAction } from '@/lib/useAction';
 import { useApp } from '@/store/AppStoreProvider';
 import type { ExpenseInput } from '@/store/financeActions';
 import { useCurrency, useFinanceActions, useToday } from '@/store/useFinance';
-import { isCardChoice, parsePaidWith, usePaidWithOptions } from '@/features/shared/paidWith';
+import {
+  isCardChoice,
+  paidWithValue,
+  parsePaidWith,
+  usePaidWithOptions,
+} from '@/features/shared/paidWith';
 import { DateField } from './DateField';
 import { pastDateProblem } from './pastDate';
 
@@ -27,18 +32,21 @@ const REPEAT_OPTIONS = [
   { value: 'yearly', label: 'Yearly' },
 ];
 
-export function ExpenseForm({ onDone }: { onDone(): void }) {
+/** Adds an expense, or edits `expense` when given (no repeat, no limit check, plus Delete). */
+export function ExpenseForm({ onDone, expense }: { onDone(): void; expense?: Expense }) {
   const actions = useFinanceActions();
   const currency = useCurrency();
   const today = useToday();
   const tone = useApp((s) => s.data.tables.settings[0]?.warningTone ?? 'motivational');
   const run = useAction();
 
-  const [amount, setAmount] = useState<number | null>(null);
-  const [category, setCategory] = useState<Category>('food');
-  const [date, setDate] = useState(today);
-  const [paidWith, setPaidWith] = useState('cash');
-  const [note, setNote] = useState('');
+  const [amount, setAmount] = useState<number | null>(expense?.amount ?? null);
+  const [category, setCategory] = useState<Category>(expense?.category ?? 'food');
+  const [date, setDate] = useState(expense?.date ?? today);
+  const [paidWith, setPaidWith] = useState(
+    expense ? paidWithValue(expense.paymentMethod, expense.cardId) : 'cash',
+  );
+  const [note, setNote] = useState(expense?.note ?? '');
   const [repeat, setRepeat] = useState('none');
   const [errors, setErrors] = useState<{ amount?: string; date?: string }>({});
   const [crossing, setCrossing] = useState<LimitStatus[] | null>(null);
@@ -46,15 +54,12 @@ export function ExpenseForm({ onDone }: { onDone(): void }) {
 
   const paidWithOptions = usePaidWithOptions();
 
+  function fields(): Omit<ExpenseInput, 'repeat'> {
+    return { amount: amount ?? 0, category, date, note: note.trim(), ...parsePaidWith(paidWith) };
+  }
+
   function input(): ExpenseInput {
-    return {
-      amount: amount ?? 0,
-      category,
-      date,
-      note: note.trim(),
-      ...parsePaidWith(paidWith),
-      repeat: repeat === 'none' ? null : (repeat as Cycle),
-    };
+    return { ...fields(), repeat: repeat === 'none' ? null : (repeat as Cycle) };
   }
 
   async function persist(expense: ExpenseInput) {
@@ -73,6 +78,22 @@ export function ExpenseForm({ onDone }: { onDone(): void }) {
     onDone();
   }
 
+  async function update(id: string) {
+    setBusy(true);
+    const saved = await run(() => actions.updateExpense(id, fields()), {
+      success: 'Expense updated.',
+    });
+    setBusy(false);
+    if (saved) onDone();
+  }
+
+  async function remove(id: string) {
+    setBusy(true);
+    const removed = await run(() => actions.deleteExpense(id), { success: 'Expense deleted.' });
+    setBusy(false);
+    if (removed) onDone();
+  }
+
   function submit(e: FormEvent) {
     e.preventDefault();
     const found = {
@@ -81,16 +102,17 @@ export function ExpenseForm({ onDone }: { onDone(): void }) {
     };
     setErrors(found);
     if (found.amount || found.date) return;
+    if (expense) return void update(expense.id);
 
-    const expense = input();
+    const next = input();
     if (tone === 'strict') {
-      const over = actions.wouldCrossOver(expense);
+      const over = actions.wouldCrossOver(next);
       if (over.length > 0) {
         setCrossing(over);
         return;
       }
     }
-    void persist(expense);
+    void persist(next);
   }
 
   const first = crossing?.[0];
@@ -106,7 +128,7 @@ export function ExpenseForm({ onDone }: { onDone(): void }) {
           setErrors((x) => ({ ...x, amount: undefined }));
         }}
         error={errors.amount}
-        autoFocus
+        autoFocus={!expense}
       />
       <RadioGroup<Category>
         legend="Category"
@@ -140,20 +162,32 @@ export function ExpenseForm({ onDone }: { onDone(): void }) {
         value={note}
         onChange={(e) => setNote(e.target.value)}
       />
-      <Select
-        label="Repeats"
-        value={repeat}
-        onChange={setRepeat}
-        options={REPEAT_OPTIONS}
-        hint={repeat === 'none' ? undefined : 'Also adds it to your subscriptions.'}
-      />
-      <div className="flex gap-2 pt-2">
-        <Button type="submit" size="lg" disabled={busy}>
+      {!expense && (
+        <Select
+          label="Repeats"
+          value={repeat}
+          onChange={setRepeat}
+          options={REPEAT_OPTIONS}
+          hint={repeat === 'none' ? undefined : 'Also adds it to your subscriptions.'}
+        />
+      )}
+      <div className="flex flex-wrap items-center gap-2 pt-2">
+        <Button type="submit" size={expense ? 'md' : 'lg'} disabled={busy}>
           Save
         </Button>
-        <Button variant="ghost" size="lg" onClick={onDone}>
+        <Button variant="ghost" size={expense ? 'md' : 'lg'} onClick={onDone}>
           Cancel
         </Button>
+        {expense && (
+          <Button
+            variant="ghost"
+            className="text-danger ml-auto"
+            disabled={busy}
+            onClick={() => void remove(expense.id)}
+          >
+            Delete
+          </Button>
+        )}
       </div>
 
       <Dialog

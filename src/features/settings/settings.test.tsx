@@ -183,6 +183,21 @@ describe('Data', () => {
     expect(downloadText).toHaveBeenCalledWith('export.json', '{}', 'application/json');
   });
 
+  it('exports expenses as CSV after the same warning', async () => {
+    const data = snapshotWith();
+    data.tables.expense.push(makeExpense({ id: 'e1', amount: 12_50, date: '2026-10-14' }));
+    renderWithStore(<SettingsScreen />, createStubStore({ data, today: '2026-10-14' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Export expenses (CSV)' }));
+    const dialog = screen.getByRole('dialog', { name: 'Export an unprotected copy?' });
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Export' }));
+    expect(downloadText).toHaveBeenCalledWith(
+      'funancial-expenses-2026-10-14.csv',
+      'date,amount,currency,category,payment_method,card,note,subscription\r\n' +
+        '2026-10-14,12.50,USD,food,cash,,,\r\n',
+      'text/csv',
+    );
+  });
+
   it('keeps Delete disabled until DELETE is typed', async () => {
     const { store } = renderWithStore(
       <SettingsScreen />,
