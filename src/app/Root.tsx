@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { RouterProvider } from 'react-router/dom';
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
 import { Toaster } from '@/components/ui/Toaster';
+import { useGameTheme } from '@/features/game/useGameTheme';
 import { LockScreen } from '@/features/lock/LockScreen';
 import { useAutoLock } from '@/features/lock/useAutoLock';
 import { OnboardingWizard } from '@/features/onboarding/OnboardingWizard';
@@ -61,6 +62,7 @@ export function Root() {
   // up for after the unlock, and one opened while the app was closed is delivered when this starts.
   useEffect(() => notifier?.onOpen((route) => void getAppRouter().navigate(route)), [notifier]);
   useClearRemindersWithoutData(notifier);
+  useGameTheme();
   return (
     <ErrorBoundary>
       <Phase />

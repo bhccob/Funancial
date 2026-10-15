@@ -19,6 +19,7 @@
   --color-accent-text: #007a55;
   --color-xp: #7c5cff;
   --color-xp-text: #6b46f5;
+  --color-xp-contrast: #ffffff;
   --color-success: #007a55;
   --color-warning: #a35f00;
   --color-danger: #d1373d;
@@ -63,6 +64,7 @@
   --color-accent-text: #2ee6a6;
   --color-xp: #9d85ff;
   --color-xp-text: #9d85ff;
+  --color-xp-contrast: #0c0c0e;
   --color-success: #2ee6a6;
   --color-warning: #f2a93b;
   --color-danger: #ff6b6f;
@@ -77,4 +79,35 @@
 
   --shadow-overlay: 0 24px 60px rgb(0 0 0 / 0.55);
   --shadow-float: 0 10px 30px rgb(0 0 0 / 0.5);
+}
+
+/*
+ * Game themes (the shop's colors). <html data-game-theme> is set while the app is unlocked, from the
+ * equipped theme; violet is the base tokens above, so it has no rule. Each theme gives the XP fill and
+ * the XP text one color, checked at 5.5:1 against the page and the chip text (--color-xp-contrast)
+ * and 4.6:1 against the progress track. The dark rules are more specific, so they win in dark mode.
+ */
+:root[data-game-theme='ocean'] {
+  --color-xp: #1f63d6;
+  --color-xp-text: #1f63d6;
+}
+:root[data-game-theme='orchid'] {
+  --color-xp: #a8189a;
+  --color-xp-text: #a8189a;
+}
+:root[data-game-theme='graphite'] {
+  --color-xp: #4a4f5c;
+  --color-xp-text: #4a4f5c;
+}
+:root[data-theme='dark'][data-game-theme='ocean'] {
+  --color-xp: #6aa6ff;
+  --color-xp-text: #6aa6ff;
+}
+:root[data-theme='dark'][data-game-theme='orchid'] {
+  --color-xp: #f08ae0;
+  --color-xp-text: #f08ae0;
+}
+:root[data-theme='dark'][data-game-theme='graphite'] {
+  --color-xp: #c3c8d4;
+  --color-xp-text: #c3c8d4;
 }

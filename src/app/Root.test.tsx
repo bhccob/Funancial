@@ -1,6 +1,7 @@
 import { act, cleanup, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { purchaseEntry } from '@/domain/game/shop';
 import { emptySnapshot } from '@/domain/snapshot';
 import { toastStore } from '@/lib/toast';
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
@@ -47,6 +48,22 @@ describe('Root', () => {
   it('shows the app when unlocked', async () => {
     renderWithStore(<Root />, createStubStore({ phase: 'unlocked', data: onboarded() }));
     expect(await screen.findByRole('heading', { level: 1, name: 'Home' })).toBeInTheDocument();
+  });
+
+  it('puts the equipped game theme on the page while unlocked, and takes it off when locked', () => {
+    const data = onboarded();
+    data.tables.ledger = [purchaseEntry('theme-ocean', 'p1', '2026-10-01T10:00:00.000Z')];
+    data.tables.settings = [
+      makeSettings({
+        cosmetics: { theme: 'theme-ocean', avatar: 'avatar-sprout', frame: 'frame-none' },
+      }),
+    ];
+    const store = createStubStore({ phase: 'unlocked', data });
+    renderWithStore(<Root />, store);
+    expect(document.documentElement.dataset.gameTheme).toBe('ocean');
+
+    act(() => store.setState({ phase: 'locked', lockMode: 'pin' }));
+    expect(document.documentElement.dataset.gameTheme).toBeUndefined();
   });
 
   it('runs onboarding for real data that has not been set up yet', () => {
