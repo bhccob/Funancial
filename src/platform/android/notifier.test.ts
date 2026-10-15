@@ -111,6 +111,7 @@ describe('createAndroidNotifier', () => {
         id: 'reminders',
         name: 'Reminders',
         importance: 4,
+        visibility: 0,
       });
       expect(plugin.schedule).toHaveBeenCalledTimes(1);
       expect(plugin.schedule).toHaveBeenCalledWith({
@@ -127,6 +128,22 @@ describe('createAndroidNotifier', () => {
           },
         ],
       });
+    });
+
+    it('keeps reminder text off a secure lock screen', async () => {
+      // Android's PRIVATE visibility (0): the lock screen shows that a reminder arrived, not what
+      // it says, until the phone is unlocked. 1 would show the text to anyone holding the phone.
+      await createAndroidNotifier().replace([reminder()]);
+      expect(plugin.createChannel).toHaveBeenLastCalledWith(
+        expect.objectContaining({ visibility: 0 }),
+      );
+
+      // The channel the test reminder creates is the same one.
+      plugin.createChannel.mockClear();
+      await createAndroidNotifier().sendTest();
+      expect(plugin.createChannel).toHaveBeenLastCalledWith(
+        expect.objectContaining({ id: 'reminders', visibility: 0 }),
+      );
     });
 
     it('gives each reminder its own id, in one schedule call', async () => {
@@ -351,6 +368,24 @@ describe('createAndroidNotifier', () => {
 
       stop();
       await vi.waitFor(() => expect(remove).toHaveBeenCalledTimes(1));
+    });
+
+    it('does not follow a route that leaves the app', async () => {
+      // The launcher activity is exported, so any app can hand it extras. `//host` and `/\host`
+      // are how a browser (and a router built on its URL parser) spells another site.
+      const cb = vi.fn();
+      createAndroidNotifier().onOpen(cb);
+      await vi.waitFor(() => expect(handlers['localNotificationActionPerformed']).toBeDefined());
+
+      for (const route of ['//example.com', '//example.com/budget', '/\\example.com']) {
+        tap({ managed: true, route });
+        expect(cb).toHaveBeenLastCalledWith('/');
+      }
+      expect(cb).toHaveBeenCalledTimes(3);
+
+      // A path of ours still gets through, a slash inside it included.
+      tap({ managed: true, route: '/budget/limits' });
+      expect(cb).toHaveBeenLastCalledWith('/budget/limits');
     });
 
     it('logs a listener that cannot be added instead of rejecting unhandled', async () => {

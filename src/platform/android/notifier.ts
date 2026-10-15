@@ -12,8 +12,12 @@ const CHANNEL_ID = 'reminders';
 const TEST_ID = 1;
 const TEST_DELAY_MS = 60_000;
 
-/** `importance: 4` is "high": reminders show as a heads-up, with sound, like a calendar alert. */
-const channel = { id: CHANNEL_ID, name: 'Reminders', importance: 4 } as const;
+/**
+ * `importance: 4` is "high": reminders show as a heads-up, with sound, like a calendar alert.
+ * `visibility: 0` is Android's PRIVATE: on a secure lock screen a reminder shows that it arrived
+ * and hides what it says (amounts, names of bills) until the phone is unlocked.
+ */
+const channel = { id: CHANNEL_ID, name: 'Reminders', importance: 4, visibility: 0 } as const;
 
 /**
  * The part of a reminder that is the same for every notification. `isExactNotification: false`
@@ -26,11 +30,15 @@ const common = {
   isExactNotification: false,
 } as const;
 
-/** The screen a tapped reminder points at: a path of ours, else Home. */
+/**
+ * The screen a tapped reminder points at: a path of ours, else Home. The launcher activity is
+ * exported, so the extras may come from any app: `//host` and `/\host` are another site to a
+ * browser's URL parser, not a path of ours.
+ */
 function routeOf(extra: unknown): string {
   const route =
     typeof extra === 'object' && extra !== null && 'route' in extra ? extra.route : undefined;
-  return typeof route === 'string' && route.startsWith('/') ? route : '/';
+  return typeof route === 'string' && /^\/(?![/\\])/.test(route) ? route : '/';
 }
 
 function isManaged(extra: unknown): boolean {

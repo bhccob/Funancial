@@ -1,13 +1,10 @@
 import { act, cleanup, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { emptySnapshot } from '@/domain/snapshot';
 import { toastStore } from '@/lib/toast';
-import { PlatformProvider } from '@/platform/PlatformProvider';
-import type { Notifier } from '@/platform/types';
-import { createWebPlatform } from '@/platform/web';
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
+import { fakeNotifier, onPhone } from '@/test/fakeNotifier';
 import { makeProfile, makeSettings } from '@/test/fixtures';
 import { DemoBanner } from './DemoBanner';
 import { Root } from './Root';
@@ -124,26 +121,6 @@ describe('Root across lock cycles', () => {
     expect(document.querySelector('[aria-live="polite"]')).not.toBeNull();
   });
 });
-
-function fakeNotifier(over: Partial<Notifier> = {}): Notifier {
-  return {
-    permission: vi.fn(async () => 'granted' as const),
-    request: vi.fn(async () => true),
-    replace: vi.fn(async () => {}),
-    sendTest: vi.fn(async () => {}),
-    onOpen: vi.fn(() => () => {}),
-    ...over,
-  };
-}
-
-/** The app as it runs on the phone, with a fake notifier in place of the Android plugin. */
-function onPhone(notifier: Notifier | null, ui: ReactNode) {
-  return (
-    <PlatformProvider platform={{ ...createWebPlatform(), kind: 'android', notifier }}>
-      {ui}
-    </PlatformProvider>
-  );
-}
 
 describe('Root with reminders', () => {
   let consoleError: ReturnType<typeof vi.spyOn>;

@@ -11,6 +11,7 @@ import { createWebPlatform } from '@/platform/web';
 import type { AppState } from '@/store/appStore';
 import { AppStoreProvider } from '@/store/AppStoreProvider';
 import { createStubStore } from '@/test/appStoreStub';
+import { fakeNotifier, type FakeNotifier } from '@/test/fakeNotifier';
 import { makeProfile, makeSettings } from '@/test/fixtures';
 import { useReminderSync } from './useReminderSync';
 
@@ -44,17 +45,6 @@ function dataWith(enabled: boolean, extra: Partial<Settings> = {}) {
   ];
   return data;
 }
-
-function fakeNotifier() {
-  return {
-    permission: vi.fn<Notifier['permission']>(async () => 'granted'),
-    request: vi.fn<Notifier['request']>(async () => true),
-    replace: vi.fn<Notifier['replace']>(async () => {}),
-    sendTest: vi.fn<Notifier['sendTest']>(async () => {}),
-    onOpen: vi.fn<Notifier['onOpen']>(() => () => {}),
-  };
-}
-type FakeNotifier = ReturnType<typeof fakeNotifier>;
 
 /** A platform whose resume the test fires by hand. */
 function nativePlatform(notifier: Notifier | null) {

@@ -1,9 +1,10 @@
-import { screen, within } from '@testing-library/react';
+import { act, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactElement } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Toaster } from '@/components/ui/Toaster';
 import { InvalidBackupError } from '@/data/backup';
+import type { ReminderSettings } from '@/domain/entities';
 import { emptySnapshot } from '@/domain/snapshot';
 import { downloadText } from '@/lib/download';
 import { toastStore } from '@/lib/toast';
@@ -11,6 +12,7 @@ import { PlatformProvider } from '@/platform/PlatformProvider';
 import type { Platform } from '@/platform/types';
 import { createWebPlatform } from '@/platform/web';
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
+import { fakeNotifier, onPhone, type FakeNotifier } from '@/test/fakeNotifier';
 import { makeExpense, makeGoal, makeProfile, makeSettings } from '@/test/fixtures';
 import { SettingsScreen } from './SettingsScreen';
 
@@ -462,6 +464,226 @@ describe('Preferences', () => {
     renderWithStore(<SettingsScreen />, createStubStore({ data: snapshotWith() }));
     await userEvent.selectOptions(screen.getByLabelText('Week starts on'), 'Sunday');
     expect(finance.updateSettings).toHaveBeenCalledWith({ weekStartsOn: 0 });
+  });
+});
+
+describe('Reminders', () => {
+  const BLOCKED =
+    'Notifications are blocked for Funancial. Turn them on in Android Settings → Apps → Funancial → Notifications.';
+  const MASTER = 'Reminders on this phone';
+  const OTHERS = [
+    ['Daily nudge to log spending', 'dailyLog'],
+    ['Bills and renewals', 'bills'],
+    ['Salary freeze start and end', 'freeze'],
+    ['Weekly and monthly reviews', 'reviews'],
+    ['Backup reminder', 'backup'],
+  ] as const;
+
+  /** What a fresh install holds: reminders off, the rest at their defaults, nobody asked yet. */
+  const fresh = makeSettings().reminders;
+  /** Reminders on, as after the person said yes. */
+  const on: ReminderSettings = { ...fresh, enabled: true, prompted: true };
+
+  function renderReminders(notifier: FakeNotifier | null, reminders: ReminderSettings = fresh) {
+    return renderWithStore(
+      onPhone(notifier, <SettingsScreen />),
+      createStubStore({ data: snapshotWith(makeSettings({ reminders })) }),
+    );
+  }
+  const section = () => screen.getByRole('region', { name: 'Reminders' });
+  const master = () => within(section()).getByRole('switch', { name: MASTER });
+  const switchNamed = (name: string) => within(section()).getByRole('switch', { name });
+  const testButton = () => within(section()).getByRole('button', { name: 'Send a test reminder' });
+
+  it('turns reminders on after Android allows it', async () => {
+    const notifier = fakeNotifier();
+    renderReminders(notifier);
+    expect(master()).toHaveAttribute('aria-checked', 'false');
+
+    await userEvent.click(master());
+
+    expect(notifier.request).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() =>
+      expect(finance.updateSettings).toHaveBeenCalledExactlyOnceWith({ reminders: on }),
+    );
+    expect(within(section()).queryByRole('alert')).not.toBeInTheDocument();
+    // Asking is the switch's job: it never asks on opening. Scheduling follows the saved data.
+    expect(notifier.permission).not.toHaveBeenCalled();
+    expect(notifier.replace).not.toHaveBeenCalled();
+  });
+
+  it('explains how to unblock notifications when refused', async () => {
+    const notifier = fakeNotifier({ request: async () => false });
+    renderReminders(notifier);
+
+    await userEvent.click(master());
+
+    const alert = await within(section()).findByRole('alert');
+    expect(alert.textContent).toBe(BLOCKED);
+    expect(notifier.request).toHaveBeenCalledTimes(1);
+    expect(finance.updateSettings).not.toHaveBeenCalled();
+    expect(master()).toHaveAttribute('aria-checked', 'false');
+  });
+
+  it('shows how to unblock on opening when reminders are on but Android blocks them', async () => {
+    for (const permission of ['denied', 'prompt'] as const) {
+      const notifier = fakeNotifier({ permission: async () => permission });
+      const { unmount } = renderReminders(notifier, on);
+
+      const alert = await within(section()).findByRole('alert');
+      expect(alert.textContent).toBe(BLOCKED);
+      // Looking is not asking: a person who only opens Settings must not get a system prompt.
+      expect(notifier.request).not.toHaveBeenCalled();
+      expect(master()).toHaveAttribute('aria-checked', 'true');
+      unmount();
+    }
+  });
+
+  it('says nothing on opening when notifications are allowed, or reminders are off', async () => {
+    const allowed = fakeNotifier();
+    const first = renderReminders(allowed, on);
+    await vi.waitFor(() => expect(allowed.permission).toHaveBeenCalledTimes(1));
+    expect(within(section()).queryByRole('alert')).not.toBeInTheDocument();
+    first.unmount();
+
+    // Off while Android blocks: nothing was promised, so there is nothing to warn about.
+    const blocked = fakeNotifier({ permission: async () => 'denied' });
+    renderReminders(blocked, fresh);
+    await act(async () => {});
+    expect(within(section()).queryByRole('alert')).not.toBeInTheDocument();
+    expect(blocked.request).not.toHaveBeenCalled();
+  });
+
+  it('clears the warning when reminders are switched off', async () => {
+    const notifier = fakeNotifier({ permission: async () => 'denied' });
+    renderReminders(notifier, on);
+    await within(section()).findByRole('alert');
+
+    await userEvent.click(master());
+
+    expect(within(section()).queryByRole('alert')).not.toBeInTheDocument();
+    expect(finance.updateSettings).toHaveBeenCalledExactlyOnceWith({
+      reminders: { ...on, enabled: false },
+    });
+    expect(notifier.request).not.toHaveBeenCalled();
+  });
+
+  it('turns reminders off without asking Android', async () => {
+    const notifier = fakeNotifier();
+    renderReminders(notifier, on);
+
+    await userEvent.click(master());
+
+    expect(finance.updateSettings).toHaveBeenCalledExactlyOnceWith({
+      reminders: { ...on, enabled: false },
+    });
+    expect(notifier.request).not.toHaveBeenCalled();
+  });
+
+  it('saves each reminder switch and the daily time', async () => {
+    renderReminders(fakeNotifier(), on);
+
+    for (const [label, key] of OTHERS) {
+      finance.updateSettings.mockClear();
+      expect(switchNamed(label)).toBeEnabled();
+      expect(switchNamed(label)).toHaveAttribute('aria-checked', 'true');
+
+      await userEvent.click(switchNamed(label));
+
+      expect(finance.updateSettings).toHaveBeenCalledExactlyOnceWith({
+        reminders: { ...on, [key]: false },
+      });
+    }
+
+    finance.updateSettings.mockClear();
+    const at = within(section()).getByLabelText('At');
+    expect(at).toHaveValue('20:00');
+    expect(
+      within(at)
+        .getAllByRole('option')
+        .map((o) => o.textContent),
+    ).toEqual(Array.from({ length: 17 }, (_, i) => `${String(i + 7).padStart(2, '0')}:00`));
+    await userEvent.selectOptions(at, '07:00');
+    expect(finance.updateSettings).toHaveBeenLastCalledWith({
+      reminders: { ...on, dailyTime: '07:00' },
+    });
+    await userEvent.selectOptions(at, '23:00');
+    expect(finance.updateSettings).toHaveBeenLastCalledWith({
+      reminders: { ...on, dailyTime: '23:00' },
+    });
+  });
+
+  it('keeps a saved time that is not on the hour, as saved', () => {
+    renderReminders(fakeNotifier(), { ...on, dailyTime: '20:30' });
+
+    expect(within(section()).getByLabelText('At')).toHaveValue('20:30');
+  });
+
+  it('shows the other controls but leaves them inert until the master switch is on', () => {
+    const others = () => [
+      ...OTHERS.map(([label]) => switchNamed(label)),
+      within(section()).getByLabelText('At'),
+      testButton(),
+    ];
+
+    const off = renderReminders(fakeNotifier(), fresh);
+    expect(master()).toBeEnabled();
+    others().forEach((c) => expect(c).toBeDisabled());
+    off.unmount();
+
+    renderReminders(fakeNotifier(), on);
+    expect(master()).toBeEnabled();
+    others().forEach((c) => expect(c).toBeEnabled());
+  });
+
+  it('sends a test reminder', async () => {
+    const notifier = fakeNotifier();
+    renderReminders(notifier, on);
+
+    await userEvent.click(testButton());
+
+    expect(notifier.sendTest).toHaveBeenCalledTimes(1);
+    expect(toastStore.getState().toasts).toEqual([
+      expect.objectContaining({
+        tone: 'success',
+        message: 'A test reminder arrives in about a minute.',
+      }),
+    ]);
+  });
+
+  it('says so when the test reminder cannot be sent', async () => {
+    const notifier = fakeNotifier({
+      sendTest: async () => {
+        throw new Error('Notifications are disabled');
+      },
+    });
+    renderReminders(notifier, on);
+
+    await userEvent.click(testButton());
+
+    expect(toastStore.getState().toasts).toEqual([
+      expect.objectContaining({ tone: 'danger', message: 'Notifications are disabled' }),
+    ]);
+  });
+
+  it('comes right after Preferences', () => {
+    renderReminders(fakeNotifier());
+    const after = (a: HTMLElement, b: HTMLElement) =>
+      Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+
+    expect(after(screen.getByRole('region', { name: 'Preferences' }), section())).toBe(true);
+    expect(after(section(), screen.getByRole('region', { name: 'Appearance' }))).toBe(true);
+  });
+
+  it('has no reminders section on the web', () => {
+    // The default platform is the web, which has no notifier.
+    const web = renderWithStore(<SettingsScreen />, createStubStore({ data: snapshotWith() }));
+    expect(screen.queryByRole('region', { name: 'Reminders' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('switch', { name: MASTER })).not.toBeInTheDocument();
+    web.unmount();
+
+    renderWithStore(onPhone(null, <SettingsScreen />), createStubStore({ data: snapshotWith() }));
+    expect(screen.queryByRole('region', { name: 'Reminders' })).not.toBeInTheDocument();
   });
 });
 
