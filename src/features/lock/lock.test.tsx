@@ -161,6 +161,47 @@ describe('useAutoLock activity', () => {
   });
 });
 
+describe('LockScreen with biometric unlock', () => {
+  const CHANGED =
+    'Your fingerprints or face changed, so use your PIN this time. You can turn biometric unlock back on in Settings.';
+
+  it('offers fingerprint or face and explains a changed enrolment', async () => {
+    const store = createStubStore({ phase: 'locked', lockMode: 'pin', biometric: 'on' });
+    const unlockWithBiometric = vi
+      .fn<() => Promise<'ok' | 'cancelled' | 'changed'>>()
+      .mockResolvedValueOnce('cancelled')
+      .mockImplementationOnce(async () => {
+        store.setState({ biometric: 'off' });
+        return 'changed';
+      });
+    store.setState({ unlockWithBiometric });
+    renderWithStore(<LockScreen />, store);
+
+    // It asks once, on its own, as the lock screen opens.
+    await vi.waitFor(() => expect(unlockWithBiometric).toHaveBeenCalledTimes(1));
+    expect(screen.queryByText(CHANGED)).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Use fingerprint or face' }));
+
+    expect(await screen.findByText(CHANGED)).toBeInTheDocument();
+    expect(unlockWithBiometric).toHaveBeenCalledTimes(2);
+    expect(
+      screen.queryByRole('button', { name: 'Use fingerprint or face' }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '5' })).toBeEnabled();
+  });
+
+  it('neither asks nor offers it when biometric unlock is off', async () => {
+    const store = createStubStore({ phase: 'locked', lockMode: 'pin', biometric: 'off' });
+    renderWithStore(<LockScreen />, store);
+    await act(async () => {});
+    expect(store.getState().unlockWithBiometric).not.toHaveBeenCalled();
+    expect(
+      screen.queryByRole('button', { name: 'Use fingerprint or face' }),
+    ).not.toBeInTheDocument();
+  });
+});
+
 describe('LockScreen after a throttle', () => {
   it('does not bring back the old error once the countdown ends', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });

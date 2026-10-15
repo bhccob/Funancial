@@ -2,8 +2,10 @@ import { useId, useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Section } from '@/components/ui/Section';
 import { RadioGroup } from '@/components/ui/RadioGroup';
+import { Switch } from '@/components/ui/Switch';
 import { defaultSettings, type AutoLockMinutes } from '@/domain/entities';
 import { nowIso } from '@/domain/ids';
+import { useAction } from '@/lib/useAction';
 import { useApp } from '@/store/AppStoreProvider';
 import { SecretDialog, type LockTarget } from './SecretDialog';
 
@@ -26,6 +28,10 @@ export function SecuritySection() {
   const lockMode = useApp((s) => s.lockMode) ?? 'device';
   const settings = useApp((s) => s.data.tables.settings[0]);
   const put = useApp((s) => s.put);
+  const biometric = useApp((s) => s.biometric);
+  const enableBiometric = useApp((s) => s.enableBiometric);
+  const disableBiometric = useApp((s) => s.disableBiometric);
+  const run = useAction();
   const [target, setTarget] = useState<LockTarget | null>(null);
   const autoLockId = useId();
 
@@ -84,6 +90,14 @@ export function SecuritySection() {
             </select>
           </div>
         </div>
+      )}
+      {lockMode !== 'device' && biometric !== 'unavailable' && (
+        <Switch
+          label="Unlock with fingerprint or face"
+          hint={`Your ${lockMode === 'pin' ? 'PIN' : 'passphrase'} still works if this fails.`}
+          checked={biometric === 'on'}
+          onChange={(on) => void run(on ? enableBiometric : disableBiometric)}
+        />
       )}
       <SecretDialog target={target} current={lockMode} onClose={() => setTarget(null)} />
     </Section>

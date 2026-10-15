@@ -129,6 +129,42 @@ describe('Security', () => {
     );
   });
 
+  it('turns biometric unlock on and off when a PIN is set', async () => {
+    const store = createStubStore({ lockMode: 'pin', biometric: 'off', data: snapshotWith() });
+    store.setState({
+      enableBiometric: vi.fn(async () => store.setState({ biometric: 'on' })),
+      disableBiometric: vi.fn(async () => store.setState({ biometric: 'off' })),
+    });
+    renderWithStore(<SettingsScreen />, store);
+    const toggle = screen.getByRole('switch', { name: 'Unlock with fingerprint or face' });
+    expect(toggle).toHaveAccessibleDescription('Your PIN still works if this fails.');
+    expect(toggle).toHaveAttribute('aria-checked', 'false');
+
+    await userEvent.click(toggle);
+    expect(store.getState().enableBiometric).toHaveBeenCalledTimes(1);
+    expect(toggle).toHaveAttribute('aria-checked', 'true');
+
+    await userEvent.click(toggle);
+    expect(store.getState().disableBiometric).toHaveBeenCalledTimes(1);
+    expect(toggle).toHaveAttribute('aria-checked', 'false');
+  });
+
+  it('hides biometric unlock without a lock or on the web', () => {
+    const name = 'Unlock with fingerprint or face';
+    const { unmount } = renderWithStore(
+      <SettingsScreen />,
+      createStubStore({ lockMode: 'device', biometric: 'off', data: snapshotWith() }),
+    );
+    expect(screen.queryByRole('switch', { name })).not.toBeInTheDocument();
+    unmount();
+
+    renderWithStore(
+      <SettingsScreen />,
+      createStubStore({ lockMode: 'pin', biometric: 'unavailable', data: snapshotWith() }),
+    );
+    expect(screen.queryByRole('switch', { name })).not.toBeInTheDocument();
+  });
+
   it('does not offer auto-lock without a lock', () => {
     renderWithStore(
       <SettingsScreen />,

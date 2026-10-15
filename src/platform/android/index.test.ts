@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { androidBiometric } from './biometric';
 import { createAndroidPlatform } from './index';
 import { installShell } from './shell';
 
@@ -31,6 +32,7 @@ describe('createAndroidPlatform', () => {
     const platform = await createAndroidPlatform();
 
     expect(platform.kind).toBe('android');
+    expect(platform.biometric).toBe(androidBiometric);
     expect(installShell).toHaveBeenCalledTimes(1);
   });
 

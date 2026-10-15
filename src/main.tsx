@@ -31,6 +31,7 @@ async function start(root: ReactRoot) {
     requestPersistence: platform.requestPersistence,
     storage: platform.storage,
     keyring: platform.keyring,
+    biometric: platform.biometric,
   });
 
   // Another tab changed data: reload it. If it replaced, re-keyed or deleted the data, start over.

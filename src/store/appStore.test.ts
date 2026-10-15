@@ -33,6 +33,7 @@ function testDeps(overrides: Partial<AppDeps> = {}) {
     requestPersistence: async () => true,
     storage: dexieStorage(prefix),
     keyring: browserKeyring,
+    biometric: null,
     ...overrides,
   };
   return { deps, posts, advance: (ms: number) => void (clock += ms) };

@@ -24,6 +24,7 @@ export function realStoreDeps(overrides: Partial<AppDeps> = {}) {
     requestPersistence: async () => true,
     storage: dexieStorage(prefix),
     keyring: browserKeyring,
+    biometric: null,
     ...overrides,
   };
   return { deps, posts };

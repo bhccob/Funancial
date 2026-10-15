@@ -6,6 +6,7 @@ import {
   exportPlainJson,
   readBackup,
 } from '@/data/backup';
+import { base64ToBytes, bytesToBase64, type Bytes } from '@/data/crypto';
 import type { Namespace } from '@/data/db';
 import { buildDemoSnapshot } from '@/data/demoSeed';
 import type { DeviceKeyring } from '@/data/keyring';
@@ -35,6 +36,7 @@ import {
 } from '@/domain/snapshot';
 import type { SyncMessage } from '@/lib/broadcast';
 import type { SafeStorage } from '@/lib/safeStorage';
+import type { BiometricVault } from '@/platform/types';
 
 export type Phase = 'booting' | 'unavailable' | 'welcome' | 'locked' | 'unlocked';
 
@@ -56,6 +58,8 @@ export interface AppDeps {
    * bytes inside the encrypted database on Android.
    */
   keyring: DeviceKeyring;
+  /** Keeps a copy of the data key behind the fingerprint or face check; `null` without one (web). */
+  biometric: BiometricVault | null;
 }
 
 export interface AppState {
@@ -72,6 +76,8 @@ export interface AppState {
   checking: boolean;
   /** The app's idea of today; refreshed on boot and whenever the app regains focus. */
   today: LocalDate;
+  /** Fingerprint or face unlock: `unavailable` where the device has none, else off or on. */
+  biometric: 'unavailable' | 'off' | 'on';
 
   boot(): Promise<void>;
   startFresh(): Promise<void>;
@@ -82,6 +88,11 @@ export interface AppState {
   lock(): void;
   setSecret(secret: string, kind: SecretKind): Promise<void>;
   clearSecret(): Promise<void>;
+  /** Keeps a copy of the data key behind the fingerprint or face check. Unlocked, with a PIN or passphrase. */
+  enableBiometric(): Promise<void>;
+  disableBiometric(): Promise<void>;
+  /** `changed`: the copy is gone (the enrolment changed), so biometric unlock turns off; the PIN still works. */
+  unlockWithBiometric(): Promise<'ok' | 'cancelled' | 'changed'>;
   put<T extends TableName>(table: T, record: EntityOf<T>): Promise<void>;
   /** Several records in one transaction (all or nothing). */
   putMany(items: TableRecord[]): Promise<void>;
@@ -105,6 +116,22 @@ const THROTTLE_MS = 30_000;
 /** Meta key for the unlock throttle; kept on disk so a reload doesn't reset it. */
 const THROTTLE_KEY = 'throttle';
 type Throttle = { failedAttempts: number; lockedUntil: number | null };
+/** Meta key saying whether biometric unlock is on: only ever a boolean, never the key. */
+const BIOMETRIC_KEY = 'biometric';
+const biometricSlot = (ns: Namespace) => `funancial.${ns}.unlock`;
+
+/** The data key from its biometric copy, extractable as an unwrapped one is; `null` if unusable. */
+async function importDataKey(secret: string): Promise<CryptoKey | null> {
+  let raw: Bytes | undefined;
+  try {
+    raw = base64ToBytes(secret);
+    return await crypto.subtle.importKey('raw', raw, 'AES-GCM', true, ['encrypt', 'decrypt']);
+  } catch {
+    return null;
+  } finally {
+    raw?.fill(0);
+  }
+}
 
 /** Open storage backend + vault for the active namespace. Kept out of state: keys never hit React. */
 type Session = { backend: StorageBackend; repo: Repository | null; key: CryptoKey | null };
@@ -140,6 +167,15 @@ export function createAppStore(deps: AppDeps): StoreApi<AppState> {
     return session as Session & { repo: Repository; key: CryptoKey };
   }
 
+  /** Off or on, from the namespace's flag, where the device has fingerprint or face at all. */
+  async function biometricState(s: Session): Promise<AppState['biometric']> {
+    if (!(await deps.biometric?.available().catch(() => false))) return 'unavailable';
+    return (await s.backend.meta.get(BIOMETRIC_KEY)) === true ? 'on' : 'off';
+  }
+
+  /** The prompt being shown, if any: a second ask (a double tap, a remount) shares it. */
+  let biometricRead: Promise<'ok' | 'cancelled' | 'changed'> | null = null;
+
   return createStore<AppState>()((set, get) => {
     async function openWith(key: CryptoKey) {
       if (!session) throw new Error('No open database');
@@ -157,6 +193,32 @@ export function createAppStore(deps: AppDeps): StoreApi<AppState> {
       if (get().namespace === 'demo') throw new Error(`Demo data can't ${action}.`);
     }
 
+    async function readBiometric(): Promise<'ok' | 'cancelled' | 'changed'> {
+      const s = session;
+      if (!s || !deps.biometric || get().phase !== 'locked' || get().biometric !== 'on') {
+        return 'cancelled';
+      }
+      const result = await deps.biometric.read(biometricSlot(get().namespace));
+      if (result.status === 'cancelled') return 'cancelled';
+      const key = result.status === 'ok' ? await importDataKey(result.secret) : null;
+      if (!key) {
+        // The copy is gone: stop asking, and leave the PIN as the way in.
+        await get()
+          .disableBiometric()
+          .catch((e: unknown) => {
+            console.error('Turning biometric unlock off failed', e);
+            set({ biometric: 'off' });
+          });
+        return 'changed';
+      }
+      // The PIN may have opened the app meanwhile, or everything was erased.
+      if (session !== s || get().phase !== 'locked') return 'cancelled';
+      await s.backend.meta.delete(THROTTLE_KEY);
+      set({ failedAttempts: 0, lockedUntil: null });
+      await openWith(key);
+      return 'ok';
+    }
+
     return {
       phase: 'booting',
       namespace: 'real',
@@ -168,6 +230,7 @@ export function createAppStore(deps: AppDeps): StoreApi<AppState> {
       lockedUntil: null,
       checking: false,
       today: deps.today(),
+      biometric: 'unavailable',
 
       async boot() {
         set({ phase: 'booting' });
@@ -189,6 +252,8 @@ export function createAppStore(deps: AppDeps): StoreApi<AppState> {
           const throttle = await s.backend.meta.get<Throttle>(THROTTLE_KEY);
           set({
             lockMode,
+            // Before the lock screen shows: it asks for the fingerprint or face as it opens.
+            biometric: await biometricState(s),
             failedAttempts: throttle?.failedAttempts ?? 0,
             lockedUntil: activeUntil(throttle?.lockedUntil ?? null),
           });
@@ -232,7 +297,13 @@ export function createAppStore(deps: AppDeps): StoreApi<AppState> {
           const key = await createVault(s.backend.meta, deps.keyring);
           await createRepository(s.backend, key).replaceAll(snapshot);
           deps.safeStorage.set(NAMESPACE_KEY, 'demo');
-          set({ namespace: 'demo', lockMode: 'device', failedAttempts: 0, lockedUntil: null });
+          set({
+            namespace: 'demo',
+            lockMode: 'device',
+            failedAttempts: 0,
+            lockedUntil: null,
+            biometric: get().biometric === 'unavailable' ? 'unavailable' : 'off',
+          });
           await openWith(key);
         } catch (e) {
           await closeSession();
@@ -313,9 +384,50 @@ export function createAppStore(deps: AppDeps): StoreApi<AppState> {
       async clearSecret() {
         requireReal('be unlocked');
         const s = unlocked();
+        // With no lock there is nothing for biometrics to unlock: the copy goes first.
+        await get().disableBiometric();
         await clearVaultSecret(s.backend.meta, s.key, deps.keyring);
         set({ lockMode: 'device' });
         deps.channel.post({ type: 'reload', reason: 'secret' });
+      },
+
+      async enableBiometric() {
+        requireReal('use biometric unlock');
+        const { lockMode, namespace } = get();
+        if (!deps.biometric || get().biometric === 'unavailable') {
+          throw new Error("This device can't unlock with a fingerprint or face.");
+        }
+        if (lockMode !== 'pin' && lockMode !== 'passphrase') {
+          throw new Error('Set a PIN or passphrase first.');
+        }
+        const s = unlocked();
+        // The raw key leaves memory only for the Keystore slot that biometrics guard.
+        const raw = new Uint8Array(await crypto.subtle.exportKey('raw', s.key));
+        try {
+          await deps.biometric.store(biometricSlot(namespace), bytesToBase64(raw));
+        } finally {
+          raw.fill(0);
+        }
+        await s.backend.meta.put(BIOMETRIC_KEY, true);
+        set({ biometric: 'on' });
+      },
+
+      async disableBiometric() {
+        const s = session;
+        if (!s) throw new Error('Call boot() first');
+        if (deps.biometric) {
+          // The copy first: if that fails it stays on, rather than off with a copy left behind.
+          await deps.biometric.forget(biometricSlot(get().namespace));
+          await s.backend.meta.delete(BIOMETRIC_KEY);
+        }
+        if (get().biometric === 'on') set({ biometric: 'off' });
+      },
+
+      unlockWithBiometric() {
+        biometricRead ??= readBiometric().finally(() => {
+          biometricRead = null;
+        });
+        return biometricRead;
       },
 
       async put(table, record) {
@@ -395,6 +507,10 @@ export function createAppStore(deps: AppDeps): StoreApi<AppState> {
 
       async deleteAllData() {
         const ns = get().namespace;
+        // Best effort: the data it opens is about to go, and erasing must never be blocked.
+        await deps.biometric
+          ?.forget(biometricSlot(ns))
+          .catch((e: unknown) => console.error('Forgetting the biometric copy failed', e));
         await closeSession();
         await deps.storage.remove(ns);
         deps.safeStorage.remove(NAMESPACE_KEY);

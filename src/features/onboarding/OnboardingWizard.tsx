@@ -105,6 +105,8 @@ function CardForm({
 export function OnboardingWizard() {
   const { completeOnboarding } = useFinanceActions();
   const setSecret = useApp((s) => s.setSecret);
+  const biometricAvailable = useApp((s) => s.biometric !== 'unavailable');
+  const enableBiometric = useApp((s) => s.enableBiometric);
   const run = useAction();
   const heading = useRef<HTMLHeadingElement>(null);
   const [options] = useState(() => currencyOptions());
@@ -124,6 +126,7 @@ export function OnboardingWizard() {
   const [lock, setLock] = useState<LockChoice>('none');
   const [secret, setSecretText] = useState('');
   const [confirm, setConfirm] = useState('');
+  const [alsoBiometric, setAlsoBiometric] = useState(true);
   const [errors, setErrors] = useState<{ secret?: string; confirm?: string }>({});
   const [busy, setBusy] = useState(false);
 
@@ -168,7 +171,10 @@ export function OnboardingWizard() {
     setBusy(true);
     await run(async () => {
       // Lock first: saving the profile switches to the Dashboard, so the chosen lock must already hold.
-      if (lock !== 'none') await setSecret(secret, lock);
+      if (lock !== 'none') {
+        await setSecret(secret, lock);
+        if (biometricAvailable && alsoBiometric) await enableBiometric();
+      }
       await completeOnboarding({
         name,
         currency,
@@ -347,6 +353,13 @@ export function OnboardingWizard() {
                 error={errors.confirm}
                 onChange={(e) => setConfirm(e.target.value)}
               />
+              {biometricAvailable && (
+                <Switch
+                  label="Also unlock with fingerprint or face"
+                  checked={alsoBiometric}
+                  onChange={setAlsoBiometric}
+                />
+              )}
             </>
           )}
         </>

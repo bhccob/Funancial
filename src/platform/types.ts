@@ -27,4 +27,18 @@ export interface Platform {
   onPause(cb: () => void): () => void;
   /** Runs `cb` each time the app comes back to the foreground. Returns an unsubscribe. */
   onResume(cb: () => void): () => void;
+  /** Fingerprint or face unlock, where the device has it: `null` on the web. */
+  biometric: BiometricVault | null;
+}
+
+/** A secret kept behind the device's fingerprint or face check. */
+export interface BiometricVault {
+  available(): Promise<boolean>;
+  /** Keep `secret` behind the fingerprint/face check (Keystore, current enrolment only). May show the system prompt. */
+  store(slot: string, secret: string): Promise<void>;
+  /** Shows the system prompt. `changed`: enrolment changed or the copy is gone (plugin code 21). */
+  read(
+    slot: string,
+  ): Promise<{ status: 'ok'; secret: string } | { status: 'cancelled' } | { status: 'changed' }>;
+  forget(slot: string): Promise<void>;
 }
