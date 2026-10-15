@@ -1,10 +1,10 @@
 import { EmptyState } from '@/components/ui/EmptyState';
+import { Section, SectionLink } from '@/components/ui/Section';
 import type { Bill } from '@/domain/budget';
 import type { LocalDate } from '@/domain/dates';
 import { dayOfMonth } from '@/domain/periods';
 import { formatMonthShort, relativeDays } from '@/lib/format';
 import { useMoney } from '@/store/useFinance';
-import { HomeSection, SectionLink } from './HomeSection';
 
 export interface BillsSectionProps {
   bills: Bill[];
@@ -18,7 +18,7 @@ export function BillsSection({ bills, total, today }: BillsSectionProps) {
   const money = useMoney();
 
   return (
-    <HomeSection
+    <Section
       title="Coming up"
       action={<SectionLink to="/subscriptions">{money(total)}</SectionLink>}
     >
@@ -49,6 +49,6 @@ export function BillsSection({ bills, total, today }: BillsSectionProps) {
       ) : (
         <EmptyState title="Nothing due this month" />
       )}
-    </HomeSection>
+    </Section>
   );
 }

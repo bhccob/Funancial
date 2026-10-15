@@ -1,11 +1,11 @@
 import { useMemo } from 'react';
 import { Sparkline } from '@/components/charts/Sparkline';
+import { Section } from '@/components/ui/Section';
 import { netWorthChangeThisMonth, netWorthSeries } from '@/domain/charts';
 import type { LocalDate } from '@/domain/dates';
 import type { DataSnapshot } from '@/domain/snapshot';
 import type { FinanceView } from '@/domain/view';
 import { useMoney } from '@/store/useFinance';
-import { HomeSection } from './HomeSection';
 
 export interface NetWorthSectionProps {
   data: DataSnapshot;
@@ -38,7 +38,7 @@ export function NetWorthSection({ data, view, today }: NetWorthSectionProps) {
   ];
 
   return (
-    <HomeSection title="Net worth" action={changeText}>
+    <Section title="Net worth" action={changeText}>
       <p className="text-[34px] leading-tight font-extrabold tracking-[-0.035em] tabular-nums">
         {money(view.netWorth)}
       </p>
@@ -62,6 +62,6 @@ export function NetWorthSection({ data, view, today }: NetWorthSectionProps) {
           </li>
         ))}
       </ul>
-    </HomeSection>
+    </Section>
   );
 }

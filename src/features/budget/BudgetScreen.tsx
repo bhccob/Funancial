@@ -1,11 +1,11 @@
 import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import { useId, useMemo, useState } from 'react';
 import { Donut, DonutLegend } from '@/components/charts/Donut';
+import { Section } from '@/components/ui/Section';
 import type { BudgetLimit } from '@/domain/entities';
 import { categorySlices, periodProgress } from '@/domain/charts';
 import { addDays } from '@/domain/dates';
 import { monthKey, monthRange } from '@/domain/periods';
-import { HomeSection } from '@/features/dashboard/HomeSection';
 import { formatMonth, formatMonthYear } from '@/lib/format';
 import { useApp } from '@/store/AppStoreProvider';
 import { useFinanceView, useMoney, useToday } from '@/store/useFinance';
@@ -90,7 +90,10 @@ export function BudgetScreen() {
       </header>
 
       <div className="lg:grid lg:grid-cols-2 lg:items-start lg:gap-x-14">
-        <section aria-labelledby={spendingId} className="min-w-0">
+        <section
+          aria-labelledby={spendingId}
+          className="border-border min-w-0 max-lg:border-b max-lg:pb-7"
+        >
           <h2 id={spendingId} className="sr-only">
             Spending
           </h2>
@@ -116,8 +119,8 @@ export function BudgetScreen() {
           )}
         </section>
 
-        <div className="min-w-0 lg:[&>section:first-child]:mt-0 lg:[&>section:first-child]:border-t-0 lg:[&>section:first-child]:pt-0">
-          <HomeSection
+        <div className="min-w-0 lg:[&>section:first-child]:pt-0">
+          <Section
             title="Limits"
             action={
               <span className="text-muted text-[12.5px] font-bold">
@@ -147,7 +150,7 @@ export function BudgetScreen() {
               <Plus aria-hidden="true" className="size-[18px]" />
               Add a limit
             </button>
-          </HomeSection>
+          </Section>
         </div>
       </div>
 

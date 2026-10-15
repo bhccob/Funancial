@@ -1,11 +1,14 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router';
 import { describe, expect, it, vi } from 'vitest';
 import { Banner } from './Banner';
-import { Button } from './Button';
+import { Button, ButtonLink } from './Button';
 import { Dialog } from './Dialog';
 import { ErrorBoundary } from './ErrorBoundary';
-import { Section } from './Section';
+import { PageHeader } from './PageHeader';
+import { ProgressBar } from './ProgressBar';
+import { EmptyLink, Section, SectionLink } from './Section';
 import { TextField } from './TextField';
 import { Toaster } from './Toaster';
 import { topDialog } from '@/lib/dialogStack';
@@ -20,6 +23,35 @@ describe('Button', () => {
       .className.split(' ')
       .filter((c) => /^text-(text|danger|muted|primary-contrast|white)$/.test(c));
     expect(colours).toEqual(['text-danger']);
+  });
+
+  it('makes medium buttons 48px tall', () => {
+    render(
+      <MemoryRouter>
+        <Button size="sm">Small</Button>
+        <Button>Medium</Button>
+        <Button size="lg">Large</Button>
+        <ButtonLink to="/" size="sm">
+          Link
+        </ButtonLink>
+      </MemoryRouter>,
+    );
+    expect(screen.getByRole('button', { name: 'Small' })).toHaveClass('h-11', 'px-4', 'text-sm');
+    expect(screen.getByRole('button', { name: 'Medium' })).toHaveClass(
+      'h-12',
+      'px-5',
+      'text-[15px]',
+    );
+    expect(screen.getByRole('button', { name: 'Large' })).toHaveClass('h-14', 'px-6', 'text-base');
+    expect(screen.getByRole('link', { name: 'Link' })).toHaveClass('h-11');
+  });
+
+  it('moves only where motion is allowed', () => {
+    render(<Button>Save</Button>);
+    const button = screen.getByRole('button', { name: 'Save' });
+    expect(button).toHaveClass('motion-safe:transition-[transform,background-color,opacity]');
+    expect(button).toHaveClass('motion-safe:active:scale-[0.98]');
+    expect(button.className).not.toMatch(/(^|s)(transition|duration-|active:scale|motion-reduce)/);
   });
 
   it('does not submit a form unless asked to', async () => {
@@ -116,6 +148,17 @@ describe('Dialog', () => {
   });
 });
 
+describe('Toaster', () => {
+  it('floats toasts just above the 76px bottom bar on phones, and low on desktop', () => {
+    toastStore.setState({ toasts: [] });
+    const { container } = render(<Toaster />);
+    expect(container.firstElementChild).toHaveClass(
+      'bottom-[calc(88px+env(safe-area-inset-bottom))]',
+      'md:bottom-8',
+    );
+  });
+});
+
 describe('Banner', () => {
   it('announces danger as an alert and other tones politely', () => {
     const { rerender } = render(<Banner tone="danger">Storage blocked</Banner>);
@@ -135,7 +178,72 @@ describe('Banner', () => {
   });
 });
 
+describe('PageHeader', () => {
+  it('renders page titles at 34px', () => {
+    render(<PageHeader title="Goals" />);
+    const title = screen.getByRole('heading', { level: 1, name: 'Goals' });
+    expect(title).toHaveClass('text-[34px]', 'font-extrabold', 'tracking-[-0.035em]');
+  });
+
+  it('has no line under it; the first section supplies its own top space', () => {
+    render(<PageHeader title="Goals" />);
+    const header = screen.getByRole('banner');
+    expect(header).toHaveClass('pb-2');
+    expect(header.className).not.toMatch(/(^|s)border-/);
+  });
+});
+
+describe('ProgressBar', () => {
+  it('animates only where motion is allowed', () => {
+    render(<ProgressBar label="Food" value={40} level="ok" valueText="40% used" />);
+    const fill = screen.getByRole('progressbar', { name: 'Food' }).firstElementChild!;
+    expect(fill).toHaveClass('motion-safe:transition-[width]', 'motion-safe:duration-300');
+    expect(fill.className).not.toMatch(/(^|s)(transition|duration-)/);
+  });
+});
+
 describe('Section', () => {
+  it('renders section titles at 21px', () => {
+    render(<Section title="Limits">body</Section>);
+    const title = screen.getByRole('heading', { level: 2, name: 'Limits' });
+    expect(title).toHaveClass('text-[21px]', 'font-extrabold', 'tracking-[-0.02em]');
+  });
+
+  it('is padded 28px above and below, with a hairline under it', () => {
+    render(<Section title="Limits">body</Section>);
+    expect(screen.getByRole('region', { name: 'Limits' })).toHaveClass(
+      'py-7',
+      'border-b',
+      'border-border',
+      'last-of-type:border-b-0',
+    );
+  });
+
+  it('keeps the action slot 13.5px, bold and muted', () => {
+    render(
+      <Section title="Limits" action={<span>See all</span>}>
+        body
+      </Section>,
+    );
+    expect(screen.getByText('See all').parentElement).toHaveClass(
+      'text-muted',
+      'text-[13.5px]',
+      'font-bold',
+    );
+  });
+
+  it('offers the title links Home and Budget use', () => {
+    render(
+      <MemoryRouter>
+        <Section title="Goals" action={<SectionLink to="/goals">All</SectionLink>}>
+          <EmptyLink to="/goals">Add a goal</EmptyLink>
+        </Section>
+      </MemoryRouter>,
+    );
+    expect(screen.getByRole('link', { name: 'All' })).toHaveAttribute('href', '/goals');
+    expect(screen.getByRole('link', { name: 'Add a goal' })).toHaveClass('min-h-11');
+  });
+
   it('is labelled by its title and shows its action', () => {
     render(
       <Section title="Limits" action={<a href="/budget">See all</a>}>

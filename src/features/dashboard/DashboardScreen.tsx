@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Banner } from '@/components/ui/Banner';
 import { Button } from '@/components/ui/Button';
+import { Section, SectionLink } from '@/components/ui/Section';
 import type { Income } from '@/domain/entities';
 import { monthKey } from '@/domain/periods';
 import { QuestList } from '@/features/game/QuestList';
@@ -14,7 +15,6 @@ import { ConfirmSalaryDialog } from './ConfirmSalaryDialog';
 import { GoalsSection } from './GoalsSection';
 import { HomeActions } from './HomeActions';
 import { HomeHero } from './HomeHero';
-import { HomeSection, SectionLink } from './HomeSection';
 import { HomeTopLine } from './HomeTopLine';
 import { LimitsSection } from './LimitsSection';
 import { NetWorthSection } from './NetWorthSection';
@@ -93,7 +93,7 @@ export function DashboardScreen() {
       <HomeActions />
 
       <div className="lg:grid lg:grid-cols-2 lg:items-start lg:gap-x-14">
-        <div className="min-w-0 [&>section:first-child]:mt-0 [&>section:first-child]:border-t-0">
+        <div className="border-border min-w-0 max-lg:border-b">
           <SpendingSection
             expenses={data.tables.expense}
             today={today}
@@ -106,13 +106,13 @@ export function DashboardScreen() {
           />
           <LimitsSection limits={view.limits} />
         </div>
-        <div className="min-w-0 lg:[&>section:first-child]:mt-0 lg:[&>section:first-child]:border-t-0">
+        <div className="min-w-0">
           <BillsSection bills={view.bills} total={view.billsTotal} today={today} />
           <NetWorthSection data={data} view={view} today={today} />
           <GoalsSection goals={data.tables.goal} />
-          <HomeSection title="Quests" action={<SectionLink to="/quests">All</SectionLink>}>
+          <Section title="Quests" action={<SectionLink to="/quests">All</SectionLink>}>
             <QuestList quests={game.quests} limit={3} />
-          </HomeSection>
+          </Section>
         </div>
       </div>
 

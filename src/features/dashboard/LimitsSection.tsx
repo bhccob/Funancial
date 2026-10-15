@@ -1,8 +1,8 @@
 import { Ring } from '@/components/charts/Ring';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { EmptyLink, Section, SectionLink } from '@/components/ui/Section';
 import { limitLabel, type LimitLevel, type LimitStatus } from '@/domain/budget';
 import { useMoney } from '@/store/useFinance';
-import { EmptyLink, HomeSection, SectionLink } from './HomeSection';
 
 /** Under 80% accent, 80–99% warning, 100% or more danger (the limit's own thresholds decide). */
 const RING_COLORS: Record<LimitLevel, string> = {
@@ -18,7 +18,7 @@ export function LimitsSection({ limits }: { limits: LimitStatus[] }) {
   const shown = limits.slice(0, 3);
 
   return (
-    <HomeSection title="Limits" action={<SectionLink to="/budget">Budget</SectionLink>}>
+    <Section title="Limits" action={<SectionLink to="/budget">Budget</SectionLink>}>
       {shown.length > 0 ? (
         <ul className="grid grid-cols-3 gap-2">
           {shown.map(({ limit, remaining, pct, level }) => {
@@ -48,6 +48,6 @@ export function LimitsSection({ limits }: { limits: LimitStatus[] }) {
           action={<EmptyLink to="/budget">Set a limit</EmptyLink>}
         />
       )}
-    </HomeSection>
+    </Section>
   );
 }

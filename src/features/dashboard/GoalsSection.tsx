@@ -1,7 +1,7 @@
 import { EmptyState } from '@/components/ui/EmptyState';
+import { EmptyLink, Section, SectionLink } from '@/components/ui/Section';
 import type { Goal } from '@/domain/entities';
 import { useMoney } from '@/store/useFinance';
-import { EmptyLink, HomeSection, SectionLink } from './HomeSection';
 
 /** The colour of the progress line of the goal in each row, in the chart colours' order. */
 const LINE_COLORS = ['var(--color-chart-1)', 'var(--color-chart-3)'];
@@ -22,7 +22,7 @@ export function GoalsSection({ goals }: { goals: Goal[] }) {
   const shown = [...goals].sort(goalOrder).slice(0, 2);
 
   return (
-    <HomeSection title="Goals" action={<SectionLink to="/goals">All</SectionLink>}>
+    <Section title="Goals" action={<SectionLink to="/goals">All</SectionLink>}>
       {shown.length > 0 ? (
         <ul className="divide-border divide-y">
           {shown.map((goal, i) => {
@@ -59,6 +59,6 @@ export function GoalsSection({ goals }: { goals: Goal[] }) {
       ) : (
         <EmptyState title="No goals yet" action={<EmptyLink to="/goals">Add a goal</EmptyLink>} />
       )}
-    </HomeSection>
+    </Section>
   );
 }

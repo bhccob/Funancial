@@ -1,8 +1,13 @@
+import { PageHeader } from '@/components/ui/PageHeader';
+import { Section } from '@/components/ui/Section';
+
 export function PlaceholderScreen({ title }: { title: string }) {
   return (
-    <div className="flex flex-col gap-3">
-      <h1 className="text-3xl font-extrabold tracking-tight">{title}</h1>
-      <p className="text-muted">Coming soon.</p>
+    <div>
+      <PageHeader title={title} />
+      <Section>
+        <p className="text-muted font-semibold">Coming soon.</p>
+      </Section>
     </div>
   );
 }

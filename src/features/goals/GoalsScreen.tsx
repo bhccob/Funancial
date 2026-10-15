@@ -127,7 +127,7 @@ export function GoalsScreen() {
       <div className="grid lg:grid-cols-2">
         <Section
           title="Goals"
-          className="lg:pr-6"
+          className="lg:border-b-0 lg:pr-6"
           action={
             <Button size="sm" variant="secondary" onClick={() => setGoalEdit(null)}>
               Add goal

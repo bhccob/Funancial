@@ -35,7 +35,7 @@ export function Switch({ label, checked, onChange, hint, disabled }: SwitchProps
         onClick={() => onChange(!checked)}
         // The track is 28px tall; the invisible `before` box takes the touch target to 44px.
         className={cn(
-          'relative h-7 w-12 shrink-0 rounded-full transition-colors motion-reduce:transition-none',
+          'relative h-7 w-12 shrink-0 rounded-full motion-safe:transition-colors',
           'before:absolute before:inset-x-0 before:-inset-y-2',
           checked ? 'bg-primary' : 'bg-border-strong',
         )}
@@ -43,7 +43,7 @@ export function Switch({ label, checked, onChange, hint, disabled }: SwitchProps
         <span
           aria-hidden
           className={cn(
-            'bg-primary-contrast absolute top-1 left-1 size-5 rounded-full shadow transition-transform motion-reduce:transition-none',
+            'bg-primary-contrast absolute top-1 left-1 size-5 rounded-full shadow motion-safe:transition-transform',
             checked && 'translate-x-5',
           )}
         />

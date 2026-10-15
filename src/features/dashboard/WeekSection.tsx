@@ -1,11 +1,11 @@
 import { useMemo, useState } from 'react';
 import { DayBars } from '@/components/charts/DayBars';
+import { Section, SectionLink } from '@/components/ui/Section';
 import { spendingByDay } from '@/domain/charts';
 import type { LocalDate } from '@/domain/dates';
 import type { Expense } from '@/domain/entities';
 import { formatWeekday } from '@/lib/format';
 import { useMoney } from '@/store/useFinance';
-import { HomeSection, SectionLink } from './HomeSection';
 
 export interface WeekSectionProps {
   expenses: Expense[];
@@ -30,7 +30,7 @@ export function WeekSection({ expenses, today, weekTotal }: WeekSectionProps) {
   const picked = selected === null ? undefined : days[selected];
 
   return (
-    <HomeSection title="Last 7 days" action={<SectionLink to="/history">History</SectionLink>}>
+    <Section title="Last 7 days" action={<SectionLink to="/history">History</SectionLink>}>
       <DayBars
         days={days}
         selected={selected}
@@ -55,6 +55,6 @@ export function WeekSection({ expenses, today, weekTotal }: WeekSectionProps) {
           </>
         )}
       </p>
-    </HomeSection>
+    </Section>
   );
 }

@@ -1,5 +1,5 @@
 /*
- * Design tokens — direction D "Pro Ledger". Values and usage rules: docs/design/visual-direction.md.
+ * Design tokens — direction E "Open". Values and usage rules: docs/design/visual-direction.md.
  * Light values live in @theme (they are the defaults and generate Tailwind utilities);
  * dark values override the same variables when <html data-theme="dark">.
  */

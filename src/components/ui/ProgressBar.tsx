@@ -31,7 +31,7 @@ export function ProgressBar({ label, value, level, valueText, className }: Progr
     >
       <div
         className={cn(
-          'h-full rounded-full transition-[width] duration-300 motion-reduce:transition-none',
+          'h-full rounded-full motion-safe:transition-[width] motion-safe:duration-300',
           fills[level],
         )}
         style={{ width: `${shown}%` }}

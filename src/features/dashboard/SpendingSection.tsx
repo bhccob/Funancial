@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Donut, DonutLegend } from '@/components/charts/Donut';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { Section } from '@/components/ui/Section';
 import { categorySlices } from '@/domain/charts';
 import type { LocalDate } from '@/domain/dates';
 import type { Expense } from '@/domain/entities';
@@ -8,7 +9,6 @@ import { monthKey, monthRange, weekRange } from '@/domain/periods';
 import { cn } from '@/lib/cn';
 import { formatMonth } from '@/lib/format';
 import { useMoney } from '@/store/useFinance';
-import { HomeSection } from './HomeSection';
 
 type Range = 'week' | 'month';
 
@@ -55,7 +55,10 @@ export function SpendingSection({ expenses, today, weekStartsOn }: SpendingSecti
             type="button"
             aria-pressed={on}
             onClick={() => choose(id)}
-            className={cn('-my-3 min-h-11 px-0.5 text-sm font-extrabold', !on && 'text-muted')}
+            className={cn(
+              '-my-3 min-h-11 px-0.5 text-sm font-extrabold',
+              on ? 'text-text' : 'text-muted',
+            )}
           >
             <span className={cn('border-b-2 py-1', on ? 'border-text' : 'border-transparent')}>
               {label}
@@ -67,7 +70,7 @@ export function SpendingSection({ expenses, today, weekStartsOn }: SpendingSecti
   );
 
   return (
-    <HomeSection title="Spending" action={tabs}>
+    <Section title="Spending" action={tabs}>
       {slices.length > 0 ? (
         <div className="flex items-center gap-[18px]">
           <Donut
@@ -92,6 +95,6 @@ export function SpendingSection({ expenses, today, weekStartsOn }: SpendingSecti
       ) : (
         <EmptyState title="No spending yet">Expenses you add show up here by category.</EmptyState>
       )}
-    </HomeSection>
+    </Section>
   );
 }
