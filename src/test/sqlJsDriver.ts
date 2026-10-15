@@ -14,7 +14,8 @@ export type SqlJsDriver = SqlDriver & {
 
 /**
  * SQLite (sql.js, in memory) behind the `SqlDriver` contract. Each named database outlives the
- * connections opened on it, as a file does: `close` ends a connection, `remove` deletes the file.
+ * connections opened on it, as a file does: `close` ends a connection (a second `close` on it
+ * throws), `remove` deletes the file.
  */
 export function sqlJsDriver(): SqlJsDriver {
   const files = new Map<string, Database>();
@@ -82,6 +83,8 @@ export function sqlJsDriver(): SqlJsDriver {
       },
 
       async close() {
+        // Closing a connection that is not open is an error, as it is on the Capacitor plugin.
+        live();
         closed = true;
       },
     };

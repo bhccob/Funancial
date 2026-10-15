@@ -1,7 +1,13 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { sqlJsDriver } from '@/test/sqlJsDriver';
 import { bytesToBase64 } from './crypto';
-import { decodeMetaValue, encodeMetaValue, sqliteStorage } from './sqliteStorage';
+import {
+  decodeMetaValue,
+  encodeMetaValue,
+  sqliteStorage,
+  type SqlDb,
+  type SqlDriver,
+} from './sqliteStorage';
 import { DATA_VERSION_KEY, type RecordRow } from './storage';
 
 function row(id: string, seed: number, table: RecordRow['table'] = 'expense'): RecordRow {
@@ -32,7 +38,8 @@ describe('meta store', () => {
     await backend.meta.put('vault', vault);
     const stored = await backend.meta.get<typeof vault>('vault');
 
-    expect(stored).toEqual(vault);
+    // toStrictEqual, unlike toEqual, compares the contents of an ArrayBuffer
+    expect(stored).toStrictEqual(vault);
     expect(stored?.wrappedKey).toBeInstanceOf(ArrayBuffer);
     expect(stored?.salt).toBeInstanceOf(Uint8Array);
 
@@ -82,13 +89,18 @@ describe('meta value encoding', () => {
     expect(decodeMetaValue(text)).toEqual(Uint8Array.of(1, 2, 3));
   });
 
-  it('restores each kind of bytes to the type it had', () => {
-    const decoded = decodeMetaValue(
-      encodeMetaValue({ a: Uint8Array.of(1), b: Uint8Array.of(2).buffer, c: [Uint8Array.of(3)] }),
-    ) as { a: unknown; b: unknown; c: unknown[] };
+  it('restores each kind of bytes to the type and contents it had', () => {
+    const value = {
+      a: Uint8Array.of(1, 200, 255),
+      b: Uint8Array.of(2, 0, 254).buffer,
+      c: [Uint8Array.of(3, 128)],
+    };
+    const decoded = decodeMetaValue(encodeMetaValue(value)) as typeof value;
     expect(decoded.a).toBeInstanceOf(Uint8Array);
     expect(decoded.b).toBeInstanceOf(ArrayBuffer);
     expect(decoded.c[0]).toBeInstanceOf(Uint8Array);
+    expect(decoded).toStrictEqual(value);
+    expect(new Uint8Array(decoded.b)).toStrictEqual(Uint8Array.of(2, 0, 254));
   });
 
   it('refuses a CryptoKey instead of storing an empty object', async () => {
@@ -111,7 +123,7 @@ describe('record store', () => {
     await backend.records.write(rows, { replace: false });
 
     const all = await backend.records.all();
-    expect(all).toEqual([rows[1], rows[0], rows[2]]); // by table, then id
+    expect(all).toStrictEqual([rows[1], rows[0], rows[2]]); // by table, then id
     expect(all[0]?.iv).toBeInstanceOf(Uint8Array);
     expect(all[0]?.ciphertext).toBeInstanceOf(ArrayBuffer);
   });
@@ -139,7 +151,7 @@ describe('record store', () => {
     const { backend } = await openReal();
     await backend.records.write([row('a', 1)], { replace: false });
     await backend.records.write([row('a', 2)], { replace: false });
-    expect(await backend.records.all()).toEqual([row('a', 2)]);
+    expect(await backend.records.all()).toStrictEqual([row('a', 2)]);
   });
 
   it('removes one row', async () => {
@@ -147,7 +159,7 @@ describe('record store', () => {
     await backend.records.write([row('a', 1), row('b', 2)], { replace: false });
     await backend.records.remove('expense', 'a');
     await backend.records.remove('expense', 'missing');
-    expect(await backend.records.all()).toEqual([row('b', 2)]);
+    expect(await backend.records.all()).toStrictEqual([row('b', 2)]);
   });
 
   it('write with replace drops other rows and sets dataVersion atomically', async () => {
@@ -157,14 +169,14 @@ describe('record store', () => {
     });
 
     await backend.records.write([row('d', 4)], { replace: true, dataVersion: 2 });
-    expect(await backend.records.all()).toEqual([row('d', 4)]);
+    expect(await backend.records.all()).toStrictEqual([row('d', 4)]);
     expect(await backend.meta.get(DATA_VERSION_KEY)).toBe(2);
 
     await backend.records.write([row('e', 5)], { replace: false });
     expect(await backend.meta.get(DATA_VERSION_KEY)).toBe(2);
 
     await backend.records.write([], { replace: true });
-    expect(await backend.records.all()).toEqual([]);
+    expect(await backend.records.all()).toStrictEqual([]);
   });
 
   it('a failing statement rolls the whole write back', async () => {
@@ -181,7 +193,7 @@ describe('record store', () => {
       }),
     ).rejects.toThrow(/INSERT/);
 
-    expect(await backend.records.all()).toEqual([row('a', 1), row('b', 2)]);
+    expect(await backend.records.all()).toStrictEqual([row('a', 1), row('b', 2)]);
     expect(await backend.meta.get(DATA_VERSION_KEY)).toBe(1);
 
     // The failed transaction is over: the next write works.
@@ -198,9 +210,12 @@ describe('lifecycle', () => {
     await backend.close();
 
     const reopened = await provider.open('real');
-    expect(await reopened.records.all()).toEqual([row('a', 1)]);
+    expect(await reopened.records.all()).toStrictEqual([row('a', 1)]);
     expect(await reopened.meta.get(DATA_VERSION_KEY)).toBe(2);
-    expect(await reopened.meta.get('vault')).toEqual({ mode: 'device', salt: Uint8Array.of(1, 2) });
+    expect(await reopened.meta.get('vault')).toStrictEqual({
+      mode: 'device',
+      salt: Uint8Array.of(1, 2),
+    });
   });
 
   it('close can be called twice', async () => {
@@ -209,11 +224,32 @@ describe('lifecycle', () => {
     await expect(backend.close()).resolves.toBeUndefined();
   });
 
+  it('reports why a database could not be set up, and logs a close that also fails', async () => {
+    const setupError = new Error('cannot create tables');
+    const closeError = new Error('cannot close');
+    const unused = () => Promise.reject(new Error('not used'));
+    const db: SqlDb = {
+      run: unused,
+      query: unused,
+      transaction: () => Promise.reject(setupError),
+      close: () => Promise.reject(closeError),
+    };
+    const driver: SqlDriver = { open: async () => db, remove: async () => {} };
+
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      await expect(sqliteStorage(driver).open('real')).rejects.toBe(setupError);
+      expect(logged).toHaveBeenCalledWith('Closing storage failed', closeError);
+    } finally {
+      logged.mockRestore();
+    }
+  });
+
   it('keeps the two namespaces apart', async () => {
     const { provider, backend } = await openReal();
     const demo = await provider.open('demo');
     await backend.records.write([row('a', 1)], { replace: false });
-    expect(await demo.records.all()).toEqual([]);
+    expect(await demo.records.all()).toStrictEqual([]);
   });
 
   it('remove deletes the database', async () => {
@@ -226,9 +262,9 @@ describe('lifecycle', () => {
 
     await provider.remove('real');
     const fresh = await provider.open('real');
-    expect(await fresh.records.all()).toEqual([]);
+    expect(await fresh.records.all()).toStrictEqual([]);
     expect(await fresh.meta.get('vault')).toBeUndefined();
-    expect(await demo.records.all()).toEqual([row('d', 4)]);
+    expect(await demo.records.all()).toStrictEqual([row('d', 4)]);
 
     await expect(provider.remove('real')).resolves.toBeUndefined();
   });

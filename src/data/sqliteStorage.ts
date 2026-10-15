@@ -57,7 +57,8 @@ type RecordColumns = {
 /**
  * Meta values are JSON text. JSON has no bytes, so a `Uint8Array` is written as
  * `{"$bytes":"<base64>"}` and an `ArrayBuffer` as `{"$bytes":"<base64>","$as":"ArrayBuffer"}`;
- * `decodeMetaValue` gives each back as the type it was.
+ * `decodeMetaValue` gives each back as the type it was. An object that itself has a string
+ * `$bytes` field would be read back as bytes; the app's meta values never have one.
  */
 export function encodeMetaValue(value: unknown): string {
   const text: string | undefined = JSON.stringify(value, (_key, v: unknown) => {
@@ -166,7 +167,10 @@ export function sqliteStorage(driver: SqlDriver): StorageProvider {
       try {
         await db.transaction(SCHEMA.map((sql) => ({ sql })));
       } catch (e) {
-        await db.close().catch(() => {});
+        // The setup error is the one to report; a close that fails too is only logged.
+        await db
+          .close()
+          .catch((closeError: unknown) => console.error('Closing storage failed', closeError));
         throw e;
       }
       let closed = false;
