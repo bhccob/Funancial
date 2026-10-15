@@ -166,6 +166,22 @@ describe('currentQuests', () => {
       });
       expect(quest(snap({ expense: [charge] }), 'log-today').action).toBe('no-spend');
     });
+
+    it('counts an expense entered with Repeat as logged, and then offers no Nothing spent', () => {
+      const repeat = (createdOn: string) =>
+        makeExpense({
+          date: '2026-10-15',
+          subscriptionId: 'sub-1',
+          recurrence: { cycle: 'monthly' },
+          createdAt: localIso(createdOn),
+        });
+      expect(quest(snap({ expense: [repeat('2026-10-15')] }), 'log-today')).toMatchObject({
+        done: true,
+        action: null,
+      });
+      // Dated today but entered before (the clock moved): spending today rules out Nothing spent.
+      expect(quest(snap({ expense: [repeat('2026-10-14')] }), 'log-today').action).toBeNull();
+    });
   });
 
   describe('week-limits', () => {

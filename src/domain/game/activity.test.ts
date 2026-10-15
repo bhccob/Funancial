@@ -8,7 +8,7 @@ import {
   makeSubscription,
 } from '@/test/fixtures';
 import { emptySnapshot, type DataSnapshot } from '../snapshot';
-import { activeDays, createSpendIndex, loggedEntries, localDay } from './activity';
+import { activeDays, createSpendIndex, isLoggedExpense, loggedEntries, localDay } from './activity';
 
 function snap(tables: Partial<DataSnapshot['tables']>): DataSnapshot {
   const base = emptySnapshot();
@@ -22,7 +22,29 @@ describe('localDay', () => {
   });
 });
 
+describe('isLoggedExpense', () => {
+  it('is true for what the person typed, with or without Repeat, and false for a charge', () => {
+    expect(isLoggedExpense(makeExpense())).toBe(true);
+    // Entered with Repeat: it starts the subscription, but the person typed it.
+    expect(
+      isLoggedExpense(makeExpense({ subscriptionId: 'sub1', recurrence: { cycle: 'monthly' } })),
+    ).toBe(true);
+    // A renewal the app added for the subscription.
+    expect(isLoggedExpense(makeExpense({ subscriptionId: 'sub1', recurrence: null }))).toBe(false);
+  });
+});
+
 describe('loggedEntries', () => {
+  it('counts an expense entered with Repeat as logged', () => {
+    const typed = makeExpense({
+      id: 'e1',
+      subscriptionId: 'sub1',
+      recurrence: { cycle: 'monthly' },
+      createdAt: localIso('2026-10-15', 9),
+    });
+    expect(loggedEntries(snap({ expense: [typed] })).map((e) => e.id)).toEqual(['e1']);
+  });
+
   it('logs what the person entered, not subscription charges or salary', () => {
     const data = snap({
       expense: [

@@ -1,5 +1,6 @@
 import type { StoreApi } from 'zustand/vanilla';
 import { defaultSettings, type Challenge, type ChallengeKind } from '@/domain/entities';
+import { isLoggedExpense } from '@/domain/game/activity';
 import { newChallenge, startRequirement } from '@/domain/game/challenges';
 import { ownedItems, purchaseBlocker, purchaseEntry, SHOP_ITEMS } from '@/domain/game/shop';
 import { newId, nowIso } from '@/domain/ids';
@@ -22,7 +23,7 @@ export function createGameActions(store: StoreApi<AppState>) {
     /** Records that nothing was spent today. Spending logged today rules it out. */
     async checkInNoSpend() {
       const { today, data } = state();
-      if (data.tables.expense.some((e) => e.subscriptionId === null && e.date === today)) {
+      if (data.tables.expense.some((e) => isLoggedExpense(e) && e.date === today)) {
         throw new Error('You already logged spending today.');
       }
       await state().put('checkIn', {

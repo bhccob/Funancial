@@ -1,7 +1,7 @@
 import { addDays, type LocalDate } from '../dates';
 import type { Challenge, ChallengeKind } from '../entities';
 import type { DataSnapshot } from '../snapshot';
-import { createSpendIndex, localDay, type SpendIndex } from './activity';
+import { createSpendIndex, isLoggedExpense, localDay, type SpendIndex } from './activity';
 import { CHALLENGE_REWARDS } from './rules';
 import type { Award, GameContext, Reward } from './types';
 
@@ -142,7 +142,7 @@ type Standing = {
 function noSpendWeekend(c: Challenge, data: DataSnapshot, ctx: GameContext): Standing {
   const spentOn = new Set<LocalDate>();
   for (const e of data.tables.expense) {
-    if (e.subscriptionId === null) spentOn.add(e.date);
+    if (isLoggedExpense(e)) spentOn.add(e.date);
   }
   const days = daysBetween(c.start, c.end);
   const lost = days.some((day) => spentOn.has(day));

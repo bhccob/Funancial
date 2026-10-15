@@ -262,6 +262,16 @@ describe('no-spend weekend', () => {
     expect(outcomeOf(viewOn(weekend(), {}, '2026-10-19'))).toEqual(['won', 2, 2]);
   });
 
+  it('loses a no-spend weekend to an expense entered with Repeat', () => {
+    const repeat = makeExpense({
+      date: '2026-10-17',
+      subscriptionId: 'sub-1',
+      recurrence: { cycle: 'monthly' },
+      createdAt: localIso('2026-10-17'),
+    });
+    expect(viewOn(weekend(), { expense: [repeat] }, '2026-10-19').outcome).toBe('lost');
+  });
+
   it('ignores subscription charges and spending outside the weekend', () => {
     const outside = [spent('2026-10-16'), spent('2026-10-19')];
     const charge = makeExpense({ date: '2026-10-17', subscriptionId: 'sub-1' });

@@ -1,6 +1,7 @@
 import { nextDueDate, upcomingBills } from './budget';
 import { addDays, toLocalDate, type LocalDate } from './dates';
 import type { Profile, ReminderSettings, Settings } from './entities';
+import { isLoggedExpense } from './game/activity';
 import { formatMoney } from './money';
 import { endOfMonth, weekRange } from './periods';
 import { nextOccurrence } from './recurrence';
@@ -59,9 +60,9 @@ function* eachDay(from: LocalDate, to: LocalDate): Generator<LocalDate> {
 
 function dailyLog({ data, prefs, today, lastDay }: Context): Reminder[] {
   if (!prefs.dailyLog) return [];
-  // Only what the person logged: a subscription charge or an expected salary appears on its own.
+  // Only what the person logged: a subscription renewal or an expected salary appears on its own.
   const loggedToday =
-    data.tables.expense.some((e) => e.date === today && e.subscriptionId === null) ||
+    data.tables.expense.some((e) => e.date === today && isLoggedExpense(e)) ||
     data.tables.income.some((i) => i.date === today && i.status === 'confirmed');
   const out: Reminder[] = [];
   for (const d of eachDay(today, lastDay)) {

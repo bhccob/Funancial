@@ -88,6 +88,23 @@ describe('settling after a write', () => {
     expect(ledgerIds(await reboot(deps))).toEqual(ledgerIds(store));
   });
 
+  it('pays an expense entered with Repeat as logged, though it starts a subscription', async () => {
+    const { store, finance } = await setup();
+
+    const { expense } = await finance.addExpense({ ...lunch, repeat: 'monthly' });
+
+    expect(expense.subscriptionId).not.toBeNull();
+    expect(ledgerIds(store)).toEqual([
+      'badge:first-expense#0',
+      `log:expense:${expense.id}#0`,
+      `quest:log-today:${TODAY}#0`,
+    ]);
+    const logToday = computeGameView(store.getState().data, ctxOf(store)).quests.find(
+      (q) => q.id === 'log-today',
+    );
+    expect(logToday).toMatchObject({ done: true, action: null });
+  });
+
   it('numbers each gain', async () => {
     const { store, finance } = await setup();
     await finance.addExpense(lunch);
@@ -303,6 +320,13 @@ describe('check-ins', () => {
       'You already logged spending today.',
     );
     expect(spender.store.getState().data.tables.checkIn).toEqual([]);
+  });
+
+  it('refuses Nothing spent after an expense entered with Repeat', async () => {
+    const { store, game, finance } = await setup();
+    await finance.addExpense({ ...lunch, repeat: 'monthly' });
+    await expect(game.checkInNoSpend()).rejects.toThrow('You already logged spending today.');
+    expect(store.getState().data.tables.checkIn).toEqual([]);
   });
 
   it('counts only what the person spent today: not a subscription charge, not an earlier day', async () => {

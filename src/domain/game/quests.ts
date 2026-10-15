@@ -1,7 +1,7 @@
 import { addDays, type LocalDate } from '../dates';
 import { monthKey, weekRange } from '../periods';
 import type { DataSnapshot } from '../snapshot';
-import { anyOver, createSpendIndex, loggedEntries, localDay } from './activity';
+import { anyOver, createSpendIndex, isLoggedExpense, loggedEntries, localDay } from './activity';
 import { QUEST_REWARDS } from './rules';
 import type { Award, GameContext, QuestId, Reward } from './types';
 
@@ -60,7 +60,7 @@ function logToday(data: DataSnapshot, ctx: GameContext): QuestView {
   const done =
     loggedEntries(data).some((e) => e.day === today) ||
     data.tables.checkIn.some((c) => c.kind === 'no-spend' && c.date === today);
-  const spentToday = data.tables.expense.some((e) => e.subscriptionId === null && e.date === today);
+  const spentToday = data.tables.expense.some((e) => isLoggedExpense(e) && e.date === today);
   return view(
     'log-today',
     'daily',

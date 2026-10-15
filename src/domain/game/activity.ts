@@ -1,11 +1,20 @@
 import { addDays, toLocalDate, type LocalDate } from '../dates';
-import type { Category } from '../entities';
+import type { Category, Expense } from '../entities';
 import { periodRange } from '../periods';
 import type { DataSnapshot } from '../snapshot';
 
 /** The local calendar day an ISO timestamp falls on. */
 export function localDay(iso: string): LocalDate {
   return toLocalDate(new Date(iso));
+}
+
+/**
+ * Whether the person logged `e` themselves. A renewal the app adds for a subscription is not
+ * logged; an expense typed with Repeat is, though it starts that subscription and carries its id.
+ * The two differ by `recurrence`: only the typed one has one.
+ */
+export function isLoggedExpense(e: Expense): boolean {
+  return e.subscriptionId === null || e.recurrence !== null;
 }
 
 /** Something the person entered by hand, and the local day they entered it. */
@@ -17,13 +26,13 @@ export type LoggedEntry = {
 };
 
 /**
- * What the person logged: their expenses (not subscription charges) and their extra income (not
+ * What the person logged: their expenses (not subscription renewals) and their extra income (not
  * salary), oldest first. Each sits on the day it was created, whatever date it carries.
  */
 export function loggedEntries(data: DataSnapshot): LoggedEntry[] {
   const entries: LoggedEntry[] = [];
   for (const e of data.tables.expense) {
-    if (e.subscriptionId === null) {
+    if (isLoggedExpense(e)) {
       entries.push({
         table: 'expense',
         id: e.id,
