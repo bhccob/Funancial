@@ -215,6 +215,46 @@ describe('settling after a write', () => {
   });
 });
 
+describe('overlapping settles', () => {
+  it('announces a gain once when two syncs run together', async () => {
+    // A desktop tab gets `visibilitychange` and `focus` together; Android gets `resume` with it.
+    let today = TODAY;
+    const t = await freshRealStore({ today: () => today });
+    const { store } = t;
+    await store.getState().put('budgetLimit', makeLimit());
+    const gains: NonNullable<AppState['gameGain']>[] = [];
+    store.subscribe((s, prev) => {
+      if (s.gameGain && s.gameGain !== prev.gameGain) gains.push(s.gameGain);
+    });
+
+    today = '2026-10-19'; // the next Monday: last week's limits were kept
+    await Promise.all([store.getState().sync(), store.getState().sync()]);
+
+    expect(gains).toHaveLength(1);
+    expect(gains[0]?.gain.rewards.map((r) => r.title)).toContain(
+      'Stay within your limits this week',
+    );
+    expect(ledgerOf(store).filter((e) => e.key === 'quest:week-limits:2026-10-12')).toHaveLength(1);
+  });
+
+  it('announces no gain from a settle that finishes after the app locked', async () => {
+    const { store, finance } = await setup();
+    await store.getState().setSecret('2468', 'pin');
+    const { gameUpdates: real } =
+      await vi.importActual<typeof import('@/domain/game/engine')>('@/domain/game/engine');
+    // Locks while the settle's ledger write is still on its way to storage.
+    vi.mocked(gameUpdates).mockImplementationOnce((data, ctx) => {
+      queueMicrotask(() => store.getState().lock());
+      return real(data, ctx);
+    });
+
+    await finance.addExpense(lunch);
+
+    expect(store.getState().phase).toBe('locked');
+    expect(store.getState().gameGain).toBeNull();
+  });
+});
+
 describe('restoring a backup', () => {
   it('keeps a restored ledger without paying twice', async () => {
     const { store, finance } = await setup();

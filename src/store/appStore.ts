@@ -236,20 +236,31 @@ export function createAppStore(deps: AppDeps): StoreApi<AppState> {
      * after every write and sync, and safe to run twice, as the ids it writes come from their keys.
      * The game never fails a write, so a failure is logged and the next settle catches up. It writes
      * through `writeRecords`, not `putMany`, so it never settles its own writes. Resolves to whether
-     * it wrote anything.
+     * it wrote anything. A gain is announced only while the app is still unlocked: a lock clears it.
      */
-    async function settle(): Promise<boolean> {
+    async function runSettle(): Promise<boolean> {
       try {
         const { records, gain } = gameUpdates(get().data, gameContext(get(), nowIsoString()));
         if (records.length === 0) return false;
         await writeRecords(records);
-        if (gain && !seedingDemo) set({ gameGain: { id: ++lastGainId, gain } });
+        if (gain && !seedingDemo && get().phase === 'unlocked') {
+          set({ gameGain: { id: ++lastGainId, gain } });
+        }
         return true;
       } catch (e) {
         console.error('Updating the game layer failed', e);
         return false;
       }
     }
+
+    /** The settle last queued. `runSettle` never rejects, so the queue never stalls on a failure. */
+    let settling: Promise<boolean> = Promise.resolve(false);
+    /**
+     * Settles one after another, so each sees what the one before wrote. Two triggers can sync at
+     * once (`visibilitychange` with `focus`, or with Android's resume), and settles computed on the
+     * same data would announce the same gain twice.
+     */
+    const settle = (): Promise<boolean> => (settling = settling.then(runSettle, runSettle));
 
     function requireReal(action: string) {
       if (get().namespace === 'demo') throw new Error(`Demo data can't ${action}.`);
