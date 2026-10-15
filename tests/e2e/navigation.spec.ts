@@ -11,25 +11,29 @@ test('mobile: the bottom bar and the Menu sheet navigate', async ({ page }, test
   await bar.getByRole('link', { name: 'Budget' }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Budget' })).toBeVisible();
 
-  await bar.getByRole('button', { name: 'Menu' }).click();
+  const menuButton = bar.getByRole('button', { name: 'Menu' });
+  await menuButton.click();
   const menu = page.getByRole('dialog', { name: 'Menu' });
   await expect(menu).toBeVisible();
   await menu.getByRole('link', { name: 'Settings' }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible();
   await expect(menu).toBeHidden();
+  // Closing the sheet hands focus back to the button that opened it.
+  await expect(menuButton).toBeFocused();
 });
 
 test('mobile: Escape closes the Menu sheet', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'mobile-chromium', 'mobile layout only');
   await startFresh(page);
-  await page
+  const menuButton = page
     .getByRole('navigation', { name: 'Primary' })
-    .getByRole('button', { name: 'Menu' })
-    .click();
+    .getByRole('button', { name: 'Menu' });
+  await menuButton.click();
   const menu = page.getByRole('dialog', { name: 'Menu' });
   await expect(menu).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(menu).toBeHidden();
+  await expect(menuButton).toBeFocused();
 });
 
 test('desktop: the sidebar navigates and the bottom bar is hidden', async ({ page }, testInfo) => {
