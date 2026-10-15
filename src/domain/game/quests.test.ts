@@ -10,7 +10,7 @@ import {
   makeSubscription,
 } from '@/test/fixtures';
 import { emptySnapshot, type DataSnapshot } from '../snapshot';
-import { currentQuests, questAwards, type QuestView } from './quests';
+import { currentQuests, QUEST_TITLES, questAwards, type QuestView } from './quests';
 import type { GameContext, QuestId } from './types';
 
 // 2026-10-15 is a Thursday, so with weeks starting Monday the current week is 2026-10-12 to 10-18.
@@ -91,6 +91,18 @@ describe('currentQuests', () => {
     expect(view.title).toBe("Log today's spending");
     expect(view.reward).toEqual({ xp: 20, coins: 5 });
     expect(quest(snap({}), 'week-checkin').reward).toEqual({ xp: 40, coins: 10 });
+  });
+
+  it('titles every quest from QUEST_TITLES', () => {
+    const data = snap({
+      budgetLimit: [limitSince('2026-10-01')],
+      profile: [makeProfile()],
+      subscription: [makeSubscription()],
+    });
+    const views = currentQuests(data, ctx);
+    expect(views).toHaveLength(6);
+    for (const view of views) expect(view.title).toBe(QUEST_TITLES[view.id]);
+    expect(Object.keys(QUEST_TITLES)).toEqual(views.map((q) => q.id));
   });
 
   describe('log-today', () => {

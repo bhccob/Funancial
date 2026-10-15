@@ -93,7 +93,7 @@ export function QuestsScreen() {
       </Section>
       <ChallengesSection challenges={game.challenges} />
       <BadgesSection badges={game.badges} frame={game.cosmetics.frame} />
-      <HowToEarn quests={game.quests} streaks={game.streaks} />
+      <HowToEarn streaks={game.streaks} />
       <XpHistory history={game.history} />
     </div>
   );

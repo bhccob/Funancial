@@ -20,7 +20,8 @@ export type QuestView = {
   action: 'no-spend' | 'checkin' | null;
 };
 
-const TITLES: Record<QuestId, string> = {
+/** The title of each quest. */
+export const QUEST_TITLES: Record<QuestId, string> = {
   'log-today': "Log today's spending",
   'week-limits': 'Stay within your limits this week',
   'week-checkin': 'Do your weekly check-in',
@@ -42,7 +43,7 @@ function view(
     id,
     cadence,
     period,
-    title: TITLES[id],
+    title: QUEST_TITLES[id],
     reward: QUEST_REWARDS[id],
     action: null,
     ...progress,
@@ -150,7 +151,7 @@ export function currentQuests(data: DataSnapshot, ctx: GameContext): QuestView[]
 }
 
 function award(id: QuestId, period: string): Award {
-  const title = TITLES[id];
+  const title = QUEST_TITLES[id];
   return {
     key: `quest:${id}:${period}`,
     kind: 'quest',

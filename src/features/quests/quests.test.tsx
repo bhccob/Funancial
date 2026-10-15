@@ -535,9 +535,12 @@ describe('Quests screen: how to earn', () => {
       quests.getByText('Stay within your limits this week — +60 XP, +15 coins'),
     ).toBeInTheDocument();
     expect(quests.getByText('Do your weekly check-in — +40 XP, +10 coins')).toBeInTheDocument();
+    expect(
+      quests.getByText("Reconcile this month's salary — +100 XP, +25 coins"),
+    ).toBeInTheDocument();
+    expect(quests.getByText('Audit your subscriptions — +100 XP, +25 coins')).toBeInTheDocument();
     expect(quests.getByText('Back up your data — +80 XP, +20 coins')).toBeInTheDocument();
-    // Quests that do not apply to this person yet (no salary, no subscriptions) are not listed.
-    expect(quests.getAllByRole('listitem')).toHaveLength(4);
+    expect(quests.getAllByRole('listitem')).toHaveLength(6);
 
     const logging = list('Daily logging streak');
     expect(logging.getByText('7-day streak — +50 XP, +10 coins')).toBeInTheDocument();
@@ -565,6 +568,24 @@ describe('Quests screen: how to earn', () => {
     expect(challenges.getByText('Subscription Audit — +120 XP, +30 coins')).toBeInTheDocument();
     expect(challenges.getByText('30-Day Budget Streak — +400 XP, +100 coins')).toBeInTheDocument();
     expect(challenges.getByText('Emergency Fund Sprint — +250 XP, +60 coins')).toBeInTheDocument();
+  });
+});
+
+describe('Quests screen: how to earn, with nothing set up', () => {
+  it('lists all six quests with their rewards, whether or not they apply yet', () => {
+    // No limit, no salary, no subscription, and a demo that cannot back up: three quests do not apply.
+    renderQuests(() => {}, { namespace: 'demo' });
+    expect(screen.queryByRole('group', { name: 'This month' })).not.toBeInTheDocument();
+
+    const quests = within(within(region('How to earn')).getByRole('group', { name: 'Quests' }));
+    expect(quests.getAllByRole('listitem').map((li) => li.textContent)).toEqual([
+      "Log today's spending — +20 XP, +5 coins",
+      'Stay within your limits this week — +60 XP, +15 coins',
+      'Do your weekly check-in — +40 XP, +10 coins',
+      "Reconcile this month's salary — +100 XP, +25 coins",
+      'Audit your subscriptions — +100 XP, +25 coins',
+      'Back up your data — +80 XP, +20 coins',
+    ]);
   });
 });
 

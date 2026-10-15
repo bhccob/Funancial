@@ -1,7 +1,7 @@
 import { Section } from '@/components/ui/Section';
 import { BADGES } from '@/domain/game/badges';
 import { CHALLENGES } from '@/domain/game/challenges';
-import type { QuestView } from '@/domain/game/quests';
+import { QUEST_TITLES } from '@/domain/game/quests';
 import {
   BADGE_REWARDS,
   CHALLENGE_REWARDS,
@@ -11,8 +11,19 @@ import {
   STREAK_MILESTONES,
 } from '@/domain/game/rules';
 import type { StreakView } from '@/domain/game/streaks';
+import type { QuestId } from '@/domain/game/types';
 import { Group } from './Group';
 import { rewardText } from './rewardText';
+
+/** Every quest, in the order of the day, week and month. */
+const QUEST_ORDER: readonly QuestId[] = [
+  'log-today',
+  'week-limits',
+  'week-checkin',
+  'month-salary',
+  'month-audit',
+  'month-backup',
+];
 
 function Rows({ lines }: { lines: readonly string[] }) {
   return (
@@ -27,16 +38,10 @@ function Rows({ lines }: { lines: readonly string[] }) {
 }
 
 /**
- * What earns XP and coins, written out from the game's own rules. Quests come from the ones that
- * apply to the person now, so each keeps its title.
+ * What earns XP and coins, written out from the game's own rules: every quest, whether or not it
+ * applies to the person yet, and every streak milestone, badge and challenge.
  */
-export function HowToEarn({
-  quests,
-  streaks,
-}: {
-  quests: readonly QuestView[];
-  streaks: readonly StreakView[];
-}) {
+export function HowToEarn({ streaks }: { streaks: readonly StreakView[] }) {
   return (
     <Section title="How to earn">
       <div className="flex flex-col gap-5">
@@ -46,7 +51,11 @@ export function HowToEarn({
           />
         </Group>
         <Group title="Quests">
-          <Rows lines={quests.map((q) => `${q.title} — ${rewardText(QUEST_REWARDS[q.id])}`)} />
+          <Rows
+            lines={QUEST_ORDER.map(
+              (id) => `${QUEST_TITLES[id]} — ${rewardText(QUEST_REWARDS[id])}`,
+            )}
+          />
         </Group>
         {streaks.map((streak) => (
           <Group key={streak.kind} title={`${streak.title} streak`}>
