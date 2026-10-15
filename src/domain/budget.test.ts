@@ -140,6 +140,25 @@ describe('upcomingBills', () => {
   });
 });
 
+describe('upcomingBills for a card with no minimum set', () => {
+  it('bills the whole balance instead of nothing', () => {
+    const d = emptySnapshot();
+    d.tables.profile = [makeProfile({ openingDate: '2026-10-01' })];
+    d.tables.debt = [
+      makeDebt({
+        id: 'c3',
+        name: 'Revolving',
+        openingBalance: 500_00,
+        openingDate: '2026-10-01',
+        payInFull: false,
+        minimumPayment: 0,
+        dueDay: 21,
+      }),
+    ];
+    expect(upcomingBills(d, '2026-10-14').map((b) => b.amount)).toEqual([500_00]);
+  });
+});
+
 describe('reservedTotal', () => {
   it('holds back what is left of reserved limits, never less than zero', () => {
     const d = emptySnapshot();

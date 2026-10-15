@@ -107,6 +107,8 @@ export interface OnboardingInput {
 }
 
 const FUTURE = 'Use today or an earlier date.';
+const PAYS_SUBSCRIPTION =
+  'A subscription is paid with this card. Change how it is paid first, or keep the card.';
 const HAS_HISTORY =
   'This card or loan has history. Delete its expenses and payments first, or keep it.';
 
@@ -225,7 +227,11 @@ export function createFinanceActions(store: StoreApi<AppState>) {
       notFuture(input.date);
       const period = input.source === 'salary' ? monthKey(input.date) : null;
       const expected = state().data.tables.income.find(
-        (i) => i.source === 'salary' && i.status === 'expected' && period && i.period === period,
+        (i) =>
+          i.source === 'salary' &&
+          (i.status === 'expected' || i.status === 'skipped') &&
+          period &&
+          i.period === period,
       );
       const income: Income = expected
         ? { ...expected, ...input, period, status: 'confirmed', updatedAt: nowIso() }
@@ -243,7 +249,23 @@ export function createFinanceActions(store: StoreApi<AppState>) {
       });
     },
 
-    deleteIncome: (id: string) => state().remove('income', id),
+    /** Marks an expected salary as never arrived: it stops counting and sync won't bring it back. */
+    async skipIncome(id: string) {
+      await state().put('income', {
+        ...find('income', id),
+        status: 'skipped',
+        updatedAt: nowIso(),
+      });
+    },
+
+    async deleteIncome(id: string) {
+      const income = find('income', id);
+      // Removing an expected salary would let sync recreate it, so it becomes a skip.
+      if (income.source === 'salary' && income.status === 'expected' && income.period) {
+        return state().put('income', { ...income, status: 'skipped', updatedAt: nowIso() });
+      }
+      await state().remove('income', id);
+    },
 
     async saveSubscription(input: SubscriptionInput) {
       const existing = input.id ? find('subscription', input.id) : null;
@@ -398,10 +420,11 @@ export function createFinanceActions(store: StoreApi<AppState>) {
     },
 
     async deleteDebt(id: string) {
-      const { expense, transaction } = state().data.tables;
+      const { expense, transaction, subscription } = state().data.tables;
       if (expense.some((e) => e.cardId === id) || transaction.some((t) => t.debtId === id)) {
         throw new Error(HAS_HISTORY);
       }
+      if (subscription.some((s) => s.cardId === id)) throw new Error(PAYS_SUBSCRIPTION);
       await state().remove('debt', id);
     },
 
@@ -452,7 +475,16 @@ export function createFinanceActions(store: StoreApi<AppState>) {
     async updateProfile(patch: Partial<Omit<Profile, 'id' | 'createdAt'>>) {
       const profile = state().data.tables.profile[0];
       if (!profile) throw new Error('Finish setting up first.');
-      await state().put('profile', { ...profile, ...patch, updatedAt: nowIso() });
+      const next = { ...profile, ...patch, updatedAt: nowIso() };
+      const was = profile.salary;
+      const now = next.salary;
+      // A new or changed salary only expects pay days after today.
+      if (now && (!was || was.monthlyAmount !== now.monthlyAmount || was.payDay !== now.payDay)) {
+        next.salary = { monthlyAmount: now.monthlyAmount, payDay: now.payDay, since: today() };
+      } else if (now && was) {
+        next.salary = { ...now, ...(was.since ? { since: was.since } : {}) };
+      }
+      await state().put('profile', next);
     },
 
     async updateSettings(patch: Partial<Omit<Settings, 'id' | 'createdAt'>>) {

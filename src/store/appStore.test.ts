@@ -497,3 +497,21 @@ describe('sync', () => {
     );
   });
 });
+
+describe('a sync failure while opening', () => {
+  it('still opens the data instead of claiming storage is unavailable', async () => {
+    const { deps, store } = await freshStore();
+    await store.getState().put('expense', makeExpense({ id: 'e1' }));
+    const again = createAppStore(deps);
+    const failingSync = vi.fn(async () => {
+      throw new Error('QuotaExceededError');
+    });
+    again.setState({ sync: failingSync });
+    const quiet = vi.spyOn(console, 'error').mockImplementation(() => {});
+    await again.getState().boot();
+    quiet.mockRestore();
+    expect(failingSync).toHaveBeenCalled();
+    expect(again.getState().phase).toBe('unlocked');
+    expect(again.getState().data.tables.expense.map((e) => e.id)).toEqual(['e1']);
+  });
+});

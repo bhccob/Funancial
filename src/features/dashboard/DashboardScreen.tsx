@@ -13,7 +13,8 @@ import { monthKey, monthRange } from '@/domain/periods';
 import { cn } from '@/lib/cn';
 import { formatDay, formatMonth, relativeDays } from '@/lib/format';
 import { useApp } from '@/store/AppStoreProvider';
-import { useFinanceView, useMoney, useToday } from '@/store/useFinance';
+import { useAction } from '@/lib/useAction';
+import { useFinanceActions, useFinanceView, useMoney, useToday } from '@/store/useFinance';
 import { ConfirmSalaryDialog } from './ConfirmSalaryDialog';
 
 const sectionLink = 'hover:text-text underline-offset-4 hover:underline';
@@ -107,6 +108,8 @@ export function DashboardScreen() {
   const today = useToday();
   const data = useApp((s) => s.data);
   const [confirming, setConfirming] = useState<Income | null>(null);
+  const { skipIncome } = useFinanceActions();
+  const run = useAction();
 
   const profile = data.tables.profile[0];
   const month = formatMonth(monthKey(today));
@@ -134,13 +137,27 @@ export function DashboardScreen() {
                 key={income.id}
                 tone="info"
                 action={
-                  <Button
-                    size="sm"
-                    aria-label={`Confirm ${m} salary`}
-                    onClick={() => setConfirming(income)}
-                  >
-                    Confirm
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      aria-label={`Didn't arrive (${m} salary)`}
+                      onClick={() =>
+                        void run(() => skipIncome(income.id), {
+                          success: `${m} salary marked as not arrived. It isn't counted.`,
+                        })
+                      }
+                    >
+                      Didn&apos;t arrive
+                    </Button>
+                    <Button
+                      size="sm"
+                      aria-label={`Confirm ${m} salary`}
+                      onClick={() => setConfirming(income)}
+                    >
+                      Confirm
+                    </Button>
+                  </div>
                 }
               >
                 {`Your ${m} salary is expected: ${money(income.amount)}. Did it arrive?`}
@@ -272,7 +289,7 @@ export function DashboardScreen() {
                       <span className="block truncate text-sm font-semibold">{b.name}</span>
                       <span className="text-muted block text-[12.5px]">
                         {card
-                          ? `Due ${formatDay(b.date)} · ${card.payInFull ? 'pay in full' : 'minimum payment'}`
+                          ? `Due ${formatDay(b.date)} · ${card.payInFull || card.minimumPayment <= 0 ? 'full balance' : 'minimum payment'}`
                           : `${formatDay(b.date)} · ${relativeDays(today, b.date)}`}
                       </span>
                     </span>

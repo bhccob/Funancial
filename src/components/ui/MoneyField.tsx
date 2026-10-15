@@ -31,6 +31,7 @@ export function MoneyField({
   const [text, setText] = useState(value === null ? '' : formatMoneyPlain(value, currency));
   const [unreadable, setUnreadable] = useState(false);
   const shownError = error ?? (unreadable ? UNREADABLE : undefined);
+  const symbol = currencySymbol(currency);
   const hintId = hint ? `${inputId}-hint` : undefined;
   const errorId = shownError ? `${inputId}-error` : undefined;
 
@@ -44,7 +45,7 @@ export function MoneyField({
           aria-hidden
           className="text-muted pointer-events-none absolute inset-y-0 left-3 flex items-center text-base font-semibold"
         >
-          {currencySymbol(currency)}
+          {symbol}
         </span>
         <input
           id={inputId}
@@ -55,6 +56,8 @@ export function MoneyField({
           value={text}
           aria-invalid={shownError ? true : undefined}
           aria-describedby={[hintId, errorId].filter(Boolean).join(' ') || undefined}
+          // Room for the symbol whatever its length ("$", "US$", "CHF").
+          style={{ paddingLeft: `calc(${symbol.length}ch + 1.25rem)` }}
           onChange={(e) => {
             setText(e.target.value);
             setUnreadable(false);
@@ -71,7 +74,7 @@ export function MoneyField({
             }
           }}
           className={cn(
-            'text-text h-11 w-full rounded-md border bg-transparent pr-3 pl-9 text-base font-semibold tabular-nums',
+            'text-text h-11 w-full rounded-md border bg-transparent pr-3 text-base font-semibold tabular-nums',
             shownError ? 'border-danger' : 'border-border-strong',
           )}
         />

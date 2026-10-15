@@ -135,7 +135,10 @@ export function createAppStore(deps: AppDeps): StoreApi<AppState> {
       session.repo = createWebRepository(session.db, key);
       const { snapshot, skipped } = await session.repo.loadAll();
       set({ data: snapshot, skipped, phase: 'unlocked' });
-      await get().sync();
+      // The data is open; a failed catch-up (e.g. storage full) retries on the next focus.
+      await get()
+        .sync()
+        .catch((e: unknown) => console.error('Sync after opening failed', e));
     }
 
     function requireReal(action: string) {

@@ -117,7 +117,11 @@ export function upcomingBills(data: DataSnapshot, today: LocalDate): Bill[] {
     bills.push({
       date: nextDueDate(today, debt.dueDay),
       name: debt.name,
-      amount: debt.payInFull ? balance : Math.min(debt.minimumPayment, balance),
+      // Without a minimum on file, the whole balance is what's due.
+      amount:
+        debt.payInFull || debt.minimumPayment <= 0
+          ? balance
+          : Math.min(debt.minimumPayment, balance),
       kind: 'card',
       refId: debt.id,
     });

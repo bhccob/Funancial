@@ -1,5 +1,7 @@
 import { X } from 'lucide-react';
+import { createPortal } from 'react-dom';
 import { cn } from '@/lib/cn';
+import { useTopDialog } from '@/lib/dialogStack';
 import { dismiss, useToasts, type ToastTone } from '@/lib/toast';
 
 const bars: Record<ToastTone, string> = {
@@ -9,10 +11,14 @@ const bars: Record<ToastTone, string> = {
   danger: 'border-l-danger',
 };
 
-/** Toasts float above the bottom tabs on phones and at the bottom center on desktop. */
+/**
+ * Toasts float above the bottom tabs on phones and at the bottom center on desktop. While a
+ * modal dialog is open they render inside it, since the page behind it is inert.
+ */
 export function Toaster() {
   const toasts = useToasts();
-  return (
+  const dialog = useTopDialog();
+  const region = (
     <div
       aria-live="polite"
       className="pointer-events-none fixed inset-x-3 bottom-[calc(150px+env(safe-area-inset-bottom))] z-40 flex flex-col items-center gap-2 md:bottom-8"
@@ -39,4 +45,5 @@ export function Toaster() {
       ))}
     </div>
   );
+  return dialog ? createPortal(region, dialog) : region;
 }

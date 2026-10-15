@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { Banner } from './Banner';
@@ -7,6 +7,8 @@ import { Dialog } from './Dialog';
 import { ErrorBoundary } from './ErrorBoundary';
 import { Section } from './Section';
 import { TextField } from './TextField';
+import { Toaster } from './Toaster';
+import { toast, toastStore } from '@/lib/toast';
 
 describe('Button', () => {
   it('has a quiet danger style with exactly one text colour', () => {
@@ -51,6 +53,21 @@ describe('TextField', () => {
 });
 
 describe('Dialog', () => {
+  it('shows messages inside an open dialog, where they can be read and dismissed', async () => {
+    toastStore.setState({ toasts: [] });
+    render(
+      <>
+        <Dialog open title="Edit card" onClose={() => {}}>
+          <p>Form</p>
+        </Dialog>
+        <Toaster />
+      </>,
+    );
+    act(() => toast('danger', 'This card or loan has history.'));
+    const dialog = screen.getByRole('dialog', { name: 'Edit card' });
+    expect(within(dialog).getByRole('alert')).toHaveTextContent('This card or loan has history.');
+  });
+
   it('is labelled by its title and described by its description', () => {
     render(
       <Dialog open title="Leave demo?" description="Demo data will be deleted." onClose={() => {}}>

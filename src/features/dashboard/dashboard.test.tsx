@@ -10,13 +10,16 @@ import { formatDay, formatMonth } from '@/lib/format';
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
 import { DashboardScreen } from './DashboardScreen';
 
-const actions = vi.hoisted(() => ({ confirmIncome: vi.fn(async () => {}) }));
+const actions = vi.hoisted(() => ({
+  confirmIncome: vi.fn(async () => {}),
+  skipIncome: vi.fn(async () => {}),
+}));
 vi.mock('@/store/useFinance', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/store/useFinance')>()),
   useFinanceActions: () => actions,
 }));
 
-beforeEach(() => actions.confirmIncome.mockClear());
+beforeEach(() => Object.values(actions).forEach((a) => a.mockClear()));
 
 function example(id: string) {
   const found = EXAMPLES.find((e) => e.id === id);
@@ -103,6 +106,15 @@ describe('DashboardScreen salary and freeze', () => {
     expect(within(dialog).getByLabelText('Amount received')).toHaveValue('2,709.68');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Confirm' }));
     expect(actions.confirmIncome).toHaveBeenCalledWith('salary-2026-10', 270968);
+  });
+
+  it('lets a salary that never came be marked as not arrived', async () => {
+    const today = '2026-10-25';
+    renderDashboard(applyRecords(sal.data, dueGenerated(sal.data, today)), today);
+    await userEvent.click(
+      screen.getByRole('button', { name: `Didn't arrive (${october} salary)` }),
+    );
+    expect(actions.skipIncome).toHaveBeenCalledWith('salary-2026-10');
   });
 
   it('explains an active freeze', () => {

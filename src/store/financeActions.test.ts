@@ -300,3 +300,68 @@ describe('subscriptions', () => {
     expect(sub).toMatchObject({ status: 'cancelled', nextRenewal: '2026-10-20' });
   });
 });
+
+describe('expected salary that never arrives', () => {
+  async function paidOnThe5th() {
+    const t = await setup();
+    await t.actions.updateProfile({ salary: { monthlyAmount: 3_100_00, payDay: 5 } });
+    return t;
+  }
+
+  it('a salary set today only expects pay days after today', async () => {
+    const { store } = await paidOnThe5th();
+    await store.getState().sync();
+    expect(store.getState().data.tables.income).toEqual([]);
+    expect(store.getState().data.tables.profile[0]?.salary).toMatchObject({ since: '2026-10-14' });
+  });
+
+  it('marking it as not arrived keeps it out of balances and the banner, for good', async () => {
+    const { store, actions } = await setup();
+    // An October pay day already passed before today, from the original salary.
+    await store.getState().put('profile', {
+      ...makeProfile({ openingDate: '2026-10-01' }),
+      salary: { monthlyAmount: 3_100_00, payDay: 5 },
+    });
+    await store.getState().sync();
+    expect(store.getState().data.tables.income.map((i) => [i.id, i.status])).toEqual([
+      ['salary-2026-10', 'expected'],
+    ]);
+    await actions.deleteIncome('salary-2026-10');
+    await store.getState().sync();
+    expect(store.getState().data.tables.income.map((i) => [i.id, i.status])).toEqual([
+      ['salary-2026-10', 'skipped'],
+    ]);
+    await actions.skipIncome('salary-2026-10');
+    const late = await actions.addIncome({
+      amount: 3_000_00,
+      source: 'salary',
+      label: 'Salary',
+      date: '2026-10-14',
+      bucket: 'cash',
+      note: '',
+    });
+    // It came after all: the skipped month is confirmed rather than doubled.
+    expect(late.id).toBe('salary-2026-10');
+    expect(store.getState().data.tables.income).toHaveLength(1);
+  });
+});
+
+describe('deleting a card a subscription pays with', () => {
+  it('is refused, so later renewals never point at a missing card', async () => {
+    const { store, actions } = await setup();
+    await store.getState().put('debt', makeDebt({ id: 'card-x', name: 'Visa', openingBalance: 0 }));
+    await store.getState().put(
+      'subscription',
+      makeSubscription({
+        id: 'sub-gym',
+        paymentMethod: 'credit_card',
+        cardId: 'card-x',
+        status: 'cancelled',
+      }),
+    );
+    await expect(actions.deleteDebt('card-x')).rejects.toThrow(
+      'A subscription is paid with this card. Change how it is paid first, or keep the card.',
+    );
+    expect(store.getState().data.tables.debt).toHaveLength(1);
+  });
+});

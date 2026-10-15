@@ -175,8 +175,20 @@ export function HistoryScreen() {
           key={i.id}
           title={i.label}
           detail={`${i.source === 'salary' ? 'Salary' : 'Extra income'} · to ${BUCKET[i.bucket]}`}
-          chip={i.status === 'expected' ? 'Expected' : undefined}
-          amount={<Amount tone="in">{`+${money(i.amount)}`}</Amount>}
+          chip={
+            i.status === 'expected'
+              ? 'Expected'
+              : i.status === 'skipped'
+                ? "Didn't arrive"
+                : undefined
+          }
+          amount={
+            i.status === 'skipped' ? (
+              <Amount>{money(0)}</Amount>
+            ) : (
+              <Amount tone="in">{`+${money(i.amount)}`}</Amount>
+            )
+          }
           onDelete={() => setDeleting({ title: i.label, remove: () => deleteIncome(i.id) })}
         />
       );

@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, type ReactNode } from 'react';
+import { pushDialog, removeDialog } from '@/lib/dialogStack';
 
 export interface DialogProps {
   open: boolean;
@@ -20,6 +21,9 @@ export function Dialog({ open, title, description, onClose, children, actions }:
     if (!el) return;
     if (open && !el.open) el.showModal();
     if (!open && el.open) el.close();
+    if (!open) return;
+    pushDialog(el);
+    return () => removeDialog(el);
   }, [open]);
 
   return (

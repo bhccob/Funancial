@@ -83,3 +83,33 @@ describe('expected salary', () => {
     expect(dueGenerated(ex.snapshot({ profile: [late] }), '2026-10-24')).toEqual([]);
   });
 });
+
+describe('expected salary: only for pay you could still be waiting for', () => {
+  const salary = { monthlyAmount: 4_200_00, payDay: 25 };
+
+  it('does not expect pay on the opening day: it is already in the opening cash', () => {
+    const p = ex.profile({ openingDate: '2026-10-25', salary });
+    expect(dueGenerated(ex.snapshot({ profile: [p] }), '2026-10-25')).toEqual([]);
+  });
+
+  it('does not backfill months from before the salary was set', () => {
+    const p = ex.profile({ openingDate: '2026-06-01', salary: { ...salary, since: '2026-10-14' } });
+    expect(dueGenerated(ex.snapshot({ profile: [p] }), '2026-10-14')).toEqual([]);
+    expect(
+      dueGenerated(ex.snapshot({ profile: [p] }), '2026-10-25').map((r) => r.record.id),
+    ).toEqual(['salary-2026-10']);
+  });
+
+  it('keeps a month marked as not arrived from coming back', () => {
+    const p = ex.profile({ openingDate: '2026-09-01', salary });
+    const skipped = ex.income({
+      id: 'salary-2026-09',
+      amount: 4_200_00,
+      date: '2026-09-25',
+      status: 'skipped',
+      period: '2026-09',
+    });
+    const out = dueGenerated(ex.snapshot({ profile: [p], income: [skipped] }), '2026-10-14');
+    expect(out).toEqual([]);
+  });
+});

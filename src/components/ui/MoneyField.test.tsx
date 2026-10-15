@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { expect, it, vi } from 'vitest';
+import { currencySymbol } from '@/domain/money';
 import { MoneyField } from './MoneyField';
 
 function Harness({ onValue }: { onValue(v: number | null): void }) {
@@ -45,4 +46,13 @@ it('shows the currency symbol and starts from a given value', () => {
   render(<MoneyField label="Balance" currency="EUR" value={123456} onChange={() => {}} />);
   expect(screen.getByLabelText('Balance')).toHaveValue('1,234.56');
   expect(screen.getByText('€')).toBeInTheDocument();
+});
+
+it('leaves room for a long currency symbol before the digits', () => {
+  render(<MoneyField label="Short" currency="EUR" value={null} onChange={() => {}} />);
+  render(<MoneyField label="Long" currency="CHF" value={null} onChange={() => {}} />);
+  const pad = (label: string) => screen.getByLabelText(label).style.paddingLeft;
+  const symbolLength = (c: string) => currencySymbol(c).length;
+  expect(pad('Short')).toContain(`${symbolLength('EUR')}ch`);
+  expect(pad('Long')).toContain(`${symbolLength('CHF')}ch`);
 });
