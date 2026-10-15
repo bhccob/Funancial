@@ -10,9 +10,7 @@ Mockup: `design/redesign/2-open.html` (the clickable reference for layout, sizes
 reasons for the change and the screen-by-screen design are in
 `docs/superpowers/specs/2026-10-15-redesign-open-design.md`.
 
-History: this replaces "D · Pro Ledger" (chosen 2026-10-14), which kept the hairline and big-number
-ideas but used a HUD strip, a floating tab bar and KPI rows that the owner found compact and hard to
-read on the phone.
+History: this replaces "D · Pro Ledger" (chosen 2026-10-14), which the owner found compact and hard to read on the phone.
 
 ## Principles
 
@@ -57,11 +55,12 @@ Contrast figures are text on the page background; all text pairs meet WCAG AA 4.
 | `--color-warning` | `#a35f00` | `#f2a93b` | Limit ≥ 80% (5.0:1 light) |
 | `--color-danger` | `#d1373d` | `#ff6b6f` | Limit ≥ 100%, destructive (4.8:1 light) |
 | `--color-focus` | `#7c5cff` | `#9d85ff` | Focus ring (2px + 2px offset) |
-| `--color-chart-1..6` | `#2a78d6 #eb6834 #1baf7a #eda100 #e87ba4 #008300` | `#3987e5 #d95926 #199e70 #c98500 #d55181 #008300` | Categorical chart series, in this fixed order (validated incl. donut wrap-around) |
+| `--color-chart-1..6` | `#2a78d6 #eb6834 #1baf7a #eda100 #e87ba4 #008300` | `#3987e5 #d95926 #199e70 #c98500 #d55181 #008300` | Categorical chart series, in this fixed order (validated incl. donut wrap-around); category slices use 1..5 |
 | `--color-chart-other` | `#868b96` | `#6b7080` | "Other" slices and segments, always (3:1 or better against its page) |
 
 Radii: `--radius-sm 6px` (bars), `--radius-md 10px` (inputs, chips, nav items), `--radius-lg 16px`
-(dialogs, the Menu sheet). Buttons and round actions are pills / circles (`999px`).
+(dialogs). The Menu sheet rounds its top corners with `rounded-t-[30px]`. Buttons and round actions
+are pills / circles (`999px`).
 
 ## Fonts
 
@@ -128,8 +127,11 @@ Fixed in both themes (`src/app/menu.ts`); each holds at least 3:1 against the wh
 
 Small hand-written SVG components in `src/components/charts/`, no chart library.
 
-1. **Category colours** come from `--color-chart-1..5` in a fixed order; "Other" always uses
-   `--color-chart-other`. Colour follows the category, never its rank inside a chart.
+1. **Category colours** are slots `--color-chart-1..5`, taken by position in the chart: the first
+   slice is chart-1, the second chart-2, and so on. "Other" always uses `--color-chart-other`.
+   Identity is carried by the legend text and the tap labels, so a category's colour may differ
+   between Week and Month, or between months. The reason: the palette is validated only in its fixed
+   adjacent order.
 2. **Donuts** show the top 5 categories plus "Other", with a 3px gap between arcs and the total (or
    the chosen slice) in the centre. Two-part splits are bars, not pies.
 3. **Every chart shows exact amounts** on tap or in a legend, and carries a screen-reader label.
@@ -144,8 +146,8 @@ Small hand-written SVG components in `src/components/charts/`, no chart library.
 ## Rules
 
 1. **No boxes on screens.** Sections are separated by whitespace and 1px `--color-border`
-   hairlines. Surfaces (overlay colour, radius-lg, soft shadow) are only for dialogs and the Menu
-   sheet. Welcome and the lock screen keep their one soft `Card`.
+   hairlines. Surfaces (overlay colour, rounded corners, soft shadow) are only for dialogs and the
+   Menu sheet. Welcome and the lock screen keep their one soft `Card`.
 2. **Numbers lead.** Key amounts are big, 800 weight, tabular, `--color-text`. Never colour a whole
    amount except gains/losses (`accent-text` / `danger`) and limit warnings.
 3. **One action colour.** Primary buttons are ink; secondary are hairline outlines; tertiary are
