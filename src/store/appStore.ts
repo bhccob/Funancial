@@ -6,7 +6,7 @@ import {
   exportPlainJson,
   readBackup,
 } from '@/data/backup';
-import { deleteDb, dexieMetaStore, openDb, type FunancialDb, type Namespace } from '@/data/db';
+import { dexieStorage, type Namespace } from '@/data/db';
 import { buildDemoSnapshot } from '@/data/demoSeed';
 import {
   clearVaultSecret,
@@ -21,9 +21,8 @@ import {
   type LockMode,
   type SecretKind,
 } from '@/data/keys';
-import type { MetaStore } from '@/data/meta';
-import type { Repository, SkippedRecord } from '@/data/repository';
-import { createWebRepository } from '@/data/webRepository';
+import { createRepository, type Repository, type SkippedRecord } from '@/data/repository';
+import type { StorageBackend, StorageProvider } from '@/data/storage';
 import { toLocalDate, type LocalDate } from '@/domain/dates';
 import { defaultSettings } from '@/domain/entities';
 import { dueGenerated } from '@/domain/sync';
@@ -43,13 +42,15 @@ export interface AppDeps {
   kdfIterations: number;
   today(): LocalDate;
   now(): number;
-  storage: SafeStorage;
+  /** Small string preferences that survive reloads (which namespace is active). */
+  safeStorage: SafeStorage;
   channel: { post(m: SyncMessage): void };
   /** Whether storage is already persistent. Must not prompt. */
   storageStatus(): Promise<boolean>;
   /** Ask the browser to keep our storage. May prompt; only call after a user action. */
   requestPersistence(): Promise<boolean>;
-  db: { open(ns: Namespace): FunancialDb; remove(ns: Namespace): Promise<void> };
+  /** Where the encrypted records and vault metadata live: IndexedDB on the web. */
+  storage: StorageProvider;
 }
 
 export interface AppState {
@@ -97,8 +98,8 @@ const THROTTLE_MS = 30_000;
 const THROTTLE_KEY = 'throttle';
 type Throttle = { failedAttempts: number; lockedUntil: number | null };
 
-/** Open database + vault for the active namespace. Kept out of state: keys never hit React. */
-type Session = { db: FunancialDb; meta: MetaStore; repo: Repository | null; key: CryptoKey | null };
+/** Open storage backend + vault for the active namespace. Kept out of state: keys never hit React. */
+type Session = { backend: StorageBackend; repo: Repository | null; key: CryptoKey | null };
 
 export function createAppStore(deps: AppDeps): StoreApi<AppState> {
   let session: Session | null = null;
@@ -108,18 +109,19 @@ export function createAppStore(deps: AppDeps): StoreApi<AppState> {
   const activeUntil = (until: number | null) =>
     until !== null && deps.now() < until ? until : null;
   const readNamespace = (): Namespace =>
-    deps.storage.get(NAMESPACE_KEY) === 'demo' ? 'demo' : 'real';
+    deps.safeStorage.get(NAMESPACE_KEY) === 'demo' ? 'demo' : 'real';
 
-  function closeSession() {
-    session?.db.close();
+  /** Best effort: a backend that fails to close leaves nothing to recover. */
+  async function closeSession() {
+    const closing = session;
     session = null;
+    await closing?.backend.close().catch(() => {});
   }
 
   async function openSession(ns: Namespace): Promise<Session> {
-    closeSession();
-    const db = deps.db.open(ns);
-    await db.open();
-    session = { db, meta: dexieMetaStore(db), repo: null, key: null };
+    await closeSession();
+    const backend = await deps.storage.open(ns);
+    session = { backend, repo: null, key: null };
     return session;
   }
 
@@ -132,7 +134,7 @@ export function createAppStore(deps: AppDeps): StoreApi<AppState> {
     async function openWith(key: CryptoKey) {
       if (!session) throw new Error('No open database');
       session.key = key;
-      session.repo = createWebRepository(session.db, key);
+      session.repo = createRepository(session.backend, key);
       const { snapshot, skipped } = await session.repo.loadAll();
       set({ data: snapshot, skipped, phase: 'unlocked' });
       // The data is open; a failed catch-up (e.g. storage full) retries on the next focus.
@@ -173,18 +175,18 @@ export function createAppStore(deps: AppDeps): StoreApi<AppState> {
         });
         try {
           const s = await openSession(namespace);
-          const lockMode = await getLockMode(s.meta);
-          const throttle = await s.meta.get<Throttle>(THROTTLE_KEY);
+          const lockMode = await getLockMode(s.backend.meta);
+          const throttle = await s.backend.meta.get<Throttle>(THROTTLE_KEY);
           set({
             lockMode,
             failedAttempts: throttle?.failedAttempts ?? 0,
             lockedUntil: activeUntil(throttle?.lockedUntil ?? null),
           });
           if (lockMode === null) set({ phase: 'welcome' });
-          else if (lockMode === 'device') await openWith(await unlockVault(s.meta));
+          else if (lockMode === 'device') await openWith(await unlockVault(s.backend.meta));
           else set({ phase: 'locked' });
         } catch {
-          closeSession();
+          await closeSession();
           set({ phase: 'unavailable' });
         }
       },
@@ -193,7 +195,7 @@ export function createAppStore(deps: AppDeps): StoreApi<AppState> {
         if (!session) throw new Error('Call boot() first');
         let key: CryptoKey;
         try {
-          key = await createVault(session.meta);
+          key = await createVault(session.backend.meta);
         } catch (e) {
           // Another tab started first: use its vault rather than replacing it.
           if (e instanceof VaultExistsError) return get().boot();
@@ -212,19 +214,19 @@ export function createAppStore(deps: AppDeps): StoreApi<AppState> {
       async startDemo() {
         // Build first (pure); switch namespace only once the demo database is fully seeded.
         const snapshot = buildDemoSnapshot(deps.today());
-        closeSession();
+        await closeSession();
         try {
-          await deps.db.remove('demo');
+          await deps.storage.remove('demo');
           const s = await openSession('demo');
-          const key = await createVault(s.meta);
-          await createWebRepository(s.db, key).replaceAll(snapshot);
-          deps.storage.set(NAMESPACE_KEY, 'demo');
+          const key = await createVault(s.backend.meta);
+          await createRepository(s.backend, key).replaceAll(snapshot);
+          deps.safeStorage.set(NAMESPACE_KEY, 'demo');
           set({ namespace: 'demo', lockMode: 'device', failedAttempts: 0, lockedUntil: null });
           await openWith(key);
         } catch (e) {
-          closeSession();
-          await deps.db.remove('demo').catch(() => {});
-          deps.storage.remove(NAMESPACE_KEY);
+          await closeSession();
+          await deps.storage.remove('demo').catch(() => {});
+          deps.safeStorage.remove(NAMESPACE_KEY);
           await get().boot();
           throw e;
         }
@@ -232,9 +234,9 @@ export function createAppStore(deps: AppDeps): StoreApi<AppState> {
       },
 
       async exitDemo() {
-        closeSession();
-        await deps.db.remove('demo');
-        deps.storage.remove(NAMESPACE_KEY);
+        await closeSession();
+        await deps.storage.remove('demo');
+        deps.safeStorage.remove(NAMESPACE_KEY);
         deps.channel.post({ type: 'reload', reason: 'namespace' });
         await get().boot();
       },
@@ -247,8 +249,8 @@ export function createAppStore(deps: AppDeps): StoreApi<AppState> {
         if (!s) throw new Error('Call boot() first');
         set({ checking: true });
         try {
-          const key = await unlockVault(s.meta, secret);
-          await s.meta.delete(THROTTLE_KEY);
+          const key = await unlockVault(s.backend.meta, secret);
+          await s.backend.meta.delete(THROTTLE_KEY);
           set({ failedAttempts: 0, lockedUntil: null });
           await openWith(key);
           return 'ok';
@@ -260,7 +262,7 @@ export function createAppStore(deps: AppDeps): StoreApi<AppState> {
               ? { failedAttempts: 0, lockedUntil: deps.now() + THROTTLE_MS }
               : { failedAttempts, lockedUntil: activeUntil(get().lockedUntil) };
           set(next);
-          await s.meta.put(THROTTLE_KEY, next);
+          await s.backend.meta.put(THROTTLE_KEY, next);
           return 'wrong';
         } finally {
           set({ checking: false });
@@ -270,7 +272,7 @@ export function createAppStore(deps: AppDeps): StoreApi<AppState> {
       async verifySecret(secret) {
         if (!session || get().lockMode === 'device') return true;
         try {
-          await unlockVault(session.meta, secret);
+          await unlockVault(session.backend.meta, secret);
           return true;
         } catch (e) {
           if (e instanceof WrongSecretError) return false;
@@ -290,7 +292,9 @@ export function createAppStore(deps: AppDeps): StoreApi<AppState> {
         const problem = validateSecret(secret, kind);
         if (problem) throw new Error(problem);
         const s = unlocked();
-        await setVaultSecret(s.meta, s.key, secret, kind, { iterations: deps.kdfIterations });
+        await setVaultSecret(s.backend.meta, s.key, secret, kind, {
+          iterations: deps.kdfIterations,
+        });
         set({ lockMode: kind });
         deps.channel.post({ type: 'reload', reason: 'secret' });
       },
@@ -298,7 +302,7 @@ export function createAppStore(deps: AppDeps): StoreApi<AppState> {
       async clearSecret() {
         requireReal('be unlocked');
         const s = unlocked();
-        await clearVaultSecret(s.meta, s.key);
+        await clearVaultSecret(s.backend.meta, s.key);
         set({ lockMode: 'device' });
         deps.channel.post({ type: 'reload', reason: 'secret' });
       },
@@ -376,9 +380,9 @@ export function createAppStore(deps: AppDeps): StoreApi<AppState> {
 
       async deleteAllData() {
         const ns = get().namespace;
-        closeSession();
-        await deps.db.remove(ns);
-        deps.storage.remove(NAMESPACE_KEY);
+        await closeSession();
+        await deps.storage.remove(ns);
+        deps.safeStorage.remove(NAMESPACE_KEY);
         deps.channel.post({ type: 'reload', reason: 'delete' });
         await get().boot();
       },
@@ -406,9 +410,9 @@ export const appStore = createAppStore({
   kdfIterations: KDF_ITERATIONS,
   today: () => toLocalDate(new Date()),
   now: () => Date.now(),
-  storage: safeStorage,
+  safeStorage,
   channel: tabChannel(),
   storageStatus: persistentStorageStatus,
   requestPersistence: requestPersistentStorage,
-  db: { open: (ns) => openDb(ns), remove: (ns) => deleteDb(ns) },
+  storage: dexieStorage(),
 });

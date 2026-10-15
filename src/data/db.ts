@@ -1,21 +1,11 @@
 import { Dexie, type Table } from 'dexie';
-import type { TableName } from '@/domain/snapshot';
-import type { Bytes } from './crypto';
 import type { MetaStore } from './meta';
+import type { RecordRow, RecordStore, StorageProvider } from './storage';
 
 /** Real data and demo data live in separate databases so leaving demo can never touch real. */
 export type Namespace = 'real' | 'demo';
 
 export const DEFAULT_DB_PREFIX = 'funancial';
-
-/** One encrypted entity. Only the slot (`table`, `id`) and `updatedAt` are in the clear. */
-export type RecordRow = {
-  table: TableName;
-  id: string;
-  updatedAt: string;
-  iv: Bytes;
-  ciphertext: ArrayBuffer;
-};
 
 export type MetaRow = { key: string; value: unknown };
 
@@ -52,5 +42,35 @@ export function dexieMetaStore(db: FunancialDb): MetaStore {
         return true;
       }),
     delete: (key) => db.meta.delete(key),
+  };
+}
+
+function dexieRecordStore(db: FunancialDb): RecordStore {
+  return {
+    all: () => db.records.toArray(),
+    write: (rows, { replace, dataVersion }) =>
+      db.transaction('rw', db.records, db.meta, async () => {
+        if (replace) await db.records.clear();
+        await db.records.bulkPut(rows);
+        if (dataVersion !== undefined)
+          await db.meta.put({ key: 'dataVersion', value: dataVersion });
+      }),
+    remove: (table, id) => db.records.delete([table, id]),
+  };
+}
+
+/** The web backend: one IndexedDB database per namespace, named `<prefix>-<namespace>`. */
+export function dexieStorage(prefix = DEFAULT_DB_PREFIX): StorageProvider {
+  return {
+    async open(ns) {
+      const db = openDb(ns, prefix);
+      await db.open();
+      return {
+        meta: dexieMetaStore(db),
+        records: dexieRecordStore(db),
+        close: async () => db.close(),
+      };
+    },
+    remove: (ns) => deleteDb(ns, prefix),
   };
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { InvalidBackupError } from '@/data/backup';
-import { deleteDb, openDb, type FunancialDb } from '@/data/db';
+import { dexieStorage } from '@/data/db';
 import { WrongSecretError } from '@/data/keys';
 import type { SyncMessage } from '@/lib/broadcast';
 import type { SafeStorage } from '@/lib/safeStorage';
@@ -25,11 +25,11 @@ function testDeps(overrides: Partial<AppDeps> = {}) {
     kdfIterations: 1_000,
     today: () => '2026-10-14',
     now: () => clock,
-    storage: memorySafeStorage(),
+    safeStorage: memorySafeStorage(),
     channel: { post: (m) => void posts.push(m) },
     storageStatus: async () => true,
     requestPersistence: async () => true,
-    db: { open: (ns) => openDb(ns, prefix), remove: (ns) => deleteDb(ns, prefix) },
+    storage: dexieStorage(prefix),
     ...overrides,
   };
   return { deps, posts, advance: (ms: number) => void (clock += ms) };
@@ -73,8 +73,9 @@ describe('first run', () => {
   });
 
   it('shows the storage-unavailable screen when the database cannot open', async () => {
-    const blocked = { open: () => Promise.reject(new Error('blocked')) } as unknown as FunancialDb;
-    const { deps } = testDeps({ db: { open: () => blocked, remove: async () => {} } });
+    const { deps } = testDeps({
+      storage: { open: () => Promise.reject(new Error('blocked')), remove: async () => {} },
+    });
     const store = createAppStore(deps);
     await store.getState().boot();
     expect(store.getState().phase).toBe('unavailable');
@@ -197,7 +198,7 @@ describe('demo mode', () => {
       lockMode: 'device',
     });
     expect(store.getState().data.tables.expense.length).toBeGreaterThan(100);
-    expect(deps.storage.get('funancial.namespace')).toBe('demo');
+    expect(deps.safeStorage.get('funancial.namespace')).toBe('demo');
 
     await store.getState().exitDemo();
     expect(store.getState()).toMatchObject({ namespace: 'real', phase: 'unlocked' });
@@ -365,7 +366,7 @@ describe('review fixes', () => {
     await expect(store.getState().startDemo()).rejects.toThrow('boom');
     deps.today = () => '2026-10-14';
     expect(store.getState()).toMatchObject({ namespace: 'real', phase: 'unlocked' });
-    expect(deps.storage.get('funancial.namespace')).toBeNull();
+    expect(deps.safeStorage.get('funancial.namespace')).toBeNull();
 
     await store.getState().put('expense', makeExpense({ id: 'after' }));
     const again = await reboot(deps);
@@ -392,19 +393,19 @@ describe('review fixes: demo start failing midway', () => {
   it('rolls back to real data when the demo database cannot be prepared', async () => {
     const { deps, store } = await freshStore();
     await store.getState().put('expense', makeExpense({ id: 'mine' }));
-    const realDb = deps.db;
-    deps.db = {
-      open: (ns) => {
+    const realStorage = deps.storage;
+    deps.storage = {
+      open: async (ns) => {
         if (ns === 'demo') throw new Error('quota exceeded');
-        return realDb.open(ns);
+        return realStorage.open(ns);
       },
-      remove: realDb.remove,
+      remove: realStorage.remove,
     };
     await expect(store.getState().startDemo()).rejects.toThrow('quota exceeded');
     expect(store.getState()).toMatchObject({ namespace: 'real', phase: 'unlocked' });
-    expect(deps.storage.get('funancial.namespace')).toBeNull();
+    expect(deps.safeStorage.get('funancial.namespace')).toBeNull();
     await store.getState().put('expense', makeExpense({ id: 'after' }));
-    deps.db = realDb;
+    deps.storage = realStorage;
     const again = await reboot(deps);
     expect(again.getState().namespace).toBe('real');
     expect(

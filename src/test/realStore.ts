@@ -1,4 +1,4 @@
-import { deleteDb, openDb } from '@/data/db';
+import { dexieStorage } from '@/data/db';
 import type { SyncMessage } from '@/lib/broadcast';
 import type { SafeStorage } from '@/lib/safeStorage';
 import { createAppStore, type AppDeps } from '@/store/appStore';
@@ -7,7 +7,7 @@ import { createAppStore, type AppDeps } from '@/store/appStore';
 export function realStoreDeps(overrides: Partial<AppDeps> = {}) {
   const prefix = `test-${crypto.randomUUID()}`;
   const map = new Map<string, string>();
-  const storage: SafeStorage = {
+  const safeStorage: SafeStorage = {
     get: (k) => map.get(k) ?? null,
     set: (k, v) => (map.set(k, v), true),
     remove: (k) => void map.delete(k),
@@ -17,11 +17,11 @@ export function realStoreDeps(overrides: Partial<AppDeps> = {}) {
     kdfIterations: 1_000,
     today: () => '2026-10-14',
     now: () => Date.parse('2026-10-14T10:00:00.000Z'),
-    storage,
+    safeStorage,
     channel: { post: (m) => void posts.push(m) },
     storageStatus: async () => true,
     requestPersistence: async () => true,
-    db: { open: (ns) => openDb(ns, prefix), remove: (ns) => deleteDb(ns, prefix) },
+    storage: dexieStorage(prefix),
     ...overrides,
   };
   return { deps, posts };
