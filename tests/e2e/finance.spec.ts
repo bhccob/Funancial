@@ -46,10 +46,7 @@ test('a weekly food limit warns at 80% in the motivational tone', async ({ page 
   await expect(
     page.getByText("Food is at 83%. A few careful days and you've got this!"),
   ).toBeVisible();
-  await expect(page.getByRole('progressbar', { name: 'Food · this week' })).toHaveAttribute(
-    'aria-valuenow',
-    '83',
-  );
+  await expect(page.getByRole('img', { name: 'Food · week: 83% used, $20 left' })).toBeVisible();
 });
 
 test('card spending becomes a bill until the card is paid', async ({ page }) => {
@@ -109,7 +106,7 @@ test('setting the actual cash balance records a correction', async ({ page }) =>
   await expect(page.getByText('Balance correction')).toBeVisible();
 
   await page.goto('/');
-  await expect(page.getByRole('region', { name: 'Net worth' })).toContainText('Cash $900.00');
+  await expect(page.getByRole('region', { name: 'Net worth' })).toContainText('Cash $900');
 });
 
 test('a monthly expense also becomes a subscription renewing next month', async ({ page }) => {
