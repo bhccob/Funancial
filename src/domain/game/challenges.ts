@@ -1,7 +1,7 @@
 import { addDays, type LocalDate } from '../dates';
 import type { Challenge, ChallengeKind } from '../entities';
 import type { DataSnapshot } from '../snapshot';
-import { createSpendIndex, type SpendIndex } from './activity';
+import { createSpendIndex, localDay, type SpendIndex } from './activity';
 import { CHALLENGE_REWARDS } from './rules';
 import type { Award, GameContext, Reward } from './types';
 
@@ -162,7 +162,11 @@ function noSpendWeekend(c: Challenge, data: DataSnapshot, ctx: GameContext): Sta
 function subscriptionAudit(c: Challenge, data: DataSnapshot, ctx: GameContext): Standing {
   const active = data.tables.subscription.filter((s) => s.status === 'active');
   const since = Date.parse(c.createdAt);
-  const audited = active.filter((s) => s.auditedAt !== null && Date.parse(s.auditedAt) >= since);
+  // Reviewed in time: marked after the challenge began and no later than its last day.
+  const audited = active.filter(
+    (s) =>
+      s.auditedAt !== null && Date.parse(s.auditedAt) >= since && localDay(s.auditedAt) <= c.end,
+  );
   const won = active.length > 0 && audited.length === active.length;
   return {
     current: audited.length,

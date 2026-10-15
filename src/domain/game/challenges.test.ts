@@ -305,6 +305,30 @@ describe('subscription audit', () => {
     expect(viewOn(audit(), { subscription: [sub] }, '2026-10-21').outcome).toBe('active');
     expect(viewOn(audit(), { subscription: [sub] }, '2026-10-22').outcome).toBe('lost');
   });
+
+  it('does not win on an audit finished after the seven days', () => {
+    // The window is 10-15 to 10-21; every audit is done on 10-23.
+    const late = [
+      makeSubscription({ auditedAt: localIso('2026-10-23') }),
+      makeSubscription({ auditedAt: localIso('2026-10-23') }),
+    ];
+    const view = viewOn(audit(), { subscription: late }, '2026-10-23');
+    expect(outcomeOf(view)).toEqual(['lost', 0, 2]);
+    expect(
+      challengeAwards(snap({ challenge: [audit()], subscription: late }), ctxOn('2026-10-23')),
+    ).toEqual([]);
+  });
+
+  it('wins an audit finished on the last day', () => {
+    const sub = makeSubscription({ auditedAt: localIso('2026-10-21', 23) });
+    expect(outcomeOf(viewOn(audit(), { subscription: [sub] }, '2026-10-21'))).toEqual([
+      'won',
+      1,
+      1,
+    ]);
+    // Still won once the window has closed, because it was done in time.
+    expect(viewOn(audit(), { subscription: [sub] }, '2026-10-23').outcome).toBe('won');
+  });
 });
 
 describe('30-day budget streak', () => {
