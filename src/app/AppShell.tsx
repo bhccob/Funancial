@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Outlet } from 'react-router';
+import { Celebrations } from '@/features/game/Celebrations';
 import { BottomTabs } from './BottomTabs';
 import { DemoBanner } from './DemoBanner';
 import { MoreSheet } from './MoreSheet';
@@ -19,6 +20,7 @@ export function AppShell() {
       <QuickAddButton />
       <BottomTabs className="md:hidden" onMore={() => setMoreOpen(true)} />
       <MoreSheet open={moreOpen} onClose={() => setMoreOpen(false)} />
+      <Celebrations />
     </div>
   );
 }
