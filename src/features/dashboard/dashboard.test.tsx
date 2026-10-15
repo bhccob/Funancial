@@ -414,6 +414,46 @@ describe('DashboardScreen spending donut', () => {
     expect(within(spending).getByText('Food · 7%')).toBeInTheDocument();
   });
 
+  describe('with nothing to show', () => {
+    /** Spent only on the 1st of October: this week is empty, the month is not. */
+    function spentEarlierInTheMonth() {
+      const data = emptySnapshot();
+      data.tables.expense = [
+        makeExpense({ date: '2026-10-01', category: 'rent', amount: 1_200_00 }),
+      ];
+      return data;
+    }
+
+    it('says Nothing spent this week on the Week tab when only earlier weeks have spending', async () => {
+      renderDashboard(spentEarlierInTheMonth(), TODAY);
+      const spending = region('Spending');
+      expect(within(spending).queryByText('No spending yet')).not.toBeInTheDocument();
+      expect(within(spending).queryByText('Nothing spent this week')).not.toBeInTheDocument();
+
+      await userEvent.click(within(spending).getByRole('button', { name: 'Week' }));
+      expect(within(spending).getByText('Nothing spent this week')).toBeInTheDocument();
+      expect(within(spending).queryByText('No spending yet')).not.toBeInTheDocument();
+
+      await userEvent.click(within(spending).getByRole('button', { name: 'Month' }));
+      expect(within(spending).queryByText('Nothing spent this week')).not.toBeInTheDocument();
+    });
+
+    it('keeps No spending yet for a brand-new account, on either tab', async () => {
+      renderDashboard(emptySnapshot(), TODAY);
+      const spending = region('Spending');
+      expect(within(spending).getByText('No spending yet')).toBeInTheDocument();
+      await userEvent.click(within(spending).getByRole('button', { name: 'Week' }));
+      expect(within(spending).getByText('No spending yet')).toBeInTheDocument();
+      expect(within(spending).queryByText('Nothing spent this week')).not.toBeInTheDocument();
+    });
+
+    it('keeps No spending yet on the Month tab of a month with nothing in it', () => {
+      // Spending exists, but in October; today is in November.
+      renderDashboard(spentEarlierInTheMonth(), '2026-11-18');
+      expect(within(region('Spending')).getByText('No spending yet')).toBeInTheDocument();
+    });
+  });
+
   it('clears a tapped slice when the range changes', async () => {
     // A transport expense this week, so the week has two slices: Food and Transport.
     const data = monthData();

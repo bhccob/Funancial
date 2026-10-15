@@ -92,6 +92,11 @@ export function SpendingSection({ expenses, today, weekStartsOn }: SpendingSecti
             onSelect={setSelected}
           />
         </div>
+      ) : range === 'week' && expenses.length > 0 ? (
+        // Spending exists, just not this week: say so instead of "No spending yet".
+        <EmptyState title="Nothing spent this week">
+          Expenses you add this week show up here by category.
+        </EmptyState>
       ) : (
         <EmptyState title="No spending yet">Expenses you add show up here by category.</EmptyState>
       )}
