@@ -210,6 +210,22 @@ describe('MonthLine', () => {
     expect(screen.getByRole('button', { name: /Spent so far/ }).style.flexGrow).toBe('188436');
   });
 
+  it('keeps a tiny segment wide enough to tap beside a huge one', () => {
+    render(
+      <MonthLine
+        segments={[
+          { key: 'spent', label: 'Spent so far: $2,600', amount: 260000, color: 'red' },
+          { key: 'bills', label: 'Bills still to come: $16', amount: 1600, color: 'blue' },
+        ]}
+        selected={null}
+        onSelect={() => {}}
+      />,
+    );
+    // Sized by amount the bills would be about 2px wide; the minimum keeps them tappable.
+    expect(screen.getByRole('button', { name: /Bills still to come/ })).toHaveClass('min-w-2');
+    expect(screen.getByRole('button', { name: /Spent so far/ })).toHaveClass('min-w-2');
+  });
+
   it('shows the track only when nothing is left to show', () => {
     render(
       <MonthLine

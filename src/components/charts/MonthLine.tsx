@@ -30,7 +30,8 @@ export function MonthLine({ segments, selected, onSelect }: MonthLineProps) {
           onClick={() => onSelect(segment.key === selected ? null : segment.key)}
           // The line is only 6px tall; the pseudo-element reaches a 44px-tall touch target.
           className={cn(
-            'relative min-w-0 rounded-full motion-safe:transition-opacity motion-safe:duration-150',
+            // min-w-2: a small segment beside a big one (a $16 bill next to $2,600) stays tappable.
+            'relative min-w-2 rounded-full motion-safe:transition-opacity motion-safe:duration-150',
             'before:absolute before:inset-x-0 before:-inset-y-[19px] before:content-[""]',
             selected !== null && segment.key !== selected && 'opacity-25',
           )}
