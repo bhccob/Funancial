@@ -3,6 +3,7 @@ import { Banner } from '@/components/ui/Banner';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { EraseDialog } from '@/features/system/EraseDialog';
+import { usePlatform } from '@/platform/PlatformProvider';
 import { useApp } from '@/store/AppStoreProvider';
 import { PinPad } from './PinPad';
 
@@ -86,6 +87,7 @@ export function LockScreen() {
   const [forgotOpen, setForgotOpen] = useState(false);
   const [enrolmentChanged, setEnrolmentChanged] = useState(false);
   const checking = useApp((s) => s.checking);
+  const platform = usePlatform();
 
   // A failed or cancelled prompt leaves the PIN pad as it is: nothing to say.
   const askBiometric = useCallback(async () => {
@@ -96,13 +98,32 @@ export function LockScreen() {
     if (result === 'changed') setEnrolmentChanged(true);
   }, [unlockWithBiometric]);
 
-  // Asks once as the lock screen opens; after that, the button asks again.
+  // Asks once, as soon as the lock screen is on screen; after that, the button asks again. The
+  // idle timer can lock the app while it is behind another app, and a prompt started from there
+  // can land over that app, come back cancelled or never finish, so then it waits for the app to
+  // come back (or the page to be shown, whichever is reported first).
   const asked = useRef(false);
   useEffect(() => {
     if (biometric !== 'on' || asked.current) return;
-    asked.current = true;
-    void askBiometric();
-  }, [biometric, askBiometric]);
+    const ask = () => {
+      if (asked.current) return;
+      asked.current = true;
+      void askBiometric();
+    };
+    if (document.visibilityState === 'visible') {
+      ask();
+      return;
+    }
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') ask();
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    const stopResume = platform.onResume(ask);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      stopResume();
+    };
+  }, [biometric, askBiometric, platform]);
 
   const throttled = lockedUntil !== null && expired !== lockedUntil;
   const onCountdownDone = useCallback(() => {
