@@ -283,11 +283,15 @@ describe('DashboardScreen hero', () => {
     await userEvent.click(bills);
     expect(bills).toHaveAttribute('aria-pressed', 'true');
     expect(within(hero).getByText('Bills still to come')).toBeInTheDocument();
-    expect(within(hero).getByText(usdWhole(284_99))).toBeInTheDocument();
+    // A tapped segment shows its exact amount; the idle keys stay in whole units.
+    expect(within(hero).getByText(usd(284_99))).toBeInTheDocument();
+    expect(within(hero).queryByText(usdWhole(284_99))).not.toBeInTheDocument();
+    expect(within(hero).getByText(usdWhole(180_00))).toBeInTheDocument();
     expect(within(hero).queryByText(`spent in ${october}`)).not.toBeInTheDocument();
 
     await userEvent.click(bills);
     expect(within(hero).getByText(`spent in ${october}`)).toBeInTheDocument();
+    expect(within(hero).getByText(usdWhole(1_320_00))).toBeInTheDocument();
     expect(within(hero).queryByText('Bills still to come')).not.toBeInTheDocument();
   });
 

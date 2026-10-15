@@ -17,7 +17,7 @@ const LONG_AMOUNT = 11;
 /**
  * What is available to spend, huge, and under it one thin line for the month: spent so far, bills
  * still to come, and what is left of the monthly limit. Tapping a part of the line names it in the
- * left key.
+ * left key, with its exact amount; the idle keys are in whole units.
  */
 export function HomeHero({ view, today }: { view: FinanceView; today: LocalDate }) {
   const money = useMoney();
@@ -53,7 +53,7 @@ export function HomeHero({ view, today }: { view: FinanceView; today: LocalDate 
       ? { value: whole(line.bills), label: 'bills to come' }
       : { value: whole(line.left), label: 'left in limit' };
   const spentKey = chosen
-    ? { value: whole(chosen.amount), label: chosen.name }
+    ? { value: money(chosen.amount), label: chosen.name }
     : { value: whole(line.spent), label: `spent in ${formatMonth(monthKey(today))}` };
 
   return (
