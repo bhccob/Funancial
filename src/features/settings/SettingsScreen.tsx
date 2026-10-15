@@ -42,7 +42,8 @@ export function SettingsScreen() {
       <PageHeader title="Settings" />
       {!demo && <ProfileSection />}
       <PreferencesSection />
-      {notifier && <RemindersSection notifier={notifier} />}
+      {/* Demo money never schedules reminders, so there is nothing to switch on. */}
+      {notifier && !demo && <RemindersSection notifier={notifier} />}
       <AppearanceSection />
       <SecuritySection />
       <DataSection />

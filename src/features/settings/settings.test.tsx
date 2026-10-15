@@ -675,6 +675,18 @@ describe('Reminders', () => {
     expect(after(section(), screen.getByRole('region', { name: 'Appearance' }))).toBe(true);
   });
 
+  it('has no reminders section in the demo, even on a phone', () => {
+    // Demo money never schedules reminders, so a switch for them would promise nothing.
+    renderWithStore(
+      onPhone(fakeNotifier(), <SettingsScreen />),
+      createStubStore({ namespace: 'demo', data: snapshotWith() }),
+    );
+
+    expect(screen.getByRole('region', { name: 'Preferences' })).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Reminders' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('switch', { name: MASTER })).not.toBeInTheDocument();
+  });
+
   it('has no reminders section on the web', () => {
     // The default platform is the web, which has no notifier.
     const web = renderWithStore(<SettingsScreen />, createStubStore({ data: snapshotWith() }));
