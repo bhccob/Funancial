@@ -167,6 +167,40 @@ describe('upcomingReminders', () => {
     ]);
   });
 
+  it('still nudges on a renewal or pay day when nothing was logged', () => {
+    const today = '2026-10-14';
+    const tonight = ['daily:2026-10-14'];
+    const nudged = (setup: Setup) =>
+      keys(
+        upcomingReminders(build({ reminders: { dailyLog: true }, ...setup }), NOW, {
+          horizonDays: 1,
+        }),
+      );
+
+    // Made by the app, not by the person: a subscription charge, and salary that is expected
+    // (or was marked as never arrived).
+    const charge = makeExpense({ date: today, subscriptionId: 'sub-tv' });
+    expect(nudged({ expenses: [charge] })).toEqual(tonight);
+    expect(nudged({ incomes: [makeIncome({ date: today, status: 'expected' })] })).toEqual(tonight);
+    expect(nudged({ incomes: [makeIncome({ date: today, status: 'skipped' })] })).toEqual(tonight);
+    expect(
+      nudged({
+        expenses: [charge],
+        incomes: [makeIncome({ date: today, status: 'expected' })],
+      }),
+    ).toEqual(tonight);
+
+    // Logged by the person: still counts, alongside the generated ones.
+    expect(nudged({ expenses: [makeExpense({ date: today, subscriptionId: null })] })).toEqual([]);
+    expect(nudged({ incomes: [makeIncome({ date: today, status: 'confirmed' })] })).toEqual([]);
+    expect(
+      nudged({
+        expenses: [charge, makeExpense({ date: today })],
+        incomes: [makeIncome({ date: today, status: 'expected' })],
+      }),
+    ).toEqual([]);
+  });
+
   it('uses the chosen time, and never schedules a moment that is not after now', () => {
     const morning = build({ reminders: { dailyLog: true, dailyTime: '07:30' } });
     expect(keys(upcomingReminders(morning, NOW, { horizonDays: 2 }))).toEqual([

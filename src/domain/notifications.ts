@@ -59,9 +59,10 @@ function* eachDay(from: LocalDate, to: LocalDate): Generator<LocalDate> {
 
 function dailyLog({ data, prefs, today, lastDay }: Context): Reminder[] {
   if (!prefs.dailyLog) return [];
+  // Only what the person logged: a subscription charge or an expected salary appears on its own.
   const loggedToday =
-    data.tables.expense.some((e) => e.date === today) ||
-    data.tables.income.some((i) => i.date === today);
+    data.tables.expense.some((e) => e.date === today && e.subscriptionId === null) ||
+    data.tables.income.some((i) => i.date === today && i.status === 'confirmed');
   const out: Reminder[] = [];
   for (const d of eachDay(today, lastDay)) {
     if (d === today && loggedToday) continue;
