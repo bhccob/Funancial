@@ -22,8 +22,9 @@ export async function createAndroidPlatform(): Promise<Platform> {
     storageStatus: async () => true,
     requestPersistence: async () => true,
     files: androidFiles,
-    onPause: (cb) => listen(() => App.addListener('pause', cb), 'the app going to the background'),
-    onResume: (cb) => listen(() => App.addListener('resume', cb), 'the app coming back'),
+    onPause: (cb) =>
+      listen((run) => App.addListener('pause', run), cb, 'the app going to the background'),
+    onResume: (cb) => listen((run) => App.addListener('resume', run), cb, 'the app coming back'),
     biometric: androidBiometric,
     notifier: createAndroidNotifier(),
   };

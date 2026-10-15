@@ -1,3 +1,4 @@
+import type { ActionPerformed } from '@capacitor/local-notifications';
 import { localDateTime } from '@/domain/dates';
 import type { Reminder } from '@/domain/notifications';
 import { reminderIds } from '../reminderIds';
@@ -132,11 +133,9 @@ export function createAndroidNotifier(): Notifier {
 
     onOpen: (cb) =>
       listen(
-        async () =>
-          (await plugin()).LocalNotifications.addListener(
-            'localNotificationActionPerformed',
-            ({ notification }) => cb(routeOf(notification.extra)),
-          ),
+        async (run) =>
+          (await plugin()).LocalNotifications.addListener('localNotificationActionPerformed', run),
+        ({ notification }: ActionPerformed) => cb(routeOf(notification.extra)),
         'a tapped reminder',
       ),
   };

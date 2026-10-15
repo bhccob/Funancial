@@ -370,6 +370,20 @@ describe('createAndroidNotifier', () => {
       await vi.waitFor(() => expect(remove).toHaveBeenCalledTimes(1));
     });
 
+    it('routes nothing after unsubscribe, even a tap Capacitor had already queued', async () => {
+      const cb = vi.fn();
+      const stop = createAndroidNotifier().onOpen(cb);
+      await vi.waitFor(() => expect(handlers['localNotificationActionPerformed']).toBeDefined());
+
+      // Capacitor removes a listener asynchronously; a tap already on its way still arrives.
+      stop();
+      tap({ managed: true, route: '/subscriptions' });
+      await vi.waitFor(() => expect(remove).toHaveBeenCalledTimes(1));
+      tap({ managed: true, route: '/subscriptions' });
+
+      expect(cb).not.toHaveBeenCalled();
+    });
+
     it('does not follow a route that leaves the app', async () => {
       // The launcher activity is exported, so any app can hand it extras. `//host` and `/\host`
       // are how a browser (and a router built on its URL parser) spells another site.

@@ -5,12 +5,13 @@ import { defaultSettings, type Settings } from '@/domain/entities';
 import { upcomingReminders } from '@/domain/notifications';
 import { emptySnapshot, type DataSnapshot } from '@/domain/snapshot';
 import { toastStore } from '@/lib/toast';
+import { useAutoLock } from '@/features/lock/useAutoLock';
 import { PlatformProvider } from '@/platform/PlatformProvider';
-import type { Notifier, Platform } from '@/platform/types';
-import { createWebPlatform } from '@/platform/web';
+import type { Notifier } from '@/platform/types';
 import type { AppState } from '@/store/appStore';
-import { AppStoreProvider } from '@/store/AppStoreProvider';
+import { AppStoreProvider, useApp } from '@/store/AppStoreProvider';
 import { createStubStore } from '@/test/appStoreStub';
+import { fakeAppLifecycle } from '@/test/fakeAppLifecycle';
 import { fakeNotifier, type FakeNotifier } from '@/test/fakeNotifier';
 import { makeProfile, makeSettings } from '@/test/fixtures';
 import { useReminderSync } from './useReminderSync';
@@ -46,25 +47,6 @@ function dataWith(enabled: boolean, extra: Partial<Settings> = {}) {
   return data;
 }
 
-/** A platform whose resume the test fires by hand. */
-function nativePlatform(notifier: Notifier | null) {
-  const resumed = new Set<() => void>();
-  const platform: Platform = {
-    ...createWebPlatform(),
-    kind: 'android',
-    notifier,
-    onResume: (cb) => {
-      resumed.add(cb);
-      return () => void resumed.delete(cb);
-    },
-  };
-  return {
-    platform,
-    resume: () => act(() => resumed.forEach((cb) => cb())),
-    listeners: () => resumed.size,
-  };
-}
-
 function Probe({ notifier }: { notifier: Notifier | null }) {
   useReminderSync(notifier);
   return null;
@@ -74,7 +56,7 @@ function Probe({ notifier }: { notifier: Notifier | null }) {
 function setup(opts: { data?: DataSnapshot; withoutNotifier?: boolean } = {}) {
   const notifier = fakeNotifier();
   const given = opts.withoutNotifier ? null : notifier;
-  const native = nativePlatform(given);
+  const native = fakeAppLifecycle({ notifier: given });
   const store: StoreApi<AppState> = createStubStore({
     phase: 'unlocked',
     namespace: 'real',
@@ -234,9 +216,73 @@ describe('useReminderSync', () => {
 
     unmount();
 
-    expect(listeners()).toBe(0);
     expect(vi.getTimerCount()).toBe(0);
     await settle();
+    // Capacitor removes a listener asynchronously.
+    expect(listeners()).toBe(0);
     expect(notifier.replace).not.toHaveBeenCalled();
+  });
+
+  it('schedules nothing from a locked app, whose data is gone', async () => {
+    // Should anything wake it between the lock and the unmount, the locked state holds no data,
+    // and scheduling from that would cancel every reminder until the next unlock.
+    const { notifier, store, resume } = setup();
+    await settle();
+    expect(notifier.replace).toHaveBeenCalledTimes(1);
+
+    act(() => store.setState({ phase: 'locked', data: emptySnapshot() }));
+    resume();
+    await settle();
+
+    expect(notifier.replace).toHaveBeenCalledTimes(1);
+  });
+});
+
+/** Root's unlocked app, as far as reminders go: auto-lock listens first, then the sync. */
+function UnlockedApp({ notifier }: { notifier: Notifier }) {
+  useAutoLock(1);
+  useReminderSync(notifier);
+  return null;
+}
+
+/** Mounts the unlocked app only while unlocked, as Root does, so a lock unmounts it. */
+function LockingRoot({ notifier }: { notifier: Notifier }) {
+  const unlocked = useApp((s) => s.phase === 'unlocked');
+  return unlocked ? <UnlockedApp notifier={notifier} /> : null;
+}
+
+describe('useReminderSync when coming back locks the app', () => {
+  it('leaves the reminders scheduled', async () => {
+    const notifier = fakeNotifier();
+    const native = fakeAppLifecycle({ notifier });
+    const store = createStubStore({
+      phase: 'unlocked',
+      namespace: 'real',
+      lockMode: 'pin',
+      data: dataWith(true),
+      today: '2026-10-14',
+    });
+    const lock = vi.fn(() => store.setState({ phase: 'locked', data: emptySnapshot() }));
+    store.setState({ lock });
+    render(
+      <PlatformProvider platform={native.platform}>
+        <AppStoreProvider store={store}>
+          <LockingRoot notifier={notifier} />
+        </AppStoreProvider>
+      </PlatformProvider>,
+    );
+    await settle();
+    expect(notifier.replace).toHaveBeenCalledTimes(1);
+
+    native.pause();
+    vi.setSystemTime(Date.now() + 61_000);
+    // Auto-lock's message locks the app and unmounts the sync; the sync's own message, queued
+    // with it, still arrives.
+    native.resume();
+    await settle();
+
+    expect(lock).toHaveBeenCalledTimes(1);
+    expect(replaced(notifier)).toHaveLength(1);
+    expect(replaced(notifier)[0]?.length).toBeGreaterThan(0);
   });
 });

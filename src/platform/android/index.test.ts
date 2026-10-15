@@ -53,6 +53,27 @@ describe('createAndroidPlatform', () => {
     await vi.waitFor(() => expect(app.remove).toHaveBeenCalledTimes(1));
   });
 
+  it.each([
+    ['onResume', 'resume'],
+    ['onPause', 'pause'],
+  ] as const)(
+    '%s runs nothing after unsubscribe, even a "%s" Capacitor had already queued',
+    async (method, event) => {
+      const platform = await createAndroidPlatform();
+      const cb = vi.fn();
+      const stop = platform[method](cb);
+      await vi.waitFor(() => expect(app.handlers[event]).toBeDefined());
+
+      // Removing a listener takes a round trip; one message per listener was queued before it.
+      stop();
+      app.handlers[event]?.();
+      await vi.waitFor(() => expect(app.remove).toHaveBeenCalledTimes(1));
+      app.handlers[event]?.();
+
+      expect(cb).not.toHaveBeenCalled();
+    },
+  );
+
   it.each(['onResume', 'onPause'] as const)(
     '%s logs a listener that cannot be added or removed instead of rejecting unhandled',
     async (method) => {

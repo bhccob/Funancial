@@ -24,9 +24,15 @@ export interface Platform {
   files: {
     save(fileName: string, text: string, mime: string): Promise<'saved' | 'cancelled'>;
   };
-  /** Runs `cb` each time the app goes to the background. Returns an unsubscribe. */
+  /**
+   * Runs `cb` each time the app goes to the background. Returns an unsubscribe, after which `cb`
+   * never runs, not even for an event that was already on its way.
+   */
   onPause(cb: () => void): () => void;
-  /** Runs `cb` each time the app comes back to the foreground. Returns an unsubscribe. */
+  /**
+   * Runs `cb` each time the app comes back to the foreground. Returns an unsubscribe, after which
+   * `cb` never runs, not even for an event that was already on its way.
+   */
   onResume(cb: () => void): () => void;
   /** Fingerprint or face unlock, where the device has it: `null` on the web. */
   biometric: BiometricVault | null;
@@ -55,6 +61,9 @@ export interface Notifier {
   replace(reminders: Reminder[]): Promise<void>;
   /** One reminder a minute from now, to check they arrive. */
   sendTest(): Promise<void>;
-  /** Runs `cb` with the screen a tapped reminder points at. Returns an unsubscribe. */
+  /**
+   * Runs `cb` with the screen a tapped reminder points at. Returns an unsubscribe, after which
+   * `cb` never runs, not even for a tap that was already on its way.
+   */
   onOpen(cb: (route: string) => void): () => void;
 }

@@ -33,8 +33,11 @@ export function useReminderSync(notifier: Notifier | null): void {
 
     const sync = async () => {
       clearTimeout(timer);
+      const state = store.getState();
+      // A locked app holds no data, so it would schedule nothing and cancel every reminder.
+      if (state.phase !== 'unlocked') return;
       try {
-        await notifier.replace(remindersFor(store.getState()));
+        await notifier.replace(remindersFor(state));
       } catch (e) {
         console.error('Could not schedule reminders', e);
       }

@@ -1,3 +1,4 @@
+import type { BackButtonListenerEvent } from '@capacitor/app';
 import { SystemBars, SystemBarsStyle } from '@capacitor/core';
 import { topDialog } from '@/lib/dialogStack';
 import { onThemeApplied } from '@/lib/theme';
@@ -16,17 +17,17 @@ export async function installShell(): Promise<void> {
     const { App } = await import('@capacitor/app');
 
     listen(
-      () =>
-        App.addListener('backButton', ({ canGoBack }) => {
-          handleBack(canGoBack, {
-            topDialog,
-            back: () => history.back(),
-            minimize: () =>
-              void App.minimizeApp().catch((e: unknown) =>
-                console.error('Could not send the app to the background', e),
-              ),
-          });
-        }),
+      (run) => App.addListener('backButton', run),
+      ({ canGoBack }: BackButtonListenerEvent) => {
+        handleBack(canGoBack, {
+          topDialog,
+          back: () => history.back(),
+          minimize: () =>
+            void App.minimizeApp().catch((e: unknown) =>
+              console.error('Could not send the app to the background', e),
+            ),
+        });
+      },
       'the back button',
     );
 
