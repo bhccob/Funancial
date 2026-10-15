@@ -35,4 +35,24 @@ describe('createWebPlatform', () => {
     expect(resumed).toHaveBeenCalledTimes(1);
     visibility.mockRestore();
   });
+
+  it('reports a pause when the page is hidden', () => {
+    const platform = createWebPlatform();
+    const paused = vi.fn();
+    const stop = platform.onPause(paused);
+    const visibility = vi.spyOn(document, 'visibilityState', 'get');
+
+    visibility.mockReturnValue('visible');
+    document.dispatchEvent(new Event('visibilitychange'));
+    expect(paused).not.toHaveBeenCalled();
+
+    visibility.mockReturnValue('hidden');
+    document.dispatchEvent(new Event('visibilitychange'));
+    expect(paused).toHaveBeenCalledTimes(1);
+
+    stop();
+    document.dispatchEvent(new Event('visibilitychange'));
+    expect(paused).toHaveBeenCalledTimes(1);
+    visibility.mockRestore();
+  });
 });

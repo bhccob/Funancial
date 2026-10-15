@@ -24,14 +24,26 @@ export function setThemePreference(preference: ThemePreference): void {
   applyCurrent?.();
 }
 
+const themeListeners = new Set<(dark: boolean) => void>();
+
+/**
+ * Runs `cb` with whether the theme is dark each time it is applied to the page, and once for the
+ * theme already on it (the Android shell starts after the first one). Returns an unsubscribe.
+ */
+export function onThemeApplied(cb: (dark: boolean) => void): () => void {
+  themeListeners.add(cb);
+  const current = document.documentElement.dataset.theme;
+  if (current) cb(current === 'dark');
+  return () => void themeListeners.delete(cb);
+}
+
 /** Applies the theme to <html data-theme> and follows OS changes. Returns an unsubscribe. */
 export function initTheme(): () => void {
   const media = globalThis.matchMedia?.(DARK_QUERY);
   const apply = () => {
-    document.documentElement.dataset.theme = resolveTheme(
-      getThemePreference(),
-      media?.matches ?? false,
-    );
+    const theme = resolveTheme(getThemePreference(), media?.matches ?? false);
+    document.documentElement.dataset.theme = theme;
+    themeListeners.forEach((cb) => cb(theme === 'dark'));
   };
   apply();
   applyCurrent = apply;

@@ -1,16 +1,30 @@
 import { TriangleAlert } from 'lucide-react';
+import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { usePlatform } from '@/platform/PlatformProvider';
+
+const COPY = {
+  web: {
+    heading: "Funancial can't save data here",
+    body: 'Your browser is blocking storage (this can happen in private windows). Open Funancial in a normal window to continue.',
+  },
+  android: {
+    heading: "Funancial can't open its storage",
+    body: "Something went wrong opening Funancial's encrypted storage on this phone. Close Funancial completely and open it again. Your data stays on this phone.",
+  },
+};
 
 export function StorageUnavailable() {
+  const { heading, body } = COPY[usePlatform().kind];
   return (
     <main className="grid min-h-dvh place-items-center px-4">
       <Card className="flex max-w-md flex-col gap-3">
         <TriangleAlert aria-hidden className="text-warning size-8" strokeLinecap="square" />
-        <h1 className="text-2xl font-extrabold tracking-tight">Funancial can't save data here</h1>
-        <p className="text-muted">
-          Your browser is blocking storage (this can happen in private windows). Open Funancial in a
-          normal window to continue.
-        </p>
+        <h1 className="text-2xl font-extrabold tracking-tight">{heading}</h1>
+        <p className="text-muted">{body}</p>
+        <Button className="self-start" onClick={() => window.location.reload()}>
+          Try again
+        </Button>
       </Card>
     </main>
   );

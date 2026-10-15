@@ -24,6 +24,15 @@ export const webFiles: Platform['files'] = {
   save: async (fileName, text, mime) => downloadText(fileName, text, mime),
 };
 
+/** Runs `cb` each time the page's visibility becomes `state`. Returns an unsubscribe. */
+function onVisibility(state: DocumentVisibilityState, cb: () => void): () => void {
+  const onChange = () => {
+    if (document.visibilityState === state) cb();
+  };
+  document.addEventListener('visibilitychange', onChange);
+  return () => document.removeEventListener('visibilitychange', onChange);
+}
+
 /** The browser: IndexedDB, a non-extractable device key, downloads. */
 export function createWebPlatform(): Platform {
   return {
@@ -33,12 +42,7 @@ export function createWebPlatform(): Platform {
     storageStatus: persistentStorageStatus,
     requestPersistence: requestPersistentStorage,
     files: webFiles,
-    onResume(cb) {
-      const onVisibility = () => {
-        if (document.visibilityState === 'visible') cb();
-      };
-      document.addEventListener('visibilitychange', onVisibility);
-      return () => document.removeEventListener('visibilitychange', onVisibility);
-    },
+    onPause: (cb) => onVisibility('hidden', cb),
+    onResume: (cb) => onVisibility('visible', cb),
   };
 }

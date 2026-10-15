@@ -2,6 +2,8 @@ import { storedKeyring } from '@/data/keyring';
 import { sqliteStorage } from '@/data/sqliteStorage';
 import type { Platform } from '../types';
 import { webFiles } from '../web';
+import { listen } from './listen';
+import { installShell } from './shell';
 import { capacitorSqlDriver } from './sqlite';
 
 /**
@@ -10,6 +12,7 @@ import { capacitorSqlDriver } from './sqlite';
  */
 export async function createAndroidPlatform(): Promise<Platform> {
   const [{ App }, driver] = await Promise.all([import('@capacitor/app'), capacitorSqlDriver()]);
+  await installShell();
   return {
     kind: 'android',
     storage: sqliteStorage(driver),
@@ -18,9 +21,7 @@ export async function createAndroidPlatform(): Promise<Platform> {
     requestPersistence: async () => true,
     // Downloads until the share sheet arrives.
     files: webFiles,
-    onResume(cb) {
-      const listener = App.addListener('resume', cb);
-      return () => void listener.then((l) => l.remove());
-    },
+    onPause: (cb) => listen(() => App.addListener('pause', cb), 'the app going to the background'),
+    onResume: (cb) => listen(() => App.addListener('resume', cb), 'the app coming back'),
   };
 }

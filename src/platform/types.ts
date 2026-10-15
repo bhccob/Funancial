@@ -17,6 +17,8 @@ export interface Platform {
   requestPersistence(): Promise<boolean>;
   /** Hand a file to the person: a download on the web. */
   files: { save(fileName: string, text: string, mime: string): Promise<void> };
+  /** Runs `cb` each time the app goes to the background. Returns an unsubscribe. */
+  onPause(cb: () => void): () => void;
   /** Runs `cb` each time the app comes back to the foreground. Returns an unsubscribe. */
   onResume(cb: () => void): () => void;
 }
