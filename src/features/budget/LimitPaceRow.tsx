@@ -67,7 +67,7 @@ export function LimitPaceRow({ status, progress, onEdit }: LimitPaceRowProps) {
         <span
           aria-hidden="true"
           data-pace-mark
-          className="bg-text absolute -top-1 -bottom-1 -ml-px w-0.5 rounded-sm opacity-45"
+          className="bg-text pointer-events-none absolute -top-1 -bottom-1 -ml-px w-0.5 rounded-sm opacity-45"
           style={{ left: `${Math.round(progress * 100)}%` }}
         />
       </div>

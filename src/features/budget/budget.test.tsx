@@ -231,6 +231,12 @@ describe('BudgetScreen', () => {
     expect(paceMark('Food · weekly')).toHaveStyle({ left: '57%' });
   });
 
+  it('lets taps pass through the pace mark, which reaches past the bar toward the Edit button', () => {
+    renderBudget();
+    expect(paceMark('Overall · monthly')).toHaveClass('pointer-events-none');
+    expect(paceMark('Food · weekly')).toHaveClass('pointer-events-none');
+  });
+
   it('says on pace when use is within five points of the period', () => {
     const data = ledger();
     data.tables.budgetLimit = [
