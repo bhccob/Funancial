@@ -123,6 +123,7 @@ function BackupDialog({ open, onClose }: { open: boolean; onClose(): void }) {
 
 function RestoreForm() {
   const restoreBackup = useApp((s) => s.restoreBackup);
+  const platform = usePlatform();
   const [file, setFile] = useState<File | null>(null);
   const [pass, setPass] = useState('');
   const [confirming, setConfirming] = useState(false);
@@ -152,7 +153,9 @@ function RestoreForm() {
         <input
           id={fileId}
           type="file"
-          accept=".funbak"
+          // Android's file chooser crashes on an extension with no MIME type, and `.funbak` has
+          // none. There every file is offered; `restoreBackup` rejects one that isn't a backup.
+          accept={platform.kind === 'web' ? '.funbak' : undefined}
           onChange={(e) => setFile(e.target.files?.[0] ?? null)}
           className="file:border-border-strong file:bg-surface text-sm file:mr-3 file:rounded-md file:border-2 file:px-3 file:py-2 file:font-bold"
         />

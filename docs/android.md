@@ -91,8 +91,13 @@ using that port makes Vite pick a different one.
 1. On the computer, in the browser version, open Settings and choose Create encrypted backup. Pick a
    passphrase you will remember, and save the `.funbak` file.
 2. Send the file to the phone, for example through Google Drive or Files.
-3. On the phone, open Settings, pick the backup file under Restore from backup, type its passphrase,
-   and tap Restore. This replaces what is on the phone.
+3. If the app on the phone is new, open it, tap Start with my real data, and finish the setup.
+   Settings, where the restore is, only opens after that. The restore replaces your setup answers,
+   so quick ones will do. The lock you choose here is the one the phone keeps.
+4. On the phone, open More, then Settings. Under Restore from backup, tap Backup file and pick the
+   `.funbak` file (the phone lists every file, so pick the right one), then type its passphrase and
+   tap Restore. The app asks you to confirm, because this replaces all data on the phone. Tap
+   Restore again.
 
 ## Good to know
 

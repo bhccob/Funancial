@@ -361,6 +361,17 @@ describe('Data', () => {
     );
   });
 
+  it('narrows the backup file picker to .funbak on the web only', () => {
+    // Android's file chooser crashes on an extension it has no MIME type for, and `.funbak` has
+    // none. On the phone the picker shows every file; the restore rejects anything else.
+    const web = renderWithStore(<SettingsScreen />, createStubStore({ data: snapshotWith() }));
+    expect(screen.getByLabelText('Backup file')).toHaveAttribute('accept', '.funbak');
+    web.unmount();
+
+    renderWithStore(onPhone(null, <SettingsScreen />), createStubStore({ data: snapshotWith() }));
+    expect(screen.getByLabelText('Backup file')).not.toHaveAttribute('accept');
+  });
+
   it('warns before exporting an unprotected copy', async () => {
     const { store } = renderWithStore(
       <SettingsScreen />,
