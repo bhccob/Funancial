@@ -1,7 +1,8 @@
 import { Capacitor } from '@capacitor/core';
 import { StrictMode } from 'react';
-import { createRoot } from 'react-dom/client';
+import type { Root as ReactRoot } from 'react-dom/client';
 import { Root } from '@/app/Root';
+import { startApp } from '@/app/startApp';
 import { KDF_ITERATIONS } from '@/data/keys';
 import { toLocalDate } from '@/domain/dates';
 import { tabChannel } from '@/lib/broadcast';
@@ -14,7 +15,7 @@ import { createAppStore } from '@/store/appStore';
 import { AppStoreProvider } from '@/store/AppStoreProvider';
 import '@/styles/index.css';
 
-async function start() {
+async function start(root: ReactRoot) {
   initTheme();
 
   const platform = Capacitor.isNativePlatform()
@@ -47,10 +48,7 @@ async function start() {
   // The WebView may not report visibility when the app comes back from the background.
   platform.onResume(sync);
 
-  const container = document.getElementById('root');
-  if (!container) throw new Error('Missing #root element');
-
-  createRoot(container).render(
+  root.render(
     <StrictMode>
       <PlatformProvider platform={platform}>
         <AppStoreProvider store={appStore}>
@@ -63,4 +61,7 @@ async function start() {
   void appStore.getState().boot();
 }
 
-start().catch((e: unknown) => console.error('Starting Funancial failed', e));
+const container = document.getElementById('root');
+if (!container) throw new Error('Missing #root element');
+
+void startApp(container, start);
