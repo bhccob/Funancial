@@ -6,14 +6,13 @@ import {
   exportPlainJson,
   readBackup,
 } from '@/data/backup';
-import { dexieStorage, type Namespace } from '@/data/db';
+import type { Namespace } from '@/data/db';
 import { buildDemoSnapshot } from '@/data/demoSeed';
-import { browserKeyring, type DeviceKeyring } from '@/data/keyring';
+import type { DeviceKeyring } from '@/data/keyring';
 import {
   clearVaultSecret,
   createVault,
   getLockMode,
-  KDF_ITERATIONS,
   setVaultSecret,
   unlockVault,
   validateSecret,
@@ -24,7 +23,7 @@ import {
 } from '@/data/keys';
 import { createRepository, type Repository, type SkippedRecord } from '@/data/repository';
 import type { StorageBackend, StorageProvider } from '@/data/storage';
-import { toLocalDate, type LocalDate } from '@/domain/dates';
+import type { LocalDate } from '@/domain/dates';
 import { defaultSettings } from '@/domain/entities';
 import { dueGenerated } from '@/domain/sync';
 import {
@@ -34,8 +33,8 @@ import {
   type TableName,
   type TableRecord,
 } from '@/domain/snapshot';
-import { tabChannel, type SyncMessage } from '@/lib/broadcast';
-import { safeStorage, type SafeStorage } from '@/lib/safeStorage';
+import type { SyncMessage } from '@/lib/broadcast';
+import type { SafeStorage } from '@/lib/safeStorage';
 
 export type Phase = 'booting' | 'unavailable' | 'welcome' | 'locked' | 'unlocked';
 
@@ -50,9 +49,12 @@ export interface AppDeps {
   storageStatus(): Promise<boolean>;
   /** Ask the browser to keep our storage. May prompt; only call after a user action. */
   requestPersistence(): Promise<boolean>;
-  /** Where the encrypted records and vault metadata live: IndexedDB on the web. */
+  /** Where the encrypted records and vault metadata live: IndexedDB on the web, SQLCipher on Android. */
   storage: StorageProvider;
-  /** Where the vault's device-mode key lives: a non-extractable key in IndexedDB on the web. */
+  /**
+   * Where the vault's device-mode key lives: a non-extractable key in IndexedDB on the web, its
+   * bytes inside the encrypted database on Android.
+   */
   keyring: DeviceKeyring;
 }
 
@@ -395,31 +397,3 @@ export function createAppStore(deps: AppDeps): StoreApi<AppState> {
     };
   });
 }
-
-async function persistentStorageStatus(): Promise<boolean> {
-  try {
-    return (await navigator.storage?.persisted?.()) ?? false;
-  } catch {
-    return false;
-  }
-}
-
-async function requestPersistentStorage(): Promise<boolean> {
-  try {
-    return (await navigator.storage?.persist?.()) ?? false;
-  } catch {
-    return false;
-  }
-}
-
-export const appStore = createAppStore({
-  kdfIterations: KDF_ITERATIONS,
-  today: () => toLocalDate(new Date()),
-  now: () => Date.now(),
-  safeStorage,
-  channel: tabChannel(),
-  storageStatus: persistentStorageStatus,
-  requestPersistence: requestPersistentStorage,
-  storage: dexieStorage(),
-  keyring: browserKeyring,
-});
