@@ -13,6 +13,8 @@ export interface DonutProps {
   formatAmount(minor: number): string;
   /** The centre while nothing is selected, and for an empty donut. */
   idle: { value: string; label: string };
+  /** A small label over the centre figure, kept while a slice is selected ("Spent"). */
+  caption?: string;
   selected: number | null;
   onSelect(index: number | null): void;
 }
@@ -23,6 +25,7 @@ export function Donut({
   thickness,
   formatAmount,
   idle,
+  caption,
   selected,
   onSelect,
 }: DonutProps) {
@@ -98,6 +101,11 @@ export function Donut({
         ))}
       </svg>
       <div className="pointer-events-none absolute inset-0 grid place-content-center px-2 text-center">
+        {caption && (
+          <span className={cn('text-muted font-bold', big ? 'text-[13px]' : 'text-xs')}>
+            {caption}
+          </span>
+        )}
         <b className={cn('font-extrabold', big ? 'text-[28px]' : 'text-[19px]')}>
           {chosen ? formatAmount(chosen.amount) : idle.value}
         </b>

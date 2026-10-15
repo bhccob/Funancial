@@ -95,6 +95,31 @@ describe('Donut', () => {
     expect(screen.getByText('October')).toBeInTheDocument();
   });
 
+  it('puts a small caption over the centre figure, selected or not', () => {
+    const { rerender } = donut({ caption: 'Spent' });
+    expect(screen.getByText('Spent')).toBeInTheDocument();
+    expect(screen.getByText('$1,875')).toBeInTheDocument();
+    rerender(
+      <Donut
+        slices={SLICES}
+        size={150}
+        thickness={18}
+        formatAmount={formatAmount}
+        idle={idle}
+        caption="Spent"
+        selected={1}
+        onSelect={() => {}}
+      />,
+    );
+    expect(screen.getByText('Spent')).toBeInTheDocument();
+    expect(screen.getByText('Food · 27%')).toBeInTheDocument();
+  });
+
+  it('has no caption unless asked for one', () => {
+    donut();
+    expect(screen.queryByText('Spent')).not.toBeInTheDocument();
+  });
+
   it('shows the selected slice in the centre and fades the others', () => {
     const { container } = donut({ selected: 1 });
     expect(screen.getByText('$500.00')).toBeInTheDocument();

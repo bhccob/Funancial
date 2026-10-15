@@ -34,7 +34,7 @@ const available = (page: Page) => page.getByRole('region', { name: 'Available to
 test('a weekly food limit warns at 80% in the motivational tone', async ({ page }) => {
   await start(page);
   await page.goto('/budget');
-  await page.getByRole('button', { name: 'Add limit' }).click();
+  await page.getByRole('button', { name: 'Add a limit' }).click();
   const dialog = page.getByRole('dialog', { name: 'Add a limit' });
   await dialog.getByRole('radio', { name: 'One category' }).click();
   await dialog.getByRole('radio', { name: 'Weekly' }).click();
