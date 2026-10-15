@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { emptySnapshot } from '@/domain/snapshot';
-import { makeExpense, makeGoal } from '@/test/fixtures';
-import { encryptRecord, generateDataKey } from './crypto';
+import { makeExpense, makeGoal, makeSubscription } from '@/test/fixtures';
+import { decryptRecord, encryptRecord, generateDataKey } from './crypto';
 import { deleteDb, dexieMetaStore, openDb, type FunancialDb, type Namespace } from './db';
 import { createVault, getLockMode, unlockVault } from './keys';
 import { createWebRepository } from './webRepository';
@@ -127,5 +127,49 @@ describe('web repository', () => {
     expect(await getLockMode(meta)).toBe('device');
     const repo = createWebRepository(second, await unlockVault(meta));
     expect((await repo.loadAll()).snapshot.tables.expense.map((e) => e.id)).toEqual(['e1']);
+  });
+});
+
+describe('web repository: schema v2', () => {
+  it('migrates v1 rows on load and stamps dataVersion', async () => {
+    const db = testDb();
+    const key = await generateDataKey();
+    const v1 = { ...makeSubscription({ id: 's1', nextRenewal: '2026-11-30' }) } as Record<
+      string,
+      unknown
+    >;
+    delete v1.anchorDay;
+    await db.records.put({
+      table: 'subscription',
+      id: 's1',
+      updatedAt: String(v1.updatedAt),
+      ...(await encryptRecord(key, 'subscription:s1', v1)),
+    });
+    await db.meta.put({ key: 'dataVersion', value: 1 });
+
+    const repo = createWebRepository(db, key);
+    const { snapshot, skipped } = await repo.loadAll();
+    expect(skipped).toEqual([]);
+    expect(snapshot.tables.subscription[0]?.anchorDay).toBe(30);
+    expect((await db.meta.get('dataVersion'))?.value).toBe(2);
+    const row = await db.records.get(['subscription', 's1']);
+    expect(await decryptRecord(key, 'subscription:s1', row!)).toMatchObject({ anchorDay: 30 });
+  });
+
+  it('putMany writes all or nothing', async () => {
+    const db = testDb();
+    const repo = createWebRepository(db, await generateDataKey());
+    await expect(
+      repo.putMany([
+        { table: 'expense', record: makeExpense({ id: 'ok' }) },
+        { table: 'expense', record: makeExpense({ id: 'bad', amount: -1 }) },
+      ]),
+    ).rejects.toThrow();
+    expect(await db.records.count()).toBe(0);
+    await repo.putMany([
+      { table: 'expense', record: makeExpense({ id: 'a' }) },
+      { table: 'goal', record: makeGoal({ id: 'g' }) },
+    ]);
+    expect(await db.records.count()).toBe(2);
   });
 });

@@ -109,3 +109,12 @@ describe('createVault', () => {
     expect(await decryptRecord(await unlockVault(meta), 'a:1', p)).toBe('kept');
   });
 });
+
+describe('unicode passphrases', () => {
+  it('unlocks with the same passphrase typed in a different Unicode form', async () => {
+    const meta = memoryMetaStore();
+    const key = await createVault(meta);
+    await setVaultSecret(meta, key, 'café au lait', 'passphrase', FAST);
+    await expect(unlockVault(meta, 'café au lait')).resolves.toBeDefined();
+  });
+});

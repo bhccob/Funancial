@@ -1,12 +1,14 @@
 import { useId, useState, type FormEvent } from 'react';
 import { LeaveDemoButton } from '@/app/LeaveDemoButton';
+import { Banner } from '@/components/ui/Banner';
 import { Button } from '@/components/ui/Button';
-import { Card } from '@/components/ui/Card';
+import { Section } from '@/components/ui/Section';
 import { Dialog } from '@/components/ui/Dialog';
 import { TextField } from '@/components/ui/TextField';
 import { EraseDialog } from '@/features/system/EraseDialog';
 import { validateSecret } from '@/data/keys';
 import type { DataSnapshot, TableName } from '@/domain/snapshot';
+import { expensesToCsv } from '@/data/csv';
 import { downloadText, readFileText } from '@/lib/download';
 import { useApp } from '@/store/AppStoreProvider';
 
@@ -138,7 +140,7 @@ function RestoreForm() {
         <input
           id={fileId}
           type="file"
-          accept=".funbak,.json"
+          accept=".funbak"
           onChange={(e) => setFile(e.target.files?.[0] ?? null)}
           className="file:border-border-strong file:bg-surface text-sm file:mr-3 file:rounded-md file:border-2 file:px-3 file:py-2 file:font-bold"
         />
@@ -185,13 +187,13 @@ function RestoreForm() {
   );
 }
 
-function ExportButton() {
-  const exportPlain = useApp((s) => s.exportPlain);
+/** Any export that writes readable finances to a file asks first. */
+function ExportButton({ label, onExport }: { label: string; onExport(): void }) {
   const [confirming, setConfirming] = useState(false);
   return (
     <>
       <Button variant="secondary" onClick={() => setConfirming(true)}>
-        Export unencrypted copy
+        {label}
       </Button>
       <Dialog
         open={confirming}
@@ -205,8 +207,7 @@ function ExportButton() {
             </Button>
             <Button
               onClick={() => {
-                const { fileName, text } = exportPlain();
-                downloadText(fileName, text, 'application/json');
+                onExport();
                 setConfirming(false);
               }}
             >
@@ -242,51 +243,74 @@ export function DataSection() {
   const namespace = useApp((s) => s.namespace);
   const data = useApp((s) => s.data);
   const persisted = useApp((s) => s.persisted);
+  const skipped = useApp((s) => s.skipped);
+  const exportPlain = useApp((s) => s.exportPlain);
+  const today = useApp((s) => s.today);
   const [backupOpen, setBackupOpen] = useState(false);
-  const headingId = useId();
   const lastBackupAt = data.tables.settings[0]?.lastBackupAt ?? null;
   const demo = namespace === 'demo';
 
   return (
-    <Card as="section" aria-labelledby={headingId} className="flex flex-col gap-5">
-      <div className="flex flex-col gap-1">
-        <h2 id={headingId} className="font-display text-xl font-semibold">
-          Data
-        </h2>
-        <p className="font-bold">{summarize(data)}</p>
-        <p className="text-muted text-sm">
-          {persisted
-            ? 'Storage: protected from automatic clearing'
-            : 'Storage: the browser may clear it if space runs low'}
-        </p>
-      </div>
-
-      <div className="flex flex-col items-start gap-2">
-        <Button onClick={() => setBackupOpen(true)}>Create encrypted backup</Button>
-        <p className="text-muted text-sm">
-          {lastBackupAt
-            ? `Last backup: ${dateTime.format(new Date(lastBackupAt))}`
-            : 'No backup yet.'}
-        </p>
-        <BackupDialog open={backupOpen} onClose={() => setBackupOpen(false)} />
-      </div>
-
-      {demo ? (
-        <div className="flex flex-col items-start gap-2">
-          <p className="text-muted text-sm">This is demo money. Leaving demo deletes it.</p>
-          <LeaveDemoButton size="md" />
+    <Section title="Data">
+      <div className="flex flex-col gap-5">
+        {skipped.length > 0 && (
+          <Banner tone="warning">
+            {skipped.length} saved items couldn't be read and are hidden. They're still kept on this
+            device.
+          </Banner>
+        )}
+        <div className="flex flex-col gap-1">
+          <p className="font-bold">{summarize(data)}</p>
+          <p className="text-muted text-sm">
+            {persisted
+              ? 'Storage: protected from automatic clearing'
+              : 'Storage: the browser may clear it if space runs low'}
+          </p>
         </div>
-      ) : (
-        <>
-          <hr className="border-border border-t-2 border-dashed" />
-          <RestoreForm />
-          <hr className="border-border border-t-2 border-dashed" />
-          <div className="flex flex-wrap gap-3">
-            <ExportButton />
-            <DeleteAllButton />
+
+        <div className="flex flex-col items-start gap-2">
+          <Button onClick={() => setBackupOpen(true)}>Create encrypted backup</Button>
+          <p className="text-muted text-sm">
+            {lastBackupAt
+              ? `Last backup: ${dateTime.format(new Date(lastBackupAt))}`
+              : 'No backup yet.'}
+          </p>
+          <BackupDialog open={backupOpen} onClose={() => setBackupOpen(false)} />
+        </div>
+
+        {demo ? (
+          <div className="flex flex-col items-start gap-2">
+            <p className="text-muted text-sm">This is demo money. Leaving demo deletes it.</p>
+            <LeaveDemoButton size="md" />
           </div>
-        </>
-      )}
-    </Card>
+        ) : (
+          <>
+            <hr className="border-border border-t-2 border-dashed" />
+            <RestoreForm />
+            <hr className="border-border border-t-2 border-dashed" />
+            <div className="flex flex-wrap gap-3">
+              <ExportButton
+                label="Export unencrypted copy"
+                onExport={() => {
+                  const { fileName, text } = exportPlain();
+                  downloadText(fileName, text, 'application/json');
+                }}
+              />
+              <ExportButton
+                label="Export expenses (CSV)"
+                onExport={() =>
+                  downloadText(
+                    `funancial-expenses-${today}.csv`,
+                    expensesToCsv(data, data.tables.profile[0]?.currency ?? 'USD'),
+                    'text/csv',
+                  )
+                }
+              />
+              <DeleteAllButton />
+            </div>
+          </>
+        )}
+      </div>
+    </Section>
   );
 }

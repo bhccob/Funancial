@@ -1,12 +1,26 @@
-import { render, screen } from '@testing-library/react';
+import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { Banner } from './Banner';
 import { Button } from './Button';
 import { Dialog } from './Dialog';
+import { ErrorBoundary } from './ErrorBoundary';
+import { Section } from './Section';
 import { TextField } from './TextField';
+import { Toaster } from './Toaster';
+import { toast, toastStore } from '@/lib/toast';
 
 describe('Button', () => {
+  it('has a quiet danger style with exactly one text colour', () => {
+    // cn() joins classes without merging, so a second colour utility would win by CSS order.
+    render(<Button variant="danger-ghost">Delete</Button>);
+    const colours = screen
+      .getByRole('button', { name: 'Delete' })
+      .className.split(' ')
+      .filter((c) => /^text-(text|danger|muted|primary-contrast|white)$/.test(c));
+    expect(colours).toEqual(['text-danger']);
+  });
+
   it('does not submit a form unless asked to', async () => {
     const onSubmit = vi.fn((e: { preventDefault(): void }) => e.preventDefault());
     render(
@@ -39,6 +53,21 @@ describe('TextField', () => {
 });
 
 describe('Dialog', () => {
+  it('shows messages inside an open dialog, where they can be read and dismissed', async () => {
+    toastStore.setState({ toasts: [] });
+    render(
+      <>
+        <Dialog open title="Edit card" onClose={() => {}}>
+          <p>Form</p>
+        </Dialog>
+        <Toaster />
+      </>,
+    );
+    act(() => toast('danger', 'This card or loan has history.'));
+    const dialog = screen.getByRole('dialog', { name: 'Edit card' });
+    expect(within(dialog).getByRole('alert')).toHaveTextContent('This card or loan has history.');
+  });
+
   it('is labelled by its title and described by its description', () => {
     render(
       <Dialog open title="Leave demo?" description="Demo data will be deleted." onClose={() => {}}>
@@ -86,5 +115,35 @@ describe('Banner', () => {
       </Banner>,
     );
     expect(screen.getByRole('button', { name: 'Fix it' })).toBeInTheDocument();
+  });
+});
+
+describe('Section', () => {
+  it('is labelled by its title and shows its action', () => {
+    render(
+      <Section title="Limits" action={<a href="/budget">See all</a>}>
+        body
+      </Section>,
+    );
+    const section = screen.getByRole('region', { name: 'Limits' });
+    expect(section).toContainElement(screen.getByRole('link', { name: 'See all' }));
+    expect(screen.getByRole('heading', { level: 2, name: 'Limits' })).toBeInTheDocument();
+  });
+});
+
+describe('ErrorBoundary', () => {
+  it('shows a recovery screen when a child crashes', () => {
+    const Boom = () => {
+      throw new Error('kaboom');
+    };
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    render(
+      <ErrorBoundary>
+        <Boom />
+      </ErrorBoundary>,
+    );
+    spy.mockRestore();
+    expect(screen.getByRole('heading', { name: 'Something went wrong' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Reload' })).toBeInTheDocument();
   });
 });

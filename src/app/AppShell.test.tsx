@@ -42,7 +42,10 @@ describe('AppShell', () => {
   it('quick add opens Add Expense from any screen', async () => {
     renderAt('/invest');
     await userEvent.click(screen.getByRole('link', { name: 'Quick add' }));
-    expect(screen.getByRole('heading', { level: 1, name: 'Add Expense' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: 'Add' })).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: 'Expense' })).toBeChecked();
+    // Already adding: the floating button would only cover the form.
+    expect(screen.queryByRole('link', { name: 'Quick add' })).not.toBeInTheDocument();
   });
 
   it('shows not found for an unknown path with a way home', async () => {

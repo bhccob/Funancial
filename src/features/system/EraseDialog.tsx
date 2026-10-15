@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Dialog } from '@/components/ui/Dialog';
 import { TextField } from '@/components/ui/TextField';
+import { useAction } from '@/lib/useAction';
 import { useApp } from '@/store/AppStoreProvider';
 
 /** Typed-confirmation erase of everything on this device. Works locked or unlocked. */
@@ -17,6 +18,7 @@ export function EraseDialog({
   onClose(): void;
 }) {
   const deleteAllData = useApp((s) => s.deleteAllData);
+  const run = useAction();
   const [typed, setTyped] = useState('');
   const close = () => {
     setTyped('');
@@ -43,7 +45,7 @@ export function EraseDialog({
               disabled={typed !== 'DELETE'}
               onClick={() => {
                 close();
-                void deleteAllData();
+                void run(deleteAllData);
               }}
             >
               Delete everything

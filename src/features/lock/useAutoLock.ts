@@ -30,13 +30,14 @@ export function useAutoLock(minutes: number): void {
     };
 
     restart();
-    window.addEventListener('pointerdown', restart);
-    window.addEventListener('keydown', restart);
+    const activity = ['pointerdown', 'keydown', 'wheel', 'touchstart'] as const;
+    activity.forEach((e) => window.addEventListener(e, restart, { passive: true }));
+    window.addEventListener('scroll', restart, { capture: true, passive: true });
     document.addEventListener('visibilitychange', onVisibility);
     return () => {
       clearTimeout(timer);
-      window.removeEventListener('pointerdown', restart);
-      window.removeEventListener('keydown', restart);
+      activity.forEach((e) => window.removeEventListener(e, restart));
+      window.removeEventListener('scroll', restart, { capture: true });
       document.removeEventListener('visibilitychange', onVisibility);
     };
   }, [minutes, lock]);

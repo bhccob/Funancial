@@ -4,7 +4,8 @@ import { deleteDb, openDb, type FunancialDb } from '@/data/db';
 import { WrongSecretError } from '@/data/keys';
 import type { SyncMessage } from '@/lib/broadcast';
 import type { SafeStorage } from '@/lib/safeStorage';
-import { makeExpense } from '@/test/fixtures';
+import { buildDemoSnapshot } from '@/data/demoSeed';
+import { makeExpense, makeSubscription } from '@/test/fixtures';
 import { createAppStore, type AppDeps } from './appStore';
 
 function memorySafeStorage(): SafeStorage {
@@ -362,6 +363,7 @@ describe('review fixes', () => {
       throw new Error('boom');
     };
     await expect(store.getState().startDemo()).rejects.toThrow('boom');
+    deps.today = () => '2026-10-14';
     expect(store.getState()).toMatchObject({ namespace: 'real', phase: 'unlocked' });
     expect(deps.storage.get('funancial.namespace')).toBeNull();
 
@@ -411,5 +413,105 @@ describe('review fixes: demo start failing midway', () => {
         .data.tables.expense.map((e) => e.id)
         .sort(),
     ).toEqual(['after', 'mine']);
+  });
+});
+
+describe('data changes across tabs', () => {
+  it('put posts a data change', async () => {
+    const { store, posts } = await freshStore();
+    await store.getState().put('expense', makeExpense({ id: 'e1' }));
+    expect(posts).toContainEqual({ type: 'reload', reason: 'data' });
+  });
+
+  it('putMany saves several records and posts once', async () => {
+    const { deps, store, posts } = await freshStore();
+    const before = posts.length;
+    await store.getState().putMany([
+      { table: 'expense', record: makeExpense({ id: 'e1' }) },
+      { table: 'expense', record: makeExpense({ id: 'e2' }) },
+    ]);
+    expect(posts.length - before).toBe(1);
+    expect(
+      (await reboot(deps))
+        .getState()
+        .data.tables.expense.map((e) => e.id)
+        .sort(),
+    ).toEqual(['e1', 'e2']);
+  });
+
+  it('refresh picks up another tab’s write', async () => {
+    const { deps, store } = await freshStore();
+    const other = await reboot(deps);
+    await store.getState().put('expense', makeExpense({ id: 'from-a' }));
+    expect(other.getState().data.tables.expense).toEqual([]);
+    await other.getState().refresh();
+    expect(other.getState().data.tables.expense.map((e) => e.id)).toEqual(['from-a']);
+  });
+});
+
+describe('backup when storage is full', () => {
+  it('still hands over the file if recording the backup date fails', async () => {
+    const { store } = await freshStore();
+    store.setState({ put: vi.fn().mockRejectedValue(new Error('quota')) });
+    const { fileName, text } = await store.getState().createBackup('correct horse');
+    expect(fileName).toMatch(/^funancial-backup-\d{4}-\d{2}-\d{2}\.funbak$/);
+    expect(JSON.parse(text).format).toBe('funancial-backup');
+  });
+});
+
+describe('sync', () => {
+  it('materializes due subscription charges when the app opens', async () => {
+    const { deps, store } = await freshStore();
+    await store
+      .getState()
+      .put(
+        'subscription',
+        makeSubscription({ id: 's1', name: 'Tunely', amount: 10_99, nextRenewal: '2026-10-12' }),
+      );
+    const again = await reboot(deps);
+    expect(again.getState().data.tables.expense.map((e) => e.id)).toEqual(['sub-s1-2026-10-12']);
+    expect(again.getState().data.tables.subscription[0]?.nextRenewal).toBe('2026-11-12');
+  });
+
+  it('picks up a renewal when the day changes', async () => {
+    let today = '2026-10-19';
+    const t = testDeps({ today: () => today });
+    const store = createAppStore(t.deps);
+    await store.getState().boot();
+    await store.getState().startFresh();
+    await store
+      .getState()
+      .put('subscription', makeSubscription({ id: 's1', nextRenewal: '2026-10-20' }));
+    expect(store.getState().today).toBe('2026-10-19');
+    today = '2026-10-20';
+    await store.getState().sync();
+    expect(store.getState().today).toBe('2026-10-20');
+    expect(store.getState().data.tables.expense.map((e) => e.id)).toEqual(['sub-s1-2026-10-20']);
+  });
+
+  it('has nothing to generate for fresh demo data', async () => {
+    const { store } = await freshStore();
+    await store.getState().startDemo();
+    expect(store.getState().data.tables.expense).toHaveLength(
+      buildDemoSnapshot('2026-10-14').tables.expense.length,
+    );
+  });
+});
+
+describe('a sync failure while opening', () => {
+  it('still opens the data instead of claiming storage is unavailable', async () => {
+    const { deps, store } = await freshStore();
+    await store.getState().put('expense', makeExpense({ id: 'e1' }));
+    const again = createAppStore(deps);
+    const failingSync = vi.fn(async () => {
+      throw new Error('QuotaExceededError');
+    });
+    again.setState({ sync: failingSync });
+    const quiet = vi.spyOn(console, 'error').mockImplementation(() => {});
+    await again.getState().boot();
+    quiet.mockRestore();
+    expect(failingSync).toHaveBeenCalled();
+    expect(again.getState().phase).toBe('unlocked');
+    expect(again.getState().data.tables.expense.map((e) => e.id)).toEqual(['e1']);
   });
 });

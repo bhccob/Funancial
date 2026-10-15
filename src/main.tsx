@@ -9,8 +9,18 @@ import '@/styles/index.css';
 
 initTheme();
 
-// Another tab replaced, re-keyed or deleted the data: start over from storage.
-tabChannel().subscribe(() => window.location.reload());
+// Another tab changed data: reload it. If it replaced, re-keyed or deleted the data, start over.
+tabChannel().subscribe((m) => {
+  if (m.reason === 'data') void appStore.getState().refresh();
+  else window.location.reload();
+});
+
+// A new day (or time away) may have brought renewals, pay days and a new budget period.
+const sync = () => void appStore.getState().sync();
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') sync();
+});
+window.addEventListener('focus', sync);
 
 const container = document.getElementById('root');
 if (!container) throw new Error('Missing #root element');

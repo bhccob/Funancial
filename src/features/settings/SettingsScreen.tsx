@@ -1,8 +1,12 @@
-import { useId, useState } from 'react';
-import { Card } from '@/components/ui/Card';
+import { useState } from 'react';
+import { PageHeader } from '@/components/ui/PageHeader';
+import { Section } from '@/components/ui/Section';
 import { RadioGroup } from '@/components/ui/RadioGroup';
 import { getThemePreference, setThemePreference, type ThemePreference } from '@/lib/theme';
+import { useApp } from '@/store/AppStoreProvider';
 import { DataSection } from './DataSection';
+import { PreferencesSection } from './PreferencesSection';
+import { ProfileSection } from './ProfileSection';
 import { SecuritySection } from './SecuritySection';
 
 const THEMES: Array<{ value: ThemePreference; label: string }> = [
@@ -13,12 +17,8 @@ const THEMES: Array<{ value: ThemePreference; label: string }> = [
 
 function AppearanceSection() {
   const [theme, setTheme] = useState(getThemePreference);
-  const headingId = useId();
   return (
-    <Card as="section" aria-labelledby={headingId} className="flex flex-col gap-4">
-      <h2 id={headingId} className="font-display text-xl font-semibold">
-        Appearance
-      </h2>
+    <Section title="Appearance">
       <RadioGroup
         legend="Theme"
         value={theme}
@@ -28,14 +28,17 @@ function AppearanceSection() {
           setThemePreference(t);
         }}
       />
-    </Card>
+    </Section>
   );
 }
 
 export function SettingsScreen() {
+  const demo = useApp((s) => s.namespace === 'demo');
   return (
-    <div className="flex flex-col gap-6">
-      <h1 className="font-display text-3xl font-semibold">Settings</h1>
+    <div className="max-w-3xl">
+      <PageHeader title="Settings" />
+      {!demo && <ProfileSection />}
+      <PreferencesSection />
       <AppearanceSection />
       <SecuritySection />
       <DataSection />

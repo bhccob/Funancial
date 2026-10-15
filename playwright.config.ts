@@ -11,6 +11,8 @@ export default defineConfig({
   use: {
     baseURL: `http://localhost:${PORT}`,
     acceptDownloads: true,
+    // Fixed so money and dates read the same on every machine.
+    locale: 'en-US',
     trace: 'retain-on-failure',
   },
   projects: [

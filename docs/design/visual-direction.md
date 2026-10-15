@@ -1,62 +1,74 @@
-# Visual direction — C: Cozy RPG (chosen 2026-10-14)
+# Visual direction — D: Pro Ledger (chosen 2026-10-14, round 2)
 
-Warm parchment and forest green by day, lantern-lit by night. Game objects (level, streak, XP coin,
-quest chest) are pixel-art accents; every money number stays in a clean, readable sans. Mockup:
-`design/directions/c.html` (A and B were the alternatives, kept for reference).
+Clean, modern finance with a light game layer. Typography and whitespace do the work: big tabular
+numbers, hairline dividers, almost no boxes. The game layer is one slim HUD strip (level, XP,
+streak, coins) and quest rows. No pixel fonts or pixel art.
+
+Mockups: `design/directions-v2/index.html` (pick "D · Pro Ledger"). Round 1 (C "Cozy RPG") was
+replaced at the user's request ("less box styling… doesn't look like Minecraft").
 
 ## Tokens
 
-Defined on `:root[data-theme=light]` / `:root[data-theme=dark]` in `src/styles/tokens.css`.
-All text/background pairs below meet WCAG AA (4.5:1) unless marked "fill only".
+Defined in `src/styles/tokens.css` (light in `@theme static`, dark under `:root[data-theme='dark']`).
+Contrast figures are text on the page background; all text pairs meet WCAG AA 4.5:1.
 
 | Token | Light | Dark | Use |
 | --- | --- | --- | --- |
-| `--color-bg` | `#F6EFE1` | `#15130F` | App background (with texture) |
-| `--color-surface` | `#FFFBF2` | `#211D17` | Cards, sheets, tab bar |
-| `--color-surface-2` | `#F0E6D2` | `#2B261E` | Tracks, chips, icon wells |
-| `--color-text` | `#2B2118` | `#F3E9D6` | Body text, money |
-| `--color-text-muted` | `#6B5B49` | `#B9A88C` | Secondary text (6.3:1 / 7.2:1) |
-| `--color-border` | `#E2D3B8` | `#3A3328` | Hairlines, inner card frame |
-| `--color-border-strong` | `#CDB994` | `#4B4334` | Card/button borders and pressable edge |
-| `--color-primary` | `#2F6B4F` | `#7CC39B` | Primary actions, active nav, normal progress |
-| `--color-primary-shade` | `#1F4A36` | `#4F8F6B` | Primary pressable edge/border |
-| `--color-primary-contrast` | `#FFFBF2` | `#15130F` | Text on primary (6.1:1 / 8.9:1) |
-| `--color-xp` | `#C98A1B` | `#F0B84A` | XP bar, coins, rewards — **fill only** in light |
-| `--color-xp-light` | `#E9B44C` | `#F6CF7C` | XP bar segment highlight (fill only) |
-| `--color-xp-shade` | `#8A5D0F` | `#A8741A` | Pressable edge of gold buttons (quick add) |
-| `--color-xp-text` | `#8A5D0F` | `#F0B84A` | XP/reward **text** (5.4:1 / 9.3:1) |
-| `--color-success` | `#3C7D3A` | `#8BCB7E` | Gains, completed states (4.8:1 light) |
-| `--color-warning` | `#A3561A` | `#E8A25A` | Limit ≥ 80% (5.2:1 light) |
-| `--color-danger` | `#B23A2E` | `#E07A6B` | Limit ≥ 100%, destructive actions (5.7:1 light) |
-| `--color-focus` | `#2F6B4F` | `#F0B84A` | Focus ring (2px, 2px offset in bg color) |
-| `--color-texture` | `rgba(120,90,50,.09)` | `rgba(240,184,74,.05)` | Background dot texture |
+| `--color-bg` | `#ffffff` | `#0c0c0e` | Page |
+| `--color-surface` | `#ffffff` | `#0c0c0e` | Sections (same as page — sections are not boxes) |
+| `--color-surface-2` | `#f2f2f5` | `#1a1a1f` | Chips, segmented controls, active nav, inputs, dialogs' inner wells |
+| `--color-overlay` | `#ffffff` | `#16161a` | Dialogs, menus, toasts, floating tab bar |
+| `--color-text` | `#0d0d0f` | `#f4f4f6` | Body, numbers |
+| `--color-text-muted` | `#6f6f78` | `#9a9aa6` | Secondary text (4.9:1 / 6.9:1) |
+| `--color-border` | `#ebebef` | `#202026` | Hairline dividers between sections |
+| `--color-border-strong` | `#d9d9df` | `#2e2e36` | Input and secondary-button outlines |
+| `--color-track` | `#ececf1` | `#232329` | Progress tracks |
+| `--color-primary` | `#0d0d0f` | `#f4f4f6` | Primary buttons (ink) |
+| `--color-primary-contrast` | `#ffffff` | `#0c0c0e` | Text on primary |
+| `--color-accent` | `#00b37e` | `#2ee6a6` | Fills only: healthy progress, active marks, positive sparkline |
+| `--color-accent-text` | `#007a55` | `#2ee6a6` | Positive amounts, links (5.2:1) |
+| `--color-xp` | `#7c5cff` | `#9d85ff` | Game layer fills: XP bar, level chip |
+| `--color-xp-text` | `#6b46f5` | `#9d85ff` | XP/reward text (5.5:1) |
+| `--color-success` | `#007a55` | `#2ee6a6` | Gains, completed |
+| `--color-warning` | `#a35f00` | `#f2a93b` | Limit ≥ 80% (5.0:1 light) |
+| `--color-danger` | `#d1373d` | `#ff6b6f` | Limit ≥ 100%, destructive (4.8:1 light) |
+| `--color-focus` | `#7c5cff` | `#9d85ff` | Focus ring (2px + 2px offset) |
+| `--color-chart-1..6` | `#2a78d6 #eb6834 #1baf7a #eda100 #e87ba4 #008300` | `#3987e5 #d95926 #199e70 #c98500 #d55181 #008300` | Categorical chart series, in this fixed order (validated incl. donut wrap-around) |
 
-Radii: `--radius-sm: 4px` (progress tracks, pixel frames), `--radius-md: 10px` (buttons, inputs, chips),
-`--radius-lg: 12px` (cards, sheets). Level badge 8px. Pill shapes are not used.
-
-Pressable edge: `box-shadow: 0 3px 0 var(--color-border-strong)` (or the matching `*-shade` on
-filled buttons); pressed state translates 2px down and drops the edge to 1px.
+Radii: `--radius-sm 6px` (bars), `--radius-md 10px` (inputs, chips, nav items), `--radius-lg 16px`
+(dialogs, floating tab bar). Buttons are pills (`999px`).
 
 ## Fonts
 
-- `--font-sans`: **Nunito** — `@fontsource-variable/nunito` (fallback `system-ui, sans-serif`).
-  Body, labels, inputs, and **all money amounts** (`font-variant-numeric: tabular-nums`; hero amounts 800).
-- `--font-display`: **Pixelify Sans** — `@fontsource/pixelify-sans` weights 500/600/700
-  (fallback `--font-sans`). Game accents only.
+- `--font-sans`: **Manrope** — `@fontsource-variable/manrope` (fallback `system-ui, sans-serif`).
+  Everything, including numbers (`tabular-nums`). Headline numbers 800, labels 600.
+- `--font-display`: same family (Manrope 800). No second display face.
+
+## Layout
+
+- **Desktop (≥ md):** 210px left text sidebar (logo, icon + label links, active = `surface-2` chip,
+  hairline right border); main column with a top HUD strip (M4) and sections in a 12-column grid,
+  7fr / 5fr pairs separated by vertical hairlines.
+- **Home:** KPI row (Available to spend — largest — · Net worth · Spent this month) divided by
+  hairlines; quick actions under the first KPI; then sections (Limits + Spending, Upcoming bills,
+  Portfolio from M5, Quests from M4).
+- **Phone:** single column, 16px gutters, floating rounded tab bar (overlay surface, shadow) at the
+  bottom; the sidebar is hidden.
 
 ## Rules
 
-1. **Money is never pixel.** Amounts, inputs, body copy and form labels use Nunito.
-2. **Pixel font is for game accents:** level number, XP counts, quest kicker labels ("DAILY QUEST · 2/3"),
-   card/section headings, streak count, Shop and Quests titles.
-3. **Gold means reward.** `--color-xp*` is only for XP, coins, quest rewards, level-ups and the quick-add
-   button. Never for money, warnings or links.
-4. **Green means go.** `--color-primary` for primary actions, active navigation, links and normal progress.
-5. **Limit states:** < 80% primary, 80–99% warning, ≥ 100% danger. Always paired with text ("85% used"),
-   never color alone.
-6. **Icons:** game objects use 8×8 pixel sprites (`shape-rendering: crispEdges`, scaled in whole multiples);
-   navigation and actions use lucide icons with square line caps and miter joins.
-7. **Texture** (dot grid via `--color-texture`) only on the app background, never inside cards.
-8. **Cards** are "inventory slots": 2px `--color-border-strong` border, inner 1px `--color-border` frame
-   inset 3px, pressable edge.
-9. Respect `prefers-reduced-motion`: no bounce/sparkle animation, state changes still visible.
+1. **No box cards on screens.** Sections are separated by whitespace and 1px `--color-border`
+   hairlines. Boxes (overlay surface, radius-lg, soft shadow) are only for dialogs, menus, toasts
+   and the floating tab bar.
+2. **Numbers lead.** Key amounts are big, 800 weight, tabular, `--color-text`. Never color a whole
+   amount except gains/losses (`accent-text` / `danger`) and limit warnings.
+3. **One action color.** Primary buttons are ink (`primary`); secondary are hairline outlines;
+   tertiary are text buttons. Green `accent` is for fills and positive values, not buttons.
+4. **Game layer is violet and small:** XP bar, level chip, quest rewards. It never competes with
+   money figures.
+5. **Limit states:** < 80% accent, 80–99% warning, ≥ 100% danger — always with text ("85% used").
+6. **Charts** use `--chart-*` in fixed order, a 2px page-colored gap between slices, a legend with
+   name, percent and value (identity never by color alone), and hover/tap/keyboard highlighting.
+   Two-part splits are bars, not pies.
+7. **Icons:** lucide, 2px stroke, round caps.
+8. Respect `prefers-reduced-motion`.

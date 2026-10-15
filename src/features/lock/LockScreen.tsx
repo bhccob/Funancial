@@ -84,7 +84,10 @@ export function LockScreen() {
   const checking = useApp((s) => s.checking);
 
   const throttled = lockedUntil !== null && expired !== lockedUntil;
-  const onCountdownDone = useCallback(() => setExpired(lockedUntil), [lockedUntil]);
+  const onCountdownDone = useCallback(() => {
+    setExpired(lockedUntil);
+    setError(undefined);
+  }, [lockedUntil]);
 
   const submit = async (secret: string) => {
     const result = await unlock(secret);
@@ -103,7 +106,7 @@ export function LockScreen() {
     <main className="grid min-h-dvh place-items-center px-4 py-10">
       <Card className="flex w-full max-w-sm flex-col items-center gap-6 p-6">
         <div className="flex flex-col items-center gap-1 text-center">
-          <h1 className="font-display text-3xl font-semibold">Welcome back</h1>
+          <h1 className="text-3xl font-extrabold tracking-tight">Welcome back</h1>
           <p className="text-muted">
             {lockMode === 'passphrase' ? 'Enter your passphrase.' : 'Enter your PIN.'}
           </p>

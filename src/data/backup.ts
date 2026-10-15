@@ -18,6 +18,8 @@ const MAX_ITERATIONS = 10_000_000;
 
 const NOT_A_BACKUP = "This file isn't a Funancial backup.";
 const TOO_NEW = 'This backup was made by a newer version of Funancial.';
+const WRONG_PASSPHRASE =
+  "That passphrase didn't open this backup. Check it, or the file may be damaged.";
 
 export class InvalidBackupError extends Error {
   constructor(message: string = NOT_A_BACKUP, cause?: unknown) {
@@ -105,7 +107,7 @@ export async function readBackup(text: string, passphrase: string): Promise<Data
       base64ToBytes(envelope.data),
     );
   } catch (e) {
-    throw new WrongSecretError(e);
+    throw new WrongSecretError(e, WRONG_PASSPHRASE);
   }
 
   try {

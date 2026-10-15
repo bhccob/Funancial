@@ -1,7 +1,8 @@
 import type { ButtonHTMLAttributes } from 'react';
+import { Link, type LinkProps } from 'react-router';
 import { cn } from '@/lib/cn';
 
-export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
+export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'danger-ghost';
 export type ButtonSize = 'sm' | 'md' | 'lg';
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -10,28 +11,23 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const base =
-  'inline-flex items-center justify-center gap-2 rounded-md border-2 font-bold select-none ' +
-  'transition-[transform,box-shadow] duration-100 active:translate-y-0.5 ' +
-  'motion-reduce:transition-none motion-reduce:active:translate-y-0 ' +
-  'disabled:pointer-events-none disabled:opacity-50';
+  'inline-flex items-center justify-center gap-1.5 rounded-full font-bold whitespace-nowrap select-none ' +
+  'transition-[transform,background-color,opacity] duration-100 active:scale-[0.98] ' +
+  'motion-reduce:transition-none motion-reduce:active:scale-100 ' +
+  'disabled:pointer-events-none disabled:opacity-45';
 
 const variants: Record<ButtonVariant, string> = {
-  primary:
-    'bg-primary text-primary-contrast border-primary-shade ' +
-    'shadow-[0_3px_0_var(--color-primary-shade)] active:shadow-[0_1px_0_var(--color-primary-shade)]',
-  secondary:
-    'bg-surface text-text border-border-strong ' +
-    'shadow-[0_3px_0_var(--color-border-strong)] active:shadow-[0_1px_0_var(--color-border-strong)]',
-  ghost: 'border-transparent bg-transparent text-primary active:translate-y-0',
-  danger:
-    'bg-danger text-primary-contrast border-danger ' +
-    'shadow-[0_3px_0_var(--color-text)] active:shadow-[0_1px_0_var(--color-text)]',
+  primary: 'bg-primary text-primary-contrast hover:opacity-90',
+  secondary: 'border border-border-strong bg-transparent text-text hover:bg-surface-2',
+  ghost: 'bg-transparent text-text hover:bg-surface-2',
+  danger: 'bg-danger text-white hover:opacity-90',
+  'danger-ghost': 'bg-transparent text-danger hover:bg-surface-2',
 };
 
 const sizes: Record<ButtonSize, string> = {
   sm: 'h-9 px-3 text-sm',
-  md: 'h-11 px-4 text-[15px]',
-  lg: 'h-13 px-5 text-base',
+  md: 'h-11 px-5 text-[15px]',
+  lg: 'h-13 px-6 text-base',
 };
 
 export function Button({
@@ -44,4 +40,19 @@ export function Button({
   return (
     <button type={type} className={cn(base, variants[variant], sizes[size], className)} {...rest} />
   );
+}
+
+export interface ButtonLinkProps extends LinkProps {
+  variant?: ButtonVariant;
+  size?: ButtonSize;
+}
+
+/** A router link that looks like a Button: for actions that go to another screen. */
+export function ButtonLink({
+  variant = 'primary',
+  size = 'md',
+  className,
+  ...rest
+}: ButtonLinkProps) {
+  return <Link className={cn(base, variants[variant], sizes[size], className)} {...rest} />;
 }

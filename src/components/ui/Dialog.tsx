@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, type ReactNode } from 'react';
+import { pushDialog, removeDialog } from '@/lib/dialogStack';
 
 export interface DialogProps {
   open: boolean;
@@ -20,6 +21,9 @@ export function Dialog({ open, title, description, onClose, children, actions }:
     if (!el) return;
     if (open && !el.open) el.showModal();
     if (!open && el.open) el.close();
+    if (!open) return;
+    pushDialog(el);
+    return () => removeDialog(el);
   }, [open]);
 
   return (
@@ -40,11 +44,11 @@ export function Dialog({ open, title, description, onClose, children, actions }:
         e.preventDefault();
         onClose();
       }}
-      className="border-border-strong bg-surface text-text m-auto w-[min(92vw,420px)] rounded-lg border-2 p-0 shadow-[0_4px_0_var(--color-border-strong)] backdrop:bg-black/50"
+      className="bg-overlay text-text m-auto w-[min(92vw,440px)] rounded-lg border-0 p-0 shadow-(--shadow-overlay) backdrop:bg-black/40"
     >
-      <div className="flex flex-col gap-4 p-5">
+      <div className="flex flex-col gap-4 p-6">
         <div className="flex flex-col gap-1">
-          <h2 id={titleId} className="font-display text-xl font-semibold">
+          <h2 id={titleId} className="text-xl font-extrabold tracking-tight">
             {title}
           </h2>
           {description && (

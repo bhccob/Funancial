@@ -1,11 +1,12 @@
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { Toaster } from '@/components/ui/Toaster';
 import { InvalidBackupError } from '@/data/backup';
 import { emptySnapshot } from '@/domain/snapshot';
 import { downloadText } from '@/lib/download';
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
-import { makeExpense, makeGoal, makeSettings } from '@/test/fixtures';
+import { makeExpense, makeGoal, makeProfile, makeSettings } from '@/test/fixtures';
 import { SettingsScreen } from './SettingsScreen';
 
 vi.mock('@/lib/download', async (importOriginal) => ({
@@ -13,7 +14,20 @@ vi.mock('@/lib/download', async (importOriginal) => ({
   downloadText: vi.fn(),
 }));
 
-beforeEach(() => vi.mocked(downloadText).mockClear());
+const finance = vi.hoisted(() => ({
+  updateProfile: vi.fn(async () => {}),
+  updateSettings: vi.fn(async () => {}),
+}));
+vi.mock('@/store/useFinance', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/store/useFinance')>()),
+  useFinanceActions: () => finance,
+}));
+
+beforeEach(() => {
+  vi.mocked(downloadText).mockClear();
+  finance.updateProfile.mockClear();
+  finance.updateSettings.mockClear();
+});
 
 function snapshotWith(settings = makeSettings()) {
   const data = emptySnapshot();
@@ -169,6 +183,21 @@ describe('Data', () => {
     expect(downloadText).toHaveBeenCalledWith('export.json', '{}', 'application/json');
   });
 
+  it('exports expenses as CSV after the same warning', async () => {
+    const data = snapshotWith();
+    data.tables.expense.push(makeExpense({ id: 'e1', amount: 12_50, date: '2026-10-14' }));
+    renderWithStore(<SettingsScreen />, createStubStore({ data, today: '2026-10-14' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Export expenses (CSV)' }));
+    const dialog = screen.getByRole('dialog', { name: 'Export an unprotected copy?' });
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Export' }));
+    expect(downloadText).toHaveBeenCalledWith(
+      'funancial-expenses-2026-10-14.csv',
+      'date,amount,currency,category,payment_method,card,note,subscription\r\n' +
+        '2026-10-14,12.50,USD,food,cash,,,\r\n',
+      'text/csv',
+    );
+  });
+
   it('keeps Delete disabled until DELETE is typed', async () => {
     const { store } = renderWithStore(
       <SettingsScreen />,
@@ -201,5 +230,89 @@ describe('Data', () => {
       screen.queryByRole('button', { name: 'Export unencrypted copy' }),
     ).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Delete all data' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Profile & salary' })).not.toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Preferences' })).toBeInTheDocument();
+  });
+});
+
+describe('Profile & salary', () => {
+  it('saves a salary with its pay day', async () => {
+    const data = snapshotWith();
+    data.tables.profile.push(makeProfile({ name: 'Sam', salary: null }));
+    renderWithStore(<SettingsScreen />, createStubStore({ data }));
+    const profile = screen.getByRole('region', { name: 'Profile & salary' });
+    expect(within(profile).getByLabelText('Name')).toHaveValue('Sam');
+    expect(within(profile).getByLabelText('Currency')).toHaveAccessibleDescription(
+      "Changing this relabels amounts; it doesn't convert them.",
+    );
+    await userEvent.type(within(profile).getByLabelText('Monthly take-home pay'), '4200');
+    await userEvent.selectOptions(within(profile).getByLabelText('Pay day'), '25');
+    await userEvent.click(within(profile).getByRole('button', { name: 'Save' }));
+    expect(finance.updateProfile).toHaveBeenCalledWith({
+      name: 'Sam',
+      currency: 'USD',
+      salary: { monthlyAmount: 420_000, payDay: 25 },
+    });
+  });
+});
+
+describe('Preferences', () => {
+  it('saves the warning style and shows an example of it', async () => {
+    renderWithStore(<SettingsScreen />, createStubStore({ data: snapshotWith() }));
+    const prefs = screen.getByRole('region', { name: 'Preferences' });
+    expect(
+      within(prefs).getByText("Food is at 85%. A few careful days and you've got this!"),
+    ).toBeInTheDocument();
+    await userEvent.click(within(prefs).getByRole('radio', { name: 'Strict' }));
+    expect(finance.updateSettings).toHaveBeenCalledWith({ warningTone: 'strict' });
+  });
+
+  it('saves the first day of the week', async () => {
+    renderWithStore(<SettingsScreen />, createStubStore({ data: snapshotWith() }));
+    await userEvent.selectOptions(screen.getByLabelText('Week starts on'), 'Sunday');
+    expect(finance.updateSettings).toHaveBeenCalledWith({ weekStartsOn: 0 });
+  });
+});
+
+describe('Data: unreadable items', () => {
+  it('tells the user when saved items could not be read', () => {
+    renderWithStore(
+      <SettingsScreen />,
+      createStubStore({
+        data: snapshotWith(),
+        skipped: [
+          { table: 'expense', id: 'x', reason: 'decrypt' },
+          { table: 'goal', id: 'y', reason: 'invalid' },
+        ],
+      }),
+    );
+    expect(
+      screen.getByText(
+        "2 saved items couldn't be read and are hidden. They're still kept on this device.",
+      ),
+    ).toBeInTheDocument();
+  });
+});
+
+describe('Security: failures are visible', () => {
+  it('shows a message when saving the PIN fails', async () => {
+    renderWithStore(
+      <>
+        <SettingsScreen />
+        <Toaster />
+      </>,
+      createStubStore({
+        lockMode: 'device',
+        setSecret: vi.fn(async () => {
+          throw new Error('Storage is full.');
+        }),
+      }),
+    );
+    await userEvent.click(screen.getByRole('radio', { name: 'PIN' }));
+    const dialog = screen.getByRole('dialog', { name: 'Set a PIN' });
+    await userEvent.type(within(dialog).getByLabelText('New PIN'), '2468');
+    await userEvent.type(within(dialog).getByLabelText('Confirm PIN'), '2468');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Storage is full.');
   });
 });

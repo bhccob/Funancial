@@ -1,7 +1,7 @@
 /** Cross-tab signal: when one tab rewrites or deletes the data, other open tabs reload. */
 export type SyncMessage = {
   type: 'reload';
-  reason: 'start' | 'secret' | 'restore' | 'delete' | 'namespace';
+  reason: 'start' | 'secret' | 'restore' | 'delete' | 'namespace' | 'data';
 };
 
 export interface SyncChannel {
@@ -10,7 +10,7 @@ export interface SyncChannel {
   close(): void;
 }
 
-const REASONS = new Set(['start', 'secret', 'restore', 'delete', 'namespace']);
+const REASONS = new Set(['start', 'secret', 'restore', 'delete', 'namespace', 'data']);
 
 function isSyncMessage(v: unknown): v is SyncMessage {
   return (

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { makeExpense, makeProfile } from '@/test/fixtures';
+import { makeExpense, makeProfile, makeSubscription } from '@/test/fixtures';
 import {
   CURRENT_SCHEMA_VERSION,
   emptySnapshot,
@@ -45,5 +45,24 @@ describe('migrateSnapshot', () => {
   it('rejects malformed content', () => {
     expect(() => migrateSnapshot({ schemaVersion: 1, tables: { expense: 'nope' } })).toThrow();
     expect(() => migrateSnapshot('garbage')).toThrow();
+  });
+});
+
+describe('migrateSnapshot v1 → v2', () => {
+  it('adds anchorDay to subscriptions and stamps version 2', () => {
+    const v1 = emptySnapshot() as unknown as {
+      schemaVersion: number;
+      tables: Record<string, unknown[]>;
+    };
+    v1.schemaVersion = 1;
+    const sub = { ...makeSubscription({ id: 's1', nextRenewal: '2026-11-28' }) } as Record<
+      string,
+      unknown
+    >;
+    delete sub.anchorDay;
+    v1.tables.subscription = [sub];
+    const migrated = migrateSnapshot(v1);
+    expect(migrated.schemaVersion).toBe(2);
+    expect(migrated.tables.subscription[0]?.anchorDay).toBe(28);
   });
 });

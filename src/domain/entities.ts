@@ -52,7 +52,14 @@ export const ProfileSchema = z.object({
   openingDate: LocalDateSchema,
   openingCash: NonNegativeMoney,
   openingSavings: NonNegativeMoney,
-  salary: z.object({ monthlyAmount: NonNegativeMoney, payDay: DayOfMonth }).nullable(),
+  salary: z
+    .object({
+      monthlyAmount: NonNegativeMoney,
+      payDay: DayOfMonth,
+      /** Set when the salary is added or changed: earlier pay days are never expected. */
+      since: LocalDateSchema.optional(),
+    })
+    .nullable(),
   onboardedAt: IsoTimestampSchema.nullable(),
 });
 export type Profile = z.infer<typeof ProfileSchema>;
@@ -92,7 +99,8 @@ export const IncomeSchema = z.object({
   source: z.enum(['salary', 'extra']),
   label: z.string(),
   date: LocalDateSchema,
-  status: z.enum(['expected', 'confirmed']),
+  /** `skipped`: an expected salary marked as never arrived; it never counts and never returns. */
+  status: z.enum(['expected', 'confirmed', 'skipped']),
   bucket: z.enum(['cash', 'savings']),
   recurrence: RecurrenceSchema.nullable(),
   period: YearMonthSchema.nullable(),
@@ -122,6 +130,8 @@ export const SubscriptionSchema = z
     amount: PositiveMoney,
     cycle: CycleSchema,
     nextRenewal: LocalDateSchema,
+    /** Day of month renewals return to (a 31st sub renews on Feb 28, then Mar 31). */
+    anchorDay: DayOfMonth,
     category: CategorySchema,
     paymentMethod: PaymentMethodSchema,
     cardId: z.string().min(1).nullable(),
