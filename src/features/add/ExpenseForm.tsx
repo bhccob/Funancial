@@ -180,8 +180,8 @@ export function ExpenseForm({ onDone, expense }: { onDone(): void; expense?: Exp
         </Button>
         {expense && (
           <Button
-            variant="ghost"
-            className="text-danger ml-auto"
+            variant="danger-ghost"
+            className="ml-auto"
             disabled={busy}
             onClick={() => void remove(expense.id)}
           >

@@ -127,7 +127,7 @@ function LimitForm({ limit, onDone }: { limit: BudgetLimit | null; onDone(): voi
       )}
       <div className="flex flex-wrap items-center justify-between gap-2">
         {limit ? (
-          <Button variant="ghost" className="text-danger" disabled={busy} onClick={remove}>
+          <Button variant="danger-ghost" disabled={busy} onClick={remove}>
             Delete
           </Button>
         ) : (

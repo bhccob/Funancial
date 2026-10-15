@@ -120,13 +120,7 @@ function SubscriptionForm({ sub, onDone }: { sub: Subscription | null; onDone():
       <Select label="Paid with" value={paidWith} onChange={setPaidWith} options={paidWithOptions} />
       {sub && (
         <div className="border-border flex flex-wrap items-center gap-x-3 gap-y-1 border-t pt-4">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-danger"
-            disabled={busy}
-            onClick={remove}
-          >
+          <Button variant="danger-ghost" size="sm" disabled={busy} onClick={remove}>
             Delete
           </Button>
           <p className="text-muted text-sm">Past charges stay in your history.</p>

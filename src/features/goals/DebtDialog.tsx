@@ -125,7 +125,7 @@ function DebtForm({ kind, debt, onDone }: DebtTarget & { onDone(): void }) {
       )}
       <div className="flex flex-wrap items-center justify-between gap-2">
         {debt ? (
-          <Button variant="ghost" className="text-danger" disabled={busy} onClick={remove}>
+          <Button variant="danger-ghost" disabled={busy} onClick={remove}>
             Delete
           </Button>
         ) : (

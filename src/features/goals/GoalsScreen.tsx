@@ -82,9 +82,7 @@ function DebtRow({
             {details.length > 0 ? details.join(' · ') : card ? 'Credit card' : 'Loan'}
           </p>
         </div>
-        <p className="shrink-0 text-lg font-extrabold tabular-nums">
-          {balance > 0 ? money(balance) : 'Paid off'}
-        </p>
+        <p className="shrink-0 text-lg font-extrabold tabular-nums">{money(balance)}</p>
       </div>
       {!card && (
         <ProgressBar
@@ -129,7 +127,7 @@ export function GoalsScreen() {
       <div className="grid lg:grid-cols-2">
         <Section
           title="Goals"
-          className="last:border-b lg:pr-6"
+          className="lg:pr-6"
           action={
             <Button size="sm" variant="secondary" onClick={() => setGoalEdit(null)}>
               Add goal
@@ -156,7 +154,7 @@ export function GoalsScreen() {
 
         <Section
           title="Debts"
-          className="lg:border-border last:border-b lg:border-l lg:pl-6"
+          className="lg:border-border lg:border-l lg:pl-6"
           action={
             <div className="flex gap-2">
               <Button

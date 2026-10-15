@@ -192,9 +192,8 @@ export function FreezeScreen() {
                     </p>
                   </div>
                   <Button
-                    variant="ghost"
+                    variant="danger-ghost"
                     size="sm"
-                    className="text-danger"
                     aria-label={`Delete freeze ${span}`}
                     onClick={() =>
                       void run(() => deleteFreeze(f.id), {

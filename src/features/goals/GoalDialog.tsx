@@ -98,7 +98,7 @@ function GoalForm({ goal, onDone }: { goal: Goal | null; onDone(): void }) {
       />
       <div className="flex flex-wrap items-center justify-between gap-2">
         {goal ? (
-          <Button variant="ghost" className="text-danger" disabled={busy} onClick={remove}>
+          <Button variant="danger-ghost" disabled={busy} onClick={remove}>
             Delete
           </Button>
         ) : (

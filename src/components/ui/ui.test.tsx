@@ -9,6 +9,16 @@ import { Section } from './Section';
 import { TextField } from './TextField';
 
 describe('Button', () => {
+  it('has a quiet danger style with exactly one text colour', () => {
+    // cn() joins classes without merging, so a second colour utility would win by CSS order.
+    render(<Button variant="danger-ghost">Delete</Button>);
+    const colours = screen
+      .getByRole('button', { name: 'Delete' })
+      .className.split(' ')
+      .filter((c) => /^text-(text|danger|muted|primary-contrast|white)$/.test(c));
+    expect(colours).toEqual(['text-danger']);
+  });
+
   it('does not submit a form unless asked to', async () => {
     const onSubmit = vi.fn((e: { preventDefault(): void }) => e.preventDefault());
     render(

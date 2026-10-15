@@ -67,7 +67,7 @@ export function BudgetScreen() {
         }
       />
       <div className="grid lg:grid-cols-[7fr_5fr]">
-        <Section title="Limits" className="last:border-b lg:pr-6">
+        <Section title="Limits" className="lg:pr-6">
           {view.limits.length > 0 ? (
             <ul className="divide-border -my-4 divide-y">
               {view.limits.map((s) => (
@@ -88,10 +88,7 @@ export function BudgetScreen() {
           )}
         </Section>
 
-        <Section
-          title="This month by category"
-          className="lg:border-border last:border-b lg:border-l lg:pl-6"
-        >
+        <Section title="This month by category" className="lg:border-border lg:border-l lg:pl-6">
           {byCategory.length > 0 ? (
             <ul className="flex flex-col gap-3">
               {byCategory.map((c) => (

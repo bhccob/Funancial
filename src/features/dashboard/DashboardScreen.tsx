@@ -59,10 +59,7 @@ function Panel({ side, ...props }: { side: 'left' | 'right' } & Parameters<typeo
   return (
     <Section
       {...props}
-      className={cn(
-        'last:border-b',
-        side === 'left' ? 'lg:pr-6' : 'lg:border-border lg:border-l lg:pl-6',
-      )}
+      className={side === 'left' ? 'lg:pr-6' : 'lg:border-border lg:border-l lg:pl-6'}
     />
   );
 }
