@@ -1,5 +1,6 @@
 import { Anchor, Cat, Crown, Gem, Mountain, Rocket, Sprout, type LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/cn';
+import { frameRing } from './frameRing';
 
 const ICONS: Record<string, LucideIcon> = {
   'avatar-sprout': Sprout,
@@ -9,13 +10,6 @@ const ICONS: Record<string, LucideIcon> = {
   'avatar-anchor': Anchor,
   'avatar-crown': Crown,
   'avatar-gem': Gem,
-};
-
-/** Frames are drawn as a 2px ring; `frame-none` (or anything unknown) has none. */
-const RINGS: Record<string, string> = {
-  'frame-silver': 'ring-2 ring-[#a8adb7]',
-  'frame-gold': 'ring-2 ring-[#d4a017]',
-  'frame-game': 'ring-2 ring-xp',
 };
 
 export interface AvatarProps {
@@ -35,7 +29,7 @@ export function Avatar({ item, frame, size = 32 }: AvatarProps) {
       aria-hidden="true"
       className={cn(
         'bg-surface-2 text-text grid shrink-0 place-items-center rounded-full',
-        RINGS[frame],
+        frameRing(frame),
       )}
       style={{ width: size, height: size }}
     >

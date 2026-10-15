@@ -25,6 +25,7 @@ import { FreezeScreen } from '@/features/freeze/FreezeScreen';
 import { GoalsScreen } from '@/features/goals/GoalsScreen';
 import { HistoryScreen } from '@/features/history/HistoryScreen';
 import { PlaceholderScreen } from '@/features/placeholder/PlaceholderScreen';
+import { QuestsScreen } from '@/features/quests/QuestsScreen';
 import { SubscriptionsScreen } from '@/features/subscriptions/SubscriptionsScreen';
 import { SettingsScreen } from '@/features/settings/SettingsScreen';
 
@@ -51,7 +52,7 @@ export const APP_ROUTES: AppRoute[] = [
   { path: '/budget', label: 'Budget', icon: ChartPie, nav: 'tab', element: <BudgetScreen /> },
   placeholder('/invest', 'Invest', TrendingUp, 'tab'),
   placeholder('/buy', 'Buy It?', ShoppingBag, 'tab', 'Should I Buy It?'),
-  placeholder('/quests', 'Quests', Trophy, 'tab'),
+  { path: '/quests', label: 'Quests', icon: Trophy, nav: 'tab', element: <QuestsScreen /> },
   {
     path: '/subscriptions',
     label: 'Subscriptions',
