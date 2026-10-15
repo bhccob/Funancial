@@ -386,13 +386,26 @@ describe('DashboardScreen spending donut', () => {
   });
 
   it('clears a tapped slice when the range changes', async () => {
-    renderDashboard(monthData(), TODAY);
+    // A transport expense this week, so the week has two slices: Food and Transport.
+    const data = monthData();
+    data.tables.expense.push(
+      makeExpense({ date: '2026-10-13', category: 'transport', amount: 10_00 }),
+    );
+    renderDashboard(data, TODAY);
     const spending = region('Spending');
-    await userEvent.click(legendRow(spending, 'Food'));
-    expect(within(spending).getByText('Food · 7%')).toBeInTheDocument();
+    const arcOpacities = () =>
+      [...spending.querySelectorAll('circle')].map((c) => (c as SVGElement).style.opacity);
+
+    // Tap the first slice (Rent in the month). Index 0 is still a slice in the week (Food).
+    await userEvent.click(legendRow(spending, 'Rent'));
+    expect(within(spending).getByText(/· \d+%/)).toHaveTextContent('Rent · 90%');
+    expect(arcOpacities()).toContain('0.25');
+
     await userEvent.click(within(spending).getByRole('button', { name: 'Week' }));
     expect(within(spending).getByText('This week')).toBeInTheDocument();
-    expect(within(spending).queryByText(/· d+%/)).not.toBeInTheDocument();
+    expect(within(spending).queryByText(/· \d+%/)).not.toBeInTheDocument();
+    expect(arcOpacities()).not.toContain('0.25');
+    expect(legendRow(spending, 'Food')).toHaveAttribute('aria-pressed', 'false');
   });
 });
 
