@@ -57,9 +57,21 @@ Android Studio's SDK Manager.
 npm run android:run
 ```
 
-This builds the web app, copies it into the Android project, and installs and starts the app on the
-phone. The first run is slow, because Gradle downloads what it needs. Run it again whenever you want
-the phone to have your latest changes.
+This builds the web app, copies it into the Android project, installs the app on the phone with the
+project's Gradle wrapper, and starts it. The first run is slow, because Gradle downloads what it
+needs. Run it again whenever you want the phone to have your latest changes. If it stops with
+"JAVA_HOME is not set", go back to step 3 of "Set up the computer".
+
+It installs on the one device that is connected and ready. If there is more than one (an emulator
+from Android Studio is running too, say), it lists them and stops. Then set `ANDROID_SERIAL` to the
+one to use, as `adb devices` names it, and run it again. In PowerShell:
+
+```powershell
+$env:ANDROID_SERIAL = "R58M12ABCDE"
+npm run android:run
+```
+
+The setting lasts until you close that terminal.
 
 Related scripts:
 
@@ -75,9 +87,10 @@ Use two terminals:
 2. `npm run android:dev`.
 
 The second command links the phone's `localhost:5173` to your computer's (`adb reverse`), then
-installs an app that loads its pages from the dev server at `http://localhost:5173`. Edits show on
-the phone as soon as you save. Over `adb reverse`, `http://localhost` counts as a secure address, so
-encryption works with no HTTPS certificate.
+builds, installs and starts an app that loads its pages from the dev server at
+`http://localhost:5173`. Edits show on the phone as soon as you save. Over `adb reverse`,
+`http://localhost` counts as a secure address, so encryption works with no HTTPS certificate. It
+picks the phone the same way `npm run android:run` does, `ANDROID_SERIAL` included.
 
 **Before you use the app away from the computer, run `npm run android:run` again.** Until you do,
 the installed app still points at the dev server, and shows an error when the computer is not

@@ -18,7 +18,7 @@
     "preview": "vite preview --port 4173 --strictPort",
     "android:sync": "npm run build && cap sync android",
     "android:open": "cap open android",
-    "android:run": "npm run android:sync && cap run android",
+    "android:run": "npm run android:sync && node scripts/android-run.mjs",
     "android:dev": "node scripts/android-dev.mjs"
   },
   "dependencies": {
