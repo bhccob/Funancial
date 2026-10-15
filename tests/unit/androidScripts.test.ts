@@ -76,8 +76,9 @@ describe('chooseDevice', () => {
 
 describe('gradleCommand', () => {
   it('runs the batch wrapper through cmd on Windows, and the shell wrapper elsewhere', () => {
-    // Node will not start a .bat file by itself.
-    expect(gradleCommand('win32')).toEqual({ command: 'cmd', args: ['/c', 'gradlew.bat'] });
+    // Node will not start a .bat file by itself. And with NoDefaultCurrentDirectoryInExePath set,
+    // as some shells set it, cmd looks for a bare `gradlew.bat` on the Path only, not in the folder.
+    expect(gradleCommand('win32')).toEqual({ command: 'cmd', args: ['/c', '.\\gradlew.bat'] });
     expect(gradleCommand('linux')).toEqual({ command: './gradlew', args: [] });
     expect(gradleCommand('darwin')).toEqual({ command: './gradlew', args: [] });
   });

@@ -64,12 +64,14 @@ export function chooseDevice(devices, wanted) {
 }
 
 /**
- * How to run the Gradle wrapper on `platform`. Node will not start a .bat file by itself.
+ * How to run the Gradle wrapper on `platform`, from the android folder. Node will not start a
+ * .bat file by itself, so cmd does. The path is spelled out: with NoDefaultCurrentDirectoryInExePath
+ * set, as some shells set it, cmd looks for a bare `gradlew.bat` on the Path only.
  * @param {NodeJS.Platform} platform
  */
 export function gradleCommand(platform) {
   return platform === 'win32'
-    ? { command: 'cmd', args: ['/c', 'gradlew.bat'] }
+    ? { command: 'cmd', args: ['/c', '.\\gradlew.bat'] }
     : { command: './gradlew', args: [] };
 }
 
