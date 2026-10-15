@@ -26,6 +26,7 @@ import { GoalsScreen } from '@/features/goals/GoalsScreen';
 import { HistoryScreen } from '@/features/history/HistoryScreen';
 import { PlaceholderScreen } from '@/features/placeholder/PlaceholderScreen';
 import { QuestsScreen } from '@/features/quests/QuestsScreen';
+import { ShopScreen } from '@/features/shop/ShopScreen';
 import { SubscriptionsScreen } from '@/features/subscriptions/SubscriptionsScreen';
 import { SettingsScreen } from '@/features/settings/SettingsScreen';
 
@@ -71,7 +72,7 @@ export const APP_ROUTES: AppRoute[] = [
   placeholder('/news', 'News', Newspaper, 'more'),
   { path: '/goals', label: 'Goals', icon: Target, nav: 'more', element: <GoalsScreen /> },
   { path: '/history', label: 'History', icon: Clock, nav: 'more', element: <HistoryScreen /> },
-  placeholder('/shop', 'Shop', Store, 'more'),
+  { path: '/shop', label: 'Shop', icon: Store, nav: 'more', element: <ShopScreen /> },
   placeholder('/inbox', 'Inbox', Inbox, 'more'),
   placeholder('/help', 'Help', CircleQuestionMark, 'more'),
   {
