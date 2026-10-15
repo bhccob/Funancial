@@ -51,7 +51,7 @@ describe('Button', () => {
     const button = screen.getByRole('button', { name: 'Save' });
     expect(button).toHaveClass('motion-safe:transition-[transform,background-color,opacity]');
     expect(button).toHaveClass('motion-safe:active:scale-[0.98]');
-    expect(button.className).not.toMatch(/(^|s)(transition|duration-|active:scale|motion-reduce)/);
+    expect(button.className).not.toMatch(/(^|\s)(transition|duration-|active:scale|motion-reduce)/);
   });
 
   it('does not submit a form unless asked to', async () => {
@@ -189,7 +189,7 @@ describe('PageHeader', () => {
     render(<PageHeader title="Goals" />);
     const header = screen.getByRole('banner');
     expect(header).toHaveClass('pb-2');
-    expect(header.className).not.toMatch(/(^|s)border-/);
+    expect(header.className).not.toMatch(/(^|\s)border-/);
   });
 });
 
@@ -198,7 +198,7 @@ describe('ProgressBar', () => {
     render(<ProgressBar label="Food" value={40} level="ok" valueText="40% used" />);
     const fill = screen.getByRole('progressbar', { name: 'Food' }).firstElementChild!;
     expect(fill).toHaveClass('motion-safe:transition-[width]', 'motion-safe:duration-300');
-    expect(fill.className).not.toMatch(/(^|s)(transition|duration-)/);
+    expect(fill.className).not.toMatch(/(^|\s)(transition|duration-)/);
   });
 });
 
