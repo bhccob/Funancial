@@ -109,3 +109,11 @@ export function createSpendIndex(data: DataSnapshot, weekStartsOn: 0 | 1): Spend
       }),
   };
 }
+
+/** Whether any day from `start` to `end`, inclusive, was over a limit. */
+export function anyOver(spend: SpendIndex, start: LocalDate, end: LocalDate): boolean {
+  for (let day = start; day <= end; day = addDays(day, 1)) {
+    if (spend.overOn(day)) return true;
+  }
+  return false;
+}

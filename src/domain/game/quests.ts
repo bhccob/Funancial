@@ -1,7 +1,7 @@
 import { addDays, type LocalDate } from '../dates';
 import { monthKey, weekRange } from '../periods';
 import type { DataSnapshot } from '../snapshot';
-import { createSpendIndex, loggedEntries, localDay, type SpendIndex } from './activity';
+import { anyOver, createSpendIndex, loggedEntries, localDay } from './activity';
 import { QUEST_REWARDS } from './rules';
 import type { Award, GameContext, QuestId, Reward } from './types';
 
@@ -70,14 +70,6 @@ function logToday(data: DataSnapshot, ctx: GameContext): QuestView {
       spentToday ? null : 'no-spend',
     ),
   );
-}
-
-/** Whether any day from `start` to `end`, inclusive, was over a limit. */
-function anyOver(spend: SpendIndex, start: LocalDate, end: LocalDate): boolean {
-  for (let day = start; day <= end; day = addDays(day, 1)) {
-    if (spend.overOn(day)) return true;
-  }
-  return false;
 }
 
 /** Progress through the week's limits. It is only ever won once the week has closed. */
