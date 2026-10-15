@@ -9,6 +9,14 @@ levels, quests, streaks and badges. Local-first and encrypted on your device.
 - Implementation plans: `docs/superpowers/plans/`
 - Run it on an Android phone, with live reload: `docs/android.md`
 
+## Game layer
+
+Logging an expense or income, finishing a quest or a challenge, reaching a streak milestone and
+earning a badge all pay XP, and XP raises your level. Everything except logging also pays coins,
+which you spend in the shop on themes, avatars, frames and streak freezes. Every reward comes from
+your own data and is listed under "How to earn" on the Quests screen. Coins are only for fun: they
+can't be bought and have no money value.
+
 ## Scripts
 
 | Command             | What it does                                             |
