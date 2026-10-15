@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { InvalidBackupError } from '@/data/backup';
 import { dexieStorage } from '@/data/db';
+import { browserKeyring } from '@/data/keyring';
 import { WrongSecretError } from '@/data/keys';
 import type { SyncMessage } from '@/lib/broadcast';
 import type { SafeStorage } from '@/lib/safeStorage';
@@ -30,6 +31,7 @@ function testDeps(overrides: Partial<AppDeps> = {}) {
     storageStatus: async () => true,
     requestPersistence: async () => true,
     storage: dexieStorage(prefix),
+    keyring: browserKeyring,
     ...overrides,
   };
   return { deps, posts, advance: (ms: number) => void (clock += ms) };

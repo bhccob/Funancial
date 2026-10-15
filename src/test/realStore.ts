@@ -1,4 +1,5 @@
 import { dexieStorage } from '@/data/db';
+import { browserKeyring } from '@/data/keyring';
 import type { SyncMessage } from '@/lib/broadcast';
 import type { SafeStorage } from '@/lib/safeStorage';
 import { createAppStore, type AppDeps } from '@/store/appStore';
@@ -22,6 +23,7 @@ export function realStoreDeps(overrides: Partial<AppDeps> = {}) {
     storageStatus: async () => true,
     requestPersistence: async () => true,
     storage: dexieStorage(prefix),
+    keyring: browserKeyring,
     ...overrides,
   };
   return { deps, posts };

@@ -8,6 +8,7 @@ import {
 } from '@/data/backup';
 import { dexieStorage, type Namespace } from '@/data/db';
 import { buildDemoSnapshot } from '@/data/demoSeed';
+import { browserKeyring, type DeviceKeyring } from '@/data/keyring';
 import {
   clearVaultSecret,
   createVault,
@@ -51,6 +52,8 @@ export interface AppDeps {
   requestPersistence(): Promise<boolean>;
   /** Where the encrypted records and vault metadata live: IndexedDB on the web. */
   storage: StorageProvider;
+  /** Where the vault's device-mode key lives: a non-extractable key in IndexedDB on the web. */
+  keyring: DeviceKeyring;
 }
 
 export interface AppState {
@@ -183,7 +186,8 @@ export function createAppStore(deps: AppDeps): StoreApi<AppState> {
             lockedUntil: activeUntil(throttle?.lockedUntil ?? null),
           });
           if (lockMode === null) set({ phase: 'welcome' });
-          else if (lockMode === 'device') await openWith(await unlockVault(s.backend.meta));
+          else if (lockMode === 'device')
+            await openWith(await unlockVault(s.backend.meta, undefined, deps.keyring));
           else set({ phase: 'locked' });
         } catch {
           await closeSession();
@@ -195,7 +199,7 @@ export function createAppStore(deps: AppDeps): StoreApi<AppState> {
         if (!session) throw new Error('Call boot() first');
         let key: CryptoKey;
         try {
-          key = await createVault(session.backend.meta);
+          key = await createVault(session.backend.meta, deps.keyring);
         } catch (e) {
           // Another tab started first: use its vault rather than replacing it.
           if (e instanceof VaultExistsError) return get().boot();
@@ -218,7 +222,7 @@ export function createAppStore(deps: AppDeps): StoreApi<AppState> {
         try {
           await deps.storage.remove('demo');
           const s = await openSession('demo');
-          const key = await createVault(s.backend.meta);
+          const key = await createVault(s.backend.meta, deps.keyring);
           await createRepository(s.backend, key).replaceAll(snapshot);
           deps.safeStorage.set(NAMESPACE_KEY, 'demo');
           set({ namespace: 'demo', lockMode: 'device', failedAttempts: 0, lockedUntil: null });
@@ -249,7 +253,7 @@ export function createAppStore(deps: AppDeps): StoreApi<AppState> {
         if (!s) throw new Error('Call boot() first');
         set({ checking: true });
         try {
-          const key = await unlockVault(s.backend.meta, secret);
+          const key = await unlockVault(s.backend.meta, secret, deps.keyring);
           await s.backend.meta.delete(THROTTLE_KEY);
           set({ failedAttempts: 0, lockedUntil: null });
           await openWith(key);
@@ -272,7 +276,7 @@ export function createAppStore(deps: AppDeps): StoreApi<AppState> {
       async verifySecret(secret) {
         if (!session || get().lockMode === 'device') return true;
         try {
-          await unlockVault(session.backend.meta, secret);
+          await unlockVault(session.backend.meta, secret, deps.keyring);
           return true;
         } catch (e) {
           if (e instanceof WrongSecretError) return false;
@@ -302,7 +306,7 @@ export function createAppStore(deps: AppDeps): StoreApi<AppState> {
       async clearSecret() {
         requireReal('be unlocked');
         const s = unlocked();
-        await clearVaultSecret(s.backend.meta, s.key);
+        await clearVaultSecret(s.backend.meta, s.key, deps.keyring);
         set({ lockMode: 'device' });
         deps.channel.post({ type: 'reload', reason: 'secret' });
       },
@@ -415,4 +419,5 @@ export const appStore = createAppStore({
   storageStatus: persistentStorageStatus,
   requestPersistence: requestPersistentStorage,
   storage: dexieStorage(),
+  keyring: browserKeyring,
 });
