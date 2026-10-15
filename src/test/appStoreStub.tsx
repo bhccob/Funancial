@@ -20,6 +20,7 @@ export function createStubStore(overrides: Partial<AppState> = {}): StoreApi<App
     checking: false,
     today: '2026-10-14',
     biometric: 'unavailable',
+    gameGain: null,
     boot: vi.fn(async () => {}),
     startFresh: vi.fn(async () => {}),
     startDemo: vi.fn(async () => {}),
