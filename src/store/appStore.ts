@@ -202,13 +202,11 @@ export function createAppStore(deps: AppDeps): StoreApi<AppState> {
       if (result.status === 'cancelled') return 'cancelled';
       const key = result.status === 'ok' ? await importDataKey(result.secret) : null;
       if (!key) {
-        // The copy is gone: stop asking, and leave the PIN as the way in.
+        // The copy is gone: stop asking, and leave the PIN as the way in. A failure to tidy up
+        // (already logged) still stops asking for now; the next start tries again.
         await get()
           .disableBiometric()
-          .catch((e: unknown) => {
-            console.error('Turning biometric unlock off failed', e);
-            set({ biometric: 'off' });
-          });
+          .catch(() => set({ biometric: 'off' }));
         return 'changed';
       }
       // The PIN may have opened the app meanwhile, or everything was erased.
@@ -401,14 +399,26 @@ export function createAppStore(deps: AppDeps): StoreApi<AppState> {
           throw new Error('Set a PIN or passphrase first.');
         }
         const s = unlocked();
-        // The raw key leaves memory only for the Keystore slot that biometrics guard.
-        const raw = new Uint8Array(await crypto.subtle.exportKey('raw', s.key));
+        if (get().biometric === 'on') return;
+        const slot = biometricSlot(namespace);
         try {
-          await deps.biometric.store(biometricSlot(namespace), bytesToBase64(raw));
-        } finally {
-          raw.fill(0);
+          // The raw key leaves memory only for the Keystore slot that biometrics guard.
+          const raw = new Uint8Array(await crypto.subtle.exportKey('raw', s.key));
+          try {
+            await deps.biometric.store(slot, bytesToBase64(raw));
+          } finally {
+            raw.fill(0);
+          }
+          await s.backend.meta.put(BIOMETRIC_KEY, true);
+        } catch (e) {
+          // The phone's own wording stays in the log; no copy stays behind with it off.
+          console.error('Turning biometric unlock on failed', e);
+          await deps.biometric.forget(slot).catch(() => {});
+          throw new Error(
+            `Fingerprint or face unlock couldn't be turned on. Try again, or keep using your ${lockMode === 'pin' ? 'PIN' : 'passphrase'}.`,
+            { cause: e },
+          );
         }
-        await s.backend.meta.put(BIOMETRIC_KEY, true);
         set({ biometric: 'on' });
       },
 
@@ -416,9 +426,16 @@ export function createAppStore(deps: AppDeps): StoreApi<AppState> {
         const s = session;
         if (!s) throw new Error('Call boot() first');
         if (deps.biometric) {
-          // The copy first: if that fails it stays on, rather than off with a copy left behind.
-          await deps.biometric.forget(biometricSlot(get().namespace));
-          await s.backend.meta.delete(BIOMETRIC_KEY);
+          try {
+            // The copy first: if that fails it stays on, rather than off with a copy left behind.
+            await deps.biometric.forget(biometricSlot(get().namespace));
+            await s.backend.meta.delete(BIOMETRIC_KEY);
+          } catch (e) {
+            console.error('Turning biometric unlock off failed', e);
+            throw new Error("Fingerprint or face unlock couldn't be turned off. Try again.", {
+              cause: e,
+            });
+          }
         }
         if (get().biometric === 'on') set({ biometric: 'off' });
       },

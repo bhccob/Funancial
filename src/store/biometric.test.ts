@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { base64ToBytes } from '@/data/crypto';
 import { fakeBiometric } from '@/test/fakeBiometric';
 import { makeExpense } from '@/test/fixtures';
@@ -159,6 +159,42 @@ describe('biometric unlock', () => {
       expect(store.getState().biometric).toBe('unavailable');
       await expect(store.getState().enableBiometric()).rejects.toThrow();
       expect(store.getState().biometric).toBe('unavailable');
+    }
+  });
+
+  it('says in plain words when the phone cannot turn it on or off, and logs why', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const bio = fakeBiometric();
+      const { store, deps } = await freshRealStore({ biometric: bio });
+      await store.getState().setSecret('2468', 'pin');
+      const keystore = new Error('Keystore key generation failed');
+      bio.store.mockRejectedValueOnce(keystore);
+
+      await expect(store.getState().enableBiometric()).rejects.toThrow(
+        new Error(
+          "Fingerprint or face unlock couldn't be turned on. Try again, or keep using your PIN.",
+        ),
+      );
+
+      expect(consoleError).toHaveBeenCalledWith(expect.any(String), keystore);
+      expect(store.getState().biometric).toBe('off');
+      expect(bio.slots.size).toBe(0);
+      expect(await storedFlag(deps)).toBeUndefined();
+
+      await store.getState().enableBiometric();
+      const deleting = new Error('Failed to delete data');
+      bio.forget.mockRejectedValueOnce(deleting);
+
+      await expect(store.getState().disableBiometric()).rejects.toThrow(
+        new Error("Fingerprint or face unlock couldn't be turned off. Try again."),
+      );
+
+      expect(consoleError).toHaveBeenCalledWith(expect.any(String), deleting);
+      expect(store.getState().biometric).toBe('on');
+      expect(await storedFlag(deps)).toBe(true);
+    } finally {
+      consoleError.mockRestore();
     }
   });
 });

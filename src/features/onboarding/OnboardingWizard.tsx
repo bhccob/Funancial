@@ -8,6 +8,7 @@ import { TextField } from '@/components/ui/TextField';
 import { validateSecret, type SecretKind } from '@/data/keys';
 import { formatMoney, minorDigits } from '@/domain/money';
 import { cn } from '@/lib/cn';
+import { toast } from '@/lib/toast';
 import { useAction } from '@/lib/useAction';
 import { useApp } from '@/store/AppStoreProvider';
 import { currencyOptions } from '@/features/shared/currencies';
@@ -31,6 +32,8 @@ const DAY_OPTIONS = Array.from({ length: 31 }, (_, i) => ({
 
 type LockChoice = 'none' | SecretKind;
 const LOCK_NAMES: Record<SecretKind, string> = { pin: 'PIN', passphrase: 'passphrase' };
+const BIOMETRIC_FAILED =
+  "Fingerprint or face unlock couldn't be turned on. You can try again in Settings.";
 
 interface CardDraft {
   key: number;
@@ -171,10 +174,7 @@ export function OnboardingWizard() {
     setBusy(true);
     await run(async () => {
       // Lock first: saving the profile switches to the Dashboard, so the chosen lock must already hold.
-      if (lock !== 'none') {
-        await setSecret(secret, lock);
-        if (biometricAvailable && alsoBiometric) await enableBiometric();
-      }
+      if (lock !== 'none') await setSecret(secret, lock);
       await completeOnboarding({
         name,
         currency,
@@ -183,6 +183,11 @@ export function OnboardingWizard() {
         salary: noSalary ? null : { monthlyAmount: salary ?? 0, payDay: Number(payDay) },
         cards: cards.map((d) => d.card),
       });
+      // Biometrics last, once set up: an extra that must never stop the person finishing, and
+      // never left on by an attempt that did not finish.
+      if (lock !== 'none' && biometricAvailable && alsoBiometric) {
+        await enableBiometric().catch(() => toast('warning', BIOMETRIC_FAILED));
+      }
     });
     setBusy(false);
   }
