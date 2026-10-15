@@ -35,6 +35,18 @@ const STEPS: Record<number, Step> = {
             },
           },
   },
+  4: {
+    // Spelled out for the same reason as step 3. The four game tables are new, so they have no
+    // old rows to upgrade; a snapshot without them gets empty ones from the schema.
+    settings: (r) =>
+      typeof r.cosmetics === 'object' && r.cosmetics !== null
+        ? r
+        : {
+            ...r,
+            cosmetics: { theme: 'theme-violet', avatar: 'avatar-sprout', frame: 'frame-none' },
+          },
+    subscription: (r) => (r.auditedAt !== undefined ? r : { ...r, auditedAt: null }),
+  },
 };
 
 export const LATEST_VERSION = Math.max(1, ...Object.keys(STEPS).map(Number));

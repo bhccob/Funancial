@@ -1,13 +1,17 @@
 import { z } from 'zod';
 import {
   BudgetLimitSchema,
+  ChallengeSchema,
+  CheckInSchema,
   DebtSchema,
   ExpenseSchema,
   GoalSchema,
   IncomeSchema,
+  LedgerEntrySchema,
   ProfileSchema,
   SalaryFreezeSchema,
   SettingsSchema,
+  StreakFreezeSchema,
   SubscriptionSchema,
   TransactionSchema,
 } from './entities';
@@ -24,6 +28,10 @@ export const TABLES = [
   'transaction',
   'goal',
   'debt',
+  'ledger',
+  'checkIn',
+  'challenge',
+  'streakFreeze',
 ] as const;
 export type TableName = (typeof TABLES)[number];
 
@@ -38,12 +46,16 @@ export const SCHEMAS = {
   transaction: TransactionSchema,
   goal: GoalSchema,
   debt: DebtSchema,
+  ledger: LedgerEntrySchema,
+  checkIn: CheckInSchema,
+  challenge: ChallengeSchema,
+  streakFreeze: StreakFreezeSchema,
 } satisfies Record<TableName, z.ZodType>;
 
 export type EntityMap = { [K in TableName]: z.infer<(typeof SCHEMAS)[K]> };
 export type EntityOf<T extends TableName> = EntityMap[T];
 
-export const CURRENT_SCHEMA_VERSION = 3;
+export const CURRENT_SCHEMA_VERSION = 4;
 
 /** One record tagged with its table, for batch writes. */
 export type TableRecord = { [K in TableName]: { table: K; record: EntityOf<K> } }[TableName];
@@ -70,6 +82,11 @@ export const SnapshotSchema = z.object({
     transaction: table('transaction', TransactionSchema),
     goal: table('goal', GoalSchema),
     debt: table('debt', DebtSchema),
+    // Added in v4: snapshots and backups from before it have none of these.
+    ledger: table('ledger', LedgerEntrySchema).default([]),
+    checkIn: table('checkIn', CheckInSchema).default([]),
+    challenge: table('challenge', ChallengeSchema).default([]),
+    streakFreeze: table('streakFreeze', StreakFreezeSchema).default([]),
   }),
 });
 
@@ -92,6 +109,10 @@ export function emptySnapshot(): DataSnapshot {
       transaction: [],
       goal: [],
       debt: [],
+      ledger: [],
+      checkIn: [],
+      challenge: [],
+      streakFreeze: [],
     },
   };
 }

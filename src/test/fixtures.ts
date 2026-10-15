@@ -1,13 +1,17 @@
-import { toLocalDate } from '@/domain/dates';
+import { addDays, toLocalDate, type LocalDate } from '@/domain/dates';
 import {
   defaultSettings,
   type BudgetLimit,
+  type Challenge,
+  type CheckIn,
   type Debt,
   type Expense,
   type Goal,
   type Income,
+  type LedgerEntry,
   type Profile,
   type Settings,
+  type StreakFreeze,
   type Subscription,
   type Transaction,
 } from '@/domain/entities';
@@ -18,6 +22,15 @@ const stamp = () => {
   return { createdAt: now, updatedAt: now };
 };
 const today = () => toLocalDate(new Date());
+
+/**
+ * An ISO timestamp for `hour` o'clock on the local day `day`. Built from local date parts, so
+ * `toLocalDate(new Date(localIso(day)))` is `day` in every time zone.
+ */
+export function localIso(day: LocalDate, hour = 12): string {
+  const [y, m, d] = day.split('-').map(Number) as [number, number, number];
+  return new Date(y, m - 1, d, hour).toISOString();
+}
 
 export function makeProfile(overrides: Partial<Profile> = {}): Profile {
   return {
@@ -86,6 +99,7 @@ export function makeSubscription(overrides: Partial<Subscription> = {}): Subscri
     cardId: null,
     status: 'active',
     audit: null,
+    auditedAt: null,
     note: '',
     ...overrides,
   };
@@ -148,6 +162,54 @@ export function makeTransaction(overrides: Partial<Transaction> = {}): Transacti
     to: 'savings',
     debtId: null,
     note: '',
+    ...overrides,
+  };
+}
+
+export function makeLedgerEntry(overrides: Partial<LedgerEntry> = {}): LedgerEntry {
+  return {
+    id: newId(),
+    ...stamp(),
+    key: 'test-award',
+    kind: 'award',
+    xp: 10,
+    coins: 1,
+    label: 'Test award',
+    ...overrides,
+  };
+}
+
+export function makeCheckIn(overrides: Partial<CheckIn> = {}): CheckIn {
+  return {
+    id: newId(),
+    ...stamp(),
+    kind: 'no-spend',
+    date: today(),
+    ...overrides,
+  };
+}
+
+export function makeChallenge(overrides: Partial<Challenge> = {}): Challenge {
+  const start = overrides.start ?? today();
+  return {
+    id: newId(),
+    ...stamp(),
+    kind: 'no-spend-weekend',
+    start,
+    end: addDays(start, 1),
+    baseline: null,
+    goal: null,
+    status: 'active',
+    ...overrides,
+  };
+}
+
+export function makeStreakFreeze(overrides: Partial<StreakFreeze> = {}): StreakFreeze {
+  return {
+    id: newId(),
+    ...stamp(),
+    streak: 'logging',
+    date: today(),
     ...overrides,
   };
 }

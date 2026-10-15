@@ -82,6 +82,7 @@ describe('first run', () => {
           backup: true,
           prompted: false,
         },
+        cosmetics: { theme: 'theme-violet', avatar: 'avatar-sprout', frame: 'frame-none' },
       },
     ]);
   });
