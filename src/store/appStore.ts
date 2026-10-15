@@ -160,6 +160,8 @@ export function createAppStore(deps: AppDeps): StoreApi<AppState> {
   let session: Session | null = null;
   /** Numbers the gains, across locks and boots, so a screen never mistakes a new one for an old one. */
   let lastGainId = 0;
+  /** True while the demo's seeded history is first settled: it is paid out, but not published as a gain. */
+  let seedingDemo = false;
 
   const nowIsoString = () => new Date(deps.now()).toISOString();
   /** A throttle deadline that has passed no longer applies. */
@@ -241,7 +243,7 @@ export function createAppStore(deps: AppDeps): StoreApi<AppState> {
         const { records, gain } = gameUpdates(get().data, gameContext(get(), nowIsoString()));
         if (records.length === 0) return false;
         await writeRecords(records);
-        if (gain) set({ gameGain: { id: ++lastGainId, gain } });
+        if (gain && !seedingDemo) set({ gameGain: { id: ++lastGainId, gain } });
         return true;
       } catch (e) {
         console.error('Updating the game layer failed', e);
@@ -363,8 +365,16 @@ export function createAppStore(deps: AppDeps): StoreApi<AppState> {
             failedAttempts: 0,
             lockedUntil: null,
             biometric: get().biometric === 'unavailable' ? 'unavailable' : 'off',
+            gameGain: null,
           });
-          await openWith(key);
+          // The demo's history is celebrated by no one: the settle on the way in publishes no gain,
+          // not even for the instant before a later clear, which a screen could already have shown.
+          seedingDemo = true;
+          try {
+            await openWith(key);
+          } finally {
+            seedingDemo = false;
+          }
         } catch (e) {
           await closeSession();
           await deps.storage.remove('demo').catch(() => {});

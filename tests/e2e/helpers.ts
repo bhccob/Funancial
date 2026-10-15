@@ -43,13 +43,9 @@ export async function startFresh(page: Page, path = '/') {
   if (path !== '/') await page.goto(path);
 }
 
-/** First run → "Try with demo money" → Home with the demo banner and the level-up dialog dismissed. */
+/** First run → "Try with demo money" → Home with the demo banner. */
 export async function startDemo(page: Page) {
   await page.goto('/');
   await page.getByRole('button', { name: 'Try with demo money' }).click();
   await expect(page.getByText("You're using demo money.")).toBeVisible();
-  // The first settle celebrates the seeded history, and the modal dialog holds the page inert.
-  const levelUp = page.getByRole('dialog', { name: /^Level \d+$/ });
-  await levelUp.getByRole('button', { name: 'Nice' }).click();
-  await expect(levelUp).toBeHidden();
 }

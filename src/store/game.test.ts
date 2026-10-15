@@ -441,3 +441,24 @@ describe('locking', () => {
     expect(store.getState().gameGain).toBeNull();
   });
 });
+
+describe('the demo', () => {
+  it('settles its seeded history without celebrating it', async () => {
+    const { store } = await setup();
+
+    await store.getState().startDemo();
+
+    // The history was paid out, but nothing is shown for it.
+    expect(ledgerOf(store).length).toBeGreaterThan(0);
+    expect(store.getState().gameGain).toBeNull();
+  });
+
+  it('celebrates what is earned inside the demo', async () => {
+    const { store } = await setup();
+    await store.getState().startDemo();
+
+    await createFinanceActions(store).addExpense({ ...lunch, note: 'Demo coffee' });
+
+    expect(store.getState().gameGain).toMatchObject({ gain: { xp: 10 } });
+  });
+});

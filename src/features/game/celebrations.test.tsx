@@ -6,6 +6,7 @@ import { Toaster } from '@/components/ui/Toaster';
 import type { GameGain } from '@/domain/game/engine';
 import { toastStore } from '@/lib/toast';
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
+import { freshRealStore } from '@/test/realStore';
 import { Celebrations } from './Celebrations';
 
 type Reward = GameGain['rewards'][number];
@@ -277,5 +278,23 @@ describe('Celebrations: once per gain', () => {
     publish(gain({ rewards: [reward('quest', 'Review your week', 20, 5)] }));
     act(() => store.setState({ gameGain: null }));
     expect(messages()).toHaveLength(1);
+  });
+});
+
+describe('Celebrations: entering the demo', () => {
+  it('shows nothing for the seeded history of the demo', async () => {
+    const { store } = await freshRealStore();
+    renderWithStore(
+      <>
+        <Celebrations />
+        <Toaster />
+      </>,
+      store,
+    );
+
+    await act(() => store.getState().startDemo());
+
+    expect(messages()).toEqual([]);
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 });
