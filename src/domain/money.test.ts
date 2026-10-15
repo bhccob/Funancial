@@ -47,4 +47,11 @@ describe('formatMoney', () => {
     expect(formatMoney(-500, 'USD', 'en-US', { signDisplay: 'always' })).toBe('-$5.00');
     expect(formatMoney(500, 'USD', 'en-US', { signDisplay: 'always' })).toBe('+$5.00');
   });
+
+  it('formats whole units', () => {
+    expect(formatMoney(188436, 'USD', 'en-US', { whole: true })).toBe('$1,884');
+    expect(formatMoney(-188436, 'USD', 'en-US', { whole: true })).toBe('-$1,884');
+    expect(formatMoney(-500, 'USD', 'en-US', { whole: true, signDisplay: 'always' })).toBe('-$5');
+    expect(formatMoney(1234, 'JPY', 'en-US', { whole: true })).toBe('¥1,234');
+  });
 });
