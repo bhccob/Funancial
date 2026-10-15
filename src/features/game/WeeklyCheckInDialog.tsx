@@ -1,20 +1,23 @@
-import { useId, useState } from 'react';
+import { useId, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Dialog } from '@/components/ui/Dialog';
-import { limitLabel } from '@/domain/budget';
+import { limitLabel, upcomingBills } from '@/domain/budget';
 import { addDays } from '@/domain/dates';
 import { monthKey } from '@/domain/periods';
 import { formatMonth } from '@/lib/format';
 import { useAction } from '@/lib/useAction';
+import { useApp } from '@/store/AppStoreProvider';
 import { useFinanceView, useMoney, useToday } from '@/store/useFinance';
 import { useGameActions } from '@/store/useGame';
 
-const BILLS_WITHIN_DAYS = 7;
+/** "The next 7 days" is today and the six days after it. */
+const BILLS_LAST_DAY = 6;
 
 function CheckInForm({ onDone }: { onDone(): void }) {
   const view = useFinanceView();
   const money = useMoney();
   const today = useToday();
+  const data = useApp((s) => s.data);
   const { checkInWeek } = useGameActions();
   const run = useAction();
   const [busy, setBusy] = useState(false);
@@ -22,7 +25,11 @@ function CheckInForm({ onDone }: { onDone(): void }) {
 
   const month = formatMonth(monthKey(today));
   const limits = view.limits.slice(0, 3);
-  const bills = view.bills.filter((b) => b.date <= addDays(today, BILLS_WITHIN_DAYS));
+  // Not `view.bills`: those stop at month end, and the week can run into the next month.
+  const bills = useMemo(() => {
+    const lastDay = addDays(today, BILLS_LAST_DAY);
+    return upcomingBills(data, today, lastDay).filter((b) => b.date <= lastDay);
+  }, [data, today]);
   const billsTotal = bills.reduce((sum, b) => sum + b.amount, 0);
 
   async function checkIn() {

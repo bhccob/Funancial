@@ -112,6 +112,26 @@ describe('upcomingBills', () => {
     expect(upcomingBills(d, TODAY)).toEqual([]);
   });
 
+  it('looks as far as `until` says, while the default stops at month end', () => {
+    const d = data();
+    d.tables.subscription = [
+      makeSubscription({ name: 'Early next month', amount: 15_99, nextRenewal: '2026-11-02' }),
+      makeSubscription({ name: 'Later', amount: 9_99, nextRenewal: '2026-11-04' }),
+    ];
+    const names = (bills: ReturnType<typeof upcomingBills>) => bills.map((b) => [b.date, b.name]);
+
+    expect(upcomingBills(d, '2026-10-28')).toEqual([]);
+    expect(names(upcomingBills(d, '2026-10-28', '2026-11-03'))).toEqual([
+      ['2026-11-02', 'Early next month'],
+    ]);
+    // `until` is a day that still counts.
+    expect(names(upcomingBills(d, '2026-10-28', '2026-11-04'))).toEqual([
+      ['2026-11-02', 'Early next month'],
+      ['2026-11-04', 'Later'],
+    ]);
+    expect(upcomingBills(d, '2026-10-28', '2026-11-01')).toEqual([]);
+  });
+
   it('lists each weekly renewal left this month', () => {
     const d = data();
     d.tables.subscription = [

@@ -16,6 +16,7 @@ import { useGameView } from '@/store/useGame';
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
 import {
   localIso,
+  makeDebt,
   makeExpense,
   makeLedgerEntry,
   makeLimit,
@@ -438,6 +439,56 @@ describe('WeeklyCheckInDialog', () => {
 
     expect(within(dialog).getByText('Bills in the next 7 days')).toBeInTheDocument();
     expect(within(dialog).getByText(`1 bill · ${usd(15_99)}`)).toBeInTheDocument();
+  });
+
+  it('counts a renewal in the first days of next month when the week runs past month end', () => {
+    const data = dataWith((d) => {
+      d.tables.subscription = [
+        makeSubscription({ name: 'Streamflix', amount: 15_99, nextRenewal: '2026-11-02' }),
+        makeSubscription({ name: 'FitHub Gym', amount: 40_00, nextRenewal: '2026-11-04' }),
+      ];
+    });
+    renderIn(
+      <WeeklyCheckInDialog open onClose={() => {}} />,
+      createStubStore({ data, today: '2026-10-28' }),
+    );
+    const dialog = screen.getByRole('dialog', { name: 'Weekly check-in' });
+    expect(within(dialog).getByText(`1 bill · ${usd(15_99)}`)).toBeInTheDocument();
+    expect(within(dialog).queryByText('Nothing due')).not.toBeInTheDocument();
+  });
+
+  it('counts bills from today to six days later, and not the seventh day after', () => {
+    const data = dataWith((d) => {
+      d.tables.subscription = [
+        makeSubscription({ name: 'Today', amount: 1_00, nextRenewal: TODAY }),
+        makeSubscription({ name: 'Day 6', amount: 2_00, nextRenewal: '2026-10-20' }),
+        makeSubscription({ name: 'Day 7', amount: 4_00, nextRenewal: '2026-10-21' }),
+      ];
+      // A card's next bill is its due day: the 21st is the seventh day after today.
+      d.tables.debt = [
+        makeDebt({ name: 'Visa', openingBalance: 500_00, openingDate: '2026-10-01', dueDay: 21 }),
+      ];
+    });
+    renderIn(
+      <WeeklyCheckInDialog open onClose={() => {}} />,
+      createStubStore({ data, today: TODAY }),
+    );
+    const dialog = screen.getByRole('dialog', { name: 'Weekly check-in' });
+    expect(within(dialog).getByText(`2 bills · ${usd(3_00)}`)).toBeInTheDocument();
+  });
+
+  it('counts a card due on the sixth day after today', () => {
+    const data = dataWith((d) => {
+      d.tables.debt = [
+        makeDebt({ name: 'Visa', openingBalance: 500_00, openingDate: '2026-10-01', dueDay: 20 }),
+      ];
+    });
+    renderIn(
+      <WeeklyCheckInDialog open onClose={() => {}} />,
+      createStubStore({ data, today: TODAY }),
+    );
+    const dialog = screen.getByRole('dialog', { name: 'Weekly check-in' });
+    expect(within(dialog).getByText(`1 bill · ${usd(500_00)}`)).toBeInTheDocument();
   });
 
   it('says so when there are no limits and no bills', () => {
