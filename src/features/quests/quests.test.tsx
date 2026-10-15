@@ -169,15 +169,26 @@ describe('Quests screen: streaks', () => {
     expect(within(checkin).getByText('1 week')).toBeInTheDocument();
   });
 
-  it('says to start a new streak at 0 for a streak that is tracked', () => {
+  it('says the no-overspending streak waits for the limit to reset while today is over', () => {
     renderQuests((d) => {
       d.tables.budgetLimit = [aLimit()];
-      // Over the limit today: the no-overspending streak is tracked, and starts again.
+      // Over the limit today: the streak is tracked, but cannot start again until the limit resets.
       d.tables.expense = [makeExpense({ date: TODAY, createdAt: AT(TODAY), amount: 500_00 })];
     });
-    const noOverspend = within(region('Streaks')).getAllByRole('listitem')[1]!;
-    expect(within(noOverspend).getByText('Start a new streak today.')).toBeInTheDocument();
+    const [, noOverspend, checkin] = within(region('Streaks')).getAllByRole('listitem') as [
+      HTMLElement,
+      HTMLElement,
+      HTMLElement,
+    ];
+    expect(
+      within(noOverspend).getByText(
+        'Over a limit right now. The streak starts again when it resets.',
+      ),
+    ).toBeInTheDocument();
+    expect(within(noOverspend).queryByText('Start a new streak today.')).not.toBeInTheDocument();
     expect(within(noOverspend).queryByText(/Set a limit/)).not.toBeInTheDocument();
+    // The check-in streak is at 0 and not kept this week either: it can start today, and says so.
+    expect(within(checkin).getByText('Start a new streak today.')).toBeInTheDocument();
   });
 });
 

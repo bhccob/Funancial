@@ -13,8 +13,12 @@ const ICONS: Record<StreakKind, LucideIcon> = {
 /** What a streak that is not running says instead of a count, or `null` when it has one. */
 function hintOf(streak: StreakView): string | null {
   if (!streak.active) return 'Set a limit to start this streak.';
-  if (streak.count === 0) return 'Start a new streak today.';
-  return null;
+  if (streak.count > 0) return null;
+  // A limit that is over stays over until its week or month resets, so today cannot start it.
+  if (streak.kind === 'no-overspend' && !streak.doneThisPeriod) {
+    return 'Over a limit right now. The streak starts again when it resets.';
+  }
+  return 'Start a new streak today.';
 }
 
 function StreakRow({ streak }: { streak: StreakView }) {

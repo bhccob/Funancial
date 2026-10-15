@@ -87,6 +87,10 @@ export function startRequirement(
     return 'Add a subscription first.';
   }
   if (kind === 'budget-30' && data.tables.budgetLimit.length === 0) return 'Set a limit first.';
+  // A limit over today stays over until its week or month resets: started now, it would be lost.
+  if (kind === 'budget-30' && createSpendIndex(data, ctx.weekStartsOn).overOn(ctx.today)) {
+    return "You're over a limit right now. Start once it resets.";
+  }
   if (kind === 'emergency-sprint' && !data.tables.goal.some((g) => g.kind === 'emergency')) {
     return 'Add an emergency fund goal first.';
   }
@@ -199,7 +203,7 @@ function budget30(c: Challenge, spend: SpendIndex, ctx: GameContext): Standing {
       active:
         current === 0 ? 'Starts today' : `Day ${current} of ${days.length}, within every limit`,
       won: `${days.length} days within every limit.`,
-      lost: 'Went over a limit. Start again whenever you like.',
+      lost: 'Went over a limit. Start again once it resets.',
     },
   };
 }

@@ -83,7 +83,7 @@ function weekLimits(data: DataSnapshot, ctx: GameContext, weekStart: LocalDate):
     current: dayOfWeek,
     target: 7,
     detail: over
-      ? 'Over a limit this week. Next week is a fresh start.'
+      ? 'Over a limit this week. Limits reset with their week or month.'
       : `Day ${dayOfWeek} of 7 · on track`,
   });
 }

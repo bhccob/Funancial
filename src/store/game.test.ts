@@ -434,6 +434,18 @@ describe('challenges', () => {
     await expect(game.abandonChallenge('missing')).rejects.toThrow('That item no longer exists.');
   });
 
+  it('refuses the 30-day budget streak while a limit is over', async () => {
+    const { store, game } = await setup();
+    await store.getState().putMany([
+      { table: 'budgetLimit', record: makeLimit({ amount: 10_00 }) },
+      { table: 'expense', record: makeExpense({ date: TODAY, amount: 20_00 }) },
+    ]);
+    await expect(game.startChallenge('budget-30')).rejects.toThrow(
+      "You're over a limit right now. Start once it resets.",
+    );
+    expect(store.getState().data.tables.challenge).toEqual([]);
+  });
+
   it('refuses a subscription audit with no subscription to review', async () => {
     const { store, game } = await setup();
     await expect(game.startChallenge('subscription-audit')).rejects.toThrow(

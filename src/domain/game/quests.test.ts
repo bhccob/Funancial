@@ -189,8 +189,23 @@ describe('currentQuests', () => {
         done: false,
         current: 4,
         target: 7,
-        detail: 'Over a limit this week. Next week is a fresh start.',
+        detail: 'Over a limit this week. Limits reset with their week or month.',
       });
+    });
+
+    it('says when limits reset, as a monthly limit stays over for the rest of its month', () => {
+      // A monthly limit of 1000.00 that went over on Oct 2: every later day of October is over.
+      const monthly = makeLimit({
+        scope: 'overall',
+        category: null,
+        period: 'monthly',
+        amount: 1000_00,
+        createdAt: localIso('2026-10-01'),
+      });
+      const data = snap({ budgetLimit: [monthly], expense: [spent('2026-10-02', 1500_00)] });
+      expect(quest(data, 'week-limits').detail).toBe(
+        'Over a limit this week. Limits reset with their week or month.',
+      );
     });
 
     it('starts the day count at the start of a week that begins on Sunday', () => {

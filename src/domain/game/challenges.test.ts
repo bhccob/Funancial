@@ -165,6 +165,17 @@ describe('startRequirement', () => {
     );
   });
 
+  it('refuses the 30-day budget streak while a limit is over, as it would be lost on day one', () => {
+    const overToday = { budgetLimit: [monthlyLimit()], expense: [spent('2026-10-02', 1500_00)] };
+    expect(startRequirement('budget-30', snap(overToday), ctx)).toBe(
+      "You're over a limit right now. Start once it resets.",
+    );
+    // Once the month resets the limit, it can start.
+    expect(startRequirement('budget-30', snap(overToday), ctxOn('2026-11-01'))).toBeNull();
+    // Other kinds start while over.
+    expect(startRequirement('no-spend-weekend', snap(overToday), ctx)).toBeNull();
+  });
+
   it('lets a finished or abandoned challenge be started again', () => {
     // The weekend of 10-03 has passed with nothing logged: won, not running.
     const past = weekend({ start: '2026-10-03', end: '2026-10-04' });
@@ -342,6 +353,9 @@ describe('30-day budget streak', () => {
     expect(viewOn(budget30(), over, '2026-10-20').outcome).toBe('lost');
     // Later clean days (a new month) do not bring it back.
     expect(viewOn(budget30(), over, '2026-11-14').outcome).toBe('lost');
+    expect(viewOn(budget30(), over, '2026-10-20').detail).toBe(
+      'Went over a limit. Start again once it resets.',
+    );
 
     // The last day is still part of the run; the day after wins it.
     expect(outcomeOf(viewOn(budget30(), data, '2026-11-13'))).toEqual(['active', 30, 30]);
