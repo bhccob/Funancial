@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { makeExpense, makeProfile, makeSubscription } from '@/test/fixtures';
+import { makeExpense, makeProfile, makeSettings, makeSubscription } from '@/test/fixtures';
 import {
   CURRENT_SCHEMA_VERSION,
   emptySnapshot,
@@ -48,8 +48,22 @@ describe('migrateSnapshot', () => {
   });
 });
 
-describe('migrateSnapshot v1 → v2', () => {
-  it('adds anchorDay to subscriptions and stamps version 2', () => {
+describe('migrateSnapshot from older versions', () => {
+  it('adds reminder settings to a v2 snapshot and stamps the current version', () => {
+    const { reminders, ...old } = makeSettings();
+    const v2 = emptySnapshot() as unknown as {
+      schemaVersion: number;
+      tables: Record<string, unknown[]>;
+    };
+    v2.schemaVersion = 2;
+    v2.tables.settings = [old];
+    const migrated = migrateSnapshot(v2);
+    expect(migrated.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+    expect(migrated.tables.settings[0]?.reminders).toEqual(reminders);
+    expect(migrated.tables.settings[0]?.reminders.enabled).toBe(false);
+  });
+
+  it('adds anchorDay to subscriptions and stamps the current version', () => {
     const v1 = emptySnapshot() as unknown as {
       schemaVersion: number;
       tables: Record<string, unknown[]>;
@@ -62,7 +76,7 @@ describe('migrateSnapshot v1 → v2', () => {
     delete sub.anchorDay;
     v1.tables.subscription = [sub];
     const migrated = migrateSnapshot(v1);
-    expect(migrated.schemaVersion).toBe(2);
+    expect(migrated.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
     expect(migrated.tables.subscription[0]?.anchorDay).toBe(28);
   });
 });

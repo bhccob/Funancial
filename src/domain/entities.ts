@@ -64,6 +64,21 @@ export const ProfileSchema = z.object({
 });
 export type Profile = z.infer<typeof ProfileSchema>;
 
+/** Which reminders the phone may show. `enabled` is the master switch; the rest pick rules. */
+export const ReminderSettingsSchema = z.object({
+  enabled: z.boolean(),
+  dailyLog: z.boolean(),
+  /** Local time of the daily nudge, `HH:MM` on a 24-hour clock. */
+  dailyTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Use a time as HH:MM'),
+  bills: z.boolean(),
+  freeze: z.boolean(),
+  reviews: z.boolean(),
+  backup: z.boolean(),
+  /** Set once the person has been asked about reminders, so the ask is not repeated. */
+  prompted: z.boolean(),
+});
+export type ReminderSettings = z.infer<typeof ReminderSettingsSchema>;
+
 export const SettingsSchema = z.object({
   ...base,
   id: z.literal('settings'),
@@ -77,6 +92,7 @@ export const SettingsSchema = z.object({
     z.literal(30),
   ]),
   lastBackupAt: IsoTimestampSchema.nullable(),
+  reminders: ReminderSettingsSchema,
 });
 export type Settings = z.infer<typeof SettingsSchema>;
 export type AutoLockMinutes = Settings['autoLockMinutes'];
@@ -90,6 +106,16 @@ export function defaultSettings(now: string): Settings {
     warningTone: 'motivational',
     autoLockMinutes: 5,
     lastBackupAt: null,
+    reminders: {
+      enabled: false,
+      dailyLog: true,
+      dailyTime: '20:00',
+      bills: true,
+      freeze: true,
+      reviews: true,
+      backup: true,
+      prompted: false,
+    },
   };
 }
 

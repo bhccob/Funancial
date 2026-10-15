@@ -39,6 +39,51 @@ describe('migrateRecord', () => {
   });
 
   it('is the identity for current-version records', () => {
+    expect(migrateRecord('subscription', v1Sub, 3)).toEqual(v1Sub);
+  });
+
+  it('does not touch a subscription that was already upgraded to v2', () => {
     expect(migrateRecord('subscription', v1Sub, 2)).toEqual(v1Sub);
+  });
+});
+
+describe('v3 settings', () => {
+  const v2Settings = {
+    id: 'settings',
+    createdAt: '2026-10-01T09:00:00.000Z',
+    updatedAt: '2026-10-01T09:00:00.000Z',
+    weekStartsOn: 1,
+    warningTone: 'motivational',
+    autoLockMinutes: 5,
+    lastBackupAt: null,
+  };
+  const reminders = {
+    enabled: false,
+    dailyLog: true,
+    dailyTime: '20:00',
+    bills: true,
+    freeze: true,
+    reviews: true,
+    backup: true,
+    prompted: false,
+  };
+
+  it('v3 adds reminder settings to old settings records', () => {
+    expect(migrateRecord('settings', v2Settings, 2)).toEqual({ ...v2Settings, reminders });
+    expect(migrateRecord('settings', v2Settings, 1)).toEqual({ ...v2Settings, reminders });
+  });
+
+  it('keeps reminder settings that are already there', () => {
+    const chosen = { ...reminders, enabled: true, dailyTime: '07:30' };
+    expect(migrateRecord('settings', { ...v2Settings, reminders: chosen }, 2)).toEqual({
+      ...v2Settings,
+      reminders: chosen,
+    });
+  });
+
+  it('gives every record its own copy of the defaults', () => {
+    const a = migrateRecord('settings', v2Settings, 2) as { reminders: object };
+    const b = migrateRecord('settings', v2Settings, 2) as { reminders: object };
+    expect(a.reminders).not.toBe(b.reminders);
   });
 });

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { emptySnapshot } from '@/domain/snapshot';
-import { makeExpense, makeGoal, makeSubscription } from '@/test/fixtures';
+import { CURRENT_SCHEMA_VERSION, emptySnapshot } from '@/domain/snapshot';
+import { makeExpense, makeGoal, makeSettings, makeSubscription } from '@/test/fixtures';
 import { memoryStorage } from '@/test/memoryStorage';
 import { decryptRecord, encryptRecord, generateDataKey } from './crypto';
 import { dexieStorage, type Namespace } from './db';
@@ -158,12 +158,12 @@ describe('repository over any StorageBackend', () => {
 
     const rows = await backend.records.all();
     expect(rows.map((r) => [r.table, r.id])).toEqual([['goal', 'g1']]);
-    expect(await backend.meta.get('dataVersion')).toBe(2);
+    expect(await backend.meta.get('dataVersion')).toBe(CURRENT_SCHEMA_VERSION);
     expect((await repo.loadAll()).snapshot.tables.expense).toEqual([]);
   });
 });
 
-describe('repository: schema v2', () => {
+describe('repository: older schema versions', () => {
   it('migrates v1 rows on load and stamps dataVersion', async () => {
     const backend = await testBackend();
     const key = await generateDataKey();
@@ -189,9 +189,36 @@ describe('repository: schema v2', () => {
     const { snapshot, skipped } = await repo.loadAll();
     expect(skipped).toEqual([]);
     expect(snapshot.tables.subscription[0]?.anchorDay).toBe(30);
-    expect(await backend.meta.get('dataVersion')).toBe(2);
+    expect(await backend.meta.get('dataVersion')).toBe(CURRENT_SCHEMA_VERSION);
     const row = await storedRow(backend, 'subscription', 's1');
     expect(await decryptRecord(key, 'subscription:s1', row!)).toMatchObject({ anchorDay: 30 });
+  });
+
+  it('adds reminder settings to v2 settings rows on load', async () => {
+    const backend = await testBackend();
+    const key = await generateDataKey();
+    const { reminders, ...v2 } = makeSettings({ lastBackupAt: '2026-10-07T12:00:00.000Z' });
+    await backend.records.write(
+      [
+        {
+          table: 'settings',
+          id: 'settings',
+          updatedAt: v2.updatedAt,
+          ...(await encryptRecord(key, 'settings:settings', v2)),
+        },
+      ],
+      { replace: false },
+    );
+    await backend.meta.put('dataVersion', 2);
+
+    const { snapshot, skipped } = await createRepository(backend, key).loadAll();
+    expect(skipped).toEqual([]);
+    expect(snapshot.tables.settings[0]).toMatchObject({
+      lastBackupAt: '2026-10-07T12:00:00.000Z',
+      reminders,
+    });
+    expect(reminders.enabled).toBe(false);
+    expect(await backend.meta.get('dataVersion')).toBe(CURRENT_SCHEMA_VERSION);
   });
 
   it('putMany writes all or nothing', async () => {

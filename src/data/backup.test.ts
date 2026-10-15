@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { emptySnapshot, type DataSnapshot } from '@/domain/snapshot';
+import { CURRENT_SCHEMA_VERSION, emptySnapshot, type DataSnapshot } from '@/domain/snapshot';
 import { makeExpense, makeGoal, makeSubscription } from '@/test/fixtures';
 import {
   backupFileName,
@@ -93,7 +93,7 @@ describe('plain export', () => {
     const parsed = JSON.parse(exportPlainJson(snap, new Date('2026-10-14T10:00:00.000Z')));
     expect(parsed).toEqual({
       format: 'funancial-export',
-      schemaVersion: 2,
+      schemaVersion: CURRENT_SCHEMA_VERSION,
       exportedAt: '2026-10-14T10:00:00.000Z',
       data: snap,
     });
@@ -120,7 +120,7 @@ describe('older backups', () => {
     delete sub.anchorDay;
     (v1.tables as unknown as Record<string, unknown[]>).subscription = [sub];
     const restored = await readBackup(await createBackup(v1, PASS, FAST), PASS);
-    expect(restored.schemaVersion).toBe(2);
+    expect(restored.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
     expect(restored.tables.subscription[0]?.anchorDay).toBe(31);
   });
 });

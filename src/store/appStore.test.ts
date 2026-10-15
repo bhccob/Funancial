@@ -72,6 +72,16 @@ describe('first run', () => {
         warningTone: 'motivational',
         autoLockMinutes: 5,
         lastBackupAt: null,
+        reminders: {
+          enabled: false,
+          dailyLog: true,
+          dailyTime: '20:00',
+          bills: true,
+          freeze: true,
+          reviews: true,
+          backup: true,
+          prompted: false,
+        },
       },
     ]);
   });
