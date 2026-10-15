@@ -30,60 +30,38 @@ import { ShopScreen } from '@/features/shop/ShopScreen';
 import { SubscriptionsScreen } from '@/features/subscriptions/SubscriptionsScreen';
 import { SettingsScreen } from '@/features/settings/SettingsScreen';
 
+/** Every screen the app routes to. What the bottom bar, Menu sheet and sidebar list lives in `menu.ts`. */
 export interface AppRoute {
   path: string;
   label: string;
   icon: LucideIcon;
-  nav: 'tab' | 'more' | 'hidden';
   element: ReactNode;
 }
 
-function placeholder(
-  path: string,
-  label: string,
-  icon: LucideIcon,
-  nav: AppRoute['nav'],
-  title = label,
-): AppRoute {
-  return { path, label, icon, nav, element: <PlaceholderScreen title={title} /> };
+function placeholder(path: string, label: string, icon: LucideIcon, title = label): AppRoute {
+  return { path, label, icon, element: <PlaceholderScreen title={title} /> };
 }
 
 export const APP_ROUTES: AppRoute[] = [
-  { path: '/', label: 'Home', icon: House, nav: 'tab', element: <DashboardScreen /> },
-  { path: '/budget', label: 'Budget', icon: ChartPie, nav: 'tab', element: <BudgetScreen /> },
-  placeholder('/invest', 'Invest', TrendingUp, 'tab'),
-  placeholder('/buy', 'Buy It?', ShoppingBag, 'tab', 'Should I Buy It?'),
-  { path: '/quests', label: 'Quests', icon: Trophy, nav: 'tab', element: <QuestsScreen /> },
+  { path: '/', label: 'Home', icon: House, element: <DashboardScreen /> },
+  { path: '/budget', label: 'Budget', icon: ChartPie, element: <BudgetScreen /> },
+  placeholder('/invest', 'Invest', TrendingUp),
+  placeholder('/buy', 'Buy It?', ShoppingBag, 'Should I Buy It?'),
+  { path: '/quests', label: 'Quests', icon: Trophy, element: <QuestsScreen /> },
   {
     path: '/subscriptions',
     label: 'Subscriptions',
     icon: Repeat,
-    nav: 'more',
     element: <SubscriptionsScreen />,
   },
-  {
-    path: '/freeze',
-    label: 'Salary Freeze',
-    icon: Snowflake,
-    nav: 'more',
-    element: <FreezeScreen />,
-  },
-  placeholder('/dividends', 'Dividends', Coins, 'more'),
-  placeholder('/news', 'News', Newspaper, 'more'),
-  { path: '/goals', label: 'Goals', icon: Target, nav: 'more', element: <GoalsScreen /> },
-  { path: '/history', label: 'History', icon: Clock, nav: 'more', element: <HistoryScreen /> },
-  { path: '/shop', label: 'Shop', icon: Store, nav: 'more', element: <ShopScreen /> },
-  placeholder('/inbox', 'Inbox', Inbox, 'more'),
-  placeholder('/help', 'Help', CircleQuestionMark, 'more'),
-  {
-    path: '/settings',
-    label: 'Settings',
-    icon: Settings,
-    nav: 'more',
-    element: <SettingsScreen />,
-  },
-  { path: '/add', label: 'Add Expense', icon: Plus, nav: 'hidden', element: <AddScreen /> },
+  { path: '/freeze', label: 'Salary Freeze', icon: Snowflake, element: <FreezeScreen /> },
+  placeholder('/dividends', 'Dividends', Coins),
+  placeholder('/news', 'News', Newspaper),
+  { path: '/goals', label: 'Goals', icon: Target, element: <GoalsScreen /> },
+  { path: '/history', label: 'History', icon: Clock, element: <HistoryScreen /> },
+  { path: '/shop', label: 'Shop', icon: Store, element: <ShopScreen /> },
+  placeholder('/inbox', 'Inbox', Inbox),
+  placeholder('/help', 'Help', CircleQuestionMark),
+  { path: '/settings', label: 'Settings', icon: Settings, element: <SettingsScreen /> },
+  { path: '/add', label: 'Add Expense', icon: Plus, element: <AddScreen /> },
 ];
-
-export const TAB_ROUTES = APP_ROUTES.filter((r) => r.nav === 'tab');
-export const MORE_ROUTES = APP_ROUTES.filter((r) => r.nav === 'more');
