@@ -274,6 +274,7 @@ export function buildDemoSnapshot(today: LocalDate, seed = 42): DataSnapshot {
       cardId: s.paymentMethod === 'credit_card' ? CARD_ID : null,
       status: 'active',
       audit: null,
+      auditedAt: null,
       note: '',
     });
   });

@@ -1,4 +1,6 @@
+import { isValidElement } from 'react';
 import { expect, it } from 'vitest';
+import { ShopScreen } from '@/features/shop/ShopScreen';
 import { APP_ROUTES } from './routes';
 
 it('has unique paths', () => {
@@ -36,4 +38,10 @@ it('routes every spec screen', () => {
       '/subscriptions',
     ].sort(),
   );
+});
+
+it('serves the shop from its own screen, not a placeholder', () => {
+  const shop = APP_ROUTES.find((r) => r.path === '/shop');
+  expect(shop).toMatchObject({ label: 'Shop', nav: 'more' });
+  expect(isValidElement(shop?.element) && shop.element.type).toBe(ShopScreen);
 });

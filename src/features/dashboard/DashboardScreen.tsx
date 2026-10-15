@@ -10,11 +10,14 @@ import { Section } from '@/components/ui/Section';
 import { categoryBreakdown, categoryLabel, limitLabel, type LimitStatus } from '@/domain/budget';
 import type { Goal, Income } from '@/domain/entities';
 import { monthKey, monthRange } from '@/domain/periods';
+import { GameHud } from '@/features/game/GameHud';
+import { QuestList } from '@/features/game/QuestList';
 import { cn } from '@/lib/cn';
 import { formatDay, formatMonth, relativeDays } from '@/lib/format';
 import { useApp } from '@/store/AppStoreProvider';
 import { useAction } from '@/lib/useAction';
 import { useFinanceActions, useFinanceView, useMoney, useToday } from '@/store/useFinance';
+import { useGameView } from '@/store/useGame';
 import { ConfirmSalaryDialog } from './ConfirmSalaryDialog';
 import { ReminderBanner } from './ReminderBanner';
 
@@ -105,6 +108,7 @@ function goalOrder(a: Goal, b: Goal): number {
 
 export function DashboardScreen() {
   const view = useFinanceView();
+  const game = useGameView();
   const money = useMoney();
   const today = useToday();
   const data = useApp((s) => s.data);
@@ -128,6 +132,8 @@ export function DashboardScreen() {
         title="Home"
         action={profile?.name ? <p className="text-[13px] font-bold">Hi, {profile.name}</p> : null}
       />
+
+      <GameHud view={game} />
 
       <div className="flex flex-col gap-2 pt-4 empty:hidden">
         {view.pendingSalary.map((income) => {
@@ -350,6 +356,18 @@ export function DashboardScreen() {
               Save toward something and watch it fill up.
             </EmptyState>
           )}
+        </Panel>
+
+        <Panel
+          side="left"
+          title="Quests"
+          action={
+            <Link to="/quests" className={sectionLink}>
+              See all
+            </Link>
+          }
+        >
+          <QuestList quests={game.quests} limit={3} />
         </Panel>
       </div>
 

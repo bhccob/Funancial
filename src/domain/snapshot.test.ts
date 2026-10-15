@@ -79,4 +79,38 @@ describe('migrateSnapshot from older versions', () => {
     expect(migrated.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
     expect(migrated.tables.subscription[0]?.anchorDay).toBe(28);
   });
+
+  it('upgrades a v3 snapshot: empty game tables, default cosmetics, auditedAt null', () => {
+    const v3Settings: Record<string, unknown> = { ...makeSettings() };
+    delete v3Settings.cosmetics;
+    const v3Sub: Record<string, unknown> = { ...makeSubscription() };
+    delete v3Sub.auditedAt;
+    const v3 = {
+      schemaVersion: 3,
+      tables: {
+        profile: [],
+        settings: [v3Settings],
+        income: [],
+        expense: [],
+        subscription: [v3Sub],
+        budgetLimit: [],
+        salaryFreeze: [],
+        transaction: [],
+        goal: [],
+        debt: [],
+      },
+    };
+    const s = migrateSnapshot(v3);
+    expect(s.schemaVersion).toBe(4);
+    expect(s.tables.ledger).toEqual([]);
+    expect(s.tables.checkIn).toEqual([]);
+    expect(s.tables.challenge).toEqual([]);
+    expect(s.tables.streakFreeze).toEqual([]);
+    expect(s.tables.settings[0]!.cosmetics).toEqual({
+      theme: 'theme-violet',
+      avatar: 'avatar-sprout',
+      frame: 'frame-none',
+    });
+    expect(s.tables.subscription[0]!.auditedAt).toBeNull();
+  });
 });

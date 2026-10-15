@@ -1,4 +1,4 @@
-import { X } from 'lucide-react';
+import { Sparkles, X } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { cn } from '@/lib/cn';
 import { useTopDialog } from '@/lib/dialogStack';
@@ -9,6 +9,7 @@ const bars: Record<ToastTone, string> = {
   success: 'border-l-accent',
   warning: 'border-l-warning',
   danger: 'border-l-danger',
+  reward: 'border-l-xp',
 };
 
 /**
@@ -32,6 +33,9 @@ export function Toaster() {
             bars[t.tone],
           )}
         >
+          {t.tone === 'reward' && (
+            <Sparkles aria-hidden className="text-xp-text mt-0.5 size-4 shrink-0" />
+          )}
           <p className="min-w-0 flex-1">{t.message}</p>
           <button
             type="button"

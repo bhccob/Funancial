@@ -1,7 +1,7 @@
 import { useStore } from 'zustand';
 import { createStore } from 'zustand/vanilla';
 
-export type ToastTone = 'info' | 'success' | 'warning' | 'danger';
+export type ToastTone = 'info' | 'success' | 'warning' | 'danger' | 'reward';
 export type Toast = { id: number; tone: ToastTone; message: string };
 
 const MAX_TOASTS = 3;

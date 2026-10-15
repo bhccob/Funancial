@@ -79,6 +79,14 @@ export const ReminderSettingsSchema = z.object({
 });
 export type ReminderSettings = z.infer<typeof ReminderSettingsSchema>;
 
+/** The shop items the person has equipped: one id per slot, each naming a catalog item. */
+export const CosmeticsSchema = z.object({
+  theme: z.string().min(1),
+  avatar: z.string().min(1),
+  frame: z.string().min(1),
+});
+export type Cosmetics = z.infer<typeof CosmeticsSchema>;
+
 export const SettingsSchema = z.object({
   ...base,
   id: z.literal('settings'),
@@ -93,6 +101,7 @@ export const SettingsSchema = z.object({
   ]),
   lastBackupAt: IsoTimestampSchema.nullable(),
   reminders: ReminderSettingsSchema,
+  cosmetics: CosmeticsSchema,
 });
 export type Settings = z.infer<typeof SettingsSchema>;
 export type AutoLockMinutes = Settings['autoLockMinutes'];
@@ -116,6 +125,7 @@ export function defaultSettings(now: string): Settings {
       backup: true,
       prompted: false,
     },
+    cosmetics: { theme: 'theme-violet', avatar: 'avatar-sprout', frame: 'frame-none' },
   };
 }
 
@@ -163,6 +173,8 @@ export const SubscriptionSchema = z
     cardId: z.string().min(1).nullable(),
     status: z.enum(['active', 'cancelled']),
     audit: z.enum(['keep', 'review', 'cancel']).nullable(),
+    /** When `audit` was last set; `null` when there is no mark, or when the mark predates v4. */
+    auditedAt: IsoTimestampSchema.nullable(),
     note: z.string(),
   })
   .refine(cardMatchesMethod, cardMessage);
@@ -254,3 +266,54 @@ export const DebtSchema = z.object({
   payInFull: z.boolean(),
 });
 export type Debt = z.infer<typeof DebtSchema>;
+
+/**
+ * One line of the XP and coin ledger. XP and coins are whole numbers; a reversal and a purchase
+ * carry negative amounts. The id is derived from `key` (`key#n`).
+ */
+export const LedgerEntrySchema = z.object({
+  ...base,
+  key: z.string().min(1),
+  kind: z.enum(['award', 'reversal', 'purchase']),
+  xp: z.number().int(),
+  coins: z.number().int(),
+  label: z.string(),
+});
+export type LedgerEntry = z.infer<typeof LedgerEntrySchema>;
+
+/** A check-in for a day (`no-spend`) or for a week (`weekly`, dated by the week's start). */
+export const CheckInSchema = z.object({
+  ...base,
+  kind: z.enum(['no-spend', 'weekly']),
+  date: LocalDateSchema,
+});
+export type CheckIn = z.infer<typeof CheckInSchema>;
+
+export const ChallengeKindSchema = z.enum([
+  'no-spend-weekend',
+  'subscription-audit',
+  'budget-30',
+  'emergency-sprint',
+]);
+export type ChallengeKind = z.infer<typeof ChallengeKindSchema>;
+
+export const ChallengeSchema = z
+  .object({
+    ...base,
+    kind: ChallengeKindSchema,
+    start: LocalDateSchema,
+    end: LocalDateSchema,
+    baseline: Money.nullable(),
+    goal: PositiveMoney.nullable(),
+    status: z.enum(['active', 'abandoned']),
+  })
+  .refine((v) => v.end >= v.start, { message: 'End must be on or after start', path: ['end'] });
+export type Challenge = z.infer<typeof ChallengeSchema>;
+
+/** A day on which a streak was held by a freeze instead of an action. */
+export const StreakFreezeSchema = z.object({
+  ...base,
+  streak: z.enum(['logging', 'checkin']),
+  date: LocalDateSchema,
+});
+export type StreakFreeze = z.infer<typeof StreakFreezeSchema>;

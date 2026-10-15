@@ -103,13 +103,19 @@ export function nextDueDate(today: LocalDate, dueDay: number | null): LocalDate 
   return `${ny}-${pad(nm)}-${pad(Math.min(dueDay, daysInMonth(ny, nm)))}`;
 }
 
-/** Subscription renewals from today to month end, plus what's due on each credit card. */
-export function upcomingBills(data: DataSnapshot, today: LocalDate): Bill[] {
-  const end = endOfMonth(today);
+/**
+ * Subscription renewals from today to `until` (month end unless asked for another day), plus what's
+ * due on each credit card: its next due date, whether or not that is before `until`.
+ */
+export function upcomingBills(
+  data: DataSnapshot,
+  today: LocalDate,
+  until: LocalDate = endOfMonth(today),
+): Bill[] {
   const bills: Bill[] = [];
   for (const s of data.tables.subscription) {
     if (s.status !== 'active') continue;
-    for (let d = s.nextRenewal; d <= end; d = nextOccurrence(d, s.cycle, s.anchorDay)) {
+    for (let d = s.nextRenewal; d <= until; d = nextOccurrence(d, s.cycle, s.anchorDay)) {
       if (d >= today)
         bills.push({ date: d, name: s.name, amount: s.amount, kind: 'subscription', refId: s.id });
     }

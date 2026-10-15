@@ -26,6 +26,8 @@ import { createRepository, type Repository, type SkippedRecord } from '@/data/re
 import type { StorageBackend, StorageProvider } from '@/data/storage';
 import type { LocalDate } from '@/domain/dates';
 import { defaultSettings } from '@/domain/entities';
+import { gameUpdates, type GameGain } from '@/domain/game/engine';
+import type { GameContext } from '@/domain/game/types';
 import { dueGenerated } from '@/domain/sync';
 import {
   emptySnapshot,
@@ -78,6 +80,11 @@ export interface AppState {
   today: LocalDate;
   /** Fingerprint or face unlock: `unavailable` where the device has none, else off or on. */
   biometric: 'unavailable' | 'off' | 'on';
+  /**
+   * What the game paid in the latest settle that paid anything, numbered so a screen can tell a new
+   * gain from one it has already shown. Cleared on lock and boot.
+   */
+  gameGain: { id: number; gain: GameGain } | null;
 
   boot(): Promise<void>;
   startFresh(): Promise<void>;
@@ -133,11 +140,28 @@ async function importDataKey(secret: string): Promise<CryptoKey | null> {
   }
 }
 
+/** The moment the game runs in: the store's day and namespace, and the settings' week start. */
+export function gameContext(
+  state: Pick<AppState, 'today' | 'namespace' | 'data'>,
+  now: string,
+): GameContext {
+  return {
+    today: state.today,
+    now,
+    weekStartsOn: state.data.tables.settings[0]?.weekStartsOn ?? 1,
+    canBackUp: state.namespace === 'real',
+  };
+}
+
 /** Open storage backend + vault for the active namespace. Kept out of state: keys never hit React. */
 type Session = { backend: StorageBackend; repo: Repository | null; key: CryptoKey | null };
 
 export function createAppStore(deps: AppDeps): StoreApi<AppState> {
   let session: Session | null = null;
+  /** Numbers the gains, across locks and boots, so a screen never mistakes a new one for an old one. */
+  let lastGainId = 0;
+  /** True while the demo's seeded history is first settled: it is paid out, but not published as a gain. */
+  let seedingDemo = false;
 
   const nowIsoString = () => new Date(deps.now()).toISOString();
   /** A throttle deadline that has passed no longer applies. */
@@ -189,6 +213,55 @@ export function createAppStore(deps: AppDeps): StoreApi<AppState> {
         .catch((e: unknown) => console.error('Sync after opening failed', e));
     }
 
+    /** Saves records and mirrors them into `data`. The caller tells other tabs, once, when it is done. */
+    async function writeRecords(items: TableRecord[]) {
+      await unlocked().repo.putMany(items);
+      const data = get().data;
+      const tables = { ...data.tables } as Record<TableName, Array<{ id: string }>>;
+      for (const { table, record } of items) {
+        const rows = tables[table];
+        tables[table] = rows.some((r) => r.id === record.id)
+          ? rows.map((r) => (r.id === record.id ? record : r))
+          : [...rows, record];
+      }
+      set({ data: { ...data, tables: tables as DataSnapshot['tables'] } });
+    }
+
+    function announceDataChange() {
+      deps.channel.post({ type: 'reload', reason: 'data' });
+    }
+
+    /**
+     * Brings the game up to date with the data: the ledger entries and streak freezes now owed. Run
+     * after every write and sync, and safe to run twice, as the ids it writes come from their keys.
+     * The game never fails a write, so a failure is logged and the next settle catches up. It writes
+     * through `writeRecords`, not `putMany`, so it never settles its own writes. Resolves to whether
+     * it wrote anything. A gain is announced only while the app is still unlocked: a lock clears it.
+     */
+    async function runSettle(): Promise<boolean> {
+      try {
+        const { records, gain } = gameUpdates(get().data, gameContext(get(), nowIsoString()));
+        if (records.length === 0) return false;
+        await writeRecords(records);
+        if (gain && !seedingDemo && get().phase === 'unlocked') {
+          set({ gameGain: { id: ++lastGainId, gain } });
+        }
+        return true;
+      } catch (e) {
+        console.error('Updating the game layer failed', e);
+        return false;
+      }
+    }
+
+    /** The settle last queued. `runSettle` never rejects, so the queue never stalls on a failure. */
+    let settling: Promise<boolean> = Promise.resolve(false);
+    /**
+     * Settles one after another, so each sees what the one before wrote. Two triggers can sync at
+     * once (`visibilitychange` with `focus`, or with Android's resume), and settles computed on the
+     * same data would announce the same gain twice.
+     */
+    const settle = (): Promise<boolean> => (settling = settling.then(runSettle, runSettle));
+
     function requireReal(action: string) {
       if (get().namespace === 'demo') throw new Error(`Demo data can't ${action}.`);
     }
@@ -229,6 +302,7 @@ export function createAppStore(deps: AppDeps): StoreApi<AppState> {
       checking: false,
       today: deps.today(),
       biometric: 'unavailable',
+      gameGain: null,
 
       async boot() {
         set({ phase: 'booting' });
@@ -243,6 +317,7 @@ export function createAppStore(deps: AppDeps): StoreApi<AppState> {
           failedAttempts: 0,
           lockedUntil: null,
           checking: false,
+          gameGain: null,
         });
         try {
           const s = await openSession(namespace);
@@ -301,8 +376,16 @@ export function createAppStore(deps: AppDeps): StoreApi<AppState> {
             failedAttempts: 0,
             lockedUntil: null,
             biometric: get().biometric === 'unavailable' ? 'unavailable' : 'off',
+            gameGain: null,
           });
-          await openWith(key);
+          // The demo's history is celebrated by no one: the settle on the way in publishes no gain,
+          // not even for the instant before a later clear, which a screen could already have shown.
+          seedingDemo = true;
+          try {
+            await openWith(key);
+          } finally {
+            seedingDemo = false;
+          }
         } catch (e) {
           await closeSession();
           await deps.storage.remove('demo').catch(() => {});
@@ -364,7 +447,7 @@ export function createAppStore(deps: AppDeps): StoreApi<AppState> {
         if (get().phase !== 'unlocked' || get().lockMode === 'device' || !session) return;
         session.repo = null;
         session.key = null;
-        set({ phase: 'locked', data: emptySnapshot(), skipped: [] });
+        set({ phase: 'locked', data: emptySnapshot(), skipped: [], gameGain: null });
       },
 
       async setSecret(secret, kind) {
@@ -453,17 +536,9 @@ export function createAppStore(deps: AppDeps): StoreApi<AppState> {
 
       async putMany(items) {
         if (items.length === 0) return;
-        await unlocked().repo.putMany(items);
-        const data = get().data;
-        const tables = { ...data.tables } as Record<TableName, Array<{ id: string }>>;
-        for (const { table, record } of items) {
-          const rows = tables[table];
-          tables[table] = rows.some((r) => r.id === record.id)
-            ? rows.map((r) => (r.id === record.id ? record : r))
-            : [...rows, record];
-        }
-        set({ data: { ...data, tables: tables as DataSnapshot['tables'] } });
-        deps.channel.post({ type: 'reload', reason: 'data' });
+        await writeRecords(items);
+        await settle();
+        announceDataChange();
       },
 
       async sync() {
@@ -471,7 +546,9 @@ export function createAppStore(deps: AppDeps): StoreApi<AppState> {
         set({ today });
         if (get().phase !== 'unlocked' || !session?.repo) return;
         const due = dueGenerated(get().data, today);
-        if (due.length > 0) await get().putMany(due);
+        if (due.length > 0) await writeRecords(due);
+        const settled = await settle();
+        if (due.length > 0 || settled) announceDataChange();
       },
 
       async refresh() {
@@ -487,7 +564,8 @@ export function createAppStore(deps: AppDeps): StoreApi<AppState> {
         set({
           data: { ...data, tables: { ...data.tables, [table]: rows.filter((r) => r.id !== id) } },
         });
-        deps.channel.post({ type: 'reload', reason: 'data' });
+        await settle();
+        announceDataChange();
       },
 
       async createBackup(passphrase) {
@@ -514,6 +592,7 @@ export function createAppStore(deps: AppDeps): StoreApi<AppState> {
         const snapshot = await readBackup(text, passphrase); // throws before anything changes
         await s.repo.replaceAll(snapshot);
         set({ data: snapshot, skipped: [] });
+        await settle();
         deps.channel.post({ type: 'reload', reason: 'restore' });
       },
 

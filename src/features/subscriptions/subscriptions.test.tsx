@@ -2,11 +2,12 @@ import { fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { Subscription } from '@/domain/entities';
 import { formatMoney } from '@/domain/money';
 import { emptySnapshot } from '@/domain/snapshot';
 import { formatDay } from '@/lib/format';
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
-import { makeDebt, makeSubscription } from '@/test/fixtures';
+import { localIso, makeDebt, makeSubscription } from '@/test/fixtures';
 import { SubscriptionsScreen } from './SubscriptionsScreen';
 
 const actions = vi.hoisted(() => ({
@@ -87,6 +88,57 @@ describe('SubscriptionsScreen', () => {
     const audit = row('Streamflix').getByRole('group', { name: 'Audit Streamflix' });
     await userEvent.click(within(audit).getByRole('button', { name: 'Review' }));
     expect(actions.setSubscriptionAudit).toHaveBeenCalledWith('sub-tv', 'review');
+  });
+
+  describe('a mark that is already set', () => {
+    function renderMarked(...subs: Subscription[]) {
+      const data = emptySnapshot();
+      data.tables.subscription.push(...subs);
+      renderWithStore(
+        <MemoryRouter>
+          <SubscriptionsScreen />
+        </MemoryRouter>,
+        createStubStore({ data, today: TODAY }),
+      );
+    }
+    const marked = (name: string, audit: Subscription['audit'], auditedAt: string | null) =>
+      makeSubscription({ id: name, name, audit, auditedAt, nextRenewal: '2026-10-20' });
+    const chip = (name: string, label: string) =>
+      within(row(name).getByRole('group', { name: `Audit ${name}` })).getByRole('button', {
+        name: label,
+      });
+
+    it('stamps a mark from last month again when it is tapped, keeping it', async () => {
+      renderMarked(marked('Streamflix', 'keep', localIso('2026-09-20')));
+      expect(chip('Streamflix', 'Keep')).toHaveAttribute('aria-pressed', 'true');
+      await userEvent.click(chip('Streamflix', 'Keep'));
+      expect(actions.setSubscriptionAudit).toHaveBeenCalledWith('Streamflix', 'keep');
+    });
+
+    it('stamps a mark made before review dates were kept when it is tapped', async () => {
+      renderMarked(marked('Streamflix', 'cancel', null));
+      await userEvent.click(chip('Streamflix', 'Cancel'));
+      expect(actions.setSubscriptionAudit).toHaveBeenCalledWith('Streamflix', 'cancel');
+    });
+
+    it('clears a mark stamped this month when it is tapped again', async () => {
+      renderMarked(marked('Streamflix', 'review', localIso('2026-10-03')));
+      await userEvent.click(chip('Streamflix', 'Review'));
+      expect(actions.setSubscriptionAudit).toHaveBeenCalledWith('Streamflix', null);
+    });
+
+    it('says when a subscription was reviewed, for a review this month only', () => {
+      renderMarked(
+        marked('Streamflix', 'keep', localIso('2026-10-03')),
+        marked('Cloud Drive', 'keep', localIso('2026-09-30')),
+        marked('Gym', 'cancel', null),
+      );
+      expect(
+        row('Streamflix').getByText(`Reviewed ${formatDay('2026-10-03')}`),
+      ).toBeInTheDocument();
+      expect(row('Cloud Drive').queryByText(/Reviewed/)).not.toBeInTheDocument();
+      expect(row('Gym').queryByText(/Reviewed/)).not.toBeInTheDocument();
+    });
   });
 
   it('cancels from the menu, and lists cancelled ones with Resume', async () => {

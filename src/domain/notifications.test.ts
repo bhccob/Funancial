@@ -192,6 +192,13 @@ describe('upcomingReminders', () => {
 
     // Logged by the person: still counts, alongside the generated ones.
     expect(nudged({ expenses: [makeExpense({ date: today, subscriptionId: null })] })).toEqual([]);
+    // Entered with Repeat, which starts a subscription: the person still logged it.
+    const repeat = makeExpense({
+      date: today,
+      subscriptionId: 'sub-tv',
+      recurrence: { cycle: 'monthly' },
+    });
+    expect(nudged({ expenses: [repeat] })).toEqual([]);
     expect(nudged({ incomes: [makeIncome({ date: today, status: 'confirmed' })] })).toEqual([]);
     expect(
       nudged({

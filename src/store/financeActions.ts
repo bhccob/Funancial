@@ -183,6 +183,7 @@ export function createFinanceActions(store: StoreApi<AppState>) {
           cardId: expense.cardId,
           status: 'active',
           audit: null,
+          auditedAt: null,
           note: '',
         };
         expense.subscriptionId = sub.id;
@@ -275,6 +276,7 @@ export function createFinanceActions(store: StoreApi<AppState>) {
           ...stamp(),
           status: 'active' as const,
           audit: null,
+          auditedAt: null,
           note: '',
         }),
         name: input.name,
@@ -306,11 +308,14 @@ export function createFinanceActions(store: StoreApi<AppState>) {
       await state().put('subscription', { ...sub, status, nextRenewal, updatedAt: nowIso() });
     },
 
+    /** Marking stamps `auditedAt`; removing the mark clears it. */
     async setSubscriptionAudit(id: string, audit: Subscription['audit']) {
+      const at = nowIso();
       await state().put('subscription', {
         ...find('subscription', id),
         audit,
-        updatedAt: nowIso(),
+        auditedAt: audit === null ? null : at,
+        updatedAt: at,
       });
     },
 

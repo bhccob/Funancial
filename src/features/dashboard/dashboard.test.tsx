@@ -4,13 +4,14 @@ import { MemoryRouter } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ReminderSettings } from '@/domain/entities';
 import { EXAMPLES } from '@/domain/examples';
+import { computeGameView } from '@/domain/game/engine';
 import { formatMoney } from '@/domain/money';
 import { emptySnapshot, type DataSnapshot } from '@/domain/snapshot';
 import { applyRecords, dueGenerated } from '@/domain/sync';
 import { formatDay, formatMonth } from '@/lib/format';
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
 import { fakeNotifier, onPhone, type FakeNotifier } from '@/test/fakeNotifier';
-import { makeSettings } from '@/test/fixtures';
+import { makeCheckIn, makeLimit, makeProfile, makeSettings } from '@/test/fixtures';
 import { DashboardScreen } from './DashboardScreen';
 
 const actions = vi.hoisted(() => ({
@@ -22,6 +23,11 @@ vi.mock('@/store/useFinance', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/store/useFinance')>()),
   useFinanceActions: () => actions,
 }));
+// The real game view, counted.
+vi.mock('@/domain/game/engine', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/domain/game/engine')>();
+  return { ...actual, computeGameView: vi.fn(actual.computeGameView) };
+});
 
 beforeEach(() => Object.values(actions).forEach((a) => a.mockClear()));
 
@@ -242,5 +248,61 @@ describe('DashboardScreen reminders invitation', () => {
     expect(screen.getByText(INVITE)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Turn on' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Not now' })).toBeInTheDocument();
+  });
+});
+
+describe('DashboardScreen game layer', () => {
+  it('shows the HUD and up to three quests on Home', () => {
+    renderDashboard(emptySnapshot(), '2026-10-14');
+
+    // Directly under the page header.
+    const hud = screen.getByRole('link', { name: /Open quests$/ });
+    expect(
+      screen.getByRole('heading', { level: 1, name: 'Home' }).closest('header'),
+    ).toHaveProperty('nextElementSibling', hud);
+    expect(hud).toHaveAttribute('href', '/quests');
+    expect(within(hud).getByText('LV 1')).toBeInTheDocument();
+
+    const quests = region('Quests');
+    expect(within(quests).getByRole('link', { name: 'See all' })).toHaveAttribute(
+      'href',
+      '/quests',
+    );
+    expect(
+      within(quests)
+        .getAllByRole('listitem')
+        .map((li) => li.querySelector('p')?.textContent),
+    ).toEqual(["Log today's spending", 'Do your weekly check-in', 'Back up your data']);
+  });
+
+  it('puts the quests still to do first, daily before weekly before monthly', () => {
+    const data = emptySnapshot();
+    data.tables.profile = [makeProfile()];
+    data.tables.budgetLimit = [makeLimit()];
+    data.tables.checkIn = [makeCheckIn({ kind: 'no-spend', date: '2026-10-14' })];
+    renderDashboard(data, '2026-10-14');
+
+    // Five quests apply and today's is done: it drops out of the three shown.
+    const rows = within(region('Quests')).getAllByRole('listitem');
+    expect(rows.map((li) => li.querySelector('p')?.textContent)).toEqual([
+      'Stay within your limits this week',
+      'Do your weekly check-in',
+      "Reconcile this month's salary",
+    ]);
+  });
+
+  it('works out the game once for the HUD and the quests together', () => {
+    vi.mocked(computeGameView).mockClear();
+    renderDashboard(emptySnapshot(), '2026-10-14');
+    expect(computeGameView).toHaveBeenCalledTimes(1);
+  });
+
+  it('records Nothing spent from Home', async () => {
+    const { store } = renderDashboard(emptySnapshot(), '2026-10-14');
+    await userEvent.click(within(region('Quests')).getByRole('button', { name: 'Nothing spent' }));
+    expect(store.getState().put).toHaveBeenCalledExactlyOnceWith(
+      'checkIn',
+      expect.objectContaining({ id: 'checkin:no-spend:2026-10-14', kind: 'no-spend' }),
+    );
   });
 });

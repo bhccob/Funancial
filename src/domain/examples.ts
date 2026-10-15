@@ -102,6 +102,7 @@ export const ex = {
     cardId: null,
     status: 'active',
     audit: null,
+    auditedAt: null,
     note: '',
     ...p,
   }),

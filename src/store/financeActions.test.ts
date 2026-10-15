@@ -299,6 +299,51 @@ describe('subscriptions', () => {
     const sub = store.getState().data.tables.subscription.find((s) => s.id === 'sub-tv');
     expect(sub).toMatchObject({ status: 'cancelled', nextRenewal: '2026-10-20' });
   });
+
+  it('stamps auditedAt when a subscription is audited and clears it when the mark is removed', async () => {
+    const { store, actions } = await setup();
+    await store.getState().put('subscription', makeSubscription({ id: 'sub-tv' }));
+    const read = () => store.getState().data.tables.subscription.find((s) => s.id === 'sub-tv')!;
+    expect(read().auditedAt).toBeNull();
+
+    await actions.setSubscriptionAudit('sub-tv', 'keep');
+    expect(read().audit).toBe('keep');
+    const stamped = read().auditedAt;
+    expect(stamped).toEqual(expect.any(String));
+    expect(new Date(stamped!).toISOString()).toBe(stamped);
+
+    await actions.setSubscriptionAudit('sub-tv', 'review');
+    expect(read()).toMatchObject({ audit: 'review', auditedAt: expect.any(String) });
+
+    await actions.setSubscriptionAudit('sub-tv', null);
+    expect(read()).toMatchObject({ audit: null, auditedAt: null });
+  });
+
+  it('a new subscription starts un-audited, and editing one keeps its audit stamp', async () => {
+    const { store, actions } = await setup();
+    const input = {
+      name: 'Gym',
+      amount: 30_00,
+      cycle: 'monthly' as const,
+      nextRenewal: '2026-11-05',
+      category: 'health' as const,
+      paymentMethod: 'debit' as const,
+      cardId: null,
+    };
+    const created = await actions.saveSubscription(input);
+    expect(created.auditedAt).toBeNull();
+
+    await actions.setSubscriptionAudit(created.id, 'cancel');
+    const audited = store.getState().data.tables.subscription.find((s) => s.id === created.id)!;
+    expect(audited.auditedAt).not.toBeNull();
+
+    const edited = await actions.saveSubscription({ ...input, id: created.id, amount: 35_00 });
+    expect(edited).toMatchObject({
+      amount: 35_00,
+      audit: 'cancel',
+      auditedAt: audited.auditedAt,
+    });
+  });
 });
 
 describe('expected salary that never arrives', () => {
