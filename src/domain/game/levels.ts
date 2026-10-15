@@ -13,7 +13,10 @@ export type LevelInfo = {
   tier: string;
   /** XP earned past the start of this level. */
   xpIntoLevel: number;
-  /** XP still needed to reach the next level; `null` at `MAX_LEVEL`. */
+  /**
+   * The level's full span: the XP from this level's start to the next level's (not what is still
+   * needed, which is `xpForNext - xpIntoLevel`); `null` at `MAX_LEVEL`.
+   */
   xpForNext: number | null;
   /** 0 to 1 through this level; `1` at `MAX_LEVEL`. */
   progress: number;
