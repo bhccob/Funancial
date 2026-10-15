@@ -5,6 +5,8 @@ import { Menu } from '@/components/ui/Menu';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Section } from '@/components/ui/Section';
 import type { Cycle, Subscription } from '@/domain/entities';
+import { localDay } from '@/domain/game/activity';
+import { monthKey } from '@/domain/periods';
 import { paidWithLabel } from '@/features/shared/paidWith';
 import { cn } from '@/lib/cn';
 import { daysUntil, formatDay, relativeDays } from '@/lib/format';
@@ -25,6 +27,13 @@ const AUDITS = [
   { value: 'review', label: 'Review' },
   { value: 'cancel', label: 'Cancel' },
 ] as const;
+
+/** The local day `sub` was last reviewed, if that was in the month of `today`; else `null`. */
+function reviewedThisMonth(sub: Subscription, today: string): string | null {
+  if (sub.auditedAt === null) return null;
+  const day = localDay(sub.auditedAt);
+  return monthKey(day) === monthKey(today) ? day : null;
+}
 
 function renewsText(today: string, date: string): string {
   const days = daysUntil(today, date);
@@ -67,55 +76,66 @@ export function SubscriptionsScreen() {
       <Section title="Active">
         {active.length > 0 ? (
           <ul className="divide-border -my-4 divide-y">
-            {active.map((sub) => (
-              <li key={sub.id} className="py-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="truncate font-bold">{sub.name}</p>
-                    <p className="text-muted text-sm font-semibold tabular-nums">
-                      {`${money(sub.amount)} / ${PER[sub.cycle]} · ${renewsText(today, sub.nextRenewal)} · ${paidWithLabel(sub.paymentMethod, sub.cardId, debts)}`}
-                    </p>
+            {active.map((sub) => {
+              const reviewed = reviewedThisMonth(sub, today);
+              return (
+                <li key={sub.id} className="py-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate font-bold">{sub.name}</p>
+                      <p className="text-muted text-sm font-semibold tabular-nums">
+                        {`${money(sub.amount)} / ${PER[sub.cycle]} · ${renewsText(today, sub.nextRenewal)} · ${paidWithLabel(sub.paymentMethod, sub.cardId, debts)}`}
+                      </p>
+                    </div>
+                    <Menu
+                      label={`Actions for ${sub.name}`}
+                      items={[
+                        { label: 'Edit', onSelect: () => setEditing(sub) },
+                        {
+                          label: 'Cancel subscription',
+                          danger: true,
+                          onSelect: () =>
+                            void run(() => setSubscriptionStatus(sub.id, 'cancelled'), {
+                              success: `${sub.name} cancelled. No more renewals are added.`,
+                            }),
+                        },
+                      ]}
+                    />
                   </div>
-                  <Menu
-                    label={`Actions for ${sub.name}`}
-                    items={[
-                      { label: 'Edit', onSelect: () => setEditing(sub) },
-                      {
-                        label: 'Cancel subscription',
-                        danger: true,
-                        onSelect: () =>
-                          void run(() => setSubscriptionStatus(sub.id, 'cancelled'), {
-                            success: `${sub.name} cancelled. No more renewals are added.`,
-                          }),
-                      },
-                    ]}
-                  />
-                </div>
-                <div role="group" aria-label={`Audit ${sub.name}`} className="mt-2.5 flex gap-1.5">
-                  {AUDITS.map((a) => {
-                    const pressed = sub.audit === a.value;
-                    return (
-                      <button
-                        key={a.value}
-                        type="button"
-                        aria-pressed={pressed}
-                        onClick={() =>
-                          void run(() => setSubscriptionAudit(sub.id, pressed ? null : a.value))
-                        }
-                        className={cn(
-                          'h-8 rounded-full border px-3 text-xs font-bold',
-                          pressed
-                            ? 'bg-primary text-primary-contrast border-transparent'
-                            : 'border-border-strong text-muted hover:text-text',
-                        )}
-                      >
-                        {a.label}
-                      </button>
-                    );
-                  })}
-                </div>
-              </li>
-            ))}
+                  <div
+                    role="group"
+                    aria-label={`Audit ${sub.name}`}
+                    className="mt-2.5 flex gap-1.5"
+                  >
+                    {AUDITS.map((a) => {
+                      const pressed = sub.audit === a.value;
+                      // A mark from an earlier month (or from before review dates) is stamped again,
+                      // so it counts for this month; only a mark stamped this month is cleared.
+                      const next = pressed && reviewed !== null ? null : a.value;
+                      return (
+                        <button
+                          key={a.value}
+                          type="button"
+                          aria-pressed={pressed}
+                          onClick={() => void run(() => setSubscriptionAudit(sub.id, next))}
+                          className={cn(
+                            'h-8 rounded-full border px-3 text-xs font-bold',
+                            pressed
+                              ? 'bg-primary text-primary-contrast border-transparent'
+                              : 'border-border-strong text-muted hover:text-text',
+                          )}
+                        >
+                          {a.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {reviewed !== null && (
+                    <p className="text-muted mt-1.5 text-[12.5px]">{`Reviewed ${formatDay(reviewed)}`}</p>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         ) : (
           <EmptyState

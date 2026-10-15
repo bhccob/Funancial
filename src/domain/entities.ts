@@ -173,7 +173,7 @@ export const SubscriptionSchema = z
     cardId: z.string().min(1).nullable(),
     status: z.enum(['active', 'cancelled']),
     audit: z.enum(['keep', 'review', 'cancel']).nullable(),
-    /** When `audit` was last set; `null` while the subscription has no audit mark. */
+    /** When `audit` was last set; `null` when there is no mark, or when the mark predates v4. */
     auditedAt: IsoTimestampSchema.nullable(),
     note: z.string(),
   })
