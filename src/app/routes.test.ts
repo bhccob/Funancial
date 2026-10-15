@@ -38,8 +38,13 @@ it('routes every screen the bottom bar, Menu sheet and sidebar link to', () => {
   expect(new Set(linked).size).toBe(linked.length);
 });
 
+it('says only where each screen is; names and icons live in menu.ts', () => {
+  for (const route of APP_ROUTES) {
+    expect(Object.keys(route).sort(), route.path).toEqual(['element', 'path']);
+  }
+});
+
 it('serves the shop from its own screen, not a placeholder', () => {
   const shop = APP_ROUTES.find((r) => r.path === '/shop');
-  expect(shop).toMatchObject({ label: 'Shop' });
   expect(isValidElement(shop?.element) && shop.element.type).toBe(ShopScreen);
 });
