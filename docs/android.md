@@ -8,20 +8,31 @@ You need: a Windows computer with Node 24, an Android phone, and a USB cable tha
 ## 1. Set up the computer (once)
 
 1. Install [Android Studio](https://developer.android.com/studio) and open it once, so it downloads
-   the Android SDK. Android Studio bundles JDK 21, so you do not need to install Java yourself.
-2. Tell your tools where they are. In PowerShell:
+   the Android SDK.
+2. Get Java 21. The build needs exactly Java 21: the Capacitor plugins ask for a Java 21 toolchain,
+   and the Java that comes inside Android Studio (Java 25 in current versions) is too new for them.
+   In Android Studio, open this project's `android` folder (or run `npm run android:open`). Then go
+   to File → Settings → Build, Execution, Deployment → Build Tools → Gradle → Gradle JDK, choose
+   Download JDK…, and pick Version 21, Vendor Eclipse Temurin. It installs to
+   `%USERPROFILE%\.jdks\temurin-21…` (the folder name ends in the exact version, for example
+   `temurin-21.0.12.1`), and Android Studio builds with it from then on.
+3. Tell the command-line tools where Java 21 and the SDK are, so `npm run android:run` and
+   `npm run android:dev` work too. In PowerShell, using your folder name from step 2:
 
    ```powershell
-   setx JAVA_HOME "C:\Program Files\Android\Android Studio\jbr"
+   setx JAVA_HOME "$env:USERPROFILE\.jdks\temurin-21.0.12.1"
    setx ANDROID_HOME "$env:LOCALAPPDATA\Android\Sdk"
    ```
 
-   (That is `JAVA_HOME` = `C:\Program Files\Android\Android Studio\jbr` and `ANDROID_HOME` =
+   (That is `JAVA_HOME` = `%USERPROFILE%\.jdks\temurin-21…` and `ANDROID_HOME` =
    `%LOCALAPPDATA%\Android\Sdk`. You can also set them in "Edit environment variables for your
-   account".) Open a new terminal afterwards, so it sees them.
+   account".) Do not point `JAVA_HOME` at Android Studio's own `jbr` folder: that is Java 25, and the
+   build stops with "Unsupported class file major version 69". Open a new terminal afterwards, so it
+   sees them. `& "$env:JAVA_HOME\bin\java" -version` should then say 21.
 
-The app builds with Android API 36 and runs on Android 7 (API 24) and newer. If the first build says
-a platform is missing, install "Android API 36" in Android Studio's SDK Manager.
+The app builds with Android API 36 and runs on Android 7 (API 24) and newer. The first build
+installs Android API 36 by itself if it is missing. If it says it cannot, install "Android API 36" in
+Android Studio's SDK Manager.
 
 ## 2. Connect the phone (once per phone)
 
