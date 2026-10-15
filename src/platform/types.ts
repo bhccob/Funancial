@@ -1,5 +1,6 @@
 import type { DeviceKeyring } from '@/data/keyring';
 import type { StorageProvider } from '@/data/storage';
+import type { Reminder } from '@/domain/notifications';
 
 /**
  * Everything that differs between the browser and the Android app, chosen once at startup.
@@ -29,6 +30,8 @@ export interface Platform {
   onResume(cb: () => void): () => void;
   /** Fingerprint or face unlock, where the device has it: `null` on the web. */
   biometric: BiometricVault | null;
+  /** Reminders that arrive while the app is closed, where the phone can schedule them: `null` on the web. */
+  notifier: Notifier | null;
 }
 
 /** A secret kept behind the device's fingerprint or face check. */
@@ -41,4 +44,17 @@ export interface BiometricVault {
     slot: string,
   ): Promise<{ status: 'ok'; secret: string } | { status: 'cancelled' } | { status: 'changed' }>;
   forget(slot: string): Promise<void>;
+}
+
+/** Local notifications the phone shows by itself, on a schedule the app sets in advance. */
+export interface Notifier {
+  permission(): Promise<'granted' | 'denied' | 'prompt'>;
+  /** Asks Android (13+) for notification permission. Only call after a user action. */
+  request(): Promise<boolean>;
+  /** Cancel the reminders this app scheduled and schedule these instead. */
+  replace(reminders: Reminder[]): Promise<void>;
+  /** One reminder a minute from now, to check they arrive. */
+  sendTest(): Promise<void>;
+  /** Runs `cb` with the screen a tapped reminder points at. Returns an unsubscribe. */
+  onOpen(cb: (route: string) => void): () => void;
 }

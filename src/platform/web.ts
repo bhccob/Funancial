@@ -48,5 +48,6 @@ export function createWebPlatform(): Platform {
     onPause: (cb) => onVisibility('hidden', cb),
     onResume: (cb) => onVisibility('visible', cb),
     biometric: null,
+    notifier: null,
   };
 }

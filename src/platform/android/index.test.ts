@@ -33,6 +33,7 @@ describe('createAndroidPlatform', () => {
 
     expect(platform.kind).toBe('android');
     expect(platform.biometric).toBe(androidBiometric);
+    expect(platform.notifier?.replace).toBeTypeOf('function');
     expect(installShell).toHaveBeenCalledTimes(1);
   });
 

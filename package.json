@@ -23,6 +23,7 @@
     "@capacitor/app": "8.1.2",
     "@capacitor/core": "8.5.3",
     "@capacitor/filesystem": "8.1.4",
+    "@capacitor/local-notifications": "8.3.1",
     "@capacitor/share": "8.0.3",
     "@capgo/capacitor-native-biometric": "8.7.0",
     "@fontsource-variable/manrope": "5.3.0",

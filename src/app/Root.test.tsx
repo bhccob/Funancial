@@ -1,9 +1,13 @@
 import { act, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import type { ReactNode } from 'react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { emptySnapshot } from '@/domain/snapshot';
+import { PlatformProvider } from '@/platform/PlatformProvider';
+import type { Notifier } from '@/platform/types';
+import { createWebPlatform } from '@/platform/web';
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
-import { makeProfile } from '@/test/fixtures';
+import { makeProfile, makeSettings } from '@/test/fixtures';
 import { DemoBanner } from './DemoBanner';
 import { Root } from './Root';
 
@@ -117,5 +121,76 @@ describe('Root across lock cycles', () => {
   it('shows toasts on every screen', () => {
     renderWithStore(<Root />, createStubStore({ phase: 'welcome' }));
     expect(document.querySelector('[aria-live="polite"]')).not.toBeNull();
+  });
+});
+
+function fakeNotifier(over: Partial<Notifier> = {}): Notifier {
+  return {
+    permission: vi.fn(async () => 'granted' as const),
+    request: vi.fn(async () => true),
+    replace: vi.fn(async () => {}),
+    sendTest: vi.fn(async () => {}),
+    onOpen: vi.fn(() => () => {}),
+    ...over,
+  };
+}
+
+/** The app as it runs on the phone, with a fake notifier in place of the Android plugin. */
+function onPhone(notifier: Notifier, ui: ReactNode) {
+  return (
+    <PlatformProvider platform={{ ...createWebPlatform(), kind: 'android', notifier }}>
+      {ui}
+    </PlatformProvider>
+  );
+}
+
+describe('Root with reminders', () => {
+  afterEach(() => vi.useRealTimers());
+
+  it('takes an opened reminder to its screen, listening once across lock cycles', async () => {
+    let open: (route: string) => void = () => {};
+    const stop = vi.fn();
+    const notifier = fakeNotifier({
+      onOpen: vi.fn((cb) => {
+        open = cb;
+        return stop;
+      }),
+    });
+    const store = createStubStore({ phase: 'unlocked', data: onboarded() });
+    const { unmount } = renderWithStore(onPhone(notifier, <Root />), store);
+    await screen.findByRole('heading', { level: 1, name: 'Home' });
+
+    // Tapped while the app is open, and again after it locked and unlocked.
+    act(() => open('/add'));
+    expect(await screen.findByRole('heading', { level: 1, name: 'Add' })).toBeInTheDocument();
+    act(() => store.setState({ phase: 'locked', lockMode: 'pin' }));
+    act(() => store.setState({ phase: 'unlocked' }));
+    act(() => open('/'));
+    expect(await screen.findByRole('heading', { level: 1, name: 'Home' })).toBeInTheDocument();
+
+    expect(notifier.onOpen).toHaveBeenCalledTimes(1);
+    expect(stop).not.toHaveBeenCalled();
+    unmount();
+    expect(stop).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the phone reminders in step with the data once unlocked', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const data = onboarded();
+    data.tables.settings = [
+      makeSettings({ reminders: { ...makeSettings().reminders, enabled: true } }),
+    ];
+    const notifier = fakeNotifier();
+    renderWithStore(
+      onPhone(notifier, <Root />),
+      createStubStore({ phase: 'unlocked', namespace: 'real', data }),
+    );
+    await screen.findByRole('heading', { level: 1, name: 'Home' });
+    expect(notifier.replace).not.toHaveBeenCalled();
+
+    await act(() => vi.advanceTimersByTimeAsync(1_000));
+
+    expect(notifier.replace).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(notifier.replace).mock.calls[0]?.[0].length).toBeGreaterThan(0);
   });
 });

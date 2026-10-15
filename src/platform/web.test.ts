@@ -12,6 +12,7 @@ describe('createWebPlatform', () => {
     expect(platform.kind).toBe('web');
     expect(platform.keyring).toBe(browserKeyring);
     expect(platform.biometric).toBeNull();
+    expect(platform.notifier).toBeNull();
 
     await expect(
       platform.files.save('funancial-export.json', '{}', 'application/json'),

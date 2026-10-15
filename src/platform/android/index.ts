@@ -4,6 +4,7 @@ import type { Platform } from '../types';
 import { androidBiometric } from './biometric';
 import { androidFiles } from './files';
 import { listen } from './listen';
+import { createAndroidNotifier } from './notifier';
 import { installShell } from './shell';
 import { capacitorSqlDriver } from './sqlite';
 
@@ -24,5 +25,6 @@ export async function createAndroidPlatform(): Promise<Platform> {
     onPause: (cb) => listen(() => App.addListener('pause', cb), 'the app going to the background'),
     onResume: (cb) => listen(() => App.addListener('resume', cb), 'the app coming back'),
     biometric: androidBiometric,
+    notifier: createAndroidNotifier(),
   };
 }

@@ -49,6 +49,14 @@ export function localDateTime(at: string): Date {
   return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), Number(m[4]), Number(m[5]));
 }
 
+/**
+ * The device's wall clock at `d`, as `YYYY-MM-DDTHH:MM` (the minute, no seconds): the inverse of
+ * `localDateTime`.
+ */
+export function formatLocalDateTime(d: Date): string {
+  return `${toLocalDate(d)}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 /** Calendar arithmetic done in UTC so daylight-saving shifts never skip or repeat a day. */
 export function addDays(d: LocalDate, n: number): LocalDate {
   const p = parts(d);

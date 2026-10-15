@@ -46,4 +46,7 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.USE_BIOMETRIC" />
+    <!-- Reminders are inexact (allowed while idle): a few minutes either side is fine. The local
+         notifications plugin declares exact alarms; drop that permission from the merged manifest. -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" tools:node="remove" />
 </manifest>
