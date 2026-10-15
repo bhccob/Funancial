@@ -1,8 +1,9 @@
-import { act, screen } from '@testing-library/react';
+import { act, cleanup, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { emptySnapshot } from '@/domain/snapshot';
+import { toastStore } from '@/lib/toast';
 import { PlatformProvider } from '@/platform/PlatformProvider';
 import type { Notifier } from '@/platform/types';
 import { createWebPlatform } from '@/platform/web';
@@ -136,7 +137,7 @@ function fakeNotifier(over: Partial<Notifier> = {}): Notifier {
 }
 
 /** The app as it runs on the phone, with a fake notifier in place of the Android plugin. */
-function onPhone(notifier: Notifier, ui: ReactNode) {
+function onPhone(notifier: Notifier | null, ui: ReactNode) {
   return (
     <PlatformProvider platform={{ ...createWebPlatform(), kind: 'android', notifier }}>
       {ui}
@@ -145,7 +146,15 @@ function onPhone(notifier: Notifier, ui: ReactNode) {
 }
 
 describe('Root with reminders', () => {
-  afterEach(() => vi.useRealTimers());
+  let consoleError: ReturnType<typeof vi.spyOn>;
+  beforeEach(() => {
+    consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    toastStore.setState({ toasts: [] });
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    consoleError.mockRestore();
+  });
 
   it('takes an opened reminder to its screen, listening once across lock cycles', async () => {
     let open: (route: string) => void = () => {};
@@ -192,5 +201,62 @@ describe('Root with reminders', () => {
 
     expect(notifier.replace).toHaveBeenCalledTimes(1);
     expect(vi.mocked(notifier.replace).mock.calls[0]?.[0].length).toBeGreaterThan(0);
+  });
+
+  it('clears the phone reminders once each time it reaches the welcome screen', async () => {
+    // After "Delete all data" the app goes back to welcome; nothing may keep reminding about it.
+    const notifier = fakeNotifier();
+    const store = createStubStore({ phase: 'welcome' });
+    renderWithStore(onPhone(notifier, <Root />), store);
+
+    expect(notifier.replace).toHaveBeenCalledTimes(1);
+    expect(notifier.replace).toHaveBeenLastCalledWith([]);
+    // Other changes while it stays there do not repeat it.
+    act(() => store.setState({ today: '2026-10-15' }));
+    expect(notifier.replace).toHaveBeenCalledTimes(1);
+
+    // Into the app and back out to welcome (data deleted again): once more.
+    act(() => store.setState({ phase: 'unlocked', data: onboarded() }));
+    await screen.findByRole('heading', { level: 1, name: 'Home' });
+    expect(notifier.replace).toHaveBeenCalledTimes(1);
+    act(() => store.setState({ phase: 'welcome', data: emptySnapshot() }));
+    expect(notifier.replace).toHaveBeenCalledTimes(2);
+    expect(notifier.replace).toHaveBeenLastCalledWith([]);
+  });
+
+  it('does not clear reminders while locked or booting', () => {
+    const notifier = fakeNotifier();
+    const store = createStubStore({ phase: 'booting' });
+    renderWithStore(onPhone(notifier, <Root />), store);
+    act(() => store.setState({ phase: 'locked', lockMode: 'pin' }));
+
+    expect(notifier.replace).not.toHaveBeenCalled();
+  });
+
+  it('keeps going, quietly, when clearing the reminders fails', async () => {
+    const rejecting = fakeNotifier({
+      replace: vi.fn(async () => Promise.reject(new Error('down'))),
+    });
+    const throwing = fakeNotifier({
+      replace: vi.fn(() => {
+        throw new Error('bridge down');
+      }),
+    });
+
+    for (const notifier of [rejecting, throwing]) {
+      renderWithStore(onPhone(notifier, <Root />), createStubStore({ phase: 'welcome' }));
+      await vi.waitFor(() => expect(consoleError).toHaveBeenCalled());
+      consoleError.mockClear();
+      expect(screen.getByRole('button', { name: 'Try with demo money' })).toBeInTheDocument();
+      expect(toastStore.getState().toasts).toEqual([]);
+      cleanup();
+    }
+  });
+
+  it('has nothing to clear on the web, where there is no notifier', () => {
+    renderWithStore(onPhone(null, <Root />), createStubStore({ phase: 'welcome' }));
+
+    expect(screen.getByRole('button', { name: 'Try with demo money' })).toBeInTheDocument();
+    expect(consoleError).not.toHaveBeenCalled();
   });
 });

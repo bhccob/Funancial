@@ -11,7 +11,7 @@ import { WelcomeScreen } from '@/features/welcome/WelcomeScreen';
 import { usePlatform } from '@/platform/PlatformProvider';
 import { useApp } from '@/store/AppStoreProvider';
 import { createAppRouter } from './router';
-import { useReminderSync } from './useReminderSync';
+import { useClearRemindersWithoutData, useReminderSync } from './useReminderSync';
 
 const DEFAULT_AUTO_LOCK_MINUTES = 5;
 
@@ -60,6 +60,7 @@ export function Root() {
   // Always listening, locked or not: opening a reminder while the app is locked lines the router
   // up for after the unlock, and one opened while the app was closed is delivered when this starts.
   useEffect(() => notifier?.onOpen((route) => void getAppRouter().navigate(route)), [notifier]);
+  useClearRemindersWithoutData(notifier);
   return (
     <ErrorBoundary>
       <Phase />

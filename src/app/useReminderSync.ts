@@ -4,7 +4,7 @@ import { upcomingReminders, type Reminder } from '@/domain/notifications';
 import { usePlatform } from '@/platform/PlatformProvider';
 import type { Notifier } from '@/platform/types';
 import type { AppState } from '@/store/appStore';
-import { useAppStore } from '@/store/AppStoreProvider';
+import { useApp, useAppStore } from '@/store/AppStoreProvider';
 
 /** Edits come in bursts (a form saves several records); the phone is told once they stop. */
 const SETTLE_MS = 1_000;
@@ -57,4 +57,24 @@ export function useReminderSync(notifier: Notifier | null): void {
       stopResume();
     };
   }, [notifier, platform, store]);
+}
+
+/**
+ * Clears the reminders on the phone each time the app reaches its welcome screen: no data is
+ * left (everything was deleted, or this is a first run), so nothing may go on reminding about it.
+ * `useReminderSync` only runs while unlocked and cannot see this. Failures go to the console.
+ */
+export function useClearRemindersWithoutData(notifier: Notifier | null): void {
+  const noData = useApp((s) => s.phase === 'welcome');
+
+  useEffect(() => {
+    if (!noData || !notifier) return;
+    void (async () => {
+      try {
+        await notifier.replace([]);
+      } catch (e) {
+        console.error('Could not clear reminders', e);
+      }
+    })();
+  }, [noData, notifier]);
 }
