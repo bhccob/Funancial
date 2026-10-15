@@ -7,6 +7,7 @@ levels, quests, streaks and badges. Local-first and encrypted on your device.
 - Product spec: `docs/spec/original-spec.md`
 - Approved design: `docs/superpowers/specs/2026-10-14-funancial-design.md`
 - Implementation plans: `docs/superpowers/plans/`
+- Run it on an Android phone, with live reload: `docs/android.md`
 
 ## Scripts
 
