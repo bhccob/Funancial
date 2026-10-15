@@ -3,6 +3,9 @@ import type { Bytes } from './crypto';
 import type { Namespace } from './db';
 import type { MetaStore } from './meta';
 
+/** Meta key holding the schema version the stored rows were written at. */
+export const DATA_VERSION_KEY = 'dataVersion';
+
 /** One encrypted entity. Only the slot (`table`, `id`) and `updatedAt` are in the clear. */
 export type RecordRow = {
   table: TableName;

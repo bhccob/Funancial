@@ -11,7 +11,7 @@ import {
   type TableRecord,
 } from '@/domain/snapshot';
 import { decryptRecord, encryptRecord } from './crypto';
-import type { RecordRow, StorageBackend } from './storage';
+import { DATA_VERSION_KEY, type RecordRow, type StorageBackend } from './storage';
 
 /** A stored record that could not be loaded; reported to the user instead of breaking boot. */
 export type SkippedRecord = { table: TableName; id: string; reason: 'decrypt' | 'invalid' };
@@ -29,7 +29,6 @@ export interface Repository {
   replaceAll(snapshot: DataSnapshot): Promise<void>;
 }
 
-const DATA_VERSION_KEY = 'dataVersion';
 const slot = (table: TableName, id: string) => `${table}:${id}`;
 const isTable = (t: string): t is TableName => (TABLES as readonly string[]).includes(t);
 

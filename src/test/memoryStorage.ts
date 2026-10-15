@@ -1,5 +1,5 @@
 import { memoryMetaStore } from '@/data/meta';
-import type { RecordRow, StorageBackend } from '@/data/storage';
+import { DATA_VERSION_KEY, type RecordRow, type StorageBackend } from '@/data/storage';
 
 /** A hand-written in-memory backend: a `Map` of rows plus a memory meta store. */
 export function memoryStorage(): StorageBackend {
@@ -13,7 +13,7 @@ export function memoryStorage(): StorageBackend {
       write: async (next, { replace, dataVersion }) => {
         if (replace) rows.clear();
         for (const row of next) rows.set(slot(row.table, row.id), row);
-        if (dataVersion !== undefined) await meta.put('dataVersion', dataVersion);
+        if (dataVersion !== undefined) await meta.put(DATA_VERSION_KEY, dataVersion);
       },
       remove: async (table, id) => void rows.delete(slot(table, id)),
     },

@@ -7,6 +7,7 @@ import type { SyncMessage } from '@/lib/broadcast';
 import type { SafeStorage } from '@/lib/safeStorage';
 import { buildDemoSnapshot } from '@/data/demoSeed';
 import { makeExpense, makeSubscription } from '@/test/fixtures';
+import { memoryStorage } from '@/test/memoryStorage';
 import { createAppStore, type AppDeps } from './appStore';
 
 function memorySafeStorage(): SafeStorage {
@@ -516,5 +517,29 @@ describe('a sync failure while opening', () => {
     expect(failingSync).toHaveBeenCalled();
     expect(again.getState().phase).toBe('unlocked');
     expect(again.getState().data.tables.expense.map((e) => e.id)).toEqual(['e1']);
+  });
+});
+
+describe('closing storage', () => {
+  it('logs a backend that fails to close instead of hiding it', async () => {
+    const backend = memoryStorage();
+    const failure = new Error('disk gone');
+    const { deps } = testDeps({
+      storage: {
+        open: async () => ({ ...backend, close: () => Promise.reject(failure) }),
+        remove: async () => {},
+      },
+    });
+    const store = createAppStore(deps);
+    await store.getState().boot();
+
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      await store.getState().boot(); // opening the next session closes the failing one
+      expect(logged).toHaveBeenCalledWith('Closing storage failed', failure);
+      expect(store.getState().phase).toBe('welcome');
+    } finally {
+      logged.mockRestore();
+    }
   });
 });

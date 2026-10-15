@@ -1,6 +1,11 @@
 import { Dexie, type Table } from 'dexie';
 import type { MetaStore } from './meta';
-import type { RecordRow, RecordStore, StorageProvider } from './storage';
+import {
+  DATA_VERSION_KEY,
+  type RecordRow,
+  type RecordStore,
+  type StorageProvider,
+} from './storage';
 
 /** Real data and demo data live in separate databases so leaving demo can never touch real. */
 export type Namespace = 'real' | 'demo';
@@ -53,7 +58,7 @@ function dexieRecordStore(db: FunancialDb): RecordStore {
         if (replace) await db.records.clear();
         await db.records.bulkPut(rows);
         if (dataVersion !== undefined)
-          await db.meta.put({ key: 'dataVersion', value: dataVersion });
+          await db.meta.put({ key: DATA_VERSION_KEY, value: dataVersion });
       }),
     remove: (table, id) => db.records.delete([table, id]),
   };

@@ -114,11 +114,13 @@ export function createAppStore(deps: AppDeps): StoreApi<AppState> {
   const readNamespace = (): Namespace =>
     deps.safeStorage.get(NAMESPACE_KEY) === 'demo' ? 'demo' : 'real';
 
-  /** Best effort: a backend that fails to close leaves nothing to recover. */
+  /** A backend that fails to close leaves nothing to recover, so the failure is logged, not thrown. */
   async function closeSession() {
     const closing = session;
     session = null;
-    await closing?.backend.close().catch(() => {});
+    await closing?.backend
+      .close()
+      .catch((e: unknown) => console.error('Closing storage failed', e));
   }
 
   async function openSession(ns: Namespace): Promise<Session> {
