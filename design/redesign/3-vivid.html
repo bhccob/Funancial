@@ -1,0 +1,363 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Funancial redesign #3 Vivid</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet" />
+<script src="https://unpkg.com/lucide@0.469.0/dist/umd/lucide.min.js"></script>
+<style>
+:root {
+  --page: #eef0f3; --bg: #f5f6fa; --card: #ffffff; --chip: #eef0f5; --track: #e6e8ef;
+  --text: #0d0d0f; --muted: #6a6b75; --line: #e9eaf0;
+  --ink: #111216; --on-ink: #ffffff;
+  --grad: linear-gradient(155deg, #00b37e 0%, #079a8e 48%, #2a62d6 100%);
+  --accent: #00b37e; --accent-text: #007a55;
+  --xp: #7c5cff; --xp-text: #6b46f5;
+  --warn-fill: #f2a93b; --danger: #d1373d; --flame: #e8590c;
+  --c1: #2a78d6; --c2: #eb6834; --c3: #1baf7a; --c4: #eda100; --c5: #e87ba4; --c6: #9aa0ab;
+  --t-blue: #e6f0ff; --t-orange: #fff0e3; --t-violet: #efeaff; --t-pink: #ffe9f1; --t-green: #e3f7ef; --t-amber: #fff6dc;
+  --shadow: 0 1px 2px rgba(16,16,24,.04), 0 10px 26px rgba(16,16,24,.07);
+}
+[data-theme='dark'] {
+  --page: #050506; --bg: #0c0c0e; --card: #17171b; --chip: #202027; --track: #2a2a31;
+  --text: #f4f4f6; --muted: #9a9aa6; --line: #26262c;
+  --ink: #f4f4f6; --on-ink: #0c0c0e;
+  --grad: linear-gradient(155deg, #0b6e52 0%, #0a5c5a 48%, #1d3f8a 100%);
+  --accent: #2ee6a6; --accent-text: #2ee6a6;
+  --xp: #9d85ff; --xp-text: #9d85ff;
+  --warn-fill: #f2a93b; --danger: #ff6b6f; --flame: #ff8a4c;
+  --c1: #3987e5; --c2: #d95926; --c3: #199e70; --c4: #c98500; --c5: #d55181; --c6: #6b7080;
+  --t-blue: #142238; --t-orange: #33200f; --t-violet: #221c3d; --t-pink: #351826; --t-green: #0f2a21; --t-amber: #302710;
+  --shadow: 0 0 0 1px rgba(255,255,255,.04);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: Manrope, system-ui, sans-serif; background: var(--page); color: var(--text); padding: 28px 16px 60px; }
+.num { font-variant-numeric: tabular-nums; }
+.i { width: 20px; height: 20px; }
+.switch { max-width: 1240px; margin: 0 auto 18px; display: flex; gap: 8px; flex-wrap: wrap; }
+.switch a { text-decoration: none; color: var(--muted); font-weight: 800; font-size: 14px; padding: 9px 14px; border-radius: 999px; background: var(--card); }
+.switch a.on { background: var(--ink); color: var(--on-ink); }
+header.top { max-width: 1240px; margin: 0 auto 26px; display: flex; flex-wrap: wrap; gap: 14px; align-items: end; justify-content: space-between; }
+header.top h1 { font-size: 26px; font-weight: 800; letter-spacing: -.02em; }
+header.top p { color: var(--muted); font-weight: 600; margin-top: 4px; max-width: 640px; line-height: 1.5; }
+.toggle { display: inline-flex; background: var(--card); border-radius: 999px; padding: 4px; }
+.toggle button { border: 0; background: transparent; color: var(--muted); font: 700 14px Manrope; padding: 9px 16px; border-radius: 999px; cursor: pointer; display: inline-flex; gap: 6px; align-items: center; }
+.toggle button[aria-pressed='true'] { background: var(--ink); color: var(--on-ink); }
+.phones { max-width: 1240px; margin: 0 auto; display: flex; flex-wrap: wrap; gap: 34px; justify-content: center; }
+.col { display: flex; flex-direction: column; gap: 12px; align-items: center; }
+.col h2 { font-size: 15px; font-weight: 800; }
+.col small { color: var(--muted); font-weight: 600; font-size: 13px; max-width: 360px; text-align: center; line-height: 1.45; }
+.phone { width: 375px; height: 812px; border-radius: 44px; background: var(--bg); position: relative; overflow: hidden; box-shadow: 0 30px 60px rgba(0,0,0,.18), 0 0 0 10px #101014; }
+.scroll { position: absolute; inset: 0; overflow-y: auto; padding: 0 0 120px; scrollbar-width: none; }
+.scroll::-webkit-scrollbar { display: none; }
+.status { position: absolute; top: 0; left: 0; right: 0; height: 44px; display: flex; justify-content: space-between; align-items: center; padding: 0 28px; font-weight: 700; font-size: 14px; z-index: 5; color: #fff; }
+.pad { padding: 0 16px; }
+
+.head { background: var(--grad); color: #fff; padding: 54px 18px 26px; border-radius: 0 0 34px 34px; }
+.head .row1 { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; }
+.who { display: flex; gap: 10px; align-items: center; }
+.av { position: relative; width: 46px; height: 46px; }
+.av svg { position: absolute; inset: 0; transform: rotate(-90deg); }
+.av .f { position: absolute; inset: 5px; border-radius: 50%; background: rgba(255,255,255,.2); display: grid; place-items: center; }
+.who .t1 { font-size: 12.5px; font-weight: 700; opacity: .8; }
+.who .t2 { font-size: 16.5px; font-weight: 800; }
+.chips { display: flex; gap: 6px; }
+.chip { display: inline-flex; align-items: center; gap: 5px; height: 34px; padding: 0 11px; border-radius: 999px; background: rgba(255,255,255,.18); font-weight: 800; font-size: 13.5px; backdrop-filter: blur(6px); }
+.chip .i { width: 16px; height: 16px; }
+.slides { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; margin: 0 -18px; }
+.slides::-webkit-scrollbar { display: none; }
+.slide { flex: none; width: 100%; padding: 0 18px; scroll-snap-align: start; }
+.slide .k { font-size: 13.5px; font-weight: 700; opacity: .85; }
+.slide .big { font-size: 42px; font-weight: 800; letter-spacing: -.04em; line-height: 1.1; margin-top: 4px; }
+.mbar { display: flex; height: 12px; gap: 3px; margin-top: 16px; border-radius: 99px; overflow: hidden; }
+.mbar i { display: block; }
+.mlegend { display: flex; gap: 14px; margin-top: 10px; font-size: 12.5px; font-weight: 700; opacity: .92; }
+.mlegend span { display: inline-flex; gap: 6px; align-items: center; }
+.dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; flex: none; }
+.gauge { display: flex; align-items: center; gap: 16px; margin-top: 8px; }
+.dots { display: flex; gap: 6px; justify-content: center; margin-top: 18px; }
+.dots i { width: 7px; height: 7px; border-radius: 99px; background: rgba(255,255,255,.45); transition: width .2s; }
+.dots i.on { width: 20px; background: #fff; }
+
+.acts { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; padding: 18px 12px 6px; }
+.act { border: 0; background: none; color: var(--text); display: flex; flex-direction: column; align-items: center; gap: 8px; font: 700 12.5px Manrope; cursor: pointer; }
+.act .c { width: 58px; height: 58px; border-radius: 50%; display: grid; place-items: center; transition: transform .12s; }
+.act:active .c { transform: scale(.93); }
+.act .c .i { width: 25px; height: 25px; }
+
+.sh { display: flex; justify-content: space-between; align-items: center; margin: 22px 2px 12px; }
+.sh h3 { font-size: 18px; font-weight: 800; letter-spacing: -.02em; }
+.sh a { font-size: 13px; font-weight: 700; color: var(--muted); text-decoration: none; }
+.bento { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.tile { border-radius: 24px; padding: 16px; position: relative; overflow: hidden; }
+.tile.wide { grid-column: span 2; }
+.tile .tk { font-size: 12.5px; font-weight: 800; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+.tile .tv { font-size: 24px; font-weight: 800; letter-spacing: -.03em; margin-top: 6px; }
+.tile .ts { font-size: 12px; font-weight: 700; color: var(--muted); margin-top: 2px; }
+.minibars { display: flex; align-items: end; gap: 5px; height: 56px; margin-top: 12px; }
+.minibars button { flex: 1; border: 0; border-radius: 6px; background: color-mix(in srgb, var(--c1) 35%, transparent); cursor: pointer; padding: 0; }
+.minibars button.today { background: var(--c1); }
+.minibars button.on { background: var(--ink); }
+.flame { position: absolute; right: -8px; bottom: -14px; opacity: .25; color: var(--flame); }
+.flame .i { width: 86px; height: 86px; }
+.ring { position: relative; width: 58px; height: 58px; }
+.ring svg { transform: rotate(-90deg); }
+.ring b { position: absolute; inset: 0; display: grid; place-items: center; font-size: 13px; font-weight: 800; }
+.billrow { display: flex; align-items: center; gap: 12px; margin-top: 10px; }
+.cal { width: 50px; height: 54px; border-radius: 15px; background: var(--card); display: flex; flex-direction: column; align-items: center; justify-content: center; flex: none; }
+.cal span { font-size: 10px; font-weight: 800; color: var(--danger); letter-spacing: .06em; }
+.cal b { font-size: 19px; font-weight: 800; line-height: 1; }
+.catscroll { display: flex; gap: 10px; overflow-x: auto; scrollbar-width: none; padding: 2px 16px 4px; margin: 0 -16px; }
+.cchip { flex: none; display: flex; flex-direction: column; gap: 10px; width: 112px; padding: 14px; border-radius: 22px; border: 0; text-align: left; cursor: pointer; color: var(--text); font-family: Manrope; }
+.cchip .ci { width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; color: #fff; }
+.cchip b { font-size: 16px; font-weight: 800; }
+.cchip span { font-size: 12px; font-weight: 700; color: var(--muted); margin-top: -8px; }
+.cchip .pb { height: 5px; border-radius: 99px; background: color-mix(in srgb, currentColor 10%, transparent); overflow: hidden; }
+.cchip .pb i { display: block; height: 100%; border-radius: 99px; }
+
+.nav { position: absolute; left: 14px; right: 14px; bottom: 18px; height: 70px; background: var(--ink); border-radius: 26px; display: grid; grid-template-columns: repeat(5, 1fr); align-items: center; z-index: 6; box-shadow: 0 14px 30px rgba(0,0,0,.25); }
+.nav button { border: 0; background: none; color: color-mix(in srgb, var(--on-ink) 60%, transparent); font: 700 11px Manrope; display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer; }
+.nav button.on { color: var(--on-ink); }
+.nav .add .c { width: 50px; height: 50px; border-radius: 18px; background: var(--grad); color: #fff; display: grid; place-items: center; }
+.nav .i { width: 22px; height: 22px; }
+
+.backdrop { position: absolute; inset: 0; background: rgba(8,8,12,.4); opacity: 0; pointer-events: none; transition: opacity .25s; z-index: 7; }
+.sheet { position: absolute; left: 0; right: 0; bottom: 0; background: var(--card); border-radius: 30px 30px 0 0; padding: 10px 18px 30px; transform: translateY(102%); transition: transform .32s cubic-bezier(.2,.8,.2,1); z-index: 8; max-height: 90%; overflow-y: auto; scrollbar-width: none; }
+.open .backdrop { opacity: 1; pointer-events: auto; }
+.open .sheet { transform: none; }
+.grab { width: 40px; height: 5px; border-radius: 99px; background: var(--track); margin: 0 auto 12px; }
+.sheet h4 { font-size: 13px; font-weight: 800; color: var(--muted); margin: 16px 2px 12px; }
+.apps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px 6px; }
+.app { border: 0; background: none; color: var(--text); display: flex; flex-direction: column; align-items: center; gap: 7px; font: 700 12px Manrope; cursor: pointer; position: relative; text-align: center; }
+.app .ai { width: 58px; height: 58px; border-radius: 19px; display: grid; place-items: center; color: #fff; }
+.app .ai .i { width: 26px; height: 26px; }
+.app .soon { position: absolute; top: -6px; right: 4px; font-size: 9.5px; font-weight: 800; background: var(--ink); color: var(--on-ink); padding: 2px 6px; border-radius: 99px; }
+.app small { font-size: 10.5px; font-weight: 700; color: var(--muted); margin-top: -4px; }
+
+.bhead { background: var(--grad); color: #fff; padding: 54px 18px 24px; border-radius: 0 0 34px 34px; }
+.bhead .t { display: flex; justify-content: space-between; align-items: center; }
+.bhead h1 { font-size: 30px; font-weight: 800; letter-spacing: -.03em; }
+.mon { display: inline-flex; align-items: center; gap: 2px; background: rgba(255,255,255,.18); border-radius: 999px; padding: 3px; font-weight: 800; font-size: 13.5px; }
+.mon button { border: 0; background: none; color: #fff; width: 32px; height: 32px; display: grid; place-items: center; cursor: pointer; border-radius: 50%; }
+.semi { display: flex; flex-direction: column; align-items: center; margin-top: 10px; }
+.semi .v { font-size: 32px; font-weight: 800; letter-spacing: -.03em; margin-top: -58px; }
+.semi .s { font-size: 13px; font-weight: 700; opacity: .85; }
+.catcards { display: grid; gap: 10px; }
+.ccard { display: flex; align-items: center; gap: 12px; padding: 14px; border-radius: 22px; }
+.ccard .ci { width: 44px; height: 44px; border-radius: 15px; display: grid; place-items: center; color: #fff; flex: none; }
+.ccard .w { flex: 1; }
+.ccard .w b { font-size: 15px; font-weight: 800; display: flex; justify-content: space-between; }
+.ccard .w small { font-size: 12.5px; font-weight: 700; color: var(--muted); }
+.ccard .pb { height: 7px; border-radius: 99px; background: var(--card); margin-top: 8px; overflow: hidden; }
+.ccard .pb i { display: block; height: 100%; border-radius: 99px; }
+.notes { max-width: 1240px; margin: 36px auto 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+.note { background: var(--card); border-radius: 22px; padding: 18px; }
+.note b { font-size: 14.5px; font-weight: 800; display: block; margin-bottom: 6px; }
+.note p { font-size: 13.5px; font-weight: 600; color: var(--muted); line-height: 1.5; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; scroll-behavior: auto !important; } }
+</style>
+</head>
+<body>
+<nav class="switch" aria-label="Designs"><a href="index.html">#1 Soft cards</a><a href="2-open.html">#2 Open</a><a href="3-vivid.html" class="on">#3 Vivid</a></nav>
+<header class="top">
+  <div>
+    <h1>#3 · Vivid</h1>
+    <p>Colourful and playful. A gradient header with swipeable money cards (swipe or tap the dots), a bento of colour-tinted tiles, and a menu like your phone's app drawer. Tap the bars, the category chips and the Menu button.</p>
+  </div>
+  <div class="toggle" role="group" aria-label="Theme">
+    <button data-theme-btn="light" aria-pressed="true"><i data-lucide="sun" class="i"></i>Light</button>
+    <button data-theme-btn="dark" aria-pressed="false"><i data-lucide="moon" class="i"></i>Dark</button>
+  </div>
+</header>
+
+<div class="phones">
+  <div class="col">
+    <h2>Home</h2>
+    <div class="phone" id="home">
+      <div class="status"><span>9:41</span><span>●●● 100%</span></div>
+      <div class="scroll">
+        <div class="head">
+          <div class="row1">
+            <div class="who">
+              <div class="av"><svg width="46" height="46"><circle cx="23" cy="23" r="20.5" fill="none" stroke="rgba(255,255,255,.3)" stroke-width="3.5"/><circle cx="23" cy="23" r="20.5" fill="none" stroke="#fff" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="128.8" stroke-dashoffset="5.2"/></svg><div class="f"><i data-lucide="sprout" class="i"></i></div></div>
+              <div><div class="t1">Level 5 · Bronze Saver</div><div class="t2">Hi, Demo Player</div></div>
+            </div>
+            <div class="chips"><span class="chip"><i data-lucide="flame" class="i"></i>61</span><span class="chip"><i data-lucide="coins" class="i"></i>130</span></div>
+          </div>
+          <div class="slides" id="slides">
+            <div class="slide">
+              <div class="k">Available to spend</div>
+              <div class="big num">$13,177.46</div>
+              <div class="mbar"><i style="flex:1884;background:#ffd28a"></i><i style="flex:548;background:#ffb3cf"></i><i style="flex:168;background:#fff"></i></div>
+              <div class="mlegend"><span><i class="dot" style="background:#ffd28a"></i>Spent $1,884</span><span><i class="dot" style="background:#ffb3cf"></i>Bills $548</span><span><i class="dot" style="background:#fff"></i>Left $168</span></div>
+            </div>
+            <div class="slide">
+              <div class="k">Net worth</div>
+              <div class="big num">$13,219.45</div>
+              <svg width="100%" height="48" viewBox="0 0 300 48" preserveAspectRatio="none" style="margin-top:10px"><path id="spark" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/></svg>
+              <div class="mlegend"><span>▲ $312 this month</span><span>Cash $5.1k · Savings $8.6k</span></div>
+            </div>
+            <div class="slide">
+              <div class="k">Spent in October</div>
+              <div class="gauge">
+                <svg width="96" height="96" style="transform:rotate(-90deg)"><circle cx="48" cy="48" r="40" fill="none" stroke="rgba(255,255,255,.25)" stroke-width="10"/><circle cx="48" cy="48" r="40" fill="none" stroke="#fff" stroke-width="10" stroke-linecap="round" stroke-dasharray="251.3" stroke-dashoffset="70.4"/></svg>
+                <div><div class="big num" style="font-size:34px">$1,884</div><div class="mlegend" style="margin-top:2px">72% of your $2,600 limit</div></div>
+              </div>
+            </div>
+          </div>
+          <div class="dots" id="dots"><i class="on"></i><i></i><i></i></div>
+        </div>
+
+        <div class="acts">
+          <button class="act"><span class="c" style="background:var(--accent);color:#fff"><i data-lucide="plus" class="i"></i></span>Expense</button>
+          <button class="act"><span class="c" style="background:var(--t-green);color:var(--accent-text)"><i data-lucide="hand-coins" class="i"></i></span>Income</button>
+          <button class="act"><span class="c" style="background:var(--t-pink);color:var(--c5)"><i data-lucide="shopping-bag" class="i"></i></span>Buy it?</button>
+          <button class="act"><span class="c" style="background:var(--t-blue);color:var(--c1)"><i data-lucide="target" class="i"></i></span>Goals</button>
+        </div>
+
+        <div class="pad">
+          <div class="sh"><h3>Your week</h3><a href="#">History</a></div>
+          <div class="bento">
+            <div class="tile" style="background:var(--t-blue)">
+              <div class="tk"><i data-lucide="calendar-days" class="i" style="width:16px;height:16px;color:var(--c1)"></i>This week</div>
+              <div class="tv num" id="wkVal">$133.72</div>
+              <div class="ts" id="wkLbl">Tap a day</div>
+              <div class="minibars" id="minibars"></div>
+            </div>
+            <div class="tile" style="background:var(--t-orange)">
+              <div class="tk"><i data-lucide="flame" class="i" style="width:16px;height:16px;color:var(--flame)"></i>Streak</div>
+              <div class="tv">61 days</div>
+              <div class="ts">Logged every day</div>
+              <div class="flame"><i data-lucide="flame" class="i"></i></div>
+            </div>
+            <div class="tile" style="background:var(--t-violet)">
+              <div class="tk"><i data-lucide="sparkles" class="i" style="width:16px;height:16px;color:var(--xp-text)"></i>Level 5</div>
+              <div style="display:flex;align-items:center;gap:10px;margin-top:8px">
+                <div class="ring"><svg width="58" height="58"><circle cx="29" cy="29" r="24" fill="none" stroke="var(--card)" stroke-width="7"/><circle cx="29" cy="29" r="24" fill="none" stroke="var(--xp)" stroke-width="7" stroke-linecap="round" stroke-dasharray="150.8" stroke-dashoffset="6"/></svg><b>96%</b></div>
+                <div class="ts" style="margin:0">38 XP to<br/>level 6</div>
+              </div>
+            </div>
+            <div class="tile" style="background:var(--t-green)">
+              <div class="tk"><i data-lucide="target" class="i" style="width:16px;height:16px;color:var(--accent-text)"></i>Goals</div>
+              <div style="display:flex;gap:8px;margin-top:8px">
+                <div class="ring"><svg width="58" height="58"><circle cx="29" cy="29" r="24" fill="none" stroke="var(--card)" stroke-width="7"/><circle cx="29" cy="29" r="24" fill="none" stroke="var(--c1)" stroke-width="7" stroke-linecap="round" stroke-dasharray="150.8" stroke-dashoffset="93.5"/></svg><b>38%</b></div>
+                <div class="ring"><svg width="58" height="58"><circle cx="29" cy="29" r="24" fill="none" stroke="var(--card)" stroke-width="7"/><circle cx="29" cy="29" r="24" fill="none" stroke="var(--c3)" stroke-width="7" stroke-linecap="round" stroke-dasharray="150.8" stroke-dashoffset="105.6"/></svg><b>30%</b></div>
+              </div>
+            </div>
+            <div class="tile wide" style="background:var(--t-pink)">
+              <div class="tk"><i data-lucide="receipt" class="i" style="width:16px;height:16px;color:var(--c5)"></i>Next bill · 3 this month, $547.81</div>
+              <div class="billrow"><div class="cal"><span>OCT</span><b>21</b></div><div style="flex:1"><b style="font-size:16px;font-weight:800">Demo Visa</b><div class="ts">Card · full balance · in 6 days</div></div><b class="num" style="font-size:18px;font-weight:800">$505.82</b></div>
+            </div>
+          </div>
+
+          <div class="sh"><h3>Where it went</h3><a href="#">October</a></div>
+          <div class="catscroll" id="catscroll"></div>
+
+          <div class="sh"><h3>Quests</h3><a href="#">All</a></div>
+          <div class="tile" style="background:var(--card);box-shadow:var(--shadow)">
+            <div style="display:flex;gap:12px;align-items:center"><span class="ci" style="width:42px;height:42px;border-radius:14px;background:var(--t-violet);color:var(--xp-text);display:grid;place-items:center"><i data-lucide="target" class="i"></i></span><div style="flex:1"><b style="font-size:14.5px;font-weight:800">Stay within limits this week</b><div style="height:7px;border-radius:99px;background:var(--track);margin-top:8px;overflow:hidden"><i style="display:block;width:57%;height:100%;background:var(--xp);border-radius:99px"></i></div></div><b style="color:var(--xp-text);font-size:13px">+60 XP</b></div>
+          </div>
+        </div>
+      </div>
+      <nav class="nav">
+        <button class="on"><i data-lucide="house" class="i"></i>Home</button>
+        <button><i data-lucide="chart-pie" class="i"></i>Budget</button>
+        <button class="add"><span class="c"><i data-lucide="plus" class="i"></i></span></button>
+        <button><i data-lucide="trophy" class="i"></i>Quests</button>
+        <button data-open-menu><i data-lucide="layout-grid" class="i"></i>Menu</button>
+      </nav>
+      <div class="backdrop" data-close-menu></div>
+      <div class="sheet" id="sheetHome"></div>
+    </div>
+    <small>Swipe the header between Available, Net worth and Spent. Colour-coded tiles show your week, streak, level, goals and next bill at a glance.</small>
+  </div>
+
+  <div class="col">
+    <h2>Menu</h2>
+    <div class="phone open">
+      <div class="status"><span>9:41</span><span>●●● 100%</span></div>
+      <div class="scroll"><div class="head"><div class="slide" style="padding:0"><div class="k">Available to spend</div><div class="big num">$13,177.46</div></div></div></div>
+      <nav class="nav"><button><i data-lucide="house" class="i"></i>Home</button><button><i data-lucide="chart-pie" class="i"></i>Budget</button><button class="add"><span class="c"><i data-lucide="plus" class="i"></i></span></button><button><i data-lucide="trophy" class="i"></i>Quests</button><button class="on"><i data-lucide="layout-grid" class="i"></i>Menu</button></nav>
+      <div class="backdrop"></div>
+      <div class="sheet" id="sheetStatic"></div>
+    </div>
+    <small>Like your phone's app drawer: big colourful icons with names and a one-word status. "Soon" marks what's coming in M5 and M6.</small>
+  </div>
+
+  <div class="col">
+    <h2>Budget</h2>
+    <div class="phone">
+      <div class="status"><span>9:41</span><span>●●● 100%</span></div>
+      <div class="scroll">
+        <div class="bhead">
+          <div class="t"><h1>Budget</h1><span class="mon"><button aria-label="Previous month"><i data-lucide="chevron-left" class="i" style="width:18px;height:18px"></i></button>October<button aria-label="Next month"><i data-lucide="chevron-right" class="i" style="width:18px;height:18px"></i></button></span></div>
+          <div class="semi">
+            <svg width="240" height="130" viewBox="0 0 240 130"><path d="M20 120 A100 100 0 0 1 220 120" fill="none" stroke="rgba(255,255,255,.25)" stroke-width="18" stroke-linecap="round"/><path d="M20 120 A100 100 0 0 1 220 120" fill="none" stroke="#fff" stroke-width="18" stroke-linecap="round" stroke-dasharray="314.2" stroke-dashoffset="88"/></svg>
+            <div class="v num">$1,884.36</div>
+            <div class="s">of your $2,600 limit · $716 left · day 15 of 31</div>
+          </div>
+        </div>
+        <div class="pad">
+          <div class="sh"><h3>Limits</h3><a href="#">+ Add</a></div>
+          <div class="catcards">
+            <div class="ccard" style="background:var(--t-amber)"><span class="ci" style="background:var(--warn-fill)"><i data-lucide="wallet" class="i"></i></span><div class="w"><b>Overall <span class="num">$716 left</span></b><small>Monthly · 72% used · ahead of pace</small><div class="pb"><i style="width:72%;background:var(--warn-fill)"></i></div></div></div>
+            <div class="ccard" style="background:var(--t-pink)"><span class="ci" style="background:var(--c5)"><i data-lucide="party-popper" class="i"></i></span><div class="w"><b>Fun <span class="num">$33 left</span></b><small>Monthly · 67% used</small><div class="pb"><i style="width:67%;background:var(--c5)"></i></div></div></div>
+            <div class="ccard" style="background:var(--t-green)"><span class="ci" style="background:var(--c3)"><i data-lucide="utensils" class="i"></i></span><div class="w"><b>Food <span class="num">$73 left</span></b><small>Weekly · 39% used · under pace</small><div class="pb"><i style="width:39%;background:var(--c3)"></i></div></div></div>
+          </div>
+          <div class="sh"><h3>By category</h3><a href="#">October</a></div>
+          <div class="catscroll" id="catscroll2"></div>
+        </div>
+      </div>
+      <nav class="nav"><button><i data-lucide="house" class="i"></i>Home</button><button class="on"><i data-lucide="chart-pie" class="i"></i>Budget</button><button class="add"><span class="c"><i data-lucide="plus" class="i"></i></span></button><button><i data-lucide="trophy" class="i"></i>Quests</button><button><i data-lucide="layout-grid" class="i"></i>Menu</button></nav>
+    </div>
+    <small>A big gauge for the month in the header, then colour-tinted limit cards and swipeable category chips.</small>
+  </div>
+</div>
+
+<div class="notes">
+  <div class="note"><b>Fun and colourful</b><p>The most "game-like" of the three: colour-coded tiles, a gradient header and an app-drawer menu.</p></div>
+  <div class="note"><b>At a glance</b><p>The bento tiles answer "how's my week?" without scrolling: spending, streak, level, goals and the next bill.</p></div>
+  <div class="note"><b>Trade-off</b><p>It's the busiest of the three, and colour carries meaning, so it needs care to stay calm as features are added.</p></div>
+</div>
+
+<script>
+const CATS = [
+  { n: 'Rent', v: 1200.00, c: 'var(--c1)', t: 'var(--t-blue)', i: 'house' }, { n: 'Shopping', v: 220.90, c: 'var(--c2)', t: 'var(--t-orange)', i: 'shopping-bag' },
+  { n: 'Food', v: 154.72, c: 'var(--c3)', t: 'var(--t-green)', i: 'utensils' }, { n: 'Utilities', v: 134.52, c: 'var(--c4)', t: 'var(--t-amber)', i: 'zap' },
+  { n: 'Health', v: 68.69, c: 'var(--c5)', t: 'var(--t-pink)', i: 'heart-pulse' }, { n: 'Other', v: 105.53, c: 'var(--c6)', t: 'var(--chip)', i: 'ellipsis' },
+];
+const DAYS = [['Fri', 24.10], ['Sat', 88.45], ['Sun', 12.00], ['Mon', 31.20], ['Tue', 0], ['Wed', 54.03], ['Thu', 48.49]];
+const fmt = (v, d = 2) => '$' + v.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
+const total = CATS.reduce((s, c) => s + c.v, 0);
+const chips = CATS.map((c) => `<button class="cchip" style="background:${c.t}"><span class="ci" style="background:${c.c}"><i data-lucide="${c.i}" class="i"></i></span><b class="num">${fmt(c.v, 0)}</b><span>${c.n} · ${Math.round(c.v / total * 100)}%</span><span class="pb"><i style="width:${(c.v / CATS[0].v) * 100}%;background:${c.c}"></i></span></button>`).join('');
+document.getElementById('catscroll').innerHTML = chips;
+document.getElementById('catscroll2').innerHTML = chips;
+const mb = document.getElementById('minibars'), max = Math.max(...DAYS.map((d) => d[1]));
+mb.innerHTML = DAYS.map(([d, v], k) => `<button class="${k === 6 ? 'today' : ''}" style="height:${Math.max(5, (v / max) * 56)}px" aria-label="${d}"></button>`).join('');
+mb.querySelectorAll('button').forEach((b, k) => b.addEventListener('click', () => {
+  mb.querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b));
+  document.getElementById('wkVal').textContent = DAYS[k][1] ? fmt(DAYS[k][1]) : '$0';
+  document.getElementById('wkLbl').textContent = k === 6 ? 'Today' : DAYS[k][0];
+}));
+const pts = [12907, 12950, 12920, 12988, 13012, 12995, 13040, 13080, 13060, 13110, 13090, 13130, 13150, 13120, 13180, 13219];
+const mn = Math.min(...pts), mx = Math.max(...pts);
+document.getElementById('spark').setAttribute('d', pts.map((p, k) => `${k ? 'L' : 'M'}${((k / (pts.length - 1)) * 300).toFixed(1)},${(44 - ((p - mn) / (mx - mn)) * 40).toFixed(1)}`).join(' '));
+const slides = document.getElementById('slides'), dots = [...document.querySelectorAll('#dots i')];
+slides.addEventListener('scroll', () => { const k = Math.round(slides.scrollLeft / slides.clientWidth); dots.forEach((d, j) => d.classList.toggle('on', j === k)); });
+dots.forEach((d, k) => { d.style.cursor = 'pointer'; d.addEventListener('click', () => slides.scrollTo({ left: k * slides.clientWidth, behavior: 'smooth' })); });
+const A = (ic, bg, t, s, soon) => `<button class="app">${soon ? '<span class="soon">Soon</span>' : ''}<span class="ai" style="background:${bg}"><i data-lucide="${ic}" class="i"></i></span>${t}<small>${s}</small></button>`;
+const SHEET = `<div class="grab"></div>
+  <h4>Your money</h4><div class="apps">${A('repeat', 'var(--c1)', 'Subscriptions', '3 active')}${A('target', 'var(--c3)', 'Goals', '33% saved')}${A('clock', 'var(--c2)', 'History', 'All entries')}${A('snowflake', '#5b8def', 'Freeze', 'None')}</div>
+  <h4>Coming next</h4><div class="apps">${A('trending-up', 'var(--c4)', 'Invest', 'M5', 1)}${A('shopping-bag', 'var(--c5)', 'Buy it?', 'M6', 1)}${A('coins', '#8a63d2', 'Dividends', 'M5', 1)}${A('newspaper', '#6b7080', 'News', 'M5', 1)}</div>
+  <h4>You</h4><div class="apps">${A('store', 'var(--xp)', 'Shop', '130 coins')}${A('inbox', '#0e9aa7', 'Inbox', 'Empty')}${A('circle-help', '#e0567a', 'Help', 'Guides')}${A('settings', '#6b7080', 'Settings', 'Lock & more')}</div>`;
+document.getElementById('sheetHome').innerHTML = SHEET; document.getElementById('sheetStatic').innerHTML = SHEET;
+const home = document.getElementById('home');
+home.querySelector('[data-open-menu]').addEventListener('click', () => home.classList.add('open'));
+home.querySelector('[data-close-menu]').addEventListener('click', () => home.classList.remove('open'));
+document.querySelectorAll('[data-theme-btn]').forEach((b) => b.addEventListener('click', () => { document.documentElement.dataset.theme = b.dataset.themeBtn; document.querySelectorAll('[data-theme-btn]').forEach((x) => x.setAttribute('aria-pressed', x === b)); }));
+lucide.createIcons();
+</script>
+</body>
+</html>
