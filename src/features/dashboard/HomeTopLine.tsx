@@ -11,7 +11,7 @@ export interface HomeTopLineProps {
   game: Pick<GameView, 'level' | 'totals' | 'streaks'>;
 }
 
-/** A whole number in the reader's locale: "23,300". */
+/** A whole number in the reader's locale: "23,300" (XP and coins). */
 const num = (n: number) => n.toLocaleString();
 
 /**
@@ -29,13 +29,17 @@ export function HomeTopLine({ name, today, game }: HomeTopLineProps) {
 
   return (
     <div className="mb-[26px] flex items-center justify-between gap-3">
-      <p className="flex min-w-0 text-[15px] font-extrabold">
-        <span className="truncate">{name ? `Hi, ${name}` : 'Hi there'}</span>
-        <span className="text-muted shrink-0 pl-1 font-bold">· {formatDay(today)}</span>
+      {/* One line that ends in an ellipsis, so the date is cut before the name; the date does not
+          show below 400px, where it never fits beside the level ring without squeezing the name. */}
+      <p className="min-w-0 truncate text-[15px] font-extrabold">
+        <span>{name ? `Hi, ${name}` : 'Hi there'}</span>
+        <span className="text-muted hidden pl-1 font-bold min-[400px]:inline">
+          · {formatDay(today)}
+        </span>
       </p>
       <Link
         to="/quests"
-        aria-label={`Level ${level.level}, ${xp}, ${streak}-day streak, ${coins} ${coins === 1 ? 'coin' : 'coins'}. Open quests`}
+        aria-label={`Level ${level.level}, ${xp}, ${streak}-day streak, ${num(coins)} ${coins === 1 ? 'coin' : 'coins'}. Open quests`}
         className="flex min-h-11 shrink-0 items-center gap-3.5 text-sm font-extrabold tabular-nums"
       >
         <span className="inline-flex items-center gap-1">
@@ -44,7 +48,7 @@ export function HomeTopLine({ name, today, game }: HomeTopLineProps) {
         </span>
         <span className="inline-flex items-center gap-1">
           <Coins aria-hidden="true" className="size-[17px]" />
-          {coins}
+          {num(coins)}
         </span>
         {/* The link's label already says the level and its progress. */}
         <span aria-hidden="true" className="flex">

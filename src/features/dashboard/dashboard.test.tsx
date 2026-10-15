@@ -203,6 +203,31 @@ describe('DashboardScreen top line', () => {
     ).toBeInTheDocument();
     expect(screen.queryByText(/-30/)).not.toBeInTheDocument();
   });
+
+  it('formats a large coin count like XP, in the label and on screen', () => {
+    const data = emptySnapshot();
+    data.tables.ledger = [makeLedgerEntry({ key: 'seed', xp: 0, coins: 12_345 })];
+    renderDashboard(data, TODAY);
+    const coins = (12_345).toLocaleString();
+    expect(coins).not.toBe('12345');
+    const link = screen.getByRole('link', {
+      name: `Level 1, 0 of 100 XP, 0-day streak, ${coins} coins. Open quests`,
+    });
+    expect(within(link).getByText(coins)).toBeInTheDocument();
+  });
+
+  it('keeps a normal name whole on a phone: the date gives way first, and only a long name is cut', () => {
+    const data = emptySnapshot();
+    data.tables.profile = [makeProfile({ name: 'Demo Player' })];
+    renderDashboard(data, TODAY);
+    const name = screen.getByText('Hi, Demo Player');
+    const date = screen.getByText(`· ${formatDay(TODAY)}`);
+    // The name is plain text in a line that ends in an ellipsis; nothing squeezes it ahead of the date.
+    expect(name).not.toHaveClass('truncate');
+    expect(name.parentElement).toHaveClass('truncate');
+    // Below 400px the date is dropped altogether rather than shown as a stub.
+    expect(date).toHaveClass('hidden', 'min-[400px]:inline');
+  });
 });
 
 describe('DashboardScreen hero', () => {
