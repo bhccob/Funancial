@@ -1,6 +1,6 @@
 import type { Platform } from '../types';
 
-/** A share sheet the person backed out of is not a failure: nothing went wrong, nothing to report. */
+/** A share sheet the person backed out of is not a failure: nothing went wrong, nothing saved. */
 function isCancellation(e: unknown): boolean {
   // A rejection from the bridge may be an Error or just a `{ message, code }` object.
   const message =
@@ -30,8 +30,10 @@ export const androidFiles: Platform['files'] = {
     });
     try {
       await Share.share({ title: fileName, files: [uri], dialogTitle: 'Save or send your file' });
+      return 'saved';
     } catch (e) {
-      if (!isCancellation(e)) throw e;
+      if (isCancellation(e)) return 'cancelled';
+      throw e;
     }
   },
 };

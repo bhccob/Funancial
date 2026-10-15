@@ -34,6 +34,7 @@ export function createStubStore(overrides: Partial<AppState> = {}): StoreApi<App
     sync: vi.fn(async () => {}),
     remove: vi.fn(async () => {}),
     createBackup: vi.fn(async () => ({ fileName: 'backup.funbak', text: '{}' })),
+    markBackedUp: vi.fn(async () => {}),
     restoreBackup: vi.fn(async () => {}),
     exportPlain: vi.fn(() => ({ fileName: 'export.json', text: '{}' })),
     deleteAllData: vi.fn(async () => {}),

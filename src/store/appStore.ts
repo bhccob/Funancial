@@ -90,7 +90,10 @@ export interface AppState {
   /** Refresh `today` and create what has come due (subscription charges, expected salary). */
   sync(): Promise<void>;
   remove(table: TableName, id: string): Promise<void>;
+  /** Encrypts the data into backup text. It is not a backup until saved: then call `markBackedUp`. */
   createBackup(passphrase: string): Promise<{ fileName: string; text: string }>;
+  /** Records that a backup file was saved just now, which is what "Last backup" shows. */
+  markBackedUp(): Promise<void>;
   restoreBackup(text: string, passphrase: string): Promise<void>;
   exportPlain(): { fileName: string; text: string };
   deleteAllData(): Promise<void>;
@@ -364,13 +367,17 @@ export function createAppStore(deps: AppDeps): StoreApi<AppState> {
           iterations: deps.kdfIterations,
           now,
         });
-        const at = now.toISOString();
+        return { fileName: backupFileName(now), text };
+      },
+
+      async markBackedUp() {
+        const at = nowIsoString();
         const settings = get().data.tables.settings[0] ?? defaultSettings(at);
-        // Best effort: when storage is full the backup matters more than remembering its date.
+        // Best effort: the file is already saved, and when storage is full that matters more than
+        // remembering its date.
         await get()
           .put('settings', { ...settings, lastBackupAt: at, updatedAt: at })
           .catch(() => {});
-        return { fileName: backupFileName(now), text };
       },
 
       async restoreBackup(text, passphrase) {

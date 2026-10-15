@@ -22,8 +22,13 @@ beforeEach(() => {
 
 describe('androidFiles.save', () => {
   it('writes to the cache and opens the share sheet', async () => {
-    await androidFiles.save('funancial-backup-2026-10-15.funbak', 'ENCRYPTED', 'application/octet-stream');
+    const outcome = await androidFiles.save(
+      'funancial-backup-2026-10-15.funbak',
+      'ENCRYPTED',
+      'application/octet-stream',
+    );
 
+    expect(outcome).toBe('saved');
     expect(native.writeFile).toHaveBeenCalledExactlyOnceWith({
       path: 'funancial-backup-2026-10-15.funbak',
       data: 'ENCRYPTED',
@@ -41,20 +46,22 @@ describe('androidFiles.save', () => {
   });
 
   it.each(['Share canceled', 'Share cancelled', 'The user CANCELED the share'])(
-    'treats a cancelled share as fine (%s)',
+    'treats a cancelled share as fine, and says nothing was saved (%s)',
     async (message) => {
       native.share.mockRejectedValue(new Error(message));
 
-      await expect(
-        androidFiles.save('export.json', '{}', 'application/json'),
-      ).resolves.toBeUndefined();
+      await expect(androidFiles.save('export.json', '{}', 'application/json')).resolves.toBe(
+        'cancelled',
+      );
     },
   );
 
-  it('treats a cancellation that is not an Error object as fine too', async () => {
+  it('treats a cancellation that is not an Error object as cancelled too', async () => {
     native.share.mockRejectedValue({ message: 'Share canceled', code: 'UNAVAILABLE' });
 
-    await expect(androidFiles.save('export.json', '{}', 'application/json')).resolves.toBeUndefined();
+    await expect(androidFiles.save('export.json', '{}', 'application/json')).resolves.toBe(
+      'cancelled',
+    );
   });
 
   it('reports a failed write, and does not open the share sheet', async () => {

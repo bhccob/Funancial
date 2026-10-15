@@ -38,6 +38,7 @@ const errorMessage = (e: unknown) => (e instanceof Error ? e.message : 'Somethin
 
 function BackupDialog({ open, onClose }: { open: boolean; onClose(): void }) {
   const createBackup = useApp((s) => s.createBackup);
+  const markBackedUp = useApp((s) => s.markBackedUp);
   const platform = usePlatform();
   const [pass, setPass] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -56,10 +57,18 @@ function BackupDialog({ open, onClose }: { open: boolean; onClose(): void }) {
     const problem = validateSecret(pass, 'passphrase');
     if (problem) return setErrors({ pass: problem });
     if (pass !== confirm) return setErrors({ confirm: "Those don't match." });
+    setErrors({});
     setBusy(true);
     try {
       const { fileName, text } = await createBackup(pass);
-      await platform.files.save(fileName, text, 'application/octet-stream');
+      const outcome = await platform.files.save(fileName, text, 'application/octet-stream');
+      if (outcome === 'cancelled') {
+        // Backing out of the share sheet saves nothing: it is no backup, so it is not recorded.
+        return setErrors({
+          other: 'Nothing was saved. Choose where to save your backup to finish.',
+        });
+      }
+      await markBackedUp();
       close();
     } catch (err) {
       setErrors({ other: errorMessage(err) });

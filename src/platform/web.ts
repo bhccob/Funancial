@@ -21,7 +21,10 @@ async function requestPersistentStorage(): Promise<boolean> {
 
 /** Files leave the browser as downloads. */
 export const webFiles: Platform['files'] = {
-  save: async (fileName, text, mime) => downloadText(fileName, text, mime),
+  save: async (fileName, text, mime) => {
+    downloadText(fileName, text, mime);
+    return 'saved';
+  },
 };
 
 /** Runs `cb` each time the page's visibility becomes `state`. Returns an unsubscribe. */

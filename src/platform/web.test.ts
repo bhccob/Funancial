@@ -12,7 +12,9 @@ describe('createWebPlatform', () => {
     expect(platform.kind).toBe('web');
     expect(platform.keyring).toBe(browserKeyring);
 
-    await platform.files.save('funancial-export.json', '{}', 'application/json');
+    await expect(
+      platform.files.save('funancial-export.json', '{}', 'application/json'),
+    ).resolves.toBe('saved');
     expect(downloadText).toHaveBeenCalledWith('funancial-export.json', '{}', 'application/json');
   });
 

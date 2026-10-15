@@ -15,8 +15,14 @@ export interface Platform {
   storageStatus(): Promise<boolean>;
   /** Ask to keep our storage. May prompt; only call after a user action. */
   requestPersistence(): Promise<boolean>;
-  /** Hand a file to the person: a download on the web. */
-  files: { save(fileName: string, text: string, mime: string): Promise<void> };
+  /**
+   * Hand a file to the person: a download on the web, the share sheet on Android. Resolves
+   * `'cancelled'` when the person backed out of the share sheet, so nothing was saved; the web
+   * cannot tell and always says `'saved'`.
+   */
+  files: {
+    save(fileName: string, text: string, mime: string): Promise<'saved' | 'cancelled'>;
+  };
   /** Runs `cb` each time the app goes to the background. Returns an unsubscribe. */
   onPause(cb: () => void): () => void;
   /** Runs `cb` each time the app comes back to the foreground. Returns an unsubscribe. */

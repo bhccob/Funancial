@@ -1,5 +1,6 @@
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import type { ReactElement } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Toaster } from '@/components/ui/Toaster';
 import { InvalidBackupError } from '@/data/backup';
@@ -7,6 +8,7 @@ import { emptySnapshot } from '@/domain/snapshot';
 import { downloadText } from '@/lib/download';
 import { toastStore } from '@/lib/toast';
 import { PlatformProvider } from '@/platform/PlatformProvider';
+import type { Platform } from '@/platform/types';
 import { createWebPlatform } from '@/platform/web';
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
 import { makeExpense, makeGoal, makeProfile, makeSettings } from '@/test/fixtures';
@@ -37,6 +39,29 @@ function snapshotWith(settings = makeSettings()) {
   const data = emptySnapshot();
   data.tables.settings = [settings];
   return data;
+}
+
+type Save = Platform['files']['save'];
+
+/** A `files.save` that ends the way the person's choice in the share sheet did. */
+const savingTo = (outcome: Awaited<ReturnType<Save>>) => vi.fn<Save>(async () => outcome);
+
+/** `ui` on a web platform whose files go to `save`. */
+function onPlatform(save: Save, ui: ReactElement) {
+  return (
+    <PlatformProvider platform={{ ...createWebPlatform(), files: { save } }}>{ui}</PlatformProvider>
+  );
+}
+
+async function openBackupDialog() {
+  await userEvent.click(screen.getByRole('button', { name: 'Create encrypted backup' }));
+  return screen.getByRole('dialog', { name: 'Create encrypted backup' });
+}
+
+async function createBackupIn(dialog: HTMLElement) {
+  await userEvent.type(within(dialog).getByLabelText('Backup passphrase'), 'correct horse');
+  await userEvent.type(within(dialog).getByLabelText('Confirm passphrase'), 'correct horse');
+  await userEvent.click(within(dialog).getByRole('button', { name: 'Create backup' }));
 }
 
 describe('Security', () => {
@@ -142,6 +167,7 @@ describe('Data', () => {
     await userEvent.type(within(dialog).getByLabelText('Confirm passphrase'), 'correct hors');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Create backup' }));
     expect(within(dialog).getByText("Those don't match.")).toBeInTheDocument();
+    expect(store.getState().markBackedUp).not.toHaveBeenCalled();
 
     await userEvent.type(within(dialog).getByLabelText('Confirm passphrase'), 'e');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Create backup' }));
@@ -151,10 +177,11 @@ describe('Data', () => {
       'X',
       'application/octet-stream',
     );
+    await vi.waitFor(() => expect(store.getState().markBackedUp).toHaveBeenCalledTimes(1));
   });
 
-  it('saves the backup through the platform', async () => {
-    const save = vi.fn(async () => {});
+  it('saves the backup through the platform, then records it and closes', async () => {
+    const save = savingTo('saved');
     const store = createStubStore({
       data: snapshotWith(),
       createBackup: vi.fn(async () => ({
@@ -162,17 +189,9 @@ describe('Data', () => {
         text: 'ENCRYPTED',
       })),
     });
-    renderWithStore(
-      <PlatformProvider platform={{ ...createWebPlatform(), files: { save } }}>
-        <SettingsScreen />
-      </PlatformProvider>,
-      store,
-    );
-    await userEvent.click(screen.getByRole('button', { name: 'Create encrypted backup' }));
-    const dialog = screen.getByRole('dialog', { name: 'Create encrypted backup' });
-    await userEvent.type(within(dialog).getByLabelText('Backup passphrase'), 'correct horse');
-    await userEvent.type(within(dialog).getByLabelText('Confirm passphrase'), 'correct horse');
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Create backup' }));
+    renderWithStore(onPlatform(save, <SettingsScreen />), store);
+    const dialog = await openBackupDialog();
+    await createBackupIn(dialog);
 
     await vi.waitFor(() =>
       expect(save).toHaveBeenCalledExactlyOnceWith(
@@ -181,26 +200,64 @@ describe('Data', () => {
         'application/octet-stream',
       ),
     );
+    await vi.waitFor(() => expect(store.getState().markBackedUp).toHaveBeenCalledTimes(1));
+    expect(
+      screen.queryByRole('dialog', { name: 'Create encrypted backup' }),
+    ).not.toBeInTheDocument();
     expect(downloadText).not.toHaveBeenCalled();
   });
 
-  it('keeps the backup dialog open and says why when the file cannot be saved', async () => {
-    const save = vi.fn(async () => {
-      throw new Error('No space left on device');
-    });
-    renderWithStore(
-      <PlatformProvider platform={{ ...createWebPlatform(), files: { save } }}>
-        <SettingsScreen />
-      </PlatformProvider>,
+  it('keeps the backup dialog open, and unrecorded, when the share sheet was cancelled', async () => {
+    const save = savingTo('cancelled');
+    const { store } = renderWithStore(
+      onPlatform(save, <SettingsScreen />),
       createStubStore({ data: snapshotWith() }),
     );
-    await userEvent.click(screen.getByRole('button', { name: 'Create encrypted backup' }));
-    const dialog = screen.getByRole('dialog', { name: 'Create encrypted backup' });
-    await userEvent.type(within(dialog).getByLabelText('Backup passphrase'), 'correct horse');
-    await userEvent.type(within(dialog).getByLabelText('Confirm passphrase'), 'correct horse');
+    const dialog = await openBackupDialog();
+    await createBackupIn(dialog);
+
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(
+      'Nothing was saved. Choose where to save your backup to finish.',
+    );
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(store.getState().markBackedUp).not.toHaveBeenCalled();
+    expect(screen.getByRole('dialog', { name: 'Create encrypted backup' })).toBeInTheDocument();
+    expect(within(dialog).getByLabelText('Backup passphrase')).toHaveValue('correct horse');
+    expect(within(dialog).getByLabelText('Confirm passphrase')).toHaveValue('correct horse');
+  });
+
+  it('records the backup when a retry after a cancelled share is saved', async () => {
+    const save = vi.fn<Save>().mockResolvedValueOnce('cancelled').mockResolvedValueOnce('saved');
+    const { store } = renderWithStore(
+      onPlatform(save, <SettingsScreen />),
+      createStubStore({ data: snapshotWith() }),
+    );
+    const dialog = await openBackupDialog();
+    await createBackupIn(dialog);
+    expect(await within(dialog).findByRole('alert')).toBeInTheDocument();
+
     await userEvent.click(within(dialog).getByRole('button', { name: 'Create backup' }));
 
+    await vi.waitFor(() => expect(store.getState().markBackedUp).toHaveBeenCalledTimes(1));
+    expect(
+      screen.queryByRole('dialog', { name: 'Create encrypted backup' }),
+    ).not.toBeInTheDocument();
+    expect(save).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps the backup dialog open and says why when the file cannot be saved', async () => {
+    const save = vi.fn<Save>(async () => {
+      throw new Error('No space left on device');
+    });
+    const { store } = renderWithStore(
+      onPlatform(save, <SettingsScreen />),
+      createStubStore({ data: snapshotWith() }),
+    );
+    const dialog = await openBackupDialog();
+    await createBackupIn(dialog);
+
     expect(await within(dialog).findByRole('alert')).toHaveTextContent('No space left on device');
+    expect(store.getState().markBackedUp).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -211,12 +268,10 @@ describe('Data', () => {
       'date,amount,currency,category,payment_method,card,note,subscription\r\n',
       'text/csv',
     ],
-  ])('saves "%s" through the platform', async (label, fileName, text, mime) => {
-    const save = vi.fn(async () => {});
-    renderWithStore(
-      <PlatformProvider platform={{ ...createWebPlatform(), files: { save } }}>
-        <SettingsScreen />
-      </PlatformProvider>,
+  ])('saves "%s" through the platform, shared or not', async (label, fileName, text, mime) => {
+    const save = savingTo('cancelled');
+    const { store } = renderWithStore(
+      onPlatform(save, <SettingsScreen />),
       createStubStore({ data: snapshotWith(), today: '2026-10-14' }),
     );
     await userEvent.click(screen.getByRole('button', { name: label }));
@@ -225,17 +280,21 @@ describe('Data', () => {
 
     await vi.waitFor(() => expect(save).toHaveBeenCalledExactlyOnceWith(fileName, text, mime));
     expect(downloadText).not.toHaveBeenCalled();
+    expect(store.getState().markBackedUp).not.toHaveBeenCalled();
   });
 
   it('shows a message when an export cannot be saved', async () => {
-    const save = vi.fn(async () => {
+    const save = vi.fn<Save>(async () => {
       throw new Error('No space left on device');
     });
     renderWithStore(
-      <PlatformProvider platform={{ ...createWebPlatform(), files: { save } }}>
-        <SettingsScreen />
-        <Toaster />
-      </PlatformProvider>,
+      onPlatform(
+        save,
+        <>
+          <SettingsScreen />
+          <Toaster />
+        </>,
+      ),
       createStubStore({ data: snapshotWith() }),
     );
     await userEvent.click(screen.getByRole('button', { name: 'Export unencrypted copy' }));
