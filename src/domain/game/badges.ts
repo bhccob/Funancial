@@ -1,6 +1,14 @@
+import { minorDigits } from '../money';
 import { endOfMonth, monthKey, monthsBetween } from '../periods';
 import type { DataSnapshot } from '../snapshot';
-import { anyOver, createSpendIndex, loggedEntries, localDay, type SpendIndex } from './activity';
+import {
+  anyOver,
+  confirmedDividends,
+  createSpendIndex,
+  loggedEntries,
+  localDay,
+  type SpendIndex,
+} from './activity';
 import { BADGE_REWARDS } from './rules';
 import type { Award, BadgeId, GameContext, Reward } from './types';
 
@@ -20,6 +28,15 @@ export const BADGES: readonly { id: BadgeId; name: string; description: string }
     id: 'freeze-master',
     name: 'Freeze Master',
     description: 'Get through a salary freeze without going over any limit.',
+  },
+  { id: 'first-etf', name: 'First ETF', description: 'Add an ETF to your portfolio.' },
+  { id: 'portfolio-pro', name: 'Portfolio Pro', description: 'Hold five or more investments.' },
+  { id: 'first-dividend', name: 'First Dividend', description: 'Confirm your first dividend.' },
+  { id: 'dividend-collector', name: 'Dividend Collector', description: 'Confirm 12 dividends.' },
+  {
+    id: 'passive-income-pro',
+    name: 'Passive Income Pro',
+    description: 'Collect 100 in dividends in one month.',
   },
 ];
 
@@ -58,6 +75,21 @@ const limitKeeper: Condition = (data, ctx, spend) => {
   return false;
 };
 
+/** Confirmed dividends paid in one calendar month that add up to 100 in the profile currency. */
+const passiveIncomePro: Condition = (data) => {
+  const currency = data.tables.profile[0]?.currency;
+  if (currency === undefined) return false;
+  const target = 100 * 10 ** minorDigits(currency);
+  const byMonth = new Map<string, number>();
+  for (const d of confirmedDividends(data)) {
+    const month = monthKey(d.paidOn);
+    const total = (byMonth.get(month) ?? 0) + d.amount;
+    if (total >= target) return true;
+    byMonth.set(month, total);
+  }
+  return false;
+};
+
 const CONDITIONS: Record<BadgeId, Condition> = {
   'first-expense': (data) => loggedEntries(data).some((e) => e.table === 'expense'),
   'subscription-slayer': (data) => data.tables.subscription.some((s) => s.status === 'cancelled'),
@@ -66,6 +98,11 @@ const CONDITIONS: Record<BadgeId, Condition> = {
     data.tables.salaryFreeze.some(
       (f) => f.end < ctx.today && spend.limitsOn(f.start) && !anyOver(spend, f.start, f.end),
     ),
+  'first-etf': (data) => data.tables.holding.some((h) => h.type === 'etf'),
+  'portfolio-pro': (data) => data.tables.holding.length >= 5,
+  'first-dividend': (data) => confirmedDividends(data).length >= 1,
+  'dividend-collector': (data) => confirmedDividends(data).length >= 12,
+  'passive-income-pro': passiveIncomePro,
 };
 
 /** The badges whose condition holds and that are not in the ledger yet. */

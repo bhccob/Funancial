@@ -7,6 +7,7 @@ test('mobile: the bottom bar and the Menu sheet navigate', async ({ page }, test
   const bar = page.getByRole('navigation', { name: 'Primary' });
   await expect(bar).toBeVisible();
   await expect(page.getByRole('navigation', { name: 'All sections' })).toBeHidden();
+  await expect(bar.locator('a, button')).toHaveText(['Home', 'Budget', 'Invest', 'Menu']);
 
   await bar.getByRole('link', { name: 'Budget' }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Budget' })).toBeVisible();
@@ -43,8 +44,12 @@ test('desktop: the sidebar navigates and the bottom bar is hidden', async ({ pag
   await expect(sidebar).toBeVisible();
   await expect(page.getByRole('navigation', { name: 'Primary' })).toBeHidden();
 
-  await sidebar.getByRole('link', { name: 'Dividends' }).click();
-  await expect(page.getByRole('heading', { level: 1, name: 'Dividends' })).toBeVisible();
+  await sidebar.getByRole('link', { name: 'Invest' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Invest' })).toBeVisible();
+  await expect(page.getByRole('tab', { name: 'Holdings' })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
 });
 
 test('unknown route shows not found with a way home', async ({ page }) => {

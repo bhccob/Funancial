@@ -10,10 +10,11 @@ export const QUEST_REWARDS: Record<QuestId, Reward> = {
   'week-checkin': { xp: 40, coins: 10 },
   'month-salary': { xp: 100, coins: 25 },
   'month-audit': { xp: 100, coins: 25 },
+  'month-dividends': { xp: 80, coins: 20 },
   'month-backup': { xp: 80, coins: 20 },
 };
 
-/** Reached when a run gets to `at` days (weeks, for check-ins). */
+/** Reached when a run gets to `at` days (weeks for check-ins, months for dividends). */
 export type StreakMilestone = Reward & { at: number };
 
 const DAILY_MILESTONES: readonly StreakMilestone[] = [
@@ -31,6 +32,11 @@ export const STREAK_MILESTONES: Record<StreakKind, readonly StreakMilestone[]> =
     { at: 12, xp: 200, coins: 50 },
     { at: 52, xp: 800, coins: 200 },
   ],
+  dividend: [
+    { at: 3, xp: 60, coins: 15 },
+    { at: 6, xp: 150, coins: 40 },
+    { at: 12, xp: 400, coins: 100 },
+  ],
 };
 
 export const BADGE_REWARDS: Record<BadgeId, Reward> = {
@@ -38,6 +44,11 @@ export const BADGE_REWARDS: Record<BadgeId, Reward> = {
   'subscription-slayer': { xp: 100, coins: 25 },
   'limit-keeper': { xp: 150, coins: 40 },
   'freeze-master': { xp: 150, coins: 40 },
+  'first-etf': { xp: 100, coins: 25 },
+  'portfolio-pro': { xp: 150, coins: 40 },
+  'first-dividend': { xp: 100, coins: 25 },
+  'dividend-collector': { xp: 150, coins: 40 },
+  'passive-income-pro': { xp: 200, coins: 50 },
 };
 
 export const CHALLENGE_REWARDS: Record<ChallengeKind, Reward> = {
@@ -45,4 +56,5 @@ export const CHALLENGE_REWARDS: Record<ChallengeKind, Reward> = {
   'subscription-audit': { xp: 120, coins: 30 },
   'budget-30': { xp: 400, coins: 100 },
   'emergency-sprint': { xp: 250, coins: 60 },
+  'portfolio-checkup': { xp: 120, coins: 30 },
 };

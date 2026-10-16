@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
   localIso,
   makeChallenge,
+  makeDividend,
   makeExpense,
+  makeHolding,
   makeLedgerEntry,
   makeSettings,
   makeStreakFreeze,
@@ -202,6 +204,56 @@ describe('gameUpdates', () => {
     });
   });
 
+  it('pays a confirmed dividend once: logging XP, two quests and its badges', () => {
+    const data = snap({
+      holding: [
+        makeHolding({
+          id: 'h1',
+          type: 'etf',
+          purchaseDate: '2026-01-01',
+          // The payout of 12 October that the dividend below settles.
+          dividendInfo: {
+            history: [],
+            nextExDate: '2026-10-05',
+            nextPayDate: '2026-10-12',
+            nextAmount: 1,
+            fetchedAt: localIso('2026-10-05', 9),
+          },
+        }),
+      ],
+      dividend: [
+        makeDividend({
+          id: 'd1',
+          holdingId: 'h1',
+          expectedPayDate: '2026-10-12',
+          paidOn: today,
+          createdAt: localIso(today, 9),
+        }),
+      ],
+    });
+    const { records, gain } = gameUpdates(data, ctx);
+    expect(ledgerIds(records)).toEqual([
+      'log:dividend:d1#0',
+      'quest:log-today:2026-10-15#0',
+      'quest:month-dividends:2026-10#0',
+      'badge:first-etf#0',
+      'badge:first-dividend#0',
+    ]);
+    expect(gain?.rewards.map((r) => r.title)).toEqual([
+      "Log today's spending",
+      "Confirm this month's dividends",
+      'First ETF',
+      'First Dividend',
+    ]);
+
+    const applied = applyRecords(data, records);
+    expect(gameUpdates(applied, ctx)).toEqual({ records: [], gain: null });
+
+    // Deleting the dividend takes back the logging XP and keeps the badge.
+    const deleted = { ...applied, tables: { ...applied.tables, dividend: [] } };
+    expect(ledgerIds(gameUpdates(deleted, ctx).records)).toEqual(['log:dividend:d1#1']);
+  });
+
   it('reports a level-up and a new tier', () => {
     // Level 11 begins at 11,746 XP, so 11,700 is level 10 and one expense (80 XP) tips it over.
     const data = snap({
@@ -259,12 +311,22 @@ describe('computeGameView', () => {
 
     expect(view.totals).toEqual({ xp: 10, coins: 50 });
     expect(view.level).toMatchObject({ level: 1, tier: 'Bronze Saver', xpIntoLevel: 10 });
-    expect(view.streaks.map((s) => s.kind)).toEqual(['logging', 'no-overspend', 'checkin']);
+    expect(view.streaks.map((s) => s.kind)).toEqual([
+      'logging',
+      'no-overspend',
+      'checkin',
+      'dividend',
+    ]);
     expect(view.badges.map((b) => b.id)).toEqual([
       'first-expense',
       'subscription-slayer',
       'limit-keeper',
       'freeze-master',
+      'first-etf',
+      'portfolio-pro',
+      'first-dividend',
+      'dividend-collector',
+      'passive-income-pro',
     ]);
     expect(view.quests.map((q) => q.id)).toEqual(['log-today', 'week-checkin']);
     expect(view.challenges.map((c) => c.challenge.id)).toEqual(['c1']);

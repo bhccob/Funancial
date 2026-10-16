@@ -1,24 +1,24 @@
 import { addDays, type LocalDate } from '../dates';
 import type { StreakFreeze } from '../entities';
-import { weekRange } from '../periods';
+import { monthKey, weekRange } from '../periods';
 import type { DataSnapshot } from '../snapshot';
-import { activeDays, createSpendIndex } from './activity';
+import { activeDays, confirmedDividends, createSpendIndex } from './activity';
 import { STREAK_MILESTONES } from './rules';
 import type { Award, GameContext, StreakKind } from './types';
 
 export type StreakView = {
   kind: StreakKind;
   title: string;
-  unit: 'day' | 'week';
-  /** The run's length: days (or weeks, for check-ins) kept in a row. */
+  unit: 'day' | 'week' | 'month';
+  /** The run's length: days (weeks for check-ins, months for dividends) kept in a row. */
   count: number;
-  /** Whether the streak is being tracked. No overspending waits for a first limit. */
+  /** Whether the streak is being tracked: no overspending waits for a first limit, dividends for a holding. */
   active: boolean;
-  /** Whether today (or this week) has already kept the streak. */
+  /** Whether today (this week, this month) has already kept the streak. */
   doneThisPeriod: boolean;
   /** Freezes held that can still be spent; `null` for a streak freezes do not apply to. */
   tokens: number | null;
-  /** The first day (or week) of the run; `null` when `count` is 0. */
+  /** The first day (week, month) of the run, as its first day; `null` when `count` is 0. */
   runStart: LocalDate | null;
 };
 
@@ -28,6 +28,7 @@ const TITLES: Record<StreakKind, string> = {
   logging: 'Daily logging',
   'no-overspend': 'No overspending',
   checkin: 'Weekly check-in',
+  dividend: 'Dividend streak',
 };
 
 /**
@@ -119,9 +120,42 @@ function noOverspend(data: DataSnapshot, ctx: GameContext): StreakView {
   return { ...view, active: true, count, doneThisPeriod: !spend.overOn(ctx.today), runStart };
 }
 
-/** The three streaks, in the order the app shows them: logging, no overspending, check-in. */
+/**
+ * Calendar months in a row with a confirmed dividend, by the day it was paid: this month counts
+ * once it has one, and the run otherwise ends last month. Tracked only with a holding, and there
+ * are no freezes for it.
+ */
+export function dividendStreak(data: DataSnapshot, ctx: GameContext): StreakView {
+  const view = { kind: 'dividend', title: TITLES.dividend, unit: 'month', tokens: null } as const;
+  if (data.tables.holding.length === 0) {
+    return { ...view, active: false, count: 0, doneThisPeriod: false, runStart: null };
+  }
+  const paid = new Set(confirmedDividends(data).map((d) => monthKey(d.paidOn)));
+  const thisMonth = monthKey(ctx.today);
+  const doneThisPeriod = paid.has(thisMonth);
+  // The day before a month's first is in the month before.
+  const before = (month: string) => monthKey(addDays(`${month}-01`, -1));
+  let count = 0;
+  let runStart: LocalDate | null = null;
+  for (
+    let month = doneThisPeriod ? thisMonth : before(thisMonth);
+    paid.has(month);
+    month = before(month)
+  ) {
+    count += 1;
+    runStart = `${month}-01`;
+  }
+  return { ...view, active: true, count, doneThisPeriod, runStart };
+}
+
+/** The four streaks, in the order the app shows them: logging, no overspending, check-in, dividends. */
 export function computeStreaks(data: DataSnapshot, ctx: GameContext): StreakView[] {
-  return [logging(data, ctx), noOverspend(data, ctx), checkin(data, ctx)];
+  return [
+    logging(data, ctx),
+    noOverspend(data, ctx),
+    checkin(data, ctx),
+    dividendStreak(data, ctx),
+  ];
 }
 
 /**

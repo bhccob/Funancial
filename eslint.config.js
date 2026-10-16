@@ -32,7 +32,7 @@ export default defineConfig([
     },
   },
   {
-    files: ['*.config.ts', 'tests/e2e/**/*.ts'],
+    files: ['*.config.ts', 'api/**/*.ts', 'tests/e2e/**/*.ts'],
     languageOptions: { globals: globals.node },
   },
 ]);

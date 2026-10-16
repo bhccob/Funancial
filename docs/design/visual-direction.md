@@ -54,6 +54,8 @@ Contrast figures are text on the page background; all text pairs meet WCAG AA 4.
 | `--color-success` | `#007a55` | `#2ee6a6` | Gains, completed |
 | `--color-warning` | `#a35f00` | `#f2a93b` | Limit ≥ 80% (5.0:1 light) |
 | `--color-danger` | `#d1373d` | `#ff6b6f` | Limit ≥ 100%, destructive (4.8:1 light) |
+| `--color-danger-soft` | `#f5d9da` | `#3d2326` | Fill for the losing side of a bar (below break-even); never text |
+| `--color-success-soft` | `#d2eadf` | `#143a2e` | Fill for the winning side of a bar (above break-even); never text |
 | `--color-focus` | `#7c5cff` | `#9d85ff` | Focus ring (2px + 2px offset) |
 | `--color-chart-1..6` | `#2a78d6 #eb6834 #1baf7a #eda100 #e87ba4 #008300` | `#3987e5 #d95926 #199e70 #c98500 #d55181 #008300` | Categorical chart series, in this fixed order (validated incl. donut wrap-around); category slices use 1..5 |
 | `--color-chart-other` | `#868b96` | `#6b7080` | "Other" slices and segments, always (3:1 or better against its page) |
@@ -92,23 +94,33 @@ Numbers are tabular. Money always goes through `useMoney()` / `formatMoney`, dat
   component.
 - **Buttons:** pills. `sm` 44px tall, `md` 48px, `lg` 56px. Primary is ink, secondary a hairline
   outline, tertiary a text button. Round actions are 56px circles with a word under the icon.
+- **Line fields** (`variant="line"` on `TextField`, `MoneyField` and `Select`; so far only the Invest
+  dialogs use them, and M7 restyles the other forms): a 13px muted label over a 16px extra-bold
+  value, no box, a 1px hairline under it that turns ink and 2px thick on focus (that line is the
+  focus indicator, so there is no outline). `ShareStepper` is the same row with a 20px typable share
+  count and round − / + buttons (30px to look at, 44px to hit; it steps by 1 and never down to 0).
+  Underline tabs (`RadioGroup variant="underline"`, and `underlineTab()` for tab-like buttons) mark
+  the choice with an ink 2px line under it.
 - **Desktop (≥ `md`):** the sidebar (210px) stays. Home and Budget put their sections in two columns
   from `lg`.
 
 ## Navigation
 
-- **Phone:** a flat bottom bar across the bottom edge with a hairline on top: **Home · Budget · + ·
-  Quests · Menu**. It is 76px tall plus the safe area, every item has a label, and the + is a 48px
-  round ink button that opens Add Expense. There is no floating quick-add button. Toasts float just
-  above the bar.
+- **Phone:** a flat bottom bar across the bottom edge with a hairline on top: **Home · Budget ·
+  Invest · Menu**. It is 64px tall plus the safe area and every item has a label. Adding an expense
+  lives on Home (and in the sidebar), so the bar has no + and there is no floating quick-add button.
+  Toasts float just above the bar.
+- **Invest:** Holdings, Dividends and News are tabs inside Invest, not separate pages or Menu rows.
+  A holding in the list opens its own page (`/invest/holding/:id`), with Edit on it.
 - **Menu:** a tall sheet that slides up from the bottom (280ms ease-out, only under `motion-safe:`)
   with a grab handle and rounded top corners. It is a plain list in three groups (section titles at
   21px); each row is at least 48px tall with a coloured round icon, the name, a line saying what is
   inside right now, and an arrow. Escape and the Android back gesture close it.
   - **Your money:** Subscriptions, Goals, History, Salary freeze.
-  - **Coming next:** Invest, Buy it?, Dividends, News, each marked "Soon".
-  - **You:** Shop, Inbox ("Soon"), Help ("Soon"), Settings.
-- **Desktop:** the sidebar lists the same groups under an "Add expense" button.
+  - **Coming next:** Buy it?, marked "Soon".
+  - **You:** Quests, Shop, Inbox ("Soon"), Help ("Soon"), Settings.
+- **Desktop:** the sidebar lists Home, Budget and Invest, then the same groups, under an "Add
+  expense" button.
 
 ### Icon-chip colours
 
@@ -116,11 +128,10 @@ Fixed in both themes (`src/app/menu.ts`); each holds at least 3:1 against the wh
 
 | Item | Colour | Item | Colour |
 | --- | --- | --- | --- |
-| Subscriptions | `#2a78d6` | Dividends | `#0b7f8a` |
-| Goals | `#128a60` | News | `#5b6270` |
-| History | `#d9541e` | Shop | `#6b46f5` |
-| Salary freeze | `#4458d6` | Inbox | `#3b82c4` |
-| Invest | `#b86e00` | Help | `#128a60` |
+| Subscriptions | `#2a78d6` | Quests | `#b86e00` |
+| Goals | `#128a60` | Shop | `#6b46f5` |
+| History | `#d9541e` | Inbox | `#3b82c4` |
+| Salary freeze | `#4458d6` | Help | `#128a60` |
 | Buy it? | `#c43b6a` | Settings | `#5b6270` |
 
 ## Charts
@@ -133,7 +144,8 @@ Small hand-written SVG components in `src/components/charts/`, no chart library.
    between Week and Month, or between months. The reason: the palette is validated only in its fixed
    adjacent order.
 2. **Donuts** show the top 5 categories plus "Other", with a 3px gap between arcs and the total (or
-   the chosen slice) in the centre. Two-part splits are bars, not pies.
+   the chosen slice) in the centre. Two-part splits are bars, not pies, except Invest's pie, which the owner asked for and which can have
+   two slices.
 3. **Every chart shows exact amounts** on tap or in a legend, and carries a screen-reader label.
    Identity is never by colour alone: legends have the name, the amount and, where it helps, the share.
    Tapping a slice or a legend row highlights it (150ms, `motion-safe:` only); a keyboard reaches the
@@ -142,6 +154,13 @@ Small hand-written SVG components in `src/components/charts/`, no chart library.
    text such as "$X left" or "$X over". Budget bars carry a pace mark showing how far through the
    period today is.
 5. The 7-day bars put today in ink and label it "Today"; the net-worth trend is a 30-day line.
+6. A donut can write each slice's share just outside the ring (`showPercent`), for slices of 6% or
+   more, in the text colour and never the slice colour; smaller slices show it in the legend only.
+   Invest's pie uses it: one pie, 180px, by holding, of everything (All) or of just Stocks, ETFs or
+   Other, chosen with underline tabs, with a full-width legend under it.
+7. A holding's price chart (`PriceLine`) is an ink line with a dashed line at what was paid per
+   share, a dot where it starts and the latest price at its end. Touching it, or the arrow keys,
+   read out a day and its price.
 
 ## Rules
 

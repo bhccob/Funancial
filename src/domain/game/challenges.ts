@@ -26,6 +26,11 @@ export const CHALLENGES: readonly { kind: ChallengeKind; title: string; descript
     title: 'Emergency Fund Sprint',
     description: 'Add 10% of your emergency fund target within 30 days.',
   },
+  {
+    kind: 'portfolio-checkup',
+    title: 'Portfolio Check-Up',
+    description: 'Check every holding within 7 days.',
+  },
 ];
 
 const titleOf = (kind: ChallengeKind): string =>
@@ -37,7 +42,7 @@ export type ChallengeView = {
   challenge: Challenge;
   title: string;
   outcome: ChallengeOutcome;
-  /** Progress so far: days, subscriptions or (for the sprint) minor units of money. */
+  /** Progress so far: days, subscriptions, holdings or (for the sprint) minor units of money. */
   current: number;
   target: number;
   detail: string;
@@ -94,6 +99,9 @@ export function startRequirement(
   if (kind === 'emergency-sprint' && !data.tables.goal.some((g) => g.kind === 'emergency')) {
     return 'Add an emergency fund goal first.';
   }
+  if (kind === 'portfolio-checkup' && data.tables.holding.length === 0) {
+    return 'Add a holding first.';
+  }
   return null;
 }
 
@@ -113,6 +121,7 @@ export function newChallenge(
       return { ...base, ...active, start, end: addDays(start, 1) };
     }
     case 'subscription-audit':
+    case 'portfolio-checkup':
       return { ...base, ...active, start: today, end: addDays(today, 6) };
     case 'budget-30':
       return { ...base, ...active, start: today, end: addDays(today, 29) };
@@ -163,29 +172,61 @@ function noSpendWeekend(c: Challenge, data: DataSnapshot, ctx: GameContext): Sta
   };
 }
 
-function subscriptionAudit(c: Challenge, data: DataSnapshot, ctx: GameContext): Standing {
-  const active = data.tables.subscription.filter((s) => s.status === 'active');
+/**
+ * A challenge to go over every item within its window. `marks` is when each item was last gone
+ * over; one counts if it was marked after the challenge began and no later than its last day.
+ */
+function reviewAll(
+  c: Challenge,
+  ctx: GameContext,
+  marks: readonly (string | null)[],
+  copy: { empty: string; done: string; won: string; lost: string },
+): Standing {
   const since = Date.parse(c.createdAt);
-  // Reviewed in time: marked after the challenge began and no later than its last day.
-  const audited = active.filter(
-    (s) =>
-      s.auditedAt !== null && Date.parse(s.auditedAt) >= since && localDay(s.auditedAt) <= c.end,
-  );
-  const won = active.length > 0 && audited.length === active.length;
+  const reviewed = marks.filter(
+    (m) => m !== null && Date.parse(m) >= since && localDay(m) <= c.end,
+  ).length;
+  const won = marks.length > 0 && reviewed === marks.length;
   return {
-    current: audited.length,
-    target: active.length,
+    current: reviewed,
+    target: marks.length,
     won,
     lost: !won && ctx.today > c.end,
     detail: {
-      active:
-        active.length === 0
-          ? 'Add a subscription to review.'
-          : `${audited.length} of ${active.length} reviewed`,
+      active: marks.length === 0 ? copy.empty : `${reviewed} of ${marks.length} ${copy.done}`,
+      won: copy.won,
+      lost: copy.lost,
+    },
+  };
+}
+
+function subscriptionAudit(c: Challenge, data: DataSnapshot, ctx: GameContext): Standing {
+  const active = data.tables.subscription.filter((s) => s.status === 'active');
+  return reviewAll(
+    c,
+    ctx,
+    active.map((s) => s.auditedAt),
+    {
+      empty: 'Add a subscription to review.',
+      done: 'reviewed',
       won: 'Every subscription reviewed.',
       lost: 'The 7 days are up. Start another audit any time.',
     },
-  };
+  );
+}
+
+function portfolioCheckup(c: Challenge, data: DataSnapshot, ctx: GameContext): Standing {
+  return reviewAll(
+    c,
+    ctx,
+    data.tables.holding.map((h) => h.checkedAt),
+    {
+      empty: 'Add a holding to check.',
+      done: 'checked',
+      won: 'Every holding checked.',
+      lost: 'The 7 days are up. Start another check-up any time.',
+    },
+  );
 }
 
 function budget30(c: Challenge, spend: SpendIndex, ctx: GameContext): Standing {
@@ -241,6 +282,8 @@ function standingOf(
       return budget30(c, spend, ctx);
     case 'emergency-sprint':
       return emergencySprint(c, data, ctx);
+    case 'portfolio-checkup':
+      return portfolioCheckup(c, data, ctx);
   }
 }
 

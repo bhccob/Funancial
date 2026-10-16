@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { makeExpense, makeProfile, makeSettings, makeSubscription } from '@/test/fixtures';
+import {
+  makeDividend,
+  makeExpense,
+  makeHolding,
+  makeProfile,
+  makeSale,
+  makeSettings,
+  makeSubscription,
+} from '@/test/fixtures';
 import {
   CURRENT_SCHEMA_VERSION,
   emptySnapshot,
@@ -101,7 +109,9 @@ describe('migrateSnapshot from older versions', () => {
       },
     };
     const s = migrateSnapshot(v3);
-    expect(s.schemaVersion).toBe(4);
+    expect(s.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+    expect(s.tables.holding).toEqual([]);
+    expect(s.tables.dividend).toEqual([]);
     expect(s.tables.ledger).toEqual([]);
     expect(s.tables.checkIn).toEqual([]);
     expect(s.tables.challenge).toEqual([]);
@@ -112,5 +122,84 @@ describe('migrateSnapshot from older versions', () => {
       frame: 'frame-none',
     });
     expect(s.tables.subscription[0]!.auditedAt).toBeNull();
+    expect(s.tables.settings[0]!.reminders.dividends).toBe(true);
+  });
+
+  it('migrates v4 settings with reminders.dividends true and empty holding tables', () => {
+    const v4Reminders: Record<string, unknown> = { ...makeSettings().reminders };
+    delete v4Reminders.dividends;
+    const v4 = {
+      schemaVersion: 4,
+      tables: {
+        profile: [],
+        settings: [{ ...makeSettings(), reminders: v4Reminders }],
+        income: [],
+        expense: [],
+        subscription: [],
+        budgetLimit: [],
+        salaryFreeze: [],
+        transaction: [],
+        goal: [],
+        debt: [],
+        ledger: [],
+        checkIn: [],
+        challenge: [],
+        streakFreeze: [],
+      },
+    };
+    const s = migrateSnapshot(v4);
+    expect(s.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+    expect(s.tables.settings[0]!.reminders).toEqual({ ...v4Reminders, dividends: true });
+    expect(s.tables.holding).toEqual([]);
+    expect(s.tables.dividend).toEqual([]);
+  });
+
+  it('migrates v5 settings to Invest in the profile currency, with no rate', () => {
+    const old: Record<string, unknown> = { ...makeSettings() };
+    delete old.investCurrency;
+    delete old.investFx;
+    const v5 = {
+      schemaVersion: 5,
+      tables: { ...emptySnapshot().tables, settings: [old] },
+    };
+    const s = migrateSnapshot(v5);
+    expect(s.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+    expect(s.tables.settings[0]).toMatchObject({ investCurrency: null, investFx: null });
+  });
+
+  it('keeps holdings and dividends through a round trip', () => {
+    const s = emptySnapshot();
+    s.tables.holding = [makeHolding({ id: 'h1' })];
+    s.tables.dividend = [makeDividend({ id: 'd1', holdingId: 'h1' })];
+    expect(migrateSnapshot(JSON.parse(JSON.stringify(s)))).toEqual(s);
+  });
+});
+
+describe('sales (v7)', () => {
+  it('gives a v6 snapshot an empty sale table and keeps its holdings', () => {
+    const { sale, ...tables } = emptySnapshot().tables;
+    expect(sale).toEqual([]);
+    const v6 = {
+      schemaVersion: 6,
+      tables: { ...tables, holding: [makeHolding({ id: 'h1' })] },
+    };
+    const s = migrateSnapshot(v6);
+    expect(s.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+    expect(s.tables.sale).toEqual([]);
+    expect(s.tables.holding).toEqual(v6.tables.holding);
+  });
+
+  it('keeps sales, with the holding a full sale stored, through a round trip', () => {
+    const s = emptySnapshot();
+    s.tables.sale = [
+      makeSale({ id: 's1', restore: makeHolding({ id: 'h1' }) }),
+      makeSale({ id: 's2' }),
+    ];
+    expect(migrateSnapshot(JSON.parse(JSON.stringify(s)))).toEqual(s);
+  });
+
+  it('names the new table', () => {
+    expect(TABLES).toContain('sale');
+    expect(CURRENT_SCHEMA_VERSION).toBe(7);
   });
 });

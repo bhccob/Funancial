@@ -1,5 +1,7 @@
 import { isValidElement } from 'react';
 import { expect, it } from 'vitest';
+import { HoldingPage } from '@/features/invest/HoldingPage';
+import { InvestScreen } from '@/features/invest/InvestScreen';
 import { ShopScreen } from '@/features/shop/ShopScreen';
 import { MENU_GROUPS, PRIMARY_LINKS } from './menu';
 import { APP_ROUTES } from './routes';
@@ -15,14 +17,13 @@ it('routes every spec screen', () => {
       '/add',
       '/budget',
       '/buy',
-      '/dividends',
       '/freeze',
       '/goals',
       '/help',
       '/history',
       '/inbox',
       '/invest',
-      '/news',
+      '/invest/holding/:id',
       '/quests',
       '/settings',
       '/shop',
@@ -47,4 +48,15 @@ it('says only where each screen is; names and icons live in menu.ts', () => {
 it('serves the shop from its own screen, not a placeholder', () => {
   const shop = APP_ROUTES.find((r) => r.path === '/shop');
   expect(isValidElement(shop?.element) && shop.element.type).toBe(ShopScreen);
+});
+
+it('serves Invest from its own screen, and has no separate Dividends or News route', () => {
+  const invest = APP_ROUTES.find((r) => r.path === '/invest');
+  expect(isValidElement(invest?.element) && invest.element.type).toBe(InvestScreen);
+  expect(APP_ROUTES.some((r) => r.path === '/dividends' || r.path === '/news')).toBe(false);
+});
+
+it("serves a holding's own page from /invest/holding/:id", () => {
+  const holding = APP_ROUTES.find((r) => r.path === '/invest/holding/:id');
+  expect(isValidElement(holding?.element) && holding.element.type).toBe(HoldingPage);
 });

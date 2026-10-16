@@ -4,12 +4,15 @@ import {
   ChallengeSchema,
   CheckInSchema,
   DebtSchema,
+  DividendSchema,
   ExpenseSchema,
   GoalSchema,
+  HoldingSchema,
   IncomeSchema,
   LedgerEntrySchema,
   ProfileSchema,
   SalaryFreezeSchema,
+  SaleSchema,
   SettingsSchema,
   StreakFreezeSchema,
   SubscriptionSchema,
@@ -32,6 +35,9 @@ export const TABLES = [
   'checkIn',
   'challenge',
   'streakFreeze',
+  'holding',
+  'dividend',
+  'sale',
 ] as const;
 export type TableName = (typeof TABLES)[number];
 
@@ -50,15 +56,20 @@ export const SCHEMAS = {
   checkIn: CheckInSchema,
   challenge: ChallengeSchema,
   streakFreeze: StreakFreezeSchema,
+  holding: HoldingSchema,
+  dividend: DividendSchema,
+  sale: SaleSchema,
 } satisfies Record<TableName, z.ZodType>;
 
 export type EntityMap = { [K in TableName]: z.infer<(typeof SCHEMAS)[K]> };
 export type EntityOf<T extends TableName> = EntityMap[T];
 
-export const CURRENT_SCHEMA_VERSION = 4;
+export const CURRENT_SCHEMA_VERSION = 7;
 
 /** One record tagged with its table, for batch writes. */
 export type TableRecord = { [K in TableName]: { table: K; record: EntityOf<K> } }[TableName];
+/** Names one stored record, to remove it. */
+export type RecordKey = { table: TableName; id: string };
 
 const SINGLETONS = new Set<TableName>(['profile', 'settings']);
 
@@ -87,6 +98,11 @@ export const SnapshotSchema = z.object({
     checkIn: table('checkIn', CheckInSchema).default([]),
     challenge: table('challenge', ChallengeSchema).default([]),
     streakFreeze: table('streakFreeze', StreakFreezeSchema).default([]),
+    // Added in v5.
+    holding: table('holding', HoldingSchema).default([]),
+    dividend: table('dividend', DividendSchema).default([]),
+    // Added in v7.
+    sale: table('sale', SaleSchema).default([]),
   }),
 });
 
@@ -113,6 +129,9 @@ export function emptySnapshot(): DataSnapshot {
       checkIn: [],
       challenge: [],
       streakFreeze: [],
+      holding: [],
+      dividend: [],
+      sale: [],
     },
   };
 }

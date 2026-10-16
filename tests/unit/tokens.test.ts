@@ -95,3 +95,48 @@ it('keeps the Other chart colour at 3:1 or better against the page, light and da
   expect(contrast(light['--color-chart-other']!, light['--color-bg']!)).toBeGreaterThanOrEqual(3);
   expect(contrast(dark['--color-chart-other']!, dark['--color-bg']!)).toBeGreaterThanOrEqual(3);
 });
+
+/** Banner tone gradients: [light from, light to, light muted, dark from, dark to, dark muted]. */
+const BANNER_TONES = {
+  demo: ['#ede7ff', '#e3ecff', '#5b5670', '#3b2a6b', '#1e2a4a', '#c9c3e6'],
+  info: ['#e2efff', '#e2f7f1', '#4a5a6b', '#1b2f4d', '#163836', '#bcd3e6'],
+  warning: ['#fff0d4', '#ffe6dc', '#6b5634', '#45310f', '#3b2317', '#e8d2b0'],
+  danger: ['#ffe2e2', '#ffe8f0', '#6b3a44', '#4a1b22', '#3a172e', '#f0c4cc'],
+} as const;
+
+it('defines each banner tone as a gradient and a muted line, light and dark', () => {
+  const light = declarations('@theme static');
+  const dark = declarations(":root[data-theme='dark']");
+  for (const [tone, [lf, lt, lm, df, dt, dm]] of Object.entries(BANNER_TONES)) {
+    expect([
+      light[`--color-${tone}-from`],
+      light[`--color-${tone}-to`],
+      light[`--color-${tone}-muted`],
+      dark[`--color-${tone}-from`],
+      dark[`--color-${tone}-to`],
+      dark[`--color-${tone}-muted`],
+    ]).toEqual([lf, lt, lm, df, dt, dm]);
+  }
+});
+
+it('keeps every banner tone readable on both ends of its gradient, light and dark', () => {
+  for (const base of [declarations('@theme static'), declarations(":root[data-theme='dark']")]) {
+    for (const tone of Object.keys(BANNER_TONES)) {
+      for (const end of [base[`--color-${tone}-from`]!, base[`--color-${tone}-to`]!]) {
+        // The title and the sentence use the page text colour; the second line is muted.
+        expect(contrast(base['--color-text']!, end)).toBeGreaterThanOrEqual(4.5);
+        expect(contrast(base[`--color-${tone}-muted`]!, end)).toBeGreaterThanOrEqual(4.5);
+        // The primary button sits on the card.
+        expect(contrast(base['--color-primary']!, end)).toBeGreaterThanOrEqual(3);
+      }
+    }
+    expect(
+      contrast(base['--color-primary-contrast']!, base['--color-primary']!),
+    ).toBeGreaterThanOrEqual(4.5);
+  }
+});
+
+it('leaves the danger colour off the danger banner: it is under 4.5:1 on the light gradient', () => {
+  const light = declarations('@theme static');
+  expect(contrast(light['--color-danger']!, light['--color-danger-from']!)).toBeLessThan(4.5);
+});

@@ -68,6 +68,64 @@ export function parseMoney(input: string, currency: string): number | null {
   return Number.isSafeInteger(minor) && minor <= MAX_MINOR ? minor : null;
 }
 
+/** One to three digits, one "." or ",", exactly three more: "1,000" is a thousand or one, "12.345" too. */
+const AMBIGUOUS_DECIMAL = /^[1-9]\d{0,2}[.,]\d{3}$/;
+
+export function isAmbiguousDecimal(input: string): boolean {
+  return AMBIGUOUS_DECIMAL.test(input.trim());
+}
+
+/**
+ * Reads a plain number typed in the same shapes as `parseMoney` ("12", "2.5", "0,25", "1,234.5",
+ * "1.234,5"), with any number of decimals, for shares and prices. It guesses no more than
+ * `parseMoney` does: a lone "." or "," after one to three digits and before exactly three more
+ * ("1,000", "12.345") could be a thousand or a fraction, so it is refused (see
+ * `isAmbiguousDecimal`); so is a sign, an exponent, text or a number too big to hold. "0.125" is
+ * clear, as no thousands group starts with 0.
+ */
+export function parseDecimal(input: string): number | null {
+  const s = input.trim();
+  if (!/^[\d.,]*\d[\d.,]*$/.test(s)) return null;
+  const dots = s.split('.').length - 1;
+  const commas = s.split(',').length - 1;
+  let intPart: string;
+  let fracPart = '';
+
+  if (dots > 0 && commas > 0) {
+    const last = Math.max(s.lastIndexOf('.'), s.lastIndexOf(','));
+    const decimal = s[last]!;
+    const group = decimal === '.' ? ',' : '.';
+    if (s.indexOf(decimal) !== last) return null;
+    const groups = s.slice(0, last).split(group);
+    if (!validGroups(groups)) return null;
+    intPart = groups.join('');
+    fracPart = s.slice(last + 1);
+  } else if (dots + commas === 1) {
+    if (isAmbiguousDecimal(s)) return null;
+    [intPart = '', fracPart = ''] = s.split(dots ? '.' : ',');
+    if (fracPart === '') return null;
+  } else if (dots + commas > 1) {
+    const groups = s.split(dots ? '.' : ',');
+    if (!validGroups(groups)) return null;
+    intPart = groups.join('');
+  } else {
+    intPart = s;
+  }
+
+  const n = Number(`${intPart || '0'}.${fracPart || '0'}`);
+  return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * A plain number as text `parseDecimal` reads back to the same number, for filling a field: no
+ * exponent ("1e-7" is "0.0000001") and no grouping, and a zero added where the text would be
+ * ambiguous ("1.125" is "1.1250", as the person would have to write it).
+ */
+export function formatDecimal(n: number): string {
+  const text = n.toLocaleString('en-US', { useGrouping: false, maximumFractionDigits: 20 });
+  return isAmbiguousDecimal(text) ? `${text}0` : text;
+}
+
 export type MoneyFormatOptions = {
   signDisplay?: 'auto' | 'always' | 'exceptZero';
   /** Drop the minor units ("$1,884"), for compact labels. */
@@ -103,4 +161,14 @@ export function currencySymbol(currency: string, locale?: string): string {
       .formatToParts(0)
       .find((p) => p.type === 'currency')?.value ?? currency
   );
+}
+
+/**
+ * `minor` units of `from` as minor units of `to` at `rate` (units of `to` for one of `from`),
+ * rounded once with `Math.round`, the one rule for money: an exact half goes up, so -22.5 is -22.
+ * The currencies may differ in decimals: ¥ has none, € has two. The `+ 0` turns a rounded -0 into
+ * 0, which would print as "-¥0". With `from` the same as `to` and a rate of 1 it is the rounding alone.
+ */
+export function convertMinor(minor: number, from: string, to: string, rate: number): number {
+  return Math.round(minor * rate * 10 ** (minorDigits(to) - minorDigits(from))) + 0;
 }

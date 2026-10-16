@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
+import { buildDemoSnapshot } from '@/data/demoSeed';
 import {
   makeDebt,
   makeExpense,
+  makeHolding,
   makeLimit,
   makeProfile,
+  makeSale,
   makeSubscription,
   makeTransaction,
 } from '@/test/fixtures';
@@ -185,6 +188,172 @@ describe('net worth over time', () => {
     data.tables.expense = [makeExpense({ date: '2026-10-01', amount: 30_00 })];
     expect(netWorthChangeThisMonth(data, '2026-10-01')).toBe(-30_00);
     expect(netWorthChangeThisMonth(data, '2026-11-01')).toBe(0);
+  });
+
+  it('adds investments to net worth and to the trend from each purchase date', () => {
+    const data = worth();
+    const quote = {
+      price: 60,
+      previousClose: null,
+      fxRate: null,
+      asOf: '2026-10-15T10:00:00.000Z',
+    };
+    data.tables.holding = [
+      makeHolding({ shares: 10, purchaseDate: '2026-10-08', quote }), // 600.00 at today's price
+      makeHolding({ shares: 1, purchaseDate: '2026-10-12', manualPrice: 25 }), // 25.00
+      makeHolding({ shares: 5, purchaseDate: '2026-10-01', quote: null }), // unpriced: adds nothing
+    ];
+    expect(netWorthOn(data, '2026-10-07')).toBe(800_00);
+    expect(netWorthOn(data, '2026-10-08')).toBe(800_00 + 600_00);
+    expect(netWorthOn(data, '2026-10-11')).toBe(800_00 + 600_00);
+    expect(netWorthOn(data, TODAY)).toBe(800_00 + 600_00 + 25_00);
+    const series = netWorthSeries(data, TODAY, 10);
+    expect(series.map((p) => p.value)).toEqual([
+      800_00, 800_00, 1_400_00, 1_400_00, 1_400_00, 1_400_00, 1_425_00, 1_425_00, 1_425_00,
+      1_425_00,
+    ]);
+  });
+
+  describe('around a sale', () => {
+    const quote = {
+      price: 60,
+      previousClose: null,
+      fxRate: null,
+      asOf: '2026-10-15T10:00:00.000Z',
+    };
+    /** 500.00 paid from cash on 10 Sep for 10 shares that are worth 600.00 at today's price. */
+    const bought = makeHolding({
+      id: 'ko',
+      shares: 10,
+      costBasis: 500_00,
+      purchaseDate: '2026-09-10',
+      quote,
+    });
+    const paid = makeTransaction({
+      type: 'investment',
+      from: 'cash',
+      to: null,
+      amount: 500_00,
+      date: '2026-09-10',
+    });
+    function held() {
+      const data = worth();
+      data.tables.expense = [];
+      data.tables.transaction = [paid];
+      data.tables.holding = [bought];
+      return data;
+    }
+    /** `held()` after selling `sold` of the 10 shares at today's price on `date`. */
+    function afterSelling(date: string, sold: number) {
+      const data = held();
+      const all = sold === bought.shares;
+      data.tables.sale = [
+        makeSale({
+          holdingId: 'ko',
+          shares: sold,
+          proceeds: sold * 60_00,
+          cost: sold * 50_00,
+          soldOn: date,
+          restore: all ? bought : null,
+        }),
+      ];
+      data.tables.holding = all
+        ? []
+        : [{ ...bought, shares: bought.shares - sold, costBasis: bought.costBasis - sold * 50_00 }];
+      return data;
+    }
+
+    it('keeps the day before a full sale as it was, selling at today’s price', () => {
+      const before = netWorthOn(held(), '2026-10-13');
+      expect(before).toBe(500_00 + 600_00);
+      const data = afterSelling('2026-10-14', 10);
+      expect(netWorthOn(data, '2026-10-13')).toBe(before);
+      expect(netWorthOn(data, '2026-10-14')).toBe(before);
+      expect(netWorthOn(data, TODAY)).toBe(before);
+    });
+
+    it('keeps the day before a partial sale as it was', () => {
+      const data = afterSelling('2026-10-14', 4);
+      for (const day of ['2026-09-20', '2026-10-13', '2026-10-14', TODAY]) {
+        expect(netWorthOn(data, day)).toBe(netWorthOn(held(), day));
+      }
+    });
+
+    it('adds nothing for days before the shares were bought', () => {
+      const data = afterSelling('2026-10-14', 4);
+      expect(netWorthOn(data, '2026-09-09')).toBe(netWorthOn(held(), '2026-09-09'));
+      expect(netWorthOn(data, '2026-09-09')).toBe(1_000_00);
+    });
+
+    it('does not count a sale made on or before the day twice', () => {
+      expect(netWorthOn(afterSelling('2026-10-01', 10), '2026-10-01')).toBe(500_00 + 600_00);
+    });
+
+    it('takes the purchase date from another sale’s snapshot of a holding sold in two steps', () => {
+      const data = afterSelling('2026-10-14', 10);
+      // 4 shares went on 5 Oct, then the other 6 on 14 Oct: the live holding is gone, and only
+      // the later sale kept it (as it was after the first).
+      const rest = { ...bought, shares: 6, costBasis: 300_00 };
+      data.tables.sale = [
+        makeSale({
+          holdingId: 'ko',
+          shares: 4,
+          proceeds: 240_00,
+          cost: 200_00,
+          soldOn: '2026-10-05',
+        }),
+        makeSale({
+          holdingId: 'ko',
+          shares: 6,
+          proceeds: 360_00,
+          cost: 300_00,
+          soldOn: '2026-10-14',
+          restore: rest,
+        }),
+      ];
+      expect(netWorthOn(data, '2026-10-04')).toBe(netWorthOn(held(), '2026-10-04'));
+      expect(netWorthOn(data, '2026-10-13')).toBe(netWorthOn(held(), '2026-10-13'));
+    });
+
+    it('skips a sale whose holding is gone with nothing stored to say when it was bought', () => {
+      const data = afterSelling('2026-10-14', 4);
+      data.tables.holding = [];
+      // Only the buckets: 1000 − 500 for the purchase, and the proceeds are not yet in.
+      expect(netWorthOn(data, '2026-10-13')).toBe(500_00);
+      expect(netWorthOn(data, TODAY)).toBe(500_00 + 240_00);
+    });
+
+    it('does not inflate the change this month by a sale made this month', () => {
+      const data = afterSelling('2026-10-10', 10);
+      // Nothing was gained over the month: the 600.00 was investments, and is now cash.
+      expect(netWorthChangeThisMonth(data, TODAY)).toBe(0);
+      expect(netWorthChangeThisMonth(held(), TODAY)).toBe(0);
+    });
+
+    it('has no dip before the demo’s AAPL sale', () => {
+      const today = '2026-10-14';
+      const demo = buildDemoSnapshot(today);
+      const [sale] = demo.tables.sale;
+      // The same demo with the sale undone, as `undoSale` would leave it.
+      const unsold = structuredClone(demo);
+      unsold.tables.sale = [];
+      unsold.tables.holding = unsold.tables.holding.map((h) =>
+        h.id === sale!.holdingId
+          ? { ...h, shares: h.shares + sale!.shares, costBasis: h.costBasis + sale!.cost }
+          : h,
+      );
+      const soldSeries = netWorthSeries(demo, today, 61);
+      const gap = netWorthSeries(unsold, today, 61).map((p, i) => ({
+        day: p.day,
+        diff: p.value - soldSeries[i]!.value,
+      }));
+      const bought = unsold.tables.holding.find((h) => h.id === sale!.holdingId)!.purchaseDate;
+      // The 5 shares are 5 × $228.50 at today's price and were sold for $1,120.00: $22.50 apart
+      // on every day since they were bought, before the sale as after it.
+      expect(sale!.soldOn > bought).toBe(true);
+      expect(gap.filter((g) => g.day >= bought).every((g) => g.diff === 22_50)).toBe(true);
+      expect(gap.filter((g) => g.day < bought).every((g) => g.diff === 0)).toBe(true);
+    });
   });
 
   it('gives a 30-point series ending today', () => {

@@ -23,7 +23,26 @@
   --color-success: #007a55;
   --color-warning: #a35f00;
   --color-danger: #d1373d;
+  /* Soft tints for the two sides of a bar (below / above break-even). Fills only, never text. */
+  --color-danger-soft: #f5d9da;
+  --color-success-soft: #d2eadf;
   --color-focus: #7c5cff;
+  /*
+   * Banner cards: each tone is a soft gradient (from, to) and a muted second line. The title, the
+   * sentence and the buttons use the ink tokens. Contrast is checked in tests/unit/tokens.test.ts.
+   */
+  --color-demo-from: #ede7ff;
+  --color-demo-to: #e3ecff;
+  --color-demo-muted: #5b5670;
+  --color-info-from: #e2efff;
+  --color-info-to: #e2f7f1;
+  --color-info-muted: #4a5a6b;
+  --color-warning-from: #fff0d4;
+  --color-warning-to: #ffe6dc;
+  --color-warning-muted: #6b5634;
+  --color-danger-from: #ffe2e2;
+  --color-danger-to: #ffe8f0;
+  --color-danger-muted: #6b3a44;
 
   /* Categorical chart series, fixed order (validated incl. donut wrap-around). */
   --color-chart-1: #2a78d6;
@@ -70,7 +89,21 @@
   --color-success: #2ee6a6;
   --color-warning: #f2a93b;
   --color-danger: #ff6b6f;
+  --color-danger-soft: #3d2326;
+  --color-success-soft: #143a2e;
   --color-focus: #9d85ff;
+  --color-demo-from: #3b2a6b;
+  --color-demo-to: #1e2a4a;
+  --color-demo-muted: #c9c3e6;
+  --color-info-from: #1b2f4d;
+  --color-info-to: #163836;
+  --color-info-muted: #bcd3e6;
+  --color-warning-from: #45310f;
+  --color-warning-to: #3b2317;
+  --color-warning-muted: #e8d2b0;
+  --color-danger-from: #4a1b22;
+  --color-danger-to: #3a172e;
+  --color-danger-muted: #f0c4cc;
 
   --color-chart-1: #3987e5;
   --color-chart-2: #d95926;

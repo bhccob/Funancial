@@ -11,7 +11,7 @@ import { cn } from '@/lib/cn';
 import { toast } from '@/lib/toast';
 import { useAction } from '@/lib/useAction';
 import { useApp } from '@/store/AppStoreProvider';
-import { currencyOptions } from '@/features/shared/currencies';
+import { currencyOptions, defaultCurrency } from '@/features/shared/currencies';
 import type { CardInput } from '@/store/financeActions';
 import { useFinanceActions } from '@/store/useFinance';
 
@@ -116,7 +116,10 @@ export function OnboardingWizard() {
 
   const [step, setStep] = useState(1);
   const [understood, setUnderstood] = useState(false);
-  const [currency, setCurrency] = useState('USD');
+  // A guess from where the phone is; the Select still offers every currency.
+  const [currency, setCurrency] = useState(() =>
+    defaultCurrency(Intl.DateTimeFormat().resolvedOptions().timeZone, navigator.language),
+  );
   const [name, setName] = useState('');
   const [cash, setCash] = useState<number | null>(null);
   const [savings, setSavings] = useState<number | null>(null);

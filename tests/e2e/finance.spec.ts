@@ -31,6 +31,37 @@ async function addExpense(
 
 const available = (page: Page) => page.getByRole('region', { name: 'Available to spend' });
 
+test('switching currency in Settings relabels amounts without converting them', async ({
+  page,
+}) => {
+  await start(page);
+  await expect(available(page)).toContainText('$6,000.00');
+
+  await page.goto('/settings');
+  // Only the row's button is there while both dialogs are closed.
+  const change = page.getByRole('button', { name: 'Change currency' });
+  await change.click();
+  const picker = page.getByRole('dialog', { name: 'Change currency' });
+  await picker.getByLabel('New currency').selectOption('EUR');
+  const confirm = page.getByRole('dialog', { name: 'Change your currency to EUR?' });
+  await expect(confirm).toContainText('1,200 USD becomes 1,200 EUR.');
+  await confirm.getByRole('button', { name: 'Cancel' }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  // Focus is back where the person started, not dropped to the page (jsdom cannot show this).
+  await expect(change).toBeFocused();
+
+  // Cancel changed nothing; do it again and confirm.
+  await change.click();
+  await picker.getByLabel('New currency').selectOption('EUR');
+  await confirm.getByRole('button', { name: 'Change currency' }).click();
+  await expect(page.getByText('Currency changed to EUR.')).toBeVisible();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(change).toBeFocused();
+
+  await page.goto('/');
+  await expect(available(page)).toContainText('€6,000.00');
+});
+
 test('a weekly food limit warns at 80% in the motivational tone', async ({ page }) => {
   await start(page);
   await page.goto('/budget');

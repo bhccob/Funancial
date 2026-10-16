@@ -221,6 +221,25 @@ describe('repository: older schema versions', () => {
     expect(await backend.meta.get('dataVersion')).toBe(CURRENT_SCHEMA_VERSION);
   });
 
+  it('putMany removes records in the same write, and none when a record is invalid', async () => {
+    const backend = await testBackend();
+    const repo = createRepository(backend, await generateDataKey());
+    await repo.putMany([
+      { table: 'expense', record: makeExpense({ id: 'gone' }) },
+      { table: 'goal', record: makeGoal({ id: 'g' }) },
+    ]);
+    const remove = [{ table: 'expense' as const, id: 'gone' }];
+
+    const invalid = makeGoal({ id: 'g', target: -1 });
+    await expect(repo.putMany([{ table: 'goal', record: invalid }], remove)).rejects.toThrow();
+    expect((await repo.loadAll()).snapshot.tables.expense).toHaveLength(1);
+
+    await repo.putMany([{ table: 'goal', record: makeGoal({ id: 'g', name: 'Bike' }) }], remove);
+    const { tables } = (await repo.loadAll()).snapshot;
+    expect(tables.expense).toEqual([]);
+    expect(tables.goal.map((g) => g.name)).toEqual(['Bike']);
+  });
+
   it('putMany writes all or nothing', async () => {
     const backend = await testBackend();
     const repo = createRepository(backend, await generateDataKey());

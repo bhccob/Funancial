@@ -47,16 +47,45 @@ const STEPS: Record<number, Step> = {
           },
     subscription: (r) => (r.auditedAt !== undefined ? r : { ...r, auditedAt: null }),
   },
+  5: {
+    // The holding and dividend tables are new, so a snapshot without them gets empty ones from
+    // the schema. Spelled out like step 3: the dividend reminder starts on.
+    settings: (r) =>
+      typeof r.reminders === 'object' && r.reminders !== null && !('dividends' in r.reminders)
+        ? { ...r, reminders: { ...r.reminders, dividends: true } }
+        : r,
+  },
+  6: {
+    // Spelled out like step 3: Invest starts in the profile currency, with no rate fetched yet.
+    settings: (r) => ({
+      ...r,
+      investCurrency: r.investCurrency ?? null,
+      investFx: r.investFx ?? null,
+    }),
+  },
+  // The sale table is new, so it has no old rows to upgrade and no other record changes: a snapshot
+  // without it gets an empty one from the schema. The step stays so the version number has one.
+  7: {},
 };
 
 export const LATEST_VERSION = Math.max(1, ...Object.keys(STEPS).map(Number));
 
-export function migrateRecord(table: TableName, raw: unknown, fromVersion: number): unknown {
+/** `steps` is for tests, to try a step that does not exist yet. */
+export function migrateRecord(
+  table: TableName,
+  raw: unknown,
+  fromVersion: number,
+  steps: Record<number, Step> = STEPS,
+): unknown {
   if (typeof raw !== 'object' || raw === null) return raw;
   let record = raw as Record<string, unknown>;
   for (let v = fromVersion + 1; v <= LATEST_VERSION; v++) {
-    const step = STEPS[v]?.[table];
+    const step = steps[v]?.[table];
     if (step) record = step(record);
+  }
+  // A sale stores the holding it removed as it was then, so the holding steps upgrade it too.
+  if (table === 'sale' && typeof record.restore === 'object' && record.restore !== null) {
+    record = { ...record, restore: migrateRecord('holding', record.restore, fromVersion, steps) };
   }
   return record;
 }

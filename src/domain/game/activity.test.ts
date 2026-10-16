@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   localIso,
   makeCheckIn,
+  makeDividend,
   makeExpense,
   makeIncome,
   makeLimit,
@@ -60,6 +61,26 @@ describe('loggedEntries', () => {
     expect(loggedEntries(data)).toEqual([
       { table: 'expense', id: 'e1', createdAt: localIso('2026-10-15', 9), day: '2026-10-15' },
       { table: 'income', id: 'i1', createdAt: localIso('2026-10-15', 11), day: '2026-10-15' },
+    ]);
+  });
+
+  it('logs a confirmed dividend on the day it was confirmed, and not a skipped one', () => {
+    const data = snap({
+      expense: [makeExpense({ id: 'e1', createdAt: localIso('2026-10-15', 9) })],
+      dividend: [
+        makeDividend({ id: 'd1', paidOn: '2026-10-01', createdAt: localIso('2026-10-15', 10) }),
+        makeDividend({
+          id: 'd2',
+          status: 'skipped',
+          amount: 0,
+          bucket: null,
+          createdAt: localIso('2026-10-15', 11),
+        }),
+      ],
+    });
+    expect(loggedEntries(data)).toEqual([
+      { table: 'expense', id: 'e1', createdAt: localIso('2026-10-15', 9), day: '2026-10-15' },
+      { table: 'dividend', id: 'd1', createdAt: localIso('2026-10-15', 10), day: '2026-10-15' },
     ]);
   });
 

@@ -1,6 +1,7 @@
 import {
   CalendarCheck,
   Check,
+  Coins,
   HardDriveDownload,
   ListChecks,
   Receipt,
@@ -22,6 +23,7 @@ const ICONS: Record<QuestId, LucideIcon> = {
   'week-checkin': CalendarCheck,
   'month-salary': Wallet,
   'month-audit': ListChecks,
+  'month-dividends': Coins,
   'month-backup': HardDriveDownload,
 };
 

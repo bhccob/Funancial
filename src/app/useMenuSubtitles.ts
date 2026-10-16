@@ -12,7 +12,9 @@ export function useMenuSubtitles(): Record<string, string> {
   const subscriptions = useApp((s) => s.data.tables.subscription);
   const goals = useApp((s) => s.data.tables.goal);
   // Reversals can take the ledger below zero; the Shop shows nothing to spend then, never a debt.
-  const coins = Math.max(0, useGameView().totals.coins);
+  const game = useGameView();
+  const coins = Math.max(0, game.totals.coins);
+  const level = game.level.level;
 
   const active = subscriptions.filter((s) => s.status === 'active').length;
   const saved = goals.reduce((sum, g) => sum + g.current, 0);
@@ -28,10 +30,8 @@ export function useMenuSubtitles(): Record<string, string> {
     '/freeze': view.activeFreeze
       ? `Active until ${formatDay(view.activeFreeze.end)}`
       : 'None right now',
-    '/invest': 'Stocks and ETFs',
     '/buy': 'Ask before you spend',
-    '/dividends': 'Passive income',
-    '/news': 'For what you hold',
+    '/quests': `Level ${level}`,
     '/shop': `${plural(coins, 'coin')} to spend`,
     '/inbox': 'Your notices',
     '/help': 'How everything works',

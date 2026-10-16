@@ -1,6 +1,7 @@
 import { ChevronDown } from 'lucide-react';
 import { useId } from 'react';
 import { cn } from '@/lib/cn';
+import { lineInput, lineLabel, type FieldVariant } from './lineField';
 
 export interface SelectProps {
   label: string;
@@ -12,6 +13,8 @@ export interface SelectProps {
   /** Dimmed and inert, but still on screen. */
   disabled?: boolean;
   className?: string;
+  /** `line` is the lighter field of the Invest forms: the label over the value, a hairline under it. */
+  variant?: FieldVariant;
 }
 
 export function Select({
@@ -23,13 +26,22 @@ export function Select({
   error,
   disabled,
   className,
+  variant = 'box',
 }: SelectProps) {
   const id = useId();
   const hintId = hint ? `${id}-hint` : undefined;
   const errorId = error ? `${id}-error` : undefined;
+  const line = variant === 'line';
   return (
-    <div className={cn('flex flex-col gap-1.5', disabled && 'opacity-45', className)}>
-      <label htmlFor={id} className="text-sm font-bold">
+    <div
+      className={cn(
+        'flex flex-col',
+        line ? 'gap-0.5' : 'gap-1.5',
+        disabled && 'opacity-45',
+        className,
+      )}
+    >
+      <label htmlFor={id} className={line ? lineLabel : 'text-sm font-bold'}>
         {label}
       </label>
       <div className="relative">
@@ -40,10 +52,14 @@ export function Select({
           disabled={disabled}
           aria-invalid={error ? true : undefined}
           aria-describedby={[hintId, errorId].filter(Boolean).join(' ') || undefined}
-          className={cn(
-            'text-text h-11 w-full appearance-none rounded-md border bg-transparent pr-9 pl-3 text-base',
-            error ? 'border-danger' : 'border-border-strong',
-          )}
+          className={
+            line
+              ? cn(lineInput(!!error), 'appearance-none pr-6')
+              : cn(
+                  'text-text h-11 w-full appearance-none rounded-md border bg-transparent pr-9 pl-3 text-base',
+                  error ? 'border-danger' : 'border-border-strong',
+                )
+          }
         >
           {options.map((o) => (
             <option key={o.value} value={o.value}>
@@ -53,7 +69,10 @@ export function Select({
         </select>
         <ChevronDown
           aria-hidden
-          className="text-muted pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2"
+          className={cn(
+            'text-muted pointer-events-none absolute top-1/2 size-4 -translate-y-1/2',
+            line ? 'right-0' : 'right-3',
+          )}
         />
       </div>
       {hint && (

@@ -8,3 +8,5 @@ blob-report/
 *.funbak
 *.tsbuildinfo
 .DS_Store
+.env.local
+.vercel

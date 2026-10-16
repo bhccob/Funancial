@@ -22,6 +22,7 @@ import {
   type Transaction,
 } from '@/domain/entities';
 import { newId, nowIso } from '@/domain/ids';
+import { minorDigits } from '@/domain/money';
 import { dayOfMonth, monthKey } from '@/domain/periods';
 import { nextOccurrence } from '@/domain/recurrence';
 import { expectedSalary, freezeLoss } from '@/domain/salary';
@@ -106,7 +107,7 @@ export interface OnboardingInput {
   cards: CardInput[];
 }
 
-const FUTURE = 'Use today or an earlier date.';
+export const FUTURE = 'Use today or an earlier date.';
 const PAYS_SUBSCRIPTION =
   'A subscription is paid with this card. Change how it is paid first, or keep the card.';
 const HAS_HISTORY =
@@ -477,7 +478,8 @@ export function createFinanceActions(store: StoreApi<AppState>) {
       return adjustment;
     },
 
-    async updateProfile(patch: Partial<Omit<Profile, 'id' | 'createdAt'>>) {
+    /** The currency is not here: `changeCurrency` is the one way to change it, with its holdings. */
+    async updateProfile(patch: Partial<Omit<Profile, 'id' | 'createdAt' | 'currency'>>) {
       const profile = state().data.tables.profile[0];
       if (!profile) throw new Error('Finish setting up first.');
       const next = { ...profile, ...patch, updatedAt: nowIso() };
@@ -490,6 +492,54 @@ export function createFinanceActions(store: StoreApi<AppState>) {
         next.salary = { ...now, ...(was.since ? { since: was.since } : {}) };
       }
       await state().put('profile', next);
+    },
+
+    /**
+     * Relabels every amount in a currency with the same decimals: the numbers stay, and nothing is
+     * converted. Stored exchange rates were for the old currency, so each holding loses its own and
+     * keeps the rest of its quote; the next Invest refresh fetches rates for the new one. A holding
+     * with no quote, priced by hand in the old currency, is relabelled too: nothing else would say
+     * what it trades in, and it would drop out of the totals. The rate Invest is shown at was for the
+     * old currency too, so it goes, and Invest shown in the new currency is just the default. One write.
+     */
+    async changeCurrency(currency: string) {
+      const profile = state().data.tables.profile[0];
+      if (!profile) throw new Error('Finish setting up first.');
+      if (currency === profile.currency) return;
+      // Amounts are minor units: another decimal count would misread every one of them.
+      if (minorDigits(currency) !== minorDigits(profile.currency)) {
+        throw new Error(`${currency} has different decimals from ${profile.currency}.`);
+      }
+      const at = nowIso();
+      const holdings: TableRecord[] = state().data.tables.holding.flatMap((h) => {
+        const quote = h.quote?.fxRate == null ? h.quote : { ...h.quote, fxRate: null };
+        const held = h.quote === null && h.currency === profile.currency ? currency : h.currency;
+        if (quote === h.quote && held === h.currency) return [];
+        return [
+          { table: 'holding' as const, record: { ...h, currency: held, quote, updatedAt: at } },
+        ];
+      });
+      const settings = state().data.tables.settings[0];
+      const invest: TableRecord[] =
+        settings && (settings.investFx || settings.investCurrency === currency)
+          ? [
+              {
+                table: 'settings',
+                record: {
+                  ...settings,
+                  investCurrency:
+                    settings.investCurrency === currency ? null : settings.investCurrency,
+                  investFx: null,
+                  updatedAt: at,
+                },
+              },
+            ]
+          : [];
+      await state().putMany([
+        { table: 'profile', record: { ...profile, currency, updatedAt: at } },
+        ...holdings,
+        ...invest,
+      ]);
     },
 
     async updateSettings(patch: Partial<Omit<Settings, 'id' | 'createdAt'>>) {

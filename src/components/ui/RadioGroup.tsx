@@ -1,5 +1,7 @@
 import { useId } from 'react';
 import { cn } from '@/lib/cn';
+import { lineLabel } from './lineField';
+import { underlineTab } from './underlineTab';
 
 export interface RadioOption<T extends string> {
   value: T;
@@ -11,29 +13,50 @@ export interface RadioGroupProps<T extends string> {
   value: T;
   options: RadioOption<T>[];
   onChange(value: T): void;
+  /** `underline` is the Invest forms' tabs: no well, the choice marked by a line under it. */
+  variant?: 'segmented' | 'underline';
+  /** Said under the choices, which it describes. */
+  error?: string;
 }
 
-/** Native radios presented as a segmented control. */
+/** Native radios presented as a segmented control, or as underline tabs. */
 export function RadioGroup<T extends string>({
   legend,
   value,
   options,
   onChange,
+  variant = 'segmented',
+  error,
 }: RadioGroupProps<T>) {
   const name = useId();
+  const errorId = `${name}-error`;
+  const underline = variant === 'underline';
   return (
-    <fieldset className="flex flex-col gap-2">
-      <legend className="mb-2 text-sm font-bold">{legend}</legend>
-      <div className="bg-surface-2 inline-flex max-w-full flex-wrap gap-1 self-start rounded-[14px] p-1">
+    <fieldset className="flex flex-col gap-2" aria-describedby={error ? errorId : undefined}>
+      <legend className={underline ? cn(lineLabel, 'mb-0.5') : 'mb-2 text-sm font-bold'}>
+        {legend}
+      </legend>
+      <div
+        className={
+          underline
+            ? 'flex max-w-full flex-wrap gap-x-5'
+            : 'bg-surface-2 inline-flex max-w-full flex-wrap gap-1 self-start rounded-[14px] p-1'
+        }
+      >
         {options.map((o) => (
           <label
             key={o.value}
             className={cn(
-              'relative flex min-h-10 cursor-pointer items-center rounded-[10px] px-3.5 text-sm font-bold',
+              'relative cursor-pointer',
               'has-[:focus-visible]:outline-focus has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2',
-              value === o.value
-                ? 'bg-overlay text-text shadow-[0_1px_3px_rgb(0_0_0/0.12)]'
-                : 'text-muted hover:text-text',
+              underline
+                ? underlineTab(value === o.value)
+                : cn(
+                    'flex min-h-10 items-center rounded-[10px] px-3.5 text-sm font-bold',
+                    value === o.value
+                      ? 'bg-overlay text-text shadow-[0_1px_3px_rgb(0_0_0/0.12)]'
+                      : 'text-muted hover:text-text',
+                  ),
             )}
           >
             <input
@@ -48,6 +71,11 @@ export function RadioGroup<T extends string>({
           </label>
         ))}
       </div>
+      {error && (
+        <p id={errorId} className="text-danger text-sm font-semibold">
+          {error}
+        </p>
+      )}
     </fieldset>
   );
 }

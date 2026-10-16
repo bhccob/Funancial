@@ -1,6 +1,8 @@
 import { expect, type Page } from '@playwright/test';
 
 export interface OnboardOptions {
+  /** Setup starts on the phone's currency, which is the test machine's; defaults to USD, chosen here. */
+  currency?: string;
   cash?: string;
   savings?: string;
   /** Omit for "I don't have a regular salary". */
@@ -14,6 +16,7 @@ const next = (page: Page) => page.getByRole('button', { name: 'Next' }).click();
 export async function onboard(page: Page, opts: OnboardOptions = {}) {
   await page.getByRole('checkbox', { name: 'I understand' }).check();
   await next(page);
+  await page.getByLabel('Currency').selectOption(opts.currency ?? 'USD');
   await next(page);
   await page.getByLabel('Cash & checking', { exact: true }).fill(opts.cash ?? '0');
   await page.getByLabel('Savings', { exact: true }).fill(opts.savings ?? '0');
@@ -47,5 +50,5 @@ export async function startFresh(page: Page, path = '/') {
 export async function startDemo(page: Page) {
   await page.goto('/');
   await page.getByRole('button', { name: 'Try with demo money' }).click();
-  await expect(page.getByText("You're using demo money.")).toBeVisible();
+  await expect(page.getByText("You're exploring with demo money")).toBeVisible();
 }

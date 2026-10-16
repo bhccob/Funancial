@@ -4,6 +4,7 @@ import {
   makeChallenge,
   makeExpense,
   makeGoal,
+  makeHolding,
   makeLedgerEntry,
   makeLimit,
   makeSubscription,
@@ -85,6 +86,15 @@ const sprint = (overrides: Partial<Challenge> = {}) =>
     ...overrides,
   });
 
+const checkup = (overrides: Partial<Challenge> = {}) =>
+  makeChallenge({
+    kind: 'portfolio-checkup',
+    start: '2026-10-15',
+    end: '2026-10-21',
+    createdAt: localIso('2026-10-15', 9),
+    ...overrides,
+  });
+
 /** A monthly limit of 1000.00 on everything, in force since October began. */
 const monthlyLimit = () =>
   makeLimit({
@@ -95,8 +105,12 @@ const monthlyLimit = () =>
     createdAt: localIso('2026-10-01'),
   });
 
+/** A holding bought long before the challenge, last checked at `checkedAt`. */
+const held = (checkedAt: string | null, id = 'h') =>
+  makeHolding({ id, createdAt: localIso('2026-10-01'), checkedAt });
+
 describe('CHALLENGES', () => {
-  it('lists the four challenges', () => {
+  it('lists the five challenges', () => {
     expect(CHALLENGES).toEqual([
       {
         kind: 'no-spend-weekend',
@@ -118,6 +132,11 @@ describe('CHALLENGES', () => {
         title: 'Emergency Fund Sprint',
         description: 'Add 10% of your emergency fund target within 30 days.',
       },
+      {
+        kind: 'portfolio-checkup',
+        title: 'Portfolio Check-Up',
+        description: 'Check every holding within 7 days.',
+      },
     ]);
   });
 });
@@ -131,6 +150,8 @@ describe('startRequirement', () => {
     expect(startRequirement('emergency-sprint', empty, ctx)).toBe(
       'Add an emergency fund goal first.',
     );
+    expect(startRequirement('portfolio-checkup', empty, ctx)).toBe('Add a holding first.');
+    expect(startRequirement('portfolio-checkup', snap({ holding: [held(null)] }), ctx)).toBeNull();
 
     // A cancelled subscription and a savings goal do not count.
     expect(
@@ -221,8 +242,11 @@ describe('newChallenge', () => {
     expect(windowOf('subscription-audit')).toEqual(['2026-10-15', '2026-10-21']);
     expect(windowOf('budget-30')).toEqual(['2026-10-15', '2026-11-13']);
     expect(windowOf('emergency-sprint')).toEqual(['2026-10-15', '2026-11-13']);
+    expect(windowOf('portfolio-checkup')).toEqual(['2026-10-15', '2026-10-21']);
     const audit7 = newChallenge('subscription-audit', snap({}), ctx, 'c1');
     expect([audit7.baseline, audit7.goal]).toEqual([null, null]);
+    const checkup7 = newChallenge('portfolio-checkup', snap({}), ctx, 'c1');
+    expect([checkup7.baseline, checkup7.goal, checkup7.status]).toEqual([null, null, 'active']);
   });
 
   it('sets the sprint baseline and goal', () => {
@@ -349,6 +373,93 @@ describe('subscription audit', () => {
     ]);
     // Still won once the window has closed, because it was done in time.
     expect(viewOn(audit(), { subscription: [sub] }, '2026-10-23').outcome).toBe('won');
+  });
+});
+
+describe('portfolio check-up', () => {
+  it('wins once every holding is checked', () => {
+    const none = viewOn(checkup(), { holding: [held(null, 'a'), held(null, 'b')] }, '2026-10-16');
+    expect(outcomeOf(none)).toEqual(['active', 0, 2]);
+    expect(none.detail).toBe('0 of 2 checked');
+
+    const a = held(localIso('2026-10-16'), 'a');
+    const one = viewOn(checkup(), { holding: [a, held(null, 'b')] }, '2026-10-16');
+    expect(outcomeOf(one)).toEqual(['active', 1, 2]);
+    expect(one.detail).toBe('1 of 2 checked');
+
+    const both = [a, held(localIso('2026-10-17'), 'b')];
+    const won = viewOn(checkup(), { holding: both }, '2026-10-17');
+    expect(outcomeOf(won)).toEqual(['won', 2, 2]);
+    expect(won.detail).toBe('Every holding checked.');
+  });
+
+  it('does not count a check from before the challenge began', () => {
+    const old = held(localIso('2026-10-15', 8));
+    expect(outcomeOf(viewOn(checkup(), { holding: [old] }, '2026-10-16'))).toEqual([
+      'active',
+      0,
+      1,
+    ]);
+    // At the moment it began counts.
+    const exact = held(checkup().createdAt);
+    expect(viewOn(checkup(), { holding: [exact] }, '2026-10-16').outcome).toBe('won');
+  });
+
+  it('waits for a holding, and a holding added later has to be checked too', () => {
+    const empty = viewOn(checkup(), {}, '2026-10-16');
+    expect(outcomeOf(empty)).toEqual(['active', 0, 0]);
+    expect(empty.detail).toBe('Add a holding to check.');
+
+    const checked = held(localIso('2026-10-16'), 'a');
+    const added = makeHolding({ id: 'b', createdAt: localIso('2026-10-17'), checkedAt: null });
+    expect(outcomeOf(viewOn(checkup(), { holding: [checked, added] }, '2026-10-17'))).toEqual([
+      'active',
+      1,
+      2,
+    ]);
+  });
+
+  it('is lost when the seven days pass unfinished', () => {
+    const holding = [held(null)];
+    expect(viewOn(checkup(), { holding }, '2026-10-21').outcome).toBe('active');
+    const lost = viewOn(checkup(), { holding }, '2026-10-22');
+    expect(lost.outcome).toBe('lost');
+    expect(lost.detail).toBe('The 7 days are up. Start another check-up any time.');
+    expect(viewOn(checkup(), {}, '2026-10-22').outcome).toBe('lost');
+  });
+
+  it('does not win on a check after the seven days', () => {
+    // The window is 10-15 to 10-21; both holdings are checked on 10-23.
+    const late = [held(localIso('2026-10-23'), 'a'), held(localIso('2026-10-23'), 'b')];
+    expect(outcomeOf(viewOn(checkup(), { holding: late }, '2026-10-23'))).toEqual(['lost', 0, 2]);
+    expect(
+      challengeAwards(snap({ challenge: [checkup()], holding: late }), ctxOn('2026-10-23')),
+    ).toEqual([]);
+  });
+
+  it('wins a check-up finished on the last day, and stays won after', () => {
+    const holding = [held(localIso('2026-10-21', 23))];
+    expect(outcomeOf(viewOn(checkup(), { holding }, '2026-10-21'))).toEqual(['won', 1, 1]);
+    expect(viewOn(checkup(), { holding }, '2026-10-23').outcome).toBe('won');
+  });
+
+  it('awards the win once, keyed by its id', () => {
+    const won = checkup({ id: 'c1' });
+    expect(
+      challengeAwards(
+        snap({ challenge: [won], holding: [held(localIso('2026-10-16'))] }),
+        ctxOn('2026-10-16'),
+      ),
+    ).toEqual([
+      {
+        key: 'challenge:c1',
+        kind: 'challenge',
+        title: 'Portfolio Check-Up',
+        label: 'Challenge: Portfolio Check-Up',
+        xp: 120,
+        coins: 30,
+      },
+    ]);
   });
 });
 

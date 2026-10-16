@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
   localIso,
+  makeDividend,
   makeExpense,
+  makeHolding,
   makeIncome,
   makeLedgerEntry,
   makeLimit,
+  makeProfile,
   makeSubscription,
 } from '@/test/fixtures';
 import type { SalaryFreeze } from '../entities';
@@ -50,20 +53,37 @@ function freeze(start: string, end: string): SalaryFreeze {
 }
 
 describe('BADGES', () => {
-  it('lists the four badges in order', () => {
+  it('lists the nine badges in order', () => {
     expect(BADGES.map((b) => b.id)).toEqual([
       'first-expense',
       'subscription-slayer',
       'limit-keeper',
       'freeze-master',
+      'first-etf',
+      'portfolio-pro',
+      'first-dividend',
+      'dividend-collector',
+      'passive-income-pro',
     ]);
     expect(BADGES.map((b) => b.name)).toEqual([
       'First Expense Logged',
       'Subscription Slayer',
       'Limit Keeper',
       'Freeze Master',
+      'First ETF',
+      'Portfolio Pro',
+      'First Dividend',
+      'Dividend Collector',
+      'Passive Income Pro',
     ]);
     expect(BADGES[2]?.description).toBe('Finish a calendar month without going over any limit.');
+    expect(BADGES.slice(4).map((b) => b.description)).toEqual([
+      'Add an ETF to your portfolio.',
+      'Hold five or more investments.',
+      'Confirm your first dividend.',
+      'Confirm 12 dividends.',
+      'Collect 100 in dividends in one month.',
+    ]);
   });
 });
 
@@ -201,6 +221,121 @@ describe('badgeAwards', () => {
     ).toEqual(['first-expense']);
   });
 
+  it('earns First ETF from an ETF holding, not from a stock', () => {
+    expect(earned(snap({ holding: [makeHolding({ type: 'stock' })] }))).toEqual([]);
+    expect(earned(snap({ holding: [makeHolding({ type: 'other' })] }))).toEqual([]);
+    expect(badgeAwards(snap({ holding: [makeHolding({ type: 'etf' })] }), ctx)).toEqual([
+      {
+        key: 'badge:first-etf',
+        kind: 'badge',
+        title: 'First ETF',
+        label: 'Badge: First ETF',
+        xp: 100,
+        coins: 25,
+      },
+    ]);
+  });
+
+  it('earns Portfolio Pro from five holdings', () => {
+    const holdings = (n: number) => Array.from({ length: n }, () => makeHolding());
+    expect(earned(snap({ holding: holdings(4) }))).toEqual([]);
+    expect(badgeAwards(snap({ holding: holdings(5) }), ctx)).toEqual([
+      {
+        key: 'badge:portfolio-pro',
+        kind: 'badge',
+        title: 'Portfolio Pro',
+        label: 'Badge: Portfolio Pro',
+        xp: 150,
+        coins: 40,
+      },
+    ]);
+    expect(earned(snap({ holding: holdings(6) }))).toEqual(['portfolio-pro']);
+  });
+
+  it('earns First Dividend from a confirmed dividend, not a skipped one', () => {
+    const skipped = makeDividend({ status: 'skipped', amount: 0, bucket: null });
+    expect(earned(snap({ dividend: [skipped] }))).toEqual([]);
+    expect(badgeAwards(snap({ dividend: [skipped, makeDividend()] }), ctx)).toEqual([
+      {
+        key: 'badge:first-dividend',
+        kind: 'badge',
+        title: 'First Dividend',
+        label: 'Badge: First Dividend',
+        xp: 100,
+        coins: 25,
+      },
+    ]);
+  });
+
+  it('earns Dividend Collector from twelve confirmed dividends', () => {
+    const confirmed = (n: number) => Array.from({ length: n }, () => makeDividend());
+    const skipped = Array.from({ length: 5 }, () =>
+      makeDividend({ status: 'skipped', amount: 0, bucket: null }),
+    );
+    expect(earned(snap({ dividend: [...confirmed(11), ...skipped] }))).toEqual(['first-dividend']);
+    const twelve = snap({ dividend: confirmed(12) });
+    expect(earned(twelve)).toEqual(['first-dividend', 'dividend-collector']);
+    expect(badgeAwards(twelve, ctx)[1]).toMatchObject({
+      key: 'badge:dividend-collector',
+      title: 'Dividend Collector',
+      label: 'Badge: Dividend Collector',
+      xp: 150,
+      coins: 40,
+    });
+  });
+
+  it('earns Passive Income Pro from 100 in confirmed dividends in one calendar month', () => {
+    const paid = (paidOn: string, amount: number) => makeDividend({ paidOn, amount });
+    const usd = (...dividend: ReturnType<typeof paid>[]) =>
+      snap({ profile: [makeProfile({ currency: 'USD' })], dividend });
+
+    expect(earned(usd(paid('2026-10-03', 60_00), paid('2026-10-20', 40_00)))).toEqual([
+      'first-dividend',
+      'passive-income-pro',
+    ]);
+    expect(
+      badgeAwards(usd(paid('2026-10-03', 100_00)), ctx).find(
+        (a) => a.title === 'Passive Income Pro',
+      ),
+    ).toEqual({
+      key: 'badge:passive-income-pro',
+      kind: 'badge',
+      title: 'Passive Income Pro',
+      label: 'Badge: Passive Income Pro',
+      xp: 200,
+      coins: 50,
+    });
+
+    // 99.99 is short, and 100.00 split over two months is not one month's.
+    expect(earned(usd(paid('2026-10-03', 99_99)))).toEqual(['first-dividend']);
+    expect(earned(usd(paid('2026-09-30', 60_00), paid('2026-10-01', 40_00)))).toEqual([
+      'first-dividend',
+    ]);
+    // A skipped payout adds nothing.
+    const skipped = makeDividend({
+      paidOn: '2026-10-05',
+      status: 'skipped',
+      amount: 0,
+      bucket: null,
+    });
+    expect(earned(usd(paid('2026-10-03', 99_99), skipped))).toEqual(['first-dividend']);
+  });
+
+  it('reads the Passive Income Pro target in the profile currency', () => {
+    // A yen has no minor unit, so 100 is 100.
+    const yen = (amount: number) =>
+      snap({
+        profile: [makeProfile({ currency: 'JPY' })],
+        dividend: [makeDividend({ paidOn: '2026-10-03', amount })],
+      });
+    expect(earned(yen(99))).toEqual(['first-dividend']);
+    expect(earned(yen(100))).toEqual(['first-dividend', 'passive-income-pro']);
+    // Without a profile there is no currency to measure in.
+    expect(earned(snap({ dividend: [makeDividend({ amount: 1_000_00 })] }))).toEqual([
+      'first-dividend',
+    ]);
+  });
+
   it('keeps a badge once in the ledger', () => {
     const entry = makeLedgerEntry({
       key: 'badge:first-expense',
@@ -254,6 +389,41 @@ describe('badgeViews', () => {
         description: 'Get through a salary freeze without going over any limit.',
         earnedAt: null,
         reward: { xp: 150, coins: 40 },
+      },
+      {
+        id: 'first-etf',
+        name: 'First ETF',
+        description: 'Add an ETF to your portfolio.',
+        earnedAt: null,
+        reward: { xp: 100, coins: 25 },
+      },
+      {
+        id: 'portfolio-pro',
+        name: 'Portfolio Pro',
+        description: 'Hold five or more investments.',
+        earnedAt: null,
+        reward: { xp: 150, coins: 40 },
+      },
+      {
+        id: 'first-dividend',
+        name: 'First Dividend',
+        description: 'Confirm your first dividend.',
+        earnedAt: null,
+        reward: { xp: 100, coins: 25 },
+      },
+      {
+        id: 'dividend-collector',
+        name: 'Dividend Collector',
+        description: 'Confirm 12 dividends.',
+        earnedAt: null,
+        reward: { xp: 150, coins: 40 },
+      },
+      {
+        id: 'passive-income-pro',
+        name: 'Passive Income Pro',
+        description: 'Collect 100 in dividends in one month.',
+        earnedAt: null,
+        reward: { xp: 200, coins: 50 },
       },
     ]);
   });

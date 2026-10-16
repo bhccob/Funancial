@@ -1,11 +1,12 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Slice } from '@/domain/charts';
 import { sliceColor } from './colors';
 import { DayBars } from './DayBars';
 import { Donut, DonutLegend } from './Donut';
 import { MonthLine } from './MonthLine';
+import { PriceLine } from './PriceLine';
 import { Ring } from './Ring';
 import { Sparkline } from './Sparkline';
 
@@ -43,6 +44,11 @@ describe('sliceColor', () => {
     expect(sliceColor('rent', 0)).toBe('var(--color-chart-1)');
     expect(sliceColor('food', 1)).toBe('var(--color-chart-2)');
     expect(sliceColor('health', 4)).toBe('var(--color-chart-5)');
+  });
+
+  it('colours keys that are not categories, such as a holding or a sector, by position too', () => {
+    expect(sliceColor('Technology', 2)).toBe('var(--color-chart-3)');
+    expect(sliceColor('a3f9-holding-id', 5)).toBe('var(--color-chart-1)');
   });
 });
 
@@ -153,6 +159,89 @@ describe('Donut', () => {
   });
 });
 
+describe('Donut centre figure', () => {
+  const figure = () => screen.getByText('$1,875');
+
+  it('is 15px on a donut under 150px, where the hole is too narrow for an exact amount', () => {
+    donut({ size: 120, thickness: 14 });
+    expect(figure()).toHaveClass('text-[15px]');
+    expect(figure()).not.toHaveClass('text-[19px]');
+  });
+
+  it('keeps 19px at 150px (Home) and 28px from 200px (Budget)', () => {
+    const { unmount } = donut({ size: 150 });
+    expect(figure()).toHaveClass('text-[19px]');
+    unmount();
+    donut({ size: 240, thickness: 22 });
+    expect(figure()).toHaveClass('text-[28px]');
+  });
+
+  it('shows a chosen slice at the same size, with its exact amount', () => {
+    donut({ size: 120, thickness: 14, selected: 0 });
+    expect(screen.getByText('$1,200.00')).toHaveClass('text-[15px]');
+  });
+});
+
+describe('Donut percentages', () => {
+  const shown = () => screen.queryAllByText(/^[0-9]+%$/).map((el) => el.textContent);
+
+  it('writes no percentages unless asked', () => {
+    const { container } = donut();
+    expect(shown()).toEqual([]);
+    expect(container.firstElementChild).not.toHaveStyle({ margin: '16px 28px' });
+  });
+
+  it('writes the share of each slice of 6% or more, rounded to a whole percent', () => {
+    donut({ showPercent: true });
+    expect(shown()).toEqual(['64%', '27%', '9%']);
+
+    // 5.9% stays off the pie; exactly 6% gets its label. The read-out of the arcs is unchanged.
+    const { unmount } = donut({
+      showPercent: true,
+      slices: [
+        { key: 'a', label: 'A', amount: 6 },
+        { key: 'b', label: 'B', amount: 5.9 },
+        { key: 'c', label: 'C', amount: 88.1 },
+      ],
+    });
+    expect(shown().slice(3)).toEqual(['6%', '88%']);
+    expect(screen.getByRole('button', { name: 'B, $0.06, 6%' })).toBeInTheDocument();
+    unmount();
+  });
+
+  it('puts a label just outside the ring at the middle of its slice, in the text colour', () => {
+    donut({ showPercent: true });
+    const label = screen.getByText('64%');
+    // Rent runs from 0 to 64% of the way round, so it points 115.2 degrees clockwise from the top.
+    const angle = 0.32 * 2 * Math.PI;
+    const radius = (150 - 18) / 2 + 18 / 2 + 4;
+    expect(parseFloat(label.style.left)).toBeCloseTo(75 + radius * Math.sin(angle), 5);
+    expect(parseFloat(label.style.top)).toBeCloseTo(75 - radius * Math.cos(angle), 5);
+    expect(label).toHaveClass('text-text');
+    expect(label.style.color).toBe('');
+    expect(label).toHaveAttribute('aria-hidden', 'true');
+    // On the right of the ring it grows rightwards, so it clears the ring.
+    expect(label.style.transform).toBe(
+      `translate(${-50 + 50 * Math.sin(angle)}%, ${-50 - 50 * Math.cos(angle)}%)`,
+    );
+  });
+
+  it('keeps room around the ring for the labels', () => {
+    const { container } = donut({ showPercent: true });
+    expect(container.firstElementChild).toHaveStyle({ margin: '16px 28px' });
+  });
+
+  it('labels a lone slice below the ring, as 100%', () => {
+    donut({ showPercent: true, slices: [{ key: 'ko', label: 'KO', amount: 500 }] });
+    expect(shown()).toEqual(['100%']);
+  });
+
+  it('writes none on an empty donut', () => {
+    donut({ showPercent: true, slices: [] });
+    expect(shown()).toEqual([]);
+  });
+});
+
 describe('DonutLegend', () => {
   it('lists each slice with its amount and marks the selected one', async () => {
     const onSelect = vi.fn();
@@ -169,6 +258,42 @@ describe('DonutLegend', () => {
     expect(onSelect).toHaveBeenLastCalledWith(1);
     await userEvent.click(rows[2]!);
     expect(onSelect).toHaveBeenLastCalledWith(null);
+  });
+});
+
+describe('DonutLegend percentages', () => {
+  it('adds each slice share after its amount, small slices included, only when asked', () => {
+    const slices = [...SLICES, { key: 'tiny', label: 'Tiny', amount: 5000 }];
+    const { rerender } = render(
+      <DonutLegend
+        slices={slices}
+        formatAmount={formatAmount}
+        selected={null}
+        onSelect={() => {}}
+      />,
+    );
+    expect(screen.getAllByRole('button').map((b) => b.textContent)).toEqual([
+      'Rent$1,200.00',
+      'Food$500.00',
+      'Other$175.00',
+      'Tiny$50.00',
+    ]);
+
+    rerender(
+      <DonutLegend
+        slices={slices}
+        formatAmount={formatAmount}
+        selected={null}
+        onSelect={() => {}}
+        showPercent
+      />,
+    );
+    expect(screen.getAllByRole('button').map((b) => b.textContent)).toEqual([
+      'Rent$1,200.0062%',
+      'Food$500.0026%',
+      'Other$175.009%',
+      'Tiny$50.003%',
+    ]);
   });
 });
 
@@ -347,5 +472,170 @@ describe('Sparkline', () => {
       expect(d).not.toContain('NaN');
       unmount();
     }
+  });
+});
+
+describe('PriceLine', () => {
+  // Prices in minor units, as the holding's page hands them over.
+  const points = [
+    { date: '2025-03-03', value: 21050 },
+    { date: '2025-03-10', value: 20000 },
+    { date: '2025-03-17', value: 22000 },
+    { date: '2025-03-24', value: 24076 },
+  ];
+  const formatDate = (d: string) => `on ${d}`;
+  const LABEL = 'From $210.50 on Mar 3, 2025 to $240.76 today';
+
+  function line(props: Partial<React.ComponentProps<typeof PriceLine>> = {}) {
+    return render(
+      <PriceLine
+        points={points}
+        paid={21050}
+        formatValue={formatAmount}
+        formatDate={formatDate}
+        label={LABEL}
+        {...props}
+      />,
+    );
+  }
+  const chart = () => screen.getByRole('img', { name: LABEL });
+  const ys = (container: HTMLElement) =>
+    [
+      ...container
+        .querySelector('path')!
+        .getAttribute('d')!
+        .matchAll(/ ([0-9.]+)/g),
+    ].map((m) => Number(m[1]));
+
+  it('reads out the summary, labels what was paid and the latest price, and marks the start', () => {
+    const { container } = line();
+    expect(chart()).toBeInTheDocument();
+    expect(screen.getByText('You bought · $210.50')).toBeInTheDocument();
+    expect(screen.getByText('$240.76')).toBeInTheDocument();
+    // The first point has a dot: a zero-length round stroke, which stays round as the chart stretches.
+    const dot = container.querySelectorAll('path')[1]!;
+    expect(dot.getAttribute('d')).toBe(`M0 ${ys(container)[0]} L0 ${ys(container)[0]}`);
+    expect(dot).toHaveAttribute('stroke-linecap', 'round');
+    // The dashed line is at the price paid, which is also the first point's price here.
+    const dashed = container.querySelector('line[stroke-dasharray]')!;
+    expect(dashed.getAttribute('y1')).toBe(String(ys(container)[0]));
+  });
+
+  it('draws the closes left to right, higher prices higher up', () => {
+    const { container } = line();
+    const d = container.querySelector('path')!.getAttribute('d')!;
+    expect(d.startsWith('M0 ')).toBe(true);
+    expect(d).toContain('L100 ');
+    const y = ys(container);
+    expect(y[3]).toBeLessThan(y[0]!);
+    expect(y[1]).toBeGreaterThan(y[0]!);
+    expect(d).not.toContain('NaN');
+  });
+
+  it('keeps the price paid in view, even when every close is above it', () => {
+    const { container } = line({ paid: 10000 });
+    const paidY = Number(container.querySelector('line[stroke-dasharray]')!.getAttribute('y1'));
+    expect(paidY).toBeGreaterThan(Math.max(...ys(container)));
+    expect(paidY).toBeLessThanOrEqual(100);
+  });
+
+  describe('without scaling to the price paid', () => {
+    const dashed = (container: HTMLElement) => container.querySelector('line[stroke-dasharray]');
+
+    it('fits the chart to the closes alone, and keeps a paid line that falls among them', () => {
+      const { container } = line({ scaleToPaid: false, paid: 22000 });
+      // The lowest close is on the bottom of the drawing area and the highest on the top.
+      expect(Math.max(...ys(container))).toBe(88);
+      expect(Math.min(...ys(container))).toBe(18);
+      expect(dashed(container)).toBeInTheDocument();
+      expect(screen.getByText('You bought · $220.00')).toBeInTheDocument();
+    });
+
+    it('draws no line for a price paid below the closes, and says so at the bottom edge', () => {
+      const { container } = line({ scaleToPaid: false, paid: 10000 });
+      expect(Math.max(...ys(container))).toBe(88);
+      expect(dashed(container)).not.toBeInTheDocument();
+      const edge = screen.getByText('You bought · $100.00 ↓');
+      expect(edge).toHaveClass('bottom-0');
+      expect(edge.style.top).toBe('');
+    });
+
+    it('draws no line for a price paid above the closes, and says so at the top edge', () => {
+      const { container } = line({ scaleToPaid: false, paid: 30000 });
+      expect(Math.min(...ys(container))).toBe(18);
+      expect(dashed(container)).not.toBeInTheDocument();
+      expect(screen.getByText('You bought · $300.00 ↑')).toHaveClass('top-0');
+    });
+
+    it('keeps a price paid at the highest close on the line', () => {
+      const { container } = line({ scaleToPaid: false, paid: 24076 });
+      expect(dashed(container)).toBeInTheDocument();
+      expect(screen.getByText('You bought · $240.76')).toBeInTheDocument();
+    });
+
+    it('draws a flat series without NaN, with the paid line at the edge it differs on', () => {
+      const { container } = line({
+        scaleToPaid: false,
+        points: points.map((p) => ({ ...p, value: 100 })),
+        paid: 50,
+      });
+      expect(container.innerHTML).not.toContain('NaN');
+      expect(screen.getByText('You bought · $0.50 ↓')).toBeInTheDocument();
+    });
+  });
+
+  it('draws a flat line without NaN when nothing moved', () => {
+    const { container } = line({
+      points: points.map((p) => ({ ...p, value: 100 })),
+      paid: 100,
+    });
+    expect(container.innerHTML).not.toContain('NaN');
+    expect(new Set(ys(container)).size).toBe(1);
+  });
+
+  describe('reading a price', () => {
+    beforeEach(() => {
+      vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
+        left: 10,
+        width: 300,
+        top: 0,
+        height: 160,
+        right: 310,
+        bottom: 160,
+        x: 10,
+        y: 0,
+        toJSON: () => ({}),
+      });
+    });
+    afterEach(() => vi.restoreAllMocks());
+
+    it('shows the date and price under the pointer, and drops them when a mouse leaves', () => {
+      line();
+      expect(screen.queryByText('on 2025-03-10 · $200.00')).not.toBeInTheDocument();
+      // 110px in of 300 is a third of the way: the second of four closes.
+      fireEvent.pointerMove(chart(), { clientX: 110, pointerType: 'mouse' });
+      expect(screen.getByText('on 2025-03-10 · $200.00')).toBeInTheDocument();
+      fireEvent.pointerMove(chart(), { clientX: 5000, pointerType: 'mouse' });
+      expect(screen.getByText('on 2025-03-24 · $240.76')).toBeInTheDocument();
+      fireEvent.pointerLeave(chart(), { pointerType: 'mouse' });
+      expect(screen.queryByText(/^on 2025/)).not.toBeInTheDocument();
+    });
+
+    it('keeps the price a finger touched after it lifts', () => {
+      line();
+      fireEvent.pointerDown(chart(), { clientX: 10, pointerType: 'touch' });
+      fireEvent.pointerLeave(chart(), { pointerType: 'touch' });
+      expect(screen.getByText('on 2025-03-03 · $210.50')).toBeInTheDocument();
+    });
+
+    it('can be walked a close at a time from the keyboard', () => {
+      line();
+      const slider = screen.getByRole('slider', { name: 'Price on a day' });
+      expect(slider).toHaveAttribute('max', '3');
+      expect(slider).toHaveAttribute('aria-valuetext', 'on 2025-03-24: $240.76');
+      fireEvent.change(slider, { target: { value: '1' } });
+      expect(slider).toHaveAttribute('aria-valuetext', 'on 2025-03-10: $200.00');
+      expect(screen.getByText('on 2025-03-10 · $200.00')).toBeInTheDocument();
+    });
   });
 });

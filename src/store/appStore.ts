@@ -33,6 +33,7 @@ import {
   emptySnapshot,
   type DataSnapshot,
   type EntityOf,
+  type RecordKey,
   type TableName,
   type TableRecord,
 } from '@/domain/snapshot';
@@ -101,8 +102,8 @@ export interface AppState {
   /** `changed`: the copy is gone (the enrolment changed), so biometric unlock turns off; the PIN still works. */
   unlockWithBiometric(): Promise<'ok' | 'cancelled' | 'changed'>;
   put<T extends TableName>(table: T, record: EntityOf<T>): Promise<void>;
-  /** Several records in one transaction (all or nothing). */
-  putMany(items: TableRecord[]): Promise<void>;
+  /** Several records, and the removal of the `remove` ones, in one transaction (all or nothing). */
+  putMany(items: TableRecord[], remove?: RecordKey[]): Promise<void>;
   /** Reload data from storage, e.g. after another tab wrote. */
   refresh(): Promise<void>;
   /** Refresh `today` and create what has come due (subscription charges, expected salary). */
@@ -214,8 +215,8 @@ export function createAppStore(deps: AppDeps): StoreApi<AppState> {
     }
 
     /** Saves records and mirrors them into `data`. The caller tells other tabs, once, when it is done. */
-    async function writeRecords(items: TableRecord[]) {
-      await unlocked().repo.putMany(items);
+    async function writeRecords(items: TableRecord[], remove: RecordKey[] = []) {
+      await unlocked().repo.putMany(items, remove);
       const data = get().data;
       const tables = { ...data.tables } as Record<TableName, Array<{ id: string }>>;
       for (const { table, record } of items) {
@@ -224,6 +225,7 @@ export function createAppStore(deps: AppDeps): StoreApi<AppState> {
           ? rows.map((r) => (r.id === record.id ? record : r))
           : [...rows, record];
       }
+      for (const { table, id } of remove) tables[table] = tables[table].filter((r) => r.id !== id);
       set({ data: { ...data, tables: tables as DataSnapshot['tables'] } });
     }
 
@@ -534,9 +536,9 @@ export function createAppStore(deps: AppDeps): StoreApi<AppState> {
         await get().putMany([{ table, record } as TableRecord]);
       },
 
-      async putMany(items) {
-        if (items.length === 0) return;
-        await writeRecords(items);
+      async putMany(items, remove = []) {
+        if (items.length === 0 && remove.length === 0) return;
+        await writeRecords(items, remove);
         await settle();
         announceDataChange();
       },

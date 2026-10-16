@@ -1,5 +1,5 @@
 import { addDays, toLocalDate, type LocalDate } from '../dates';
-import type { Category, Expense } from '../entities';
+import type { Category, Dividend, Expense } from '../entities';
 import { periodRange } from '../periods';
 import type { DataSnapshot } from '../snapshot';
 
@@ -17,17 +17,23 @@ export function isLoggedExpense(e: Expense): boolean {
   return e.subscriptionId === null || e.recurrence !== null;
 }
 
+/** The dividends the person confirmed, skipped ones left out. */
+export function confirmedDividends(data: DataSnapshot): Dividend[] {
+  return data.tables.dividend.filter((d) => d.status === 'confirmed');
+}
+
 /** Something the person entered by hand, and the local day they entered it. */
 export type LoggedEntry = {
-  table: 'expense' | 'income';
+  table: 'expense' | 'income' | 'dividend';
   id: string;
   createdAt: string;
   day: LocalDate;
 };
 
 /**
- * What the person logged: their expenses (not subscription renewals) and their extra income (not
- * salary), oldest first. Each sits on the day it was created, whatever date it carries.
+ * What the person logged: their expenses (not subscription renewals), their extra income (not
+ * salary) and the dividends they confirmed, oldest first. Each sits on the day it was created,
+ * whatever date it carries.
  */
 export function loggedEntries(data: DataSnapshot): LoggedEntry[] {
   const entries: LoggedEntry[] = [];
@@ -50,6 +56,14 @@ export function loggedEntries(data: DataSnapshot): LoggedEntry[] {
         day: localDay(i.createdAt),
       });
     }
+  }
+  for (const d of confirmedDividends(data)) {
+    entries.push({
+      table: 'dividend',
+      id: d.id,
+      createdAt: d.createdAt,
+      day: localDay(d.createdAt),
+    });
   }
   return entries.sort(
     (a, b) =>

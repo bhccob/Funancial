@@ -18,6 +18,9 @@ const v1Sub = {
   note: '',
 };
 
+// Migrating a settings record all the way up also runs step 6, which adds Invest's currency and rate.
+const invest = { investCurrency: null, investFx: null };
+
 it('has a step up to the current schema version', () => {
   expect(LATEST_VERSION).toBe(CURRENT_SCHEMA_VERSION);
 });
@@ -76,17 +79,21 @@ describe('v3 settings', () => {
   };
 
   const cosmetics = { theme: 'theme-violet', avatar: 'avatar-sprout', frame: 'frame-none' };
+  // Migrating all the way up also runs step 5, which adds the dividend reminder.
+  const upgraded = { ...reminders, dividends: true };
 
   it('v3 adds reminder settings to old settings records', () => {
     expect(migrateRecord('settings', v2Settings, 2)).toEqual({
       ...v2Settings,
-      reminders,
+      reminders: upgraded,
       cosmetics,
+      ...invest,
     });
     expect(migrateRecord('settings', v2Settings, 1)).toEqual({
       ...v2Settings,
-      reminders,
+      reminders: upgraded,
       cosmetics,
+      ...invest,
     });
   });
 
@@ -94,8 +101,9 @@ describe('v3 settings', () => {
     const chosen = { ...reminders, enabled: true, dailyTime: '07:30' };
     expect(migrateRecord('settings', { ...v2Settings, reminders: chosen }, 2)).toEqual({
       ...v2Settings,
-      reminders: chosen,
+      reminders: { ...chosen, dividends: true },
       cosmetics,
+      ...invest,
     });
   });
 
@@ -132,7 +140,9 @@ describe('v4 game data', () => {
   it('gives v3 settings the default cosmetics and keeps everything else', () => {
     expect(migrateRecord('settings', v3Settings, 3)).toEqual({
       ...v3Settings,
+      reminders: { ...v3Settings.reminders, dividends: true },
       cosmetics: defaultCosmetics,
+      ...invest,
     });
   });
 
@@ -140,7 +150,9 @@ describe('v4 game data', () => {
     const chosen = { theme: 'theme-forest', avatar: 'avatar-fox', frame: 'frame-gold' };
     expect(migrateRecord('settings', { ...v3Settings, cosmetics: chosen }, 3)).toEqual({
       ...v3Settings,
+      reminders: { ...v3Settings.reminders, dividends: true },
       cosmetics: chosen,
+      ...invest,
     });
   });
 
@@ -165,5 +177,153 @@ describe('v4 game data', () => {
     expect(migrateRecord('checkIn', entry, 3)).toEqual(entry);
     expect(migrateRecord('challenge', entry, 3)).toEqual(entry);
     expect(migrateRecord('streakFreeze', entry, 3)).toEqual(entry);
+  });
+});
+
+describe('v5 investments', () => {
+  const v4Settings = {
+    id: 'settings',
+    createdAt: '2026-10-01T09:00:00.000Z',
+    updatedAt: '2026-10-01T09:00:00.000Z',
+    weekStartsOn: 1,
+    warningTone: 'motivational',
+    autoLockMinutes: 5,
+    lastBackupAt: null,
+    reminders: {
+      enabled: true,
+      dailyLog: true,
+      dailyTime: '07:30',
+      bills: true,
+      freeze: true,
+      reviews: true,
+      backup: true,
+      prompted: true,
+    },
+    cosmetics: { theme: 'theme-forest', avatar: 'avatar-fox', frame: 'frame-gold' },
+  };
+
+  it('turns the dividend reminder on in v4 settings and keeps everything else', () => {
+    expect(migrateRecord('settings', v4Settings, 4)).toEqual({
+      ...v4Settings,
+      reminders: { ...v4Settings.reminders, dividends: true },
+      ...invest,
+    });
+  });
+
+  it('keeps a dividend reminder choice that is already there', () => {
+    const chosen = { ...v4Settings, reminders: { ...v4Settings.reminders, dividends: false } };
+    expect(migrateRecord('settings', chosen, 4)).toEqual({ ...chosen, ...invest });
+  });
+
+  it('gives every settings record its own reminders object', () => {
+    const a = migrateRecord('settings', v4Settings, 4) as { reminders: object };
+    const b = migrateRecord('settings', v4Settings, 4) as { reminders: object };
+    expect(a.reminders).not.toBe(b.reminders);
+    expect(a.reminders).not.toBe(v4Settings.reminders);
+  });
+
+  it('leaves the new holding and dividend tables alone', () => {
+    const row = { id: 'h1', symbol: 'KO' };
+    expect(migrateRecord('holding', row, 4)).toEqual(row);
+    expect(migrateRecord('dividend', row, 4)).toEqual(row);
+  });
+});
+
+describe('v6 Invest currency', () => {
+  const v5Settings = {
+    id: 'settings',
+    createdAt: '2026-10-01T09:00:00.000Z',
+    updatedAt: '2026-10-01T09:00:00.000Z',
+    weekStartsOn: 1,
+    warningTone: 'motivational',
+    autoLockMinutes: 5,
+    lastBackupAt: null,
+    reminders: {
+      enabled: true,
+      dailyLog: true,
+      dailyTime: '07:30',
+      bills: true,
+      freeze: true,
+      reviews: true,
+      backup: true,
+      dividends: false,
+      prompted: true,
+    },
+    cosmetics: { theme: 'theme-forest', avatar: 'avatar-fox', frame: 'frame-gold' },
+  };
+
+  it('adds the currency and rate as null to v5 settings and keeps everything else', () => {
+    expect(migrateRecord('settings', v5Settings, 5)).toEqual({ ...v5Settings, ...invest });
+  });
+
+  it('keeps a currency and rate that are already there', () => {
+    const chosen = {
+      ...v5Settings,
+      investCurrency: 'USD',
+      investFx: { currency: 'USD', rate: 1.1, asOf: '2026-10-14T09:00:00.000Z' },
+    };
+    expect(migrateRecord('settings', chosen, 5)).toEqual(chosen);
+  });
+
+  it('leaves the other tables alone', () => {
+    const row = { id: 'h1', symbol: 'KO' };
+    expect(migrateRecord('holding', row, 5)).toEqual(row);
+    expect(migrateRecord('profile', row, 5)).toEqual(row);
+  });
+});
+
+describe('v7 sales', () => {
+  // The new table has no old rows to upgrade, so step 7 touches nothing.
+  const v6Settings = {
+    id: 'settings',
+    createdAt: '2026-10-01T09:00:00.000Z',
+    updatedAt: '2026-10-01T09:00:00.000Z',
+    weekStartsOn: 1,
+    warningTone: 'motivational',
+    autoLockMinutes: 5,
+    lastBackupAt: null,
+    reminders: {
+      enabled: true,
+      dailyLog: true,
+      dailyTime: '07:30',
+      bills: true,
+      freeze: true,
+      reviews: true,
+      backup: true,
+      dividends: false,
+      prompted: true,
+    },
+    cosmetics: { theme: 'theme-forest', avatar: 'avatar-fox', frame: 'frame-gold' },
+    investCurrency: 'USD',
+    investFx: { currency: 'USD', rate: 1.1, asOf: '2026-10-14T09:00:00.000Z' },
+  };
+
+  it('leaves every v6 record as it was', () => {
+    const row = { id: 'h1', symbol: 'KO' };
+    for (const table of ['holding', 'dividend', 'profile', 'transaction'] as const) {
+      expect(migrateRecord(table, row, 6)).toEqual(row);
+    }
+    expect(migrateRecord('settings', v6Settings, 6)).toEqual(v6Settings);
+  });
+
+  it('runs the holding steps on the holding a sale keeps to restore', () => {
+    // A later holding step, as one would be added.
+    const steps = { [LATEST_VERSION]: { holding: (r: object) => ({ ...r, upgraded: true }) } };
+    const restore = { id: 'h1', symbol: 'KO' };
+    const sale = { id: 's1', symbol: 'KO', restore };
+    expect(migrateRecord('sale', sale, LATEST_VERSION - 1, steps)).toEqual({
+      ...sale,
+      restore: { ...restore, upgraded: true },
+    });
+    // Nothing to restore, or a sale already past the step: nothing changes.
+    const partial = { ...sale, restore: null };
+    expect(migrateRecord('sale', partial, LATEST_VERSION - 1, steps)).toEqual(partial);
+    expect(migrateRecord('sale', sale, LATEST_VERSION, steps)).toEqual(sale);
+  });
+
+  it('leaves a sale alone', () => {
+    const sale = { id: 's1', symbol: 'KO', restore: null };
+    expect(migrateRecord('sale', sale, 1)).toEqual(sale);
+    expect(migrateRecord('sale', sale, 6)).toEqual(sale);
   });
 });

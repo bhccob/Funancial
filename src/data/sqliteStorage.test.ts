@@ -162,6 +162,22 @@ describe('record store', () => {
     expect(await backend.records.all()).toStrictEqual([row('b', 2)]);
   });
 
+  it('removes rows in the same transaction as the write', async () => {
+    const { driver, backend } = await openReal();
+    await backend.records.write([row('a', 1), row('b', 2)], { replace: false });
+    const remove = [{ table: 'expense' as const, id: 'a' }];
+
+    // The removal of a applies, then the insert of c fails: both roll back.
+    driver.failOn('INSERT', 0);
+    await expect(backend.records.write([row('c', 3)], { replace: false, remove })).rejects.toThrow(
+      /INSERT/,
+    );
+    expect((await backend.records.all()).map((r) => r.id)).toEqual(['a', 'b']);
+
+    await backend.records.write([row('c', 3)], { replace: false, remove });
+    expect((await backend.records.all()).map((r) => r.id)).toEqual(['b', 'c']);
+  });
+
   it('write with replace drops other rows and sets dataVersion atomically', async () => {
     const { backend } = await openReal();
     await backend.records.write([row('a', 1), row('b', 2), row('c', 3, 'income')], {

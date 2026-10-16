@@ -23,6 +23,7 @@
     "vitest.config.ts",
     "playwright.config.ts",
     "capacitor.config.ts",
+    "api",
     "tests/e2e",
     "tests/unit"
   ]

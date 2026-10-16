@@ -175,6 +175,7 @@ describe('QuestList', () => {
       'week-checkin': 'calendar-check',
       'month-salary': 'wallet',
       'month-audit': 'list-checks',
+      'month-dividends': 'coins',
       'month-backup': 'hard-drive-download',
     };
     const quests = (Object.keys(icons) as QuestId[]).map((id) =>
@@ -183,7 +184,7 @@ describe('QuestList', () => {
     renderIn(<QuestList quests={quests} />);
 
     const rows = screen.getAllByRole('listitem');
-    expect(rows).toHaveLength(6);
+    expect(rows).toHaveLength(7);
     for (const [id, icon] of Object.entries(icons)) {
       const row = screen.getByText(`Title of ${id}`).closest('li')!;
       expect(row.querySelector(`svg.lucide-${icon}`)).toBeInTheDocument();

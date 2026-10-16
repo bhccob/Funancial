@@ -45,6 +45,7 @@ const SCHEMA = [
 const PUT_RECORD =
   'INSERT OR REPLACE INTO records (tbl, id, updated_at, iv, ciphertext) VALUES (?, ?, ?, ?, ?)';
 const PUT_META = 'INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)';
+const DELETE_RECORD = 'DELETE FROM records WHERE tbl = ? AND id = ?';
 
 type RecordColumns = {
   tbl: string;
@@ -129,9 +130,12 @@ function sqliteRecordStore(db: SqlDb): RecordStore {
       }));
     },
 
-    async write(rows, { replace, dataVersion }) {
+    async write(rows, { replace, dataVersion, remove = [] }) {
       const statements: Array<{ sql: string; values?: unknown[] }> = [];
       if (replace) statements.push({ sql: 'DELETE FROM records' });
+      for (const { table, id } of remove) {
+        statements.push({ sql: DELETE_RECORD, values: [table, id] });
+      }
       for (const row of rows) {
         statements.push({
           sql: PUT_RECORD,
@@ -154,7 +158,7 @@ function sqliteRecordStore(db: SqlDb): RecordStore {
     },
 
     async remove(table, id) {
-      await db.run('DELETE FROM records WHERE tbl = ? AND id = ?', [table, id]);
+      await db.run(DELETE_RECORD, [table, id]);
     },
   };
 }

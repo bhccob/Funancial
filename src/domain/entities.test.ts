@@ -4,12 +4,15 @@ import {
   makeChallenge,
   makeCheckIn,
   makeDebt,
+  makeDividend,
   makeExpense,
   makeGoal,
+  makeHolding,
   makeIncome,
   makeLedgerEntry,
   makeLimit,
   makeProfile,
+  makeSale,
   makeSettings,
   makeStreakFreeze,
   makeSubscription,
@@ -22,12 +25,15 @@ import {
   CheckInSchema,
   DebtSchema,
   defaultSettings,
+  DividendSchema,
   ExpenseSchema,
   GoalSchema,
+  HoldingSchema,
   IncomeSchema,
   LedgerEntrySchema,
   ProfileSchema,
   SalaryFreezeSchema,
+  SaleSchema,
   SettingsSchema,
   StreakFreezeSchema,
   SubscriptionSchema,
@@ -63,6 +69,9 @@ describe('fixtures', () => {
     expect(ok(CheckInSchema, makeCheckIn())).toBe(true);
     expect(ok(ChallengeSchema, makeChallenge())).toBe(true);
     expect(ok(StreakFreezeSchema, makeStreakFreeze())).toBe(true);
+    expect(ok(HoldingSchema, makeHolding())).toBe(true);
+    expect(ok(DividendSchema, makeDividend())).toBe(true);
+    expect(ok(SaleSchema, makeSale())).toBe(true);
   });
 
   it('localIso builds a timestamp that falls on the given local day, at noon by default', () => {
@@ -226,6 +235,124 @@ describe('Transaction', () => {
       ok(TransactionSchema, makeTransaction({ ...payment, from: null, debtId: 'card-1' })),
     ).toBe(false);
   });
+  it('has investments that leave a bucket, and need a positive amount and a source', () => {
+    const investment = { type: 'investment' as const, from: 'cash' as const, to: null };
+    expect(ok(TransactionSchema, makeTransaction(investment))).toBe(true);
+    expect(ok(TransactionSchema, makeTransaction({ ...investment, from: null }))).toBe(false);
+    expect(ok(TransactionSchema, makeTransaction({ ...investment, amount: 0 }))).toBe(false);
+    expect(ok(TransactionSchema, makeTransaction({ ...investment, amount: -5_00 }))).toBe(false);
+  });
+});
+
+describe('Holding', () => {
+  it('needs an upper-case symbol and a 3-letter upper-case currency', () => {
+    expect(ok(HoldingSchema, makeHolding({ symbol: 'VWRL.L', currency: 'GBP' }))).toBe(true);
+    expect(ok(HoldingSchema, makeHolding({ symbol: 'ko' }))).toBe(false);
+    expect(ok(HoldingSchema, makeHolding({ symbol: '' }))).toBe(false);
+    expect(ok(HoldingSchema, makeHolding({ currency: 'usd' }))).toBe(false);
+    expect(ok(HoldingSchema, makeHolding({ currency: 'US' }))).toBe(false);
+  });
+  it('has a positive number of shares, fractions allowed', () => {
+    expect(ok(HoldingSchema, makeHolding({ shares: 0.1234 }))).toBe(true);
+    expect(ok(HoldingSchema, makeHolding({ shares: 0 }))).toBe(false);
+    expect(ok(HoldingSchema, makeHolding({ shares: -1 }))).toBe(false);
+    expect(ok(HoldingSchema, makeHolding({ shares: Infinity }))).toBe(false);
+  });
+  it('keeps the cost in whole minor units, never negative', () => {
+    expect(ok(HoldingSchema, makeHolding({ costBasis: 0 }))).toBe(true);
+    expect(ok(HoldingSchema, makeHolding({ costBasis: 12.5 }))).toBe(false);
+    expect(ok(HoldingSchema, makeHolding({ costBasis: -1 }))).toBe(false);
+  });
+  it('keeps the withholding between 0 and 100 percent', () => {
+    expect(ok(HoldingSchema, makeHolding({ withholdingPct: 0 }))).toBe(true);
+    expect(ok(HoldingSchema, makeHolding({ withholdingPct: 100 }))).toBe(true);
+    expect(ok(HoldingSchema, makeHolding({ withholdingPct: -1 }))).toBe(false);
+    expect(ok(HoldingSchema, makeHolding({ withholdingPct: 100.5 }))).toBe(false);
+  });
+  it('checks the purchase date and the type', () => {
+    expect(ok(HoldingSchema, makeHolding({ purchaseDate: '2026-02-30' }))).toBe(false);
+    expect(ok(HoldingSchema, makeHolding({ type: 'crypto' as never }))).toBe(false);
+  });
+  it('takes a quote and dividend info, or none', () => {
+    const quote = {
+      price: 60.12,
+      previousClose: null,
+      fxRate: 0.92,
+      asOf: '2026-10-16T10:00:00.000Z',
+    };
+    const dividendInfo = {
+      history: [{ date: '2026-07-15', amount: 0.485 }],
+      nextExDate: '2026-10-15',
+      nextPayDate: null,
+      nextAmount: null,
+      fetchedAt: '2026-10-16T10:00:00.000Z',
+    };
+    expect(
+      ok(
+        HoldingSchema,
+        makeHolding({ quote, dividendInfo, manualPrice: 61, checkedAt: quote.asOf }),
+      ),
+    ).toBe(true);
+    expect(ok(HoldingSchema, makeHolding({ quote: { ...quote, asOf: 'yesterday' } }))).toBe(false);
+    expect(
+      ok(
+        HoldingSchema,
+        makeHolding({ dividendInfo: { ...dividendInfo, nextExDate: '2026-13-01' } }),
+      ),
+    ).toBe(false);
+  });
+});
+
+describe('Dividend', () => {
+  it('records a confirmed payout into a bucket', () => {
+    for (const bucket of ['cash', 'savings', 'passive', 'reinvest'] as const) {
+      expect(ok(DividendSchema, makeDividend({ bucket }))).toBe(true);
+    }
+    expect(ok(DividendSchema, makeDividend({ bucket: null }))).toBe(false);
+    expect(ok(DividendSchema, makeDividend({ amount: 11.5 }))).toBe(false);
+    expect(ok(DividendSchema, makeDividend({ amount: -1 }))).toBe(false);
+  });
+  it('records a skipped payout as nothing received and nowhere', () => {
+    const skipped = { status: 'skipped' as const, amount: 0, bucket: null, sharesAdded: null };
+    expect(ok(DividendSchema, makeDividend(skipped))).toBe(true);
+    expect(ok(DividendSchema, makeDividend({ ...skipped, amount: 5_00 }))).toBe(false);
+    expect(ok(DividendSchema, makeDividend({ ...skipped, bucket: 'cash' }))).toBe(false);
+    expect(ok(DividendSchema, makeDividend({ ...skipped, sharesAdded: 0.2 }))).toBe(false);
+  });
+  it('can add shares when reinvested', () => {
+    expect(ok(DividendSchema, makeDividend({ bucket: 'reinvest', sharesAdded: 0.0832 }))).toBe(
+      true,
+    );
+  });
+});
+
+describe('Sale', () => {
+  it('sells a positive number of shares for positive proceeds, in whole minor units', () => {
+    expect(ok(SaleSchema, makeSale({ shares: 0.25 }))).toBe(true);
+    expect(ok(SaleSchema, makeSale({ shares: 0 }))).toBe(false);
+    expect(ok(SaleSchema, makeSale({ shares: -1 }))).toBe(false);
+    expect(ok(SaleSchema, makeSale({ proceeds: 0 }))).toBe(false);
+    expect(ok(SaleSchema, makeSale({ proceeds: 10.5 }))).toBe(false);
+  });
+  it('carried a cost of nothing or more, in whole minor units', () => {
+    expect(ok(SaleSchema, makeSale({ cost: 0 }))).toBe(true);
+    expect(ok(SaleSchema, makeSale({ cost: -1 }))).toBe(false);
+    expect(ok(SaleSchema, makeSale({ cost: 1.5 }))).toBe(false);
+  });
+  it('checks the date, the destination and the type', () => {
+    expect(ok(SaleSchema, makeSale({ soldOn: '2026-02-30' }))).toBe(false);
+    expect(ok(SaleSchema, makeSale({ to: 'savings' }))).toBe(true);
+    expect(ok(SaleSchema, makeSale({ to: 'passive' as never }))).toBe(false);
+    expect(ok(SaleSchema, makeSale({ type: 'crypto' as never }))).toBe(false);
+  });
+  it('holds the holding as it was when the last shares were sold, or nothing', () => {
+    expect(ok(SaleSchema, makeSale({ restore: makeHolding() }))).toBe(true);
+    expect(ok(SaleSchema, makeSale({ restore: null }))).toBe(true);
+    expect(ok(SaleSchema, makeSale({ restore: makeHolding({ shares: 0 }) }))).toBe(false);
+    const { restore, ...without } = makeSale();
+    expect(restore).toBeNull();
+    expect(ok(SaleSchema, without)).toBe(false);
+  });
 });
 
 describe('Profile and Settings', () => {
@@ -240,6 +367,26 @@ describe('Profile and Settings', () => {
   });
   it('only allows the offered auto-lock choices', () => {
     expect(ok(SettingsSchema, { ...makeSettings(), autoLockMinutes: 2 })).toBe(false);
+  });
+  it('takes a 3-letter currency for Invest, or none, with its positive rate', () => {
+    const fx = { currency: 'USD', rate: 1.1, asOf: '2026-10-14T10:00:00.000Z' };
+    expect(ok(SettingsSchema, makeSettings({ investCurrency: 'USD', investFx: fx }))).toBe(true);
+    for (const investCurrency of ['usd', 'US', 'USDX', '']) {
+      expect(ok(SettingsSchema, makeSettings({ investCurrency })), investCurrency).toBe(false);
+    }
+    for (const investFx of [
+      { ...fx, rate: 0 },
+      { ...fx, rate: -1 },
+      { ...fx, currency: 'us' },
+      { ...fx, asOf: 'yesterday' },
+    ]) {
+      expect(ok(SettingsSchema, makeSettings({ investFx }))).toBe(false);
+    }
+    for (const key of ['investCurrency', 'investFx']) {
+      const without: Record<string, unknown> = { ...makeSettings() };
+      delete without[key];
+      expect(ok(SettingsSchema, without), key).toBe(false);
+    }
   });
   it('has the documented defaults', () => {
     const s = defaultSettings('2026-10-14T10:00:00.000Z');
@@ -259,9 +406,12 @@ describe('Profile and Settings', () => {
         freeze: true,
         reviews: true,
         backup: true,
+        dividends: true,
         prompted: false,
       },
       cosmetics: { theme: 'theme-violet', avatar: 'avatar-sprout', frame: 'frame-none' },
+      investCurrency: null,
+      investFx: null,
     });
     expect(ok(SettingsSchema, s)).toBe(true);
   });

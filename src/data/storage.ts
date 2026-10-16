@@ -1,4 +1,4 @@
-import type { TableName } from '@/domain/snapshot';
+import type { RecordKey, TableName } from '@/domain/snapshot';
 import type { Bytes } from './crypto';
 import type { Namespace } from './db';
 import type { MetaStore } from './meta';
@@ -18,10 +18,13 @@ export type RecordRow = {
 export interface RecordStore {
   all(): Promise<RecordRow[]>;
   /**
-   * Insert or replace rows in one transaction. `replace` drops every other row first;
-   * `dataVersion` is written to meta in the same transaction.
+   * Insert or replace rows in one transaction. `replace` drops every other row first; `remove`
+   * deletes those rows and `dataVersion` is written to meta, in the same transaction.
    */
-  write(rows: RecordRow[], opts: { replace: boolean; dataVersion?: number }): Promise<void>;
+  write(
+    rows: RecordRow[],
+    opts: { replace: boolean; dataVersion?: number; remove?: RecordKey[] },
+  ): Promise<void>;
   remove(table: TableName, id: string): Promise<void>;
 }
 

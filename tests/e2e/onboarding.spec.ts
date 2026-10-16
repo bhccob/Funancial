@@ -22,6 +22,23 @@ test('a new user sets up money, salary and a PIN, then lands on Home', async ({ 
   await expect(page.getByRole('heading', { level: 1, name: 'Home' })).toBeVisible();
 });
 
+test.describe('in the Netherlands', () => {
+  // The time zone is the location signal, even on an English (US) phone.
+  test.use({ timezoneId: 'Europe/Amsterdam' });
+
+  test("setup starts on the phone's currency, and the person can pick another", async ({
+    page,
+  }) => {
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Start with my real data' }).click();
+    await page.getByRole('checkbox', { name: 'I understand' }).check();
+    await page.getByRole('button', { name: 'Next' }).click();
+    await expect(page.getByLabel('Currency')).toHaveValue('EUR');
+    await page.getByLabel('Currency').selectOption('GBP');
+    await expect(page.getByLabel('Currency')).toHaveValue('GBP');
+  });
+});
+
 test('onboarding survives a reload part-way through', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: 'Start with my real data' }).click();

@@ -34,6 +34,9 @@ export function NetWorthSection({ data, view, today }: NetWorthSectionProps) {
   const parts = [
     { label: 'Cash', amount: view.buckets.cash, color: 'var(--color-chart-1)' },
     { label: 'Savings', amount: view.buckets.savings, color: 'var(--color-chart-3)' },
+    ...(view.investments > 0
+      ? [{ label: 'Investments', amount: view.investments, color: 'var(--color-chart-2)' }]
+      : []),
     { label: 'Debts', amount: view.debtTotal, color: 'var(--color-danger)' },
   ];
 

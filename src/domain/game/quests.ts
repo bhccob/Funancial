@@ -1,5 +1,6 @@
 import { addDays, type LocalDate } from '../dates';
-import { monthKey, weekRange } from '../periods';
+import { expectedPayouts, settledPayouts } from '../dividends';
+import { endOfMonth, monthKey, weekRange } from '../periods';
 import type { DataSnapshot } from '../snapshot';
 import { anyOver, createSpendIndex, isLoggedExpense, loggedEntries, localDay } from './activity';
 import { QUEST_REWARDS } from './rules';
@@ -27,6 +28,7 @@ export const QUEST_TITLES: Record<QuestId, string> = {
   'week-checkin': 'Do your weekly check-in',
   'month-salary': "Reconcile this month's salary",
   'month-audit': 'Audit your subscriptions',
+  'month-dividends': "Confirm this month's dividends",
   'month-backup': 'Back up your data',
 };
 
@@ -123,6 +125,26 @@ function monthAudit(data: DataSnapshot, month: string): QuestView {
   });
 }
 
+/**
+ * Handled out of due this month: this month's payouts that a record settles (confirmed or skipped),
+ * out of those and the payouts that came due this month and still wait. It exists once there is one
+ * of either.
+ */
+function monthDividends(data: DataSnapshot, ctx: GameContext, month: string): QuestView | null {
+  const currency = data.tables.profile[0]?.currency ?? 'USD';
+  const start = `${month}-01`;
+  const waiting = expectedPayouts(data, currency, start, ctx.today, ctx.today).length;
+  const handled = settledPayouts(data, currency, start, endOfMonth(start), ctx.today).length;
+  const target = waiting + handled;
+  if (target === 0) return null;
+  return view('month-dividends', 'monthly', month, {
+    done: waiting === 0,
+    current: handled,
+    target,
+    detail: `${handled} of ${target} confirmed or skipped`,
+  });
+}
+
 function monthBackup(data: DataSnapshot, month: string): QuestView {
   const lastBackupAt = data.tables.settings[0]?.lastBackupAt ?? null;
   const done = lastBackupAt !== null && monthKey(localDay(lastBackupAt)) === month;
@@ -146,6 +168,8 @@ export function currentQuests(data: DataSnapshot, ctx: GameContext): QuestView[]
   if (data.tables.subscription.some((s) => s.status === 'active')) {
     quests.push(monthAudit(data, month));
   }
+  const dividends = monthDividends(data, ctx, month);
+  if (dividends) quests.push(dividends);
   if (ctx.canBackUp) quests.push(monthBackup(data, month));
   return quests;
 }

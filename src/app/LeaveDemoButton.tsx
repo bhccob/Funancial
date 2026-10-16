@@ -1,19 +1,27 @@
 import { useState } from 'react';
-import { Button } from '@/components/ui/Button';
+import { Button, type ButtonVariant } from '@/components/ui/Button';
 import { Dialog } from '@/components/ui/Dialog';
 import { useAction } from '@/lib/useAction';
 import { useApp } from '@/store/AppStoreProvider';
 
-/** "Start with my real data" — confirms, then deletes the demo data and returns to real data. */
-export function LeaveDemoButton({ size = 'sm' }: { size?: 'sm' | 'md' }) {
+/** Confirms, then deletes the demo data and returns to real data. The label fits where it stands. */
+export function LeaveDemoButton({
+  size = 'sm',
+  variant = 'secondary',
+  label = 'Start with my real data',
+}: {
+  size?: 'sm' | 'md';
+  variant?: ButtonVariant;
+  label?: string;
+}) {
   const exitDemo = useApp((s) => s.exitDemo);
   const run = useAction();
   const [confirming, setConfirming] = useState(false);
 
   return (
     <>
-      <Button size={size} variant="secondary" onClick={() => setConfirming(true)}>
-        Start with my real data
+      <Button size={size} variant={variant} onClick={() => setConfirming(true)}>
+        {label}
       </Button>
       <Dialog
         open={confirming}

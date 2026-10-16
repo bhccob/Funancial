@@ -5,6 +5,8 @@ import { DashboardScreen } from '@/features/dashboard/DashboardScreen';
 import { FreezeScreen } from '@/features/freeze/FreezeScreen';
 import { GoalsScreen } from '@/features/goals/GoalsScreen';
 import { HistoryScreen } from '@/features/history/HistoryScreen';
+import { HoldingPage } from '@/features/invest/HoldingPage';
+import { InvestScreen } from '@/features/invest/InvestScreen';
 import { PlaceholderScreen } from '@/features/placeholder/PlaceholderScreen';
 import { QuestsScreen } from '@/features/quests/QuestsScreen';
 import { ShopScreen } from '@/features/shop/ShopScreen';
@@ -27,13 +29,12 @@ function placeholder(path: string, title: string): AppRoute {
 export const APP_ROUTES: AppRoute[] = [
   { path: '/', element: <DashboardScreen /> },
   { path: '/budget', element: <BudgetScreen /> },
-  placeholder('/invest', 'Invest'),
+  { path: '/invest', element: <InvestScreen /> },
+  { path: '/invest/holding/:id', element: <HoldingPage /> },
   placeholder('/buy', 'Should I Buy It?'),
   { path: '/quests', element: <QuestsScreen /> },
   { path: '/subscriptions', element: <SubscriptionsScreen /> },
   { path: '/freeze', element: <FreezeScreen /> },
-  placeholder('/dividends', 'Dividends'),
-  placeholder('/news', 'News'),
   { path: '/goals', element: <GoalsScreen /> },
   { path: '/history', element: <HistoryScreen /> },
   { path: '/shop', element: <ShopScreen /> },

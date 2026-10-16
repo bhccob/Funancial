@@ -370,6 +370,15 @@ describe('createAndroidNotifier', () => {
       await vi.waitFor(() => expect(remove).toHaveBeenCalledTimes(1));
     });
 
+    it('keeps the query of a route, so a reminder can open a tab', async () => {
+      const cb = vi.fn();
+      createAndroidNotifier().onOpen(cb);
+      await vi.waitFor(() => expect(handlers['localNotificationActionPerformed']).toBeDefined());
+
+      tap({ managed: true, route: '/invest?tab=dividends' });
+      expect(cb).toHaveBeenLastCalledWith('/invest?tab=dividends');
+    });
+
     it('routes nothing after unsubscribe, even a tap Capacitor had already queued', async () => {
       const cb = vi.fn();
       const stop = createAndroidNotifier().onOpen(cb);

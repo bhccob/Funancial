@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { localIso, makeExpense, makeIncome, makeLedgerEntry } from '@/test/fixtures';
+import { localIso, makeDividend, makeExpense, makeIncome, makeLedgerEntry } from '@/test/fixtures';
 import type { LedgerEntry } from '../entities';
 import { emptySnapshot, type DataSnapshot } from '../snapshot';
 import { ledgerId, ledgerTotals, loggingAwards, netByKey, reconcileLedger } from './ledger';
@@ -97,6 +97,56 @@ describe('loggingAwards', () => {
       ['log:expense:e', 'Logged an expense', 'Logged an expense'],
       ['log:income:i', 'Logged income', 'Logged income'],
     ]);
+  });
+
+  it('pays a confirmed dividend as a logged entry, and nothing for a skipped one', () => {
+    const awards = loggingAwards(
+      snap({
+        dividend: [
+          makeDividend({ id: 'd1', createdAt: localIso('2026-10-15', 9) }),
+          makeDividend({
+            id: 'd2',
+            status: 'skipped',
+            amount: 0,
+            bucket: null,
+            createdAt: localIso('2026-10-15', 10),
+          }),
+        ],
+      }),
+    );
+    expect(awards).toEqual([
+      {
+        key: 'log:dividend:d1',
+        kind: 'log',
+        title: 'Logged a dividend',
+        label: 'Logged a dividend',
+        xp: 10,
+        coins: 0,
+      },
+    ]);
+  });
+
+  it('shares the daily cap between dividends and the rest', () => {
+    // Four expenses and two dividends on one local day: the sixth entry, a dividend, is past the cap.
+    const expense = Array.from({ length: 4 }, (_, i) =>
+      makeExpense({ id: `e${i}`, createdAt: localIso('2026-10-15', 9 + i) }),
+    );
+    const dividend = ['d1', 'd2'].map((id, i) =>
+      makeDividend({ id, createdAt: localIso('2026-10-15', 14 + i) }),
+    );
+    const keys = loggingAwards(snap({ expense, dividend })).map((a) => a.key);
+    expect(keys).toEqual([
+      'log:expense:e0',
+      'log:expense:e1',
+      'log:expense:e2',
+      'log:expense:e3',
+      'log:dividend:d1',
+    ]);
+
+    // The next day starts again.
+    const next = makeDividend({ id: 'd3', createdAt: localIso('2026-10-16', 9) });
+    const more = loggingAwards(snap({ expense, dividend: [...dividend, next] })).map((a) => a.key);
+    expect(more).toContain('log:dividend:d3');
   });
 
   it('awards nothing for subscription charges or salary', () => {
