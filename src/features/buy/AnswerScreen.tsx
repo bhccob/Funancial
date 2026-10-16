@@ -7,8 +7,11 @@ import { RadioGroup } from '@/components/ui/RadioGroup';
 import { Section } from '@/components/ui/Section';
 import { categoryLabel } from '@/domain/budget';
 import type { BuyDecision, Facts } from '@/domain/entities';
+import { localDay } from '@/domain/game/activity';
 import { formatDay } from '@/lib/format';
 import { useAction } from '@/lib/useAction';
+import { usePlatform } from '@/platform/PlatformProvider';
+import { useReminderSettings } from '@/features/shared/reminders';
 import { RATE_RANGE, remindDay, type BuyPrefill } from '@/store/buyActions';
 import { useBuyActions, useDecision } from '@/store/useBuy';
 import { useMoney, useToday } from '@/store/useFinance';
@@ -62,12 +65,19 @@ export function AnswerScreen() {
   const money = useMoney();
   const today = useToday();
   const run = useAction();
+  const reminders = useReminderSettings();
+  const { notifier } = usePlatform();
   const [busy, setBusy] = useState(false);
+  // The decision a re-check is replacing: once it is gone the screen waits for the new one, not the list.
+  const [replacing, setReplacing] = useState<string | null>(null);
 
-  if (!decision) return <Navigate to="/buy" replace />;
+  if (!decision) return replacing === id ? null : <Navigate to="/buy" replace />;
 
   const { ask, facts, guards, notes, status } = decision;
   const decided = statusLine(decision);
+  // The phone only shows what it was told to schedule: no notifier (the web), the master switch off,
+  // or this rule off, and the promised reminder never comes.
+  const wontRemind = status === 'waiting' && (!notifier || !reminders.enabled || !reminders.buyIt);
 
   async function decide(fn: () => Promise<unknown>) {
     setBusy(true);
@@ -84,6 +94,16 @@ export function AnswerScreen() {
     if (done) void navigate('/add', { state: { prefill: result.prefill } });
   }
 
+  async function recheck() {
+    const result: { id?: string } = {};
+    setReplacing(id);
+    const done = await decide(async () => {
+      result.id = await actions.recheck(id);
+    });
+    if (done) void navigate(`/buy/${result.id}`, { replace: true });
+    else setReplacing(null);
+  }
+
   return (
     <div className="max-w-xl">
       <Link
@@ -94,9 +114,12 @@ export function AnswerScreen() {
         ‹ Buy it?
       </Link>
       <PageHeader title={ask.item}>
-        {ask.quantity === 1
-          ? money(facts.total)
-          : `${ask.quantity} × ${money(ask.price)} = ${money(facts.total)}`}
+        <p>
+          {ask.quantity === 1
+            ? money(facts.total)
+            : `${ask.quantity} × ${money(ask.price)} = ${money(facts.total)}`}
+        </p>
+        <p>{`Asked ${formatDay(localDay(decision.createdAt))}`}</p>
       </PageHeader>
 
       <Section>
@@ -139,6 +162,18 @@ export function AnswerScreen() {
       <Section>
         <div aria-live="polite">
           {decided && <p className="text-[17px] font-extrabold">{decided}</p>}
+          {wontRemind && (
+            <p className="text-muted text-sm font-semibold">
+              Reminders are off. Turn them on in{' '}
+              <Link
+                to="/settings"
+                className="text-accent-text -my-1 inline-flex min-h-11 items-center font-bold underline underline-offset-4"
+              >
+                Settings
+              </Link>
+              .
+            </p>
+          )}
         </div>
         {(status === 'open' || status === 'waiting') && (
           <div className={decided ? 'mt-4 flex flex-wrap gap-2' : 'flex flex-wrap gap-2'}>
@@ -159,6 +194,9 @@ export function AnswerScreen() {
             >
               Skip it
             </Button>
+            <Button variant="ghost" disabled={busy} onClick={() => void recheck()}>
+              Check again
+            </Button>
           </div>
         )}
         {status === 'bought' && (
@@ -168,6 +206,8 @@ export function AnswerScreen() {
               legend="Was it worth it?"
               value={decision.usage === null ? '' : String(decision.usage)}
               options={RATINGS}
+              // A single digit is about 12px wide: the option is widened to a touch target.
+              optionClassName="min-w-11 justify-center"
               onChange={(v) => void run(() => actions.rate(decision.id, Number(v)))}
             />
             <p className="text-muted text-sm font-semibold">{RATE_RANGE}</p>

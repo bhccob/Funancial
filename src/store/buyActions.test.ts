@@ -324,14 +324,103 @@ describe('wait', () => {
   });
 });
 
+describe('recheck', () => {
+  it('asks the same thing again for today, in place of the old answer', async () => {
+    const { store, actions, decision, table } = await setup();
+    const id = await actions.ask(concert());
+    await actions.wait(id);
+    expect(decision(id).facts.categoryAfter).toBeNull();
+    // The money changed since: a limit now stands where there was none.
+    await store
+      .getState()
+      .put('budgetLimit', makeLimit({ category: 'entertainment', amount: 30_00 }));
+
+    const again = await actions.recheck(id);
+
+    expect(again).not.toBe(id);
+    expect(table().buyDecision.map((d) => d.id)).toEqual([again]);
+    const ask = concert();
+    const expected = analyse(buildSnapshot(store.getState().data, TODAY, ask), ask, TODAY);
+    expect(decision(again)).toMatchObject({
+      ask,
+      status: 'open',
+      remindOn: null,
+      boughtOn: null,
+      usage: null,
+      facts: expected.facts,
+      meter: expected.meter,
+      verdict: expected.verdict,
+    });
+    expect(decision(again).facts.categoryAfter).not.toBeNull();
+  });
+
+  it('weighs it against the other decisions, not against the one it replaces', async () => {
+    const { actions } = await setup();
+    const old = await actions.ask(concert());
+    await actions.ask(concert({ item: 'Shoes' }));
+    vi.mocked(buildSnapshot).mockClear();
+    await actions.recheck(old);
+    const past = vi.mocked(buildSnapshot).mock.calls[0]![3]!;
+    expect(past.map((p) => p.ask.item)).toEqual(['Shoes']);
+  });
+
+  it('reads About you as it is now', async () => {
+    const { actions, decision } = await setup();
+    const id = await actions.ask(concert());
+    await actions.saveAbout({ overspend: ['entertainment'] });
+    const again = await actions.recheck(id);
+    expect(decision(again)).toMatchObject({
+      meter: 40,
+      notes: [`You said you tend to overspend on ${categoryLabel('entertainment')}.`],
+    });
+  });
+
+  it('keeps the old decision when the new one cannot be saved', async () => {
+    const { store, actions, table } = await setup();
+    const id = await actions.ask(concert());
+    await actions.wait(id);
+    const before = table().buyDecision;
+    const state = store.getState();
+    vi.spyOn(state, 'putMany').mockRejectedValue(new Error('Storage is full'));
+    vi.spyOn(state, 'put').mockRejectedValue(new Error('Storage is full'));
+
+    await expect(actions.recheck(id)).rejects.toThrow('Storage is full');
+    expect(table().buyDecision).toEqual(before);
+    expect(table().buyDecision[0]).toMatchObject({ id, status: 'waiting' });
+  });
+
+  it.each(['bought', 'skipped'] as const)('leaves a decision that is %s alone', async (status) => {
+    const { store, actions, table } = await setup();
+    const id = await actions.ask(concert());
+    await store.getState().put('buyDecision', { ...table().buyDecision[0]!, status });
+    await expect(actions.recheck(id)).rejects.toThrow("You've already decided on this one.");
+    expect(table().buyDecision.map((d) => [d.id, d.status])).toEqual([[id, status]]);
+  });
+});
+
 describe('bought, skip, rate and delete', () => {
   it('records the purchase and hands back what Add Expense starts from', async () => {
     const { actions, decision } = await setup();
     const id = await actions.ask(concert({ price: 12_50, quantity: 3 }));
     await actions.wait(id);
     const prefill = await actions.bought(id);
-    expect(prefill).toEqual({ item: 'Concert ticket', amount: 37_50, category: 'entertainment' });
+    expect(prefill).toEqual({
+      item: 'Concert ticket',
+      amount: 37_50,
+      category: 'entertainment',
+      paymentMethod: 'debit',
+      cardId: null,
+    });
     expect(decision(id)).toMatchObject({ status: 'bought', boughtOn: TODAY, remindOn: null });
+  });
+
+  it('hands back how the person said they would pay, card included', async () => {
+    const { actions } = await setup();
+    const id = await actions.ask(concert({ payWith: 'credit_card', cardId: 'card-1' }));
+    expect(await actions.bought(id)).toMatchObject({
+      paymentMethod: 'credit_card',
+      cardId: 'card-1',
+    });
   });
 
   it('keeps the first day when it is said again that it was bought', async () => {
@@ -404,7 +493,7 @@ describe('bought, skip, rate and delete', () => {
     expect(table().buyDecision).toEqual([]);
   });
 
-  it.each(['wait', 'bought', 'skip'] as const)(
+  it.each(['wait', 'bought', 'skip', 'recheck'] as const)(
     'says so when %s is given a decision that is gone',
     async (name) => {
       const { actions } = await setup();

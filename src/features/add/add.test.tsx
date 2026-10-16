@@ -146,7 +146,13 @@ describe('Add expense', () => {
 
 describe('Add expense from a buy check', () => {
   const fromCheck = (prefill: unknown) => ({ pathname: '/add', state: { prefill } });
-  const bought = { item: 'Noise-cancelling headphones', amount: 249_00, category: 'entertainment' };
+  const bought = {
+    item: 'Noise-cancelling headphones',
+    amount: 249_00,
+    category: 'entertainment',
+    paymentMethod: 'cash',
+    cardId: null,
+  };
   const ASK_FIRST = "Haven't bought it yet? Ask first →";
 
   it('offers to ask first, on an expense and not on income', async () => {
@@ -188,6 +194,29 @@ describe('Add expense from a buy check', () => {
     expect(screen.queryByRole('link', { name: ASK_FIRST })).not.toBeInTheDocument();
   });
 
+  it('opens on the card the person said they would pay with, and saves it', async () => {
+    renderAdd(fromCheck({ ...bought, paymentMethod: 'credit_card', cardId: 'card-1' }));
+    expect(screen.getByLabelText('Paid with')).toHaveValue('card:card-1');
+    await save();
+    expect(actions.addExpense).toHaveBeenCalledWith(
+      expect.objectContaining({ paymentMethod: 'credit_card', cardId: 'card-1' }),
+    );
+  });
+
+  it('opens on the way to pay it was asked with, when that is not a card', () => {
+    renderAdd(fromCheck({ ...bought, paymentMethod: 'debit' }));
+    expect(screen.getByLabelText('Paid with')).toHaveValue('debit');
+  });
+
+  it('opens on Cash when the card it names has been deleted', async () => {
+    renderAdd(fromCheck({ ...bought, paymentMethod: 'credit_card', cardId: 'gone' }));
+    expect(screen.getByLabelText('Paid with')).toHaveValue('cash');
+    await save();
+    expect(actions.addExpense).toHaveBeenCalledWith(
+      expect.objectContaining({ paymentMethod: 'cash', cardId: null }),
+    );
+  });
+
   it('can still be changed before it is saved', async () => {
     renderAdd(fromCheck(bought));
     await userEvent.clear(screen.getByLabelText('Amount'));
@@ -208,6 +237,7 @@ describe('Add expense from a buy check', () => {
     ['nothing', undefined],
     ['text', 'Headphones'],
     ['an unknown category', { ...bought, category: 'yachts' }],
+    ['an unknown way to pay', { ...bought, paymentMethod: 'barter' }],
     ['an amount of nothing', { ...bought, amount: 0 }],
     ['a fractional amount', { ...bought, amount: 12.5 }],
     ['an item that is not text', { ...bought, item: 5 }],

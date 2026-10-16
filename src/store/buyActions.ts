@@ -9,6 +9,7 @@ import {
   type BuyAsk,
   type BuyDecision,
   type Category,
+  type PaymentMethod,
 } from '@/domain/entities';
 import { newId, nowIso } from '@/domain/ids';
 import { formatMoney } from '@/domain/money';
@@ -30,6 +31,8 @@ export const RATE_RANGE = 'Rate it from 1 (not at all) to 5 (a lot).';
 /** What `rate` says to a decision that was not bought: a rating there would move later answers. */
 export const RATE_AFTER_BUYING = "You can rate it once you've bought it.";
 const NOT_FOUND = 'That item no longer exists.';
+/** What `recheck` says to a decision that was bought or skipped: asking again would replace it. */
+export const ALREADY_DECIDED = "You've already decided on this one.";
 const RATINGS = [1, 2, 3, 4, 5] as const;
 /** The day to ask again when no limit starts afresh sooner. */
 const WAIT_DAYS = 2;
@@ -48,6 +51,9 @@ export interface BuyPrefill {
   /** Price times quantity, in minor units. */
   amount: number;
   category: Category;
+  /** How the person said they would pay in the ask, so the expense starts there. */
+  paymentMethod: PaymentMethod;
+  cardId: string | null;
 }
 
 export type BuyActions = ReturnType<typeof createBuyActions>;
@@ -97,38 +103,60 @@ export function createBuyActions(store: StoreApi<AppState>, market: Market) {
     throw new Error(messages[String(issue.path[0])] ?? BUY_MESSAGES.other);
   }
 
+  /**
+   * The rules' answer to `ask` for today, as a new open decision that is not saved yet. It weighs
+   * the earlier decisions but never itself, nor `replacing`, the one it is about to take the place of.
+   */
+  async function answer(ask: BuyAsk, replacing: string | null = null): Promise<BuyDecision> {
+    await aboutSaves.get(store);
+    const { today, data } = state();
+    const past = decisions().filter((d) => d.id !== replacing);
+    const snapshot = buildSnapshot(data, today, ask, past);
+    const { facts, meter, verdict, confidence, guards, notes } = analyse(
+      snapshot,
+      ask,
+      today,
+      data.tables.aboutYou[0],
+    );
+    return {
+      id: newId(),
+      ...stamp(),
+      ask,
+      facts,
+      rulesMeter: meter,
+      rulesVerdict: verdict,
+      meter,
+      verdict,
+      confidence,
+      guards,
+      notes,
+      status: 'open',
+      remindOn: null,
+      boughtOn: null,
+      usage: null,
+    };
+  }
+
   return {
     /** Answers an ask from the rules and About you, and keeps the answer. Returns its id. */
     async ask(input: BuyAsk): Promise<string> {
-      const ask = checked(input);
-      await aboutSaves.get(store);
-      const { today, data } = state();
-      // The decision being made is not saved yet, so it can never count among the earlier ones.
-      const snapshot = buildSnapshot(data, today, ask, decisions());
-      const { facts, meter, verdict, confidence, guards, notes } = analyse(
-        snapshot,
-        ask,
-        today,
-        data.tables.aboutYou[0],
-      );
-      const decision: BuyDecision = {
-        id: newId(),
-        ...stamp(),
-        ask,
-        facts,
-        rulesMeter: meter,
-        rulesVerdict: verdict,
-        meter,
-        verdict,
-        confidence,
-        guards,
-        notes,
-        status: 'open',
-        remindOn: null,
-        boughtOn: null,
-        usage: null,
-      };
+      const decision = await answer(checked(input));
       await state().put('buyDecision', decision);
+      return decision.id;
+    },
+
+    /**
+     * Asks a decision that is still open or waiting again, for today, and puts the new answer in
+     * its place (one write, so a failed save keeps the old one). Returns the new id.
+     */
+    async recheck(id: string): Promise<string> {
+      const { ask, status } = find(id);
+      if (status === 'bought' || status === 'skipped') throw new Error(ALREADY_DECIDED);
+      const decision = await answer(ask, id);
+      await state().putMany(
+        [{ table: 'buyDecision', record: decision }],
+        [{ table: 'buyDecision', id }],
+      );
       return decision.id;
     },
 
@@ -158,7 +186,13 @@ export function createBuyActions(store: StoreApi<AppState>, market: Market) {
         boughtOn: status === 'bought' && boughtOn ? boughtOn : state().today,
         remindOn: null,
       });
-      return { item: ask.item, amount: ask.price * ask.quantity, category: ask.category };
+      return {
+        item: ask.item,
+        amount: ask.price * ask.quantity,
+        category: ask.category,
+        paymentMethod: ask.payWith,
+        cardId: ask.cardId,
+      };
     },
 
     skip: (id: string) => update(id, { status: 'skipped', remindOn: null }),

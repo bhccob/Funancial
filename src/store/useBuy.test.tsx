@@ -80,7 +80,17 @@ describe('useBuyActions', () => {
     rerender();
     expect(result.current).toBe(first);
     expect(Object.keys(first).sort()).toEqual(
-      ['ask', 'bought', 'deleteDecision', 'extract', 'rate', 'saveAbout', 'skip', 'wait'].sort(),
+      [
+        'ask',
+        'bought',
+        'deleteDecision',
+        'extract',
+        'rate',
+        'recheck',
+        'saveAbout',
+        'skip',
+        'wait',
+      ].sort(),
     );
   });
 });

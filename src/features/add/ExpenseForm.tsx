@@ -56,16 +56,18 @@ export function ExpenseForm({
     expense?.category ?? prefill?.category ?? 'food',
   );
   const [date, setDate] = useState(expense?.date ?? today);
-  const [paidWith, setPaidWith] = useState(
-    expense ? paidWithValue(expense.paymentMethod, expense.cardId) : 'cash',
-  );
+  const paidWithOptions = usePaidWithOptions();
+  const [paidWith, setPaidWith] = useState(() => {
+    if (expense) return paidWithValue(expense.paymentMethod, expense.cardId);
+    const asked = prefill ? paidWithValue(prefill.paymentMethod, prefill.cardId) : 'cash';
+    // A card deleted since the ask is no longer one to pick.
+    return paidWithOptions.some((o) => o.value === asked) ? asked : 'cash';
+  });
   const [note, setNote] = useState(expense?.note ?? prefill?.item ?? '');
   const [repeat, setRepeat] = useState('none');
   const [errors, setErrors] = useState<{ amount?: string; date?: string }>({});
   const [crossing, setCrossing] = useState<LimitStatus[] | null>(null);
   const [busy, setBusy] = useState(false);
-
-  const paidWithOptions = usePaidWithOptions();
 
   function fields(): Omit<ExpenseInput, 'repeat'> {
     return { amount: amount ?? 0, category, date, note: note.trim(), ...parsePaidWith(paidWith) };

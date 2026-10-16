@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { RadioGroup } from '@/components/ui/RadioGroup';
 import { EmptyLink } from '@/components/ui/Section';
-import { CategorySchema } from '@/domain/entities';
+import { CategorySchema, PaymentMethodSchema } from '@/domain/entities';
 import { ExpenseForm } from './ExpenseForm';
 import { IncomeForm } from './IncomeForm';
 
@@ -14,6 +14,8 @@ const PrefillSchema = z.object({
   item: z.string(),
   amount: z.number().int().positive(),
   category: CategorySchema,
+  paymentMethod: PaymentMethodSchema,
+  cardId: z.string().nullable(),
 });
 
 export function AddScreen() {

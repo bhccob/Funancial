@@ -17,6 +17,8 @@ export interface RadioGroupProps<T extends string> {
   variant?: 'segmented' | 'underline';
   /** Said under the choices, which it describes. */
   error?: string;
+  /** Added to each choice, e.g. a width for one-character labels. */
+  optionClassName?: string;
 }
 
 /** Native radios presented as a segmented control, or as underline tabs. */
@@ -27,6 +29,7 @@ export function RadioGroup<T extends string>({
   onChange,
   variant = 'segmented',
   error,
+  optionClassName,
 }: RadioGroupProps<T>) {
   const name = useId();
   const errorId = `${name}-error`;
@@ -48,6 +51,7 @@ export function RadioGroup<T extends string>({
             key={o.value}
             className={cn(
               'relative cursor-pointer',
+              optionClassName,
               'has-[:focus-visible]:outline-focus has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2',
               underline
                 ? underlineTab(value === o.value)
