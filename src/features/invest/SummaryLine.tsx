@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 
 /**
  * One line of a dialog's summary: a muted label on the left, the figure on the right. The figure
- * changes as the person types, so it is a polite live region and a screen reader hears it.
+ * changes as the person types, so it is a polite live region, read whole so the label comes with it.
  */
 export function SummaryLine({
   label,
@@ -17,6 +17,7 @@ export function SummaryLine({
   return (
     <p
       aria-live="polite"
+      aria-atomic="true"
       className="flex justify-between gap-3 text-[13.5px] font-extrabold tabular-nums"
     >
       <span className="text-muted font-bold">{label}</span>

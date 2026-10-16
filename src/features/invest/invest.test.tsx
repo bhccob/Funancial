@@ -520,10 +520,9 @@ describe('HoldingDialog adding', () => {
     await enter(dialog, 'Shares', 'abc');
     expect(dialog).toHaveTextContent('Total paid—');
     // A screen reader hears the total change as the person types.
-    expect(within(dialog).getByText('Total paid').closest('p')).toHaveAttribute(
-      'aria-live',
-      'polite',
-    );
+    const total = within(dialog).getByText('Total paid').closest('p');
+    expect(total).toHaveAttribute('aria-live', 'polite');
+    expect(total).toHaveAttribute('aria-atomic', 'true');
   });
 
   it('saves the cost basis as shares times the price per share, rounded once', async () => {

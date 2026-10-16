@@ -185,7 +185,10 @@ describe('Sell dialog', () => {
   it('announces the figures politely as they change', async () => {
     const { dialog } = await openSell();
     for (const label of ['You get', 'Profit on these shares']) {
-      expect(within(dialog).getByText(label).closest('p')).toHaveAttribute('aria-live', 'polite');
+      const line = within(dialog).getByText(label).closest('p');
+      expect(line).toHaveAttribute('aria-live', 'polite');
+      // Read whole, so the label comes with the figure.
+      expect(line).toHaveAttribute('aria-atomic', 'true');
     }
   });
 
