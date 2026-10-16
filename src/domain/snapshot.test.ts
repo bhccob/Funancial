@@ -4,6 +4,7 @@ import {
   makeExpense,
   makeHolding,
   makeProfile,
+  makeSale,
   makeSettings,
   makeSubscription,
 } from '@/test/fixtures';
@@ -171,5 +172,34 @@ describe('migrateSnapshot from older versions', () => {
     s.tables.holding = [makeHolding({ id: 'h1' })];
     s.tables.dividend = [makeDividend({ id: 'd1', holdingId: 'h1' })];
     expect(migrateSnapshot(JSON.parse(JSON.stringify(s)))).toEqual(s);
+  });
+});
+
+describe('sales (v7)', () => {
+  it('gives a v6 snapshot an empty sale table and keeps its holdings', () => {
+    const { sale, ...tables } = emptySnapshot().tables;
+    expect(sale).toEqual([]);
+    const v6 = {
+      schemaVersion: 6,
+      tables: { ...tables, holding: [makeHolding({ id: 'h1' })] },
+    };
+    const s = migrateSnapshot(v6);
+    expect(s.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+    expect(s.tables.sale).toEqual([]);
+    expect(s.tables.holding).toEqual(v6.tables.holding);
+  });
+
+  it('keeps sales, with the holding a full sale stored, through a round trip', () => {
+    const s = emptySnapshot();
+    s.tables.sale = [
+      makeSale({ id: 's1', restore: makeHolding({ id: 'h1' }) }),
+      makeSale({ id: 's2' }),
+    ];
+    expect(migrateSnapshot(JSON.parse(JSON.stringify(s)))).toEqual(s);
+  });
+
+  it('names the new table', () => {
+    expect(TABLES).toContain('sale');
+    expect(CURRENT_SCHEMA_VERSION).toBe(7);
   });
 });

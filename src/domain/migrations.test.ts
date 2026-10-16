@@ -271,3 +271,44 @@ describe('v6 Invest currency', () => {
     expect(migrateRecord('profile', row, 5)).toEqual(row);
   });
 });
+
+describe('v7 sales', () => {
+  // The new table has no old rows to upgrade, so step 7 touches nothing.
+  const v6Settings = {
+    id: 'settings',
+    createdAt: '2026-10-01T09:00:00.000Z',
+    updatedAt: '2026-10-01T09:00:00.000Z',
+    weekStartsOn: 1,
+    warningTone: 'motivational',
+    autoLockMinutes: 5,
+    lastBackupAt: null,
+    reminders: {
+      enabled: true,
+      dailyLog: true,
+      dailyTime: '07:30',
+      bills: true,
+      freeze: true,
+      reviews: true,
+      backup: true,
+      dividends: false,
+      prompted: true,
+    },
+    cosmetics: { theme: 'theme-forest', avatar: 'avatar-fox', frame: 'frame-gold' },
+    investCurrency: 'USD',
+    investFx: { currency: 'USD', rate: 1.1, asOf: '2026-10-14T09:00:00.000Z' },
+  };
+
+  it('leaves every v6 record as it was', () => {
+    const row = { id: 'h1', symbol: 'KO' };
+    for (const table of ['holding', 'dividend', 'profile', 'transaction'] as const) {
+      expect(migrateRecord(table, row, 6)).toEqual(row);
+    }
+    expect(migrateRecord('settings', v6Settings, 6)).toEqual(v6Settings);
+  });
+
+  it('leaves a sale alone', () => {
+    const sale = { id: 's1', symbol: 'KO', restore: null };
+    expect(migrateRecord('sale', sale, 1)).toEqual(sale);
+    expect(migrateRecord('sale', sale, 6)).toEqual(sale);
+  });
+});

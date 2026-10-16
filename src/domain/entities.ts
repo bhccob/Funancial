@@ -410,3 +410,26 @@ export const DividendSchema = z
     }
   });
 export type Dividend = z.infer<typeof DividendSchema>;
+
+/**
+ * Shares the person sold. `proceeds` is what they got and `cost` the part of the holding's cost basis
+ * those shares carried, both in the profile currency, so the profit is `proceeds - cost`. The
+ * holding's own fields are copied here so the sale reads the same after the holding is gone.
+ * `restore` is the holding exactly as it was just before a sale of its last shares, which removes it,
+ * so the sale can be undone; it is null when shares were left.
+ */
+export const SaleSchema = z.object({
+  ...base,
+  holdingId: z.string().min(1),
+  symbol: z.string().min(1),
+  name: z.string().min(1),
+  type: HoldingSchema.shape.type,
+  shares: z.number().positive(),
+  proceeds: PositiveMoney,
+  cost: NonNegativeMoney,
+  soldOn: LocalDateSchema,
+  /** Where the money went. */
+  to: z.enum(['cash', 'savings']),
+  restore: HoldingSchema.nullable(),
+});
+export type Sale = z.infer<typeof SaleSchema>;

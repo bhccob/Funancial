@@ -12,6 +12,7 @@ import {
   LedgerEntrySchema,
   ProfileSchema,
   SalaryFreezeSchema,
+  SaleSchema,
   SettingsSchema,
   StreakFreezeSchema,
   SubscriptionSchema,
@@ -36,6 +37,7 @@ export const TABLES = [
   'streakFreeze',
   'holding',
   'dividend',
+  'sale',
 ] as const;
 export type TableName = (typeof TABLES)[number];
 
@@ -56,12 +58,13 @@ export const SCHEMAS = {
   streakFreeze: StreakFreezeSchema,
   holding: HoldingSchema,
   dividend: DividendSchema,
+  sale: SaleSchema,
 } satisfies Record<TableName, z.ZodType>;
 
 export type EntityMap = { [K in TableName]: z.infer<(typeof SCHEMAS)[K]> };
 export type EntityOf<T extends TableName> = EntityMap[T];
 
-export const CURRENT_SCHEMA_VERSION = 6;
+export const CURRENT_SCHEMA_VERSION = 7;
 
 /** One record tagged with its table, for batch writes. */
 export type TableRecord = { [K in TableName]: { table: K; record: EntityOf<K> } }[TableName];
@@ -98,6 +101,8 @@ export const SnapshotSchema = z.object({
     // Added in v5.
     holding: table('holding', HoldingSchema).default([]),
     dividend: table('dividend', DividendSchema).default([]),
+    // Added in v7.
+    sale: table('sale', SaleSchema).default([]),
   }),
 });
 
@@ -126,6 +131,7 @@ export function emptySnapshot(): DataSnapshot {
       streakFreeze: [],
       holding: [],
       dividend: [],
+      sale: [],
     },
   };
 }

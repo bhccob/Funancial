@@ -63,6 +63,9 @@ const STEPS: Record<number, Step> = {
       investFx: r.investFx ?? null,
     }),
   },
+  // The sale table is new, so it has no old rows to upgrade and no other record changes: a snapshot
+  // without it gets an empty one from the schema. The step stays so the version number has one.
+  7: {},
 };
 
 export const LATEST_VERSION = Math.max(1, ...Object.keys(STEPS).map(Number));

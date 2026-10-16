@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { makeHolding, makeProfile, makeSettings } from '@/test/fixtures';
+import { makeDividend, makeHolding, makeProfile, makeSettings } from '@/test/fixtures';
 import type { Holding } from './entities';
 import {
   allocation,
+  breakEven,
   convertPortfolio,
+  costForShares,
+  costPerShare,
   holdingPrice,
   holdingValue,
   investRate,
@@ -286,5 +289,77 @@ describe('convertPortfolio', () => {
   it('changes nothing when the amounts are not converted', () => {
     const p = euros(twin('A'), twin('B', { costBasis: 400_00 }), twin('C', { quote: null }));
     expect(convertPortfolio(p, (minor) => minor)).toEqual(p);
+  });
+});
+
+describe('costPerShare and costForShares', () => {
+  const three = makeHolding({ shares: 3, costBasis: 100_00 });
+
+  it('costPerShare is the unrounded average cost, in minor units per share', () => {
+    expect(costPerShare(makeHolding({ shares: 10, costBasis: 500_00 }))).toBe(50_00);
+    expect(costPerShare(three)).toBeCloseTo(3333.3333333, 6);
+    expect(costPerShare(makeHolding({ shares: 0.5, costBasis: 0 }))).toBe(0);
+  });
+
+  it('costForShares is exactly the cost basis for all the shares', () => {
+    expect(costForShares(three, 3)).toBe(100_00);
+    const odd = makeHolding({ shares: 0.1 + 0.2, costBasis: 12_345 });
+    expect(costForShares(odd, odd.shares)).toBe(12_345);
+  });
+
+  it('costForShares rounds once, not per share', () => {
+    expect(costForShares(three, 1)).toBe(3_333);
+    // 3 × the rounded per-share cost would be 6_666.
+    expect(costForShares(three, 2)).toBe(6_667);
+    expect(costForShares(three, 0.5)).toBe(1_667);
+    expect(costForShares(three, 4)).toBe(13_333);
+  });
+});
+
+describe('breakEven', () => {
+  const ko = makeHolding({ id: 'ko', shares: 10, costBasis: 500_00 });
+  const paid = (over: Parameters<typeof makeDividend>[0]) =>
+    makeDividend({ holdingId: 'ko', status: 'confirmed', ...over });
+
+  function withDividends(...dividends: ReturnType<typeof makeDividend>[]) {
+    const data = dataOf([ko]);
+    data.tables.dividend = dividends;
+    return data;
+  }
+
+  it('is the average cost per share, with no dividends to bring it down', () => {
+    expect(breakEven(dataOf([ko]), ko)).toEqual({ perShare: 50_00, afterDividends: 50_00 });
+  });
+
+  it('takes every confirmed dividend of the holding off the cost, reinvested ones too', () => {
+    const data = withDividends(
+      paid({ amount: 10_00, bucket: 'cash' }),
+      paid({ amount: 8_50, bucket: 'reinvest', sharesAdded: 0.1 }),
+      paid({ amount: 11_50, bucket: 'passive' }),
+    );
+    // (500.00 − 30.00) ÷ 10 shares
+    expect(breakEven(data, ko)).toEqual({ perShare: 50_00, afterDividends: 47_00 });
+  });
+
+  it('ignores skipped payouts and the payouts of other holdings', () => {
+    const data = withDividends(
+      paid({ amount: 0, status: 'skipped', bucket: null }),
+      makeDividend({ holdingId: 'other', amount: 99_00 }),
+      paid({ amount: 5_00 }),
+    );
+    expect(breakEven(data, ko).afterDividends).toBe(49_50);
+  });
+
+  it('never goes below zero', () => {
+    const data = withDividends(paid({ amount: 800_00 }));
+    expect(breakEven(data, ko)).toEqual({ perShare: 50_00, afterDividends: 0 });
+  });
+
+  it('keeps both values unrounded', () => {
+    const three = makeHolding({ id: 'ko', shares: 3, costBasis: 100_00 });
+    const data = dataOf([three]);
+    data.tables.dividend = [paid({ amount: 1_00 })];
+    expect(breakEven(data, three).perShare).toBeCloseTo(3333.3333333, 6);
+    expect(breakEven(data, three).afterDividends).toBeCloseTo(3300, 9);
   });
 });

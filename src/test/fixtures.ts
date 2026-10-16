@@ -12,6 +12,7 @@ import {
   type Income,
   type LedgerEntry,
   type Profile,
+  type Sale,
   type Settings,
   type StreakFreeze,
   type Subscription,
@@ -250,6 +251,24 @@ export function makeDividend(overrides: Partial<Dividend> = {}): Dividend {
     amount: 11_20,
     bucket: 'cash',
     sharesAdded: null,
+    ...overrides,
+  };
+}
+
+export function makeSale(overrides: Partial<Sale> = {}): Sale {
+  return {
+    id: newId(),
+    ...stamp(),
+    holdingId: 'holding-1',
+    symbol: 'KO',
+    name: 'Coca-Cola',
+    type: 'stock',
+    shares: 5,
+    proceeds: 300_00,
+    cost: 250_00,
+    soldOn: today(),
+    to: 'cash',
+    restore: null,
     ...overrides,
   };
 }

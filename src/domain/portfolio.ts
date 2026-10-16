@@ -34,6 +34,37 @@ export function toMinor(amount: number, rate: number, profileCurrency: string): 
   return Math.round(amount * rate * 10 ** minorDigits(profileCurrency)) + 0;
 }
 
+/** What one share cost on average, in minor units of the profile currency, unrounded: the break-even price. */
+export function costPerShare(h: Holding): number {
+  return h.costBasis / h.shares;
+}
+
+/**
+ * The part of the cost basis that `shares` of the holding carry, rounded once. All the shares carry
+ * the cost basis exactly, whatever the division would round to.
+ */
+export function costForShares(h: Holding, shares: number): number {
+  return shares === h.shares ? h.costBasis : Math.round((h.costBasis * shares) / h.shares);
+}
+
+/**
+ * What one share must sell for to get the money back, in minor units of the profile currency, both
+ * unrounded: `perShare` is the average cost, `afterDividends` also takes off what the holding has
+ * paid out so far (every confirmed dividend, reinvested ones too) and is never below zero.
+ */
+export function breakEven(
+  data: DataSnapshot,
+  h: Holding,
+): { perShare: number; afterDividends: number } {
+  const received = data.tables.dividend
+    .filter((d) => d.holdingId === h.id && d.status === 'confirmed')
+    .reduce((sum, d) => sum + d.amount, 0);
+  return {
+    perShare: costPerShare(h),
+    afterDividends: Math.max(0, h.costBasis - received) / h.shares,
+  };
+}
+
 /** What the holding is worth in minor units of the profile currency; null when no price or rate. */
 export function holdingValue(h: Holding, profileCurrency: string): number | null {
   const price = holdingPrice(h);

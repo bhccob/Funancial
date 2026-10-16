@@ -12,6 +12,7 @@ import {
   makeLedgerEntry,
   makeLimit,
   makeProfile,
+  makeSale,
   makeSettings,
   makeStreakFreeze,
   makeSubscription,
@@ -32,6 +33,7 @@ import {
   LedgerEntrySchema,
   ProfileSchema,
   SalaryFreezeSchema,
+  SaleSchema,
   SettingsSchema,
   StreakFreezeSchema,
   SubscriptionSchema,
@@ -69,6 +71,7 @@ describe('fixtures', () => {
     expect(ok(StreakFreezeSchema, makeStreakFreeze())).toBe(true);
     expect(ok(HoldingSchema, makeHolding())).toBe(true);
     expect(ok(DividendSchema, makeDividend())).toBe(true);
+    expect(ok(SaleSchema, makeSale())).toBe(true);
   });
 
   it('localIso builds a timestamp that falls on the given local day, at noon by default', () => {
@@ -320,6 +323,35 @@ describe('Dividend', () => {
     expect(ok(DividendSchema, makeDividend({ bucket: 'reinvest', sharesAdded: 0.0832 }))).toBe(
       true,
     );
+  });
+});
+
+describe('Sale', () => {
+  it('sells a positive number of shares for positive proceeds, in whole minor units', () => {
+    expect(ok(SaleSchema, makeSale({ shares: 0.25 }))).toBe(true);
+    expect(ok(SaleSchema, makeSale({ shares: 0 }))).toBe(false);
+    expect(ok(SaleSchema, makeSale({ shares: -1 }))).toBe(false);
+    expect(ok(SaleSchema, makeSale({ proceeds: 0 }))).toBe(false);
+    expect(ok(SaleSchema, makeSale({ proceeds: 10.5 }))).toBe(false);
+  });
+  it('carried a cost of nothing or more, in whole minor units', () => {
+    expect(ok(SaleSchema, makeSale({ cost: 0 }))).toBe(true);
+    expect(ok(SaleSchema, makeSale({ cost: -1 }))).toBe(false);
+    expect(ok(SaleSchema, makeSale({ cost: 1.5 }))).toBe(false);
+  });
+  it('checks the date, the destination and the type', () => {
+    expect(ok(SaleSchema, makeSale({ soldOn: '2026-02-30' }))).toBe(false);
+    expect(ok(SaleSchema, makeSale({ to: 'savings' }))).toBe(true);
+    expect(ok(SaleSchema, makeSale({ to: 'passive' as never }))).toBe(false);
+    expect(ok(SaleSchema, makeSale({ type: 'crypto' as never }))).toBe(false);
+  });
+  it('holds the holding as it was when the last shares were sold, or nothing', () => {
+    expect(ok(SaleSchema, makeSale({ restore: makeHolding() }))).toBe(true);
+    expect(ok(SaleSchema, makeSale({ restore: null }))).toBe(true);
+    expect(ok(SaleSchema, makeSale({ restore: makeHolding({ shares: 0 }) }))).toBe(false);
+    const { restore, ...without } = makeSale();
+    expect(restore).toBeNull();
+    expect(ok(SaleSchema, without)).toBe(false);
   });
 });
 

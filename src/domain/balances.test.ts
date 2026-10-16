@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { makeDebt, makeDividend, makeExpense, makeProfile, makeTransaction } from '@/test/fixtures';
+import {
+  makeDebt,
+  makeDividend,
+  makeExpense,
+  makeProfile,
+  makeSale,
+  makeTransaction,
+} from '@/test/fixtures';
 import { bucketBalances, debtBalance, netWorth } from './balances';
 import { emptySnapshot } from './snapshot';
 
@@ -78,6 +85,25 @@ describe('investments and dividends', () => {
       passive: 7_00,
     });
     expect(bucketBalances(data, '2026-10-12').cash).toBe(1_000_00 - 250_00 + 11_20 + 99_00);
+  });
+});
+
+describe('sales', () => {
+  it('puts the proceeds into the bucket they went to, on the day of the sale', () => {
+    const data = base();
+    data.tables.sale = [
+      makeSale({ proceeds: 300_00, to: 'cash', soldOn: '2026-10-03' }),
+      makeSale({ proceeds: 450_00, to: 'savings', soldOn: '2026-10-04' }),
+      makeSale({ proceeds: 99_00, to: 'cash', soldOn: '2026-10-12' }), // after the as-of day
+      makeSale({ proceeds: 98_00, to: 'savings', soldOn: '2026-09-30' }), // before the opening date
+    ];
+    expect(bucketBalances(data, '2026-10-10')).toEqual({
+      cash: 1_000_00 + 300_00,
+      savings: 5_000_00 + 450_00,
+      passive: 0,
+    });
+    expect(bucketBalances(data, '2026-10-03').savings).toBe(5_000_00);
+    expect(bucketBalances(data, '2026-10-12').cash).toBe(1_000_00 + 300_00 + 99_00);
   });
 });
 
