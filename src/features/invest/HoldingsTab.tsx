@@ -43,7 +43,9 @@ function HoldingItem({ row, onOpen }: { row: HoldingRow; onOpen(): void }) {
           <span className="text-muted text-[13px] font-semibold">{sharesText(holding.shares)}</span>
         </span>
         {value === null ? (
-          <span className="text-muted text-[13px] font-bold">Not priced yet</span>
+          <span className="text-muted text-[13px] font-bold">
+            {holdingPrice(holding) === null ? 'Not priced yet' : 'No exchange rate yet'}
+          </span>
         ) : (
           <span className="flex flex-none flex-col items-end tabular-nums">
             <span className="text-[15px] font-extrabold">{money(value)}</span>

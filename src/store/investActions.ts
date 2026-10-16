@@ -15,6 +15,7 @@ export const UNKNOWN_SYMBOL =
   "We couldn't find that symbol. Check it, or enter the name and currency yourself.";
 const NO_PRICE =
   'Reinvesting needs a price for this holding. Refresh prices or set a manual price.';
+const NO_RATE = 'Reinvesting needs an exchange rate for this holding. Refresh prices first.';
 /** What `deleteDividend` says when taking a reinvested payout's shares back would leave none. */
 export const SHARES_GONE =
   'The holding has fewer shares than this dividend bought. Edit the holding first.';
@@ -246,12 +247,11 @@ export function createInvestActions(store: StoreApi<AppState>, market: Market) {
       const items: TableRecord[] = [];
       let sharesAdded: number | null = null;
       if (input.bucket === 'reinvest') {
-        const price = holdingPrice(holding);
+        const price = holdingPrice(holding) ?? 0;
         const rate = holdingRate(holding, profileCurrency());
-        const minorPerShare =
-          price === null || rate === null ? 0 : price * rate * 10 ** minorDigits(profileCurrency());
-        if (minorPerShare <= 0) throw new Error(NO_PRICE);
-        sharesAdded = input.amount / minorPerShare;
+        if (price <= 0) throw new Error(NO_PRICE);
+        if (rate === null) throw new Error(NO_RATE);
+        sharesAdded = input.amount / (price * rate * 10 ** minorDigits(profileCurrency()));
         items.push({
           table: 'holding',
           record: {

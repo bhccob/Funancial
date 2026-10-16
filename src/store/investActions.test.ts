@@ -524,18 +524,22 @@ describe('dividend payouts', () => {
     expect(holding(h.id).shares).toBeCloseTo(10 + 540 / 2700, 12);
   });
 
+  const NO_PRICE =
+    'Reinvesting needs a price for this holding. Refresh prices or set a manual price.';
+  const NO_RATE = 'Reinvesting needs an exchange rate for this holding. Refresh prices first.';
+  const noRate = { price: 60, previousClose: null, fxRate: null, asOf: ASOF };
   it.each([
-    ['price', { quote: null }],
-    ['exchange rate', { quote: { price: 60, previousClose: null, fxRate: null, asOf: ASOF } }],
-    ['price above zero', { manualPrice: 0 }],
-  ])('will not reinvest without a %s', async (_what, over) => {
+    ['price', { quote: null }, NO_PRICE],
+    ['exchange rate', { quote: noRate }, NO_RATE],
+    ['exchange rate, with a manual price', { quote: null, manualPrice: 30 }, NO_RATE],
+    ['price above zero', { manualPrice: 0 }, NO_PRICE],
+    ['price or rate', { quote: noRate, manualPrice: 0 }, NO_PRICE],
+  ])('will not reinvest without a %s', async (_what, over, message) => {
     const { actions, tables, holding, h, payout } = await withDuePayout(over);
     const kept = holding(h.id);
     await expect(
       actions.confirmDividend(payout, { amount: 3_79, paidOn: '2026-10-12', bucket: 'reinvest' }),
-    ).rejects.toThrow(
-      'Reinvesting needs a price for this holding. Refresh prices or set a manual price.',
-    );
+    ).rejects.toThrow(message);
     expect(tables().dividend).toEqual([]);
     expect(holding(h.id)).toEqual(kept);
   });

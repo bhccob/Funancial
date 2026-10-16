@@ -306,7 +306,8 @@ describe('Holdings tab', () => {
     ];
     renderInvest(data);
     expect(screen.getByText('1 holding has no exchange rate yet')).toBeInTheDocument();
-    expect(rowOf('SAP')).toHaveTextContent('Not priced yet');
+    expect(rowOf('SAP')).toHaveTextContent('No exchange rate yet');
+    expect(rowOf('SAP')).not.toHaveTextContent('Not priced yet');
     // Left out of the total.
     expect(within(region('Portfolio value')).getByText(usd(600_00))).toBeInTheDocument();
 
@@ -330,7 +331,7 @@ describe('Holdings tab', () => {
     renderInvest(data);
     expect(screen.getByText('1 holding has no exchange rate yet')).toBeInTheDocument();
     expect(rowOf('NEW')).toHaveTextContent('Not priced yet');
-    expect(rowOf('SAP')).toHaveTextContent('Not priced yet');
+    expect(rowOf('SAP')).toHaveTextContent('No exchange rate yet');
 
     // Without the one that has a price, nothing is said about rates.
     cleanup();
