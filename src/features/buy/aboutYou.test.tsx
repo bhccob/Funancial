@@ -5,6 +5,8 @@ import { formatMoney } from '@/domain/money';
 import type { AboutYou } from '@/domain/entities';
 import { CATEGORY_OPTIONS } from '@/features/shared/categories';
 import { formatDay } from '@/lib/format';
+import { market } from '@/services/market';
+import { createBuyActions } from '@/store/buyActions';
 import { renderWithStore } from '@/test/appStoreStub';
 import { makeAboutYou, makeGoal, makeProfile } from '@/test/fixtures';
 import { freshRealStore } from '@/test/realStore';
@@ -39,16 +41,19 @@ const chip = (name: string) => screen.getByRole('button', { name });
 
 type Store = Awaited<ReturnType<typeof renderAbout>>['store'];
 
-/** Every write to the store waits a while first, so a tap can come before the last one has landed. */
-function slowWrites(store: Store, ms: number) {
+/** Counts every write to the store, each waiting `ms` first so a tap can come before the last one lands. */
+function spyOnWrites(store: Store, ms = 0) {
   const { put } = store.getState();
-  store.setState({
-    put: (async (...args: Parameters<typeof put>) => {
-      await new Promise((resolve) => setTimeout(resolve, ms));
-      return put(...args);
-    }) as typeof put,
+  const spy = vi.fn(async (...args: Parameters<typeof put>) => {
+    await new Promise((resolve) => setTimeout(resolve, ms));
+    return put(...args);
   });
+  store.setState({ put: spy as typeof put });
+  return spy;
 }
+
+/** Resolves once every About-you save already started has finished (it makes one write of its own). */
+const settled = (store: Store) => createBuyActions(store, market).saveAbout({});
 
 /** Every write to the store fails. */
 const failingWrites = (store: Store) =>
@@ -284,23 +289,49 @@ describe('About you', () => {
       await waitFor(() => expect(saved()?.[key]).toBe('A house deposit'));
     });
 
+    it('leaves alone text it never changed, even if it was saved elsewhere since', async () => {
+      const { store, saved, unmount } = await renderAbout({ about: makeAboutYou() });
+      // Another tab saved this while the screen was open on an empty field.
+      await store.getState().put('aboutYou', { ...saved()!, matters: 'House deposit' });
+      unmount();
+      await settled(store);
+      expect(saved()?.matters).toBe('House deposit');
+    });
+
+    it('leaves alone text it never changed when the field is left', async () => {
+      const { store, saved } = await renderAbout({ about: makeAboutYou() });
+      await store.getState().put('aboutYou', { ...saved()!, matters: 'House deposit' });
+      await userEvent.click(screen.getByLabelText(MATTERS));
+      await userEvent.tab();
+      await settled(store);
+      expect(saved()?.matters).toBe('House deposit');
+    });
+
+    it('saves a text once when the field is left and the screen closes straight after', async () => {
+      const { store, saved, unmount } = await renderAbout();
+      const put = spyOnWrites(store, 100);
+      await userEvent.type(screen.getByLabelText(MATTERS), 'A house');
+      await userEvent.tab();
+      unmount(); // the save from leaving the field is still on its way
+      await waitFor(() => expect(saved()?.matters).toBe('A house'));
+      expect(put).toHaveBeenCalledTimes(1);
+    });
+
     it('saves nothing when no text was changed', async () => {
-      const { saved, store, unmount } = await renderAbout({
-        about: makeAboutYou({ matters: 'Kept' }),
-      });
-      const before = saved();
+      const { store, unmount } = await renderAbout({ about: makeAboutYou({ matters: 'Kept' }) });
+      const put = spyOnWrites(store);
       await userEvent.click(screen.getByLabelText(SITUATION));
       unmount();
-      await new Promise((resolve) => setTimeout(resolve, 20));
-      expect(store.getState().data.tables.aboutYou[0]).toBe(before);
+      await settled(store);
+      expect(put).toHaveBeenCalledTimes(1); // settled's own
     });
 
     it('does not save a text that is too long', async () => {
-      const { saved, unmount } = await renderAbout();
+      const { store, saved, unmount } = await renderAbout();
       await pasteInto(MATTERS, 'x'.repeat(501));
       unmount();
-      await new Promise((resolve) => setTimeout(resolve, 20));
-      expect(saved()).toBeUndefined();
+      await settled(store);
+      expect(saved()?.matters).toBe(''); // the record settled made, nothing from the screen
     });
   });
 
@@ -331,14 +362,14 @@ describe('About you', () => {
     });
 
     it('does not say Saved beside another field that is still wrong', async () => {
-      await renderAbout();
+      const { store } = await renderAbout();
       await pasteInto(MATTERS, 'x'.repeat(501));
       await userEvent.tab();
       expect(await screen.findByText(TOO_LONG)).toBeInTheDocument();
 
       await userEvent.click(chip('Fun'));
       await waitFor(() => expect(chip('Fun')).toHaveAttribute('aria-pressed', 'true'));
-      await new Promise((resolve) => setTimeout(resolve, 20));
+      await settled(store);
       expect(screen.getByText(TOO_LONG)).toBeInTheDocument();
       expect(screen.queryByText('Saved')).not.toBeInTheDocument();
     });
@@ -349,7 +380,7 @@ describe('About you', () => {
       goals: [fund, bike],
       about: makeAboutYou({ protectGoalId: 'gone' }), // the stored goal was deleted
     });
-    slowWrites(store, 200);
+    spyOnWrites(store, 200);
     await userEvent.selectOptions(screen.getByLabelText(GOAL), 'bike');
     await userEvent.click(chip('Fun'));
     await waitFor(() => expect(saved()?.overspend).toEqual(['entertainment']));

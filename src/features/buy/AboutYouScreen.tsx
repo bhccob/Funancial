@@ -38,8 +38,13 @@ export function AboutYouScreen() {
   const [goalId, setGoalId] = useState(about?.protectGoalId ?? '');
   const [errors, setErrors] = useState<Partial<Record<Field, string>>>({});
   const [saved, setSaved] = useState(false);
-  // What is typed in each text, for the save when the screen is left with the cursor still in one.
-  const pending = useRef({ matters, situation });
+  // What is typed in each text and not yet handed to a save, or null when it was not changed since:
+  // only that is saved on leaving the field or the screen, so a text never touched cannot overwrite
+  // what another tab saved meanwhile, and one already on its way is not saved a second time.
+  const pending = useRef<Record<'matters' | 'situation', string | null>>({
+    matters: null,
+    situation: null,
+  });
   const flush = useRef(() => {});
 
   // A goal deleted since it was picked reads as None, and the next save lets go of it.
@@ -74,11 +79,12 @@ export function AboutYouScreen() {
     }
   }
 
-  /** Saves a text on leaving its field, unless it is what is already saved. */
+  /** Saves a text on leaving its field, if it was changed and is not what is already saved. */
   function leave(field: 'matters' | 'situation', text: string, set: (text: string) => void) {
+    if (pending.current[field] === null) return;
+    pending.current[field] = null;
     const value = text.trim();
     set(value);
-    pending.current[field] = value;
     if (value !== (about?.[field] ?? '')) void save(field, { [field]: value });
   }
 
@@ -95,7 +101,10 @@ export function AboutYouScreen() {
   useEffect(() => {
     flush.current = () => {
       for (const field of ['matters', 'situation'] as const) {
-        const value = pending.current[field].trim();
+        const text = pending.current[field];
+        if (text === null) continue;
+        pending.current[field] = null;
+        const value = text.trim();
         if (value !== (store.getState().data.tables.aboutYou[0]?.[field] ?? '')) {
           void save(field, { [field]: value });
         }
