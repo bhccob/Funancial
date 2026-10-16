@@ -1125,10 +1125,12 @@ describe('price service', () => {
       expect(
         await read(listed({ priceSpecification: [{ priceCurrency: 'EUR' }, spec, { price: 1 }] })),
       ).toEqual(want);
-      // `price` comes first, and its own priceCurrency before the specification's.
+      // `price` comes first, and a price keeps the currency of the element that gave it: the
+      // offer's, never the specification's.
       expect(await read(listed({ price: '80', priceSpecification: [spec] }))).toEqual({
         ...want,
         price: 80,
+        currency: null,
       });
       expect(
         await read(listed({ price: '80', priceCurrency: 'gbp', priceSpecification: [spec] })),
@@ -1197,7 +1199,11 @@ describe('price service', () => {
         await read(
           product({ ...aggregate, priceSpecification: { price: 22, priceCurrency: 'GBP' } }),
         ),
-      ).toEqual({ name: 'Lamp', price: 22, currency: 'EUR' });
+      ).toEqual({ name: 'Lamp', price: 22, currency: 'GBP' });
+      // A specification's price takes the specification's currency, not the offer's.
+      expect(
+        await read(product({ priceCurrency: 'EUR', priceSpecification: { price: 22 } })),
+      ).toEqual({ name: 'Lamp', price: 22, currency: null });
       expect(await read(product({ '@type': 'AggregateOffer', highPrice: 49 }))).toMatchObject({
         price: null,
       });

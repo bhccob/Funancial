@@ -94,12 +94,17 @@ function quoteOf(offer: Obj): Quote | null {
     .flat()
     .filter(isObj)
     .find((s) => parsePrice(s.price) !== null);
-  const price = parsePrice(offer.price) ?? parsePrice(spec?.price) ?? parsePrice(offer.lowPrice);
-  if (price === null) return null;
-  return {
-    price,
-    currency: parseCurrency(offer.priceCurrency) ?? parseCurrency(spec?.priceCurrency),
-  };
+  const candidates: Array<[unknown, Obj | undefined]> = [
+    [offer.price, offer],
+    [spec?.price, spec],
+    [offer.lowPrice, offer],
+  ];
+  for (const [value, source] of candidates) {
+    const price = parsePrice(value);
+    // The currency comes from the element that gave the price.
+    if (price !== null && source) return { price, currency: parseCurrency(source.priceCurrency) };
+  }
+  return null;
 }
 
 const firstQuote = (offers: unknown): Quote | null =>
@@ -156,8 +161,8 @@ function readProduct(html: string) {
   const meta = metaContent(html);
   const title = /<title\b[^>]{0,200}>([\s\S]{0,1000}?)<\/title>/i.exec(html)?.[1];
 
-  // The name and the price come from the first Product, and a price keeps the currency of its own
-  // source, so a name or a currency is never paired with another source's price.
+  // The name and the price come from the first Product. A price keeps the currency of its own
+  // source, so a currency is never paired with another source's price.
   // `og:price:*` is the older spelling of `product:price:*`; Shopify stores still use it.
   const { price, currency } = (product && productQuote(product)) || {
     price: parsePrice(meta.get('product:price:amount') ?? meta.get('og:price:amount')),
