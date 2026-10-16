@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Funancial wireframes M5 M6</title>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&display=swap" rel="stylesheet" />
+<style>
+:root { --ink: #1d1d22; --mid: #8b8b96; --soft: #c9c9d1; --fill: #ececf0; --bg: #fff; --page: #e9eaee; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: Manrope, system-ui, sans-serif; background: var(--page); color: var(--ink); padding: 28px 16px 60px; }
+h1 { max-width: 1240px; margin: 0 auto 6px; font-size: 24px; font-weight: 800; }
+.lead { max-width: 1240px; margin: 0 auto 24px; color: var(--mid); font-weight: 700; line-height: 1.5; }
+.row { max-width: 1240px; margin: 0 auto 30px; }
+.row h2 { font-size: 16px; font-weight: 800; margin-bottom: 14px; }
+.phones { display: flex; flex-wrap: wrap; gap: 24px; }
+.col { display: flex; flex-direction: column; gap: 8px; }
+.col b.cap { font-size: 13px; font-weight: 800; }
+.col small { color: var(--mid); font-weight: 700; font-size: 12px; max-width: 300px; line-height: 1.45; }
+.phone { width: 300px; height: 620px; background: var(--bg); border-radius: 30px; border: 8px solid #22222a; position: relative; overflow: hidden; }
+.in { position: absolute; inset: 0; padding: 30px 16px 70px; overflow: hidden; }
+.t { font-size: 22px; font-weight: 800; margin-bottom: 10px; }
+.k { font-size: 10.5px; font-weight: 700; color: var(--mid); }
+.big { font-size: 26px; font-weight: 800; margin: 2px 0 8px; }
+.line { height: 1px; background: var(--fill); margin: 12px 0; }
+.box { border: 1.5px dashed var(--soft); border-radius: 12px; display: grid; place-items: center; color: var(--mid); font-size: 10.5px; font-weight: 700; text-align: center; padding: 8px; }
+.tabs { display: flex; gap: 14px; font-size: 12px; font-weight: 800; color: var(--mid); margin: 4px 0 12px; border-bottom: 1px solid var(--fill); }
+.tabs span { padding-bottom: 6px; }
+.tabs .on { color: var(--ink); border-bottom: 2px solid var(--ink); }
+.chips { display: flex; gap: 6px; margin: 8px 0; flex-wrap: wrap; }
+.chip { font-size: 10px; font-weight: 800; padding: 4px 8px; border-radius: 99px; background: var(--fill); }
+.chip.on { background: var(--ink); color: #fff; }
+.item { display: flex; align-items: center; gap: 8px; padding: 7px 0; font-size: 11.5px; font-weight: 700; }
+.item + .item { border-top: 1px solid var(--fill); }
+.dot { width: 26px; height: 26px; border-radius: 50%; background: var(--fill); flex: none; }
+.item .w { flex: 1; } .item .w i { display: block; font-style: normal; color: var(--mid); font-size: 10px; }
+.btn { border-radius: 99px; background: var(--ink); color: #fff; font-size: 11.5px; font-weight: 800; padding: 9px 14px; text-align: center; }
+.btn.o { background: none; color: var(--ink); border: 1.5px solid var(--soft); }
+.field { border: 1.5px solid var(--soft); border-radius: 10px; padding: 9px 10px; font-size: 11px; font-weight: 700; color: var(--mid); margin: 5px 0 9px; }
+.acts { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin: 10px 0; }
+.acts div { display: flex; flex-direction: column; align-items: center; gap: 5px; font-size: 10px; font-weight: 800; }
+.acts div i { width: 40px; height: 40px; border-radius: 50%; background: var(--fill); }
+.acts div.hl i { background: var(--ink); }
+.acts div.new i { outline: 2px solid #f0a400; outline-offset: 2px; }
+.bar { position: absolute; left: 0; right: 0; bottom: 0; height: 54px; border-top: 1px solid var(--fill); display: grid; grid-template-columns: repeat(4, 1fr); font-size: 9.5px; font-weight: 800; color: var(--mid); }
+.bar span { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; }
+.bar span::before { content: ''; width: 18px; height: 18px; border-radius: 5px; background: var(--fill); }
+.bar .on { color: var(--ink); } .bar .on::before { background: var(--ink); }
+.bar .new { color: #b37700; }
+.verdict { background: var(--ink); color: #fff; border-radius: 14px; padding: 12px; margin: 6px 0 10px; }
+.verdict b { font-size: 18px; font-weight: 800; display: block; } .verdict i { font-style: normal; font-size: 10.5px; opacity: .75; font-weight: 700; }
+.kv { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 8px 0; }
+.kv div { font-size: 10px; font-weight: 700; color: var(--mid); } .kv div b { display: block; color: var(--ink); font-size: 13px; }
+.note { font-size: 9.5px; font-weight: 700; color: var(--mid); margin-top: 6px; }
+.tag { position: absolute; top: 8px; right: 10px; font-size: 9px; font-weight: 800; background: #fff3d6; color: #8a5a00; padding: 3px 7px; border-radius: 99px; }
+.legend { max-width: 1240px; margin: 0 auto; color: var(--mid); font-size: 12.5px; font-weight: 700; line-height: 1.6; }
+</style>
+</head>
+<body>
+<h1>Wireframes · M5 Invest and M6 "Should I buy it?"</h1>
+<p class="lead">Grey boxes = layout only, no final colours. It uses the Open style you approved. Orange marks what's new. Bottom bar from M5: Home · Budget · Invest · Menu (Quests moves into the Menu; the level ring on Home still opens it).</p>
+
+<section class="row">
+  <h2>M5 · Invest (stocks, ETFs, dividends and news in one place)</h2>
+  <div class="phones">
+    <div class="col"><b class="cap">Invest · Holdings</b>
+      <div class="phone"><div class="in">
+        <div class="t">Invest</div>
+        <div class="tabs"><span class="on">Holdings</span><span>Dividends</span><span>News</span></div>
+        <div class="k">Portfolio value</div><div class="big">$24,310.55</div>
+        <div class="k">▲ $132.20 today · ▲ 8.4% all time</div>
+        <div class="chips"><span class="chip on">By holding</span><span class="chip">By type</span><span class="chip">By sector</span></div>
+        <div style="display:flex;gap:10px;align-items:center"><div class="box" style="width:110px;height:110px;border-radius:50%">donut</div><div class="box" style="flex:1;height:110px">legend: name · % · value</div></div>
+        <div class="line"></div>
+        <div class="item"><span class="dot"></span><span class="w">VWRL · All-World ETF<i>40 shares</i></span><span>$5,120 ▲</span></div>
+        <div class="item"><span class="dot"></span><span class="w">AAPL · Apple<i>12 shares</i></span><span>$2,690 ▼</span></div>
+        <div class="item"><span class="dot"></span><span class="w">Best / worst this month<i>NVDA +12% · KO −3%</i></span></div>
+        <div class="btn o" style="margin-top:8px">+ Add a holding</div>
+        <div class="note">Prices delayed · not financial advice</div>
+      </div><div class="bar"><span>Home</span><span>Budget</span><span class="on new">Invest</span><span>Menu</span></div></div>
+      <small>Your portfolio first, then a tappable donut (by holding, type or sector), then each holding with its gain or loss.</small>
+    </div>
+    <div class="col"><b class="cap">Invest · Dividends</b>
+      <div class="phone"><div class="in">
+        <div class="t">Invest</div>
+        <div class="tabs"><span>Holdings</span><span class="on">Dividends</span><span>News</span></div>
+        <div class="kv"><div>This month<b>$42.10</b></div><div>This year<b>$388.40</b></div><div>Next 12 months<b>~$510</b></div><div>Yield<b>2.1%</b></div></div>
+        <div class="box" style="height:90px">bars: expected income per month (12)</div>
+        <div class="line"></div>
+        <div class="k">Coming up</div>
+        <div class="item"><span class="dot"></span><span class="w">KO · pays Oct 28<i>ex-date Oct 18 · after 15% tax</i></span><span>$11.20</span></div>
+        <div class="item"><span class="dot"></span><span class="w">VWRL · paid today<i>Confirm where it went</i></span><span class="btn" style="padding:5px 9px">Confirm</span></div>
+        <div class="item"><span class="dot"></span><span class="w">Top payers · Dividend streak<i>4 months in a row</i></span></div>
+      </div><div class="bar"><span>Home</span><span>Budget</span><span class="on new">Invest</span><span>Menu</span></div></div>
+      <small>Dividends sit with the stocks, as you asked: totals, a 12-month forecast, what's coming, and "Confirm" when a payout lands (cash, savings or reinvest).</small>
+    </div>
+    <div class="col"><b class="cap">Invest · News</b>
+      <div class="phone"><div class="in">
+        <div class="t">Invest</div>
+        <div class="tabs"><span>Holdings</span><span>Dividends</span><span class="on">News</span></div>
+        <div class="chips"><span class="chip on">All</span><span class="chip">VWRL</span><span class="chip">AAPL</span><span class="chip">KO</span></div>
+        <div class="item"><span class="w">Apple unveils…<i>AAPL · Reuters · 2 h ago</i></span></div>
+        <div class="item"><span class="w">Coca-Cola raises dividend…<i>KO · Bloomberg · 5 h ago</i></span></div>
+        <div class="item"><span class="w">Global markets close higher…<i>VWRL · FT · 1 day ago</i></span></div>
+        <div class="item"><span class="w">…<i>tap opens the article</i></span></div>
+        <div class="note">Headlines from a third party · not financial advice</div>
+      </div><div class="bar"><span>Home</span><span>Budget</span><span class="on new">Invest</span><span>Menu</span></div></div>
+      <small>Headlines only for what you hold, filterable by stock. Tapping opens the article.</small>
+    </div>
+  </div>
+</section>
+
+<section class="row">
+  <h2>M6 · "Should I buy it?"</h2>
+  <div class="phones">
+    <div class="col"><b class="cap">Home with the new action</b>
+      <div class="phone"><div class="in">
+        <div class="k">Hi, Bob · Oct 16</div>
+        <div class="k" style="margin-top:12px">Available to spend</div><div class="big">$3,482.15</div>
+        <div class="box" style="height:10px;padding:0"></div>
+        <div class="acts"><div class="hl"><i></i>Expense</div><div><i></i>Income</div><div><i></i>Goals</div><div class="new"><i></i>Buy it?</div></div>
+        <div class="line"></div>
+        <div class="box" style="height:150px">Spending, Last 7 days, Limits… (as today)</div>
+      </div><div class="bar"><span class="on">Home</span><span>Budget</span><span>Invest</span><span>Menu</span></div></div>
+      <small>"Buy it?" takes History's spot among the four round buttons (History stays in the Menu). The Add Expense screen also gets a line: "Haven't bought it yet? Ask first →".</small>
+    </div>
+    <div class="col"><b class="cap">Ask</b>
+      <div class="phone"><span class="tag">new</span><div class="in">
+        <div class="t">Should I buy it?</div>
+        <div class="k">Paste a link (fills name and price)</div><div class="field">https://…</div>
+        <div class="k">What is it?</div><div class="field">Noise-cancelling headphones</div>
+        <div class="k">Price</div><div class="field">$249.00</div>
+        <div class="chips"><span class="chip">Need</span><span class="chip on">Want</span><span class="chip">Treat</span></div>
+        <div class="k">How soon?</div><div class="chips"><span class="chip">Today</span><span class="chip on">This month</span><span class="chip">No rush</span></div>
+        <div class="btn" style="margin-top:10px">Ask</div>
+        <div class="note">Works offline with a basic check; the AI explains it when online.</div>
+      </div><div class="bar"><span>Home</span><span>Budget</span><span>Invest</span><span>Menu</span></div></div>
+      <small>A short form: link, name, price, need/want, and how soon. Only totals (not your transactions) leave the phone.</small>
+    </div>
+    <div class="col"><b class="cap">The answer</b>
+      <div class="phone"><span class="tag">new</span><div class="in">
+        <div class="verdict"><i>Our take</i><b>Wait a few days</b><i>Confidence: medium · Budget check agrees</i></div>
+        <div class="kv"><div>Fun limit after<b>132% · over by $82</b></div><div>Available after<b>$3,233</b></div><div>Emergency fund<b>2.1 → 2.0 months</b></div><div>Bike goal<b>+9 days later</b></div></div>
+        <div class="line"></div>
+        <div class="k">Why</div><div class="box" style="height:58px">pros · cons · cheaper alternatives</div>
+        <div class="field" style="margin-top:8px">Argue back: "I use them every day…"</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px"><span class="btn o">Remind me in 3 days</span><span class="btn o">I bought it</span></div>
+        <div class="note">Not financial advice</div>
+      </div><div class="bar"><span>Home</span><span>Budget</span><span>Invest</span><span>Menu</span></div></div>
+      <small>One clear verdict, the exact numbers behind it, then reasons. You can argue back (Debate), get a reminder to re-check, or log it if you bought it.</small>
+    </div>
+  </div>
+</section>
+
+<p class="legend">Menu after M6: Subscriptions · Goals · History · Salary freeze · Quests · Shop · Inbox · Help · Settings. Desktop: the same items in the sidebar.</p>
+</body>
+</html>
