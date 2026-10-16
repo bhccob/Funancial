@@ -23,6 +23,7 @@ import {
   type SearchResponse,
 } from '@/services/market';
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
+import { expectHelpTip } from '@/test/helpTip';
 import { makeDividend, makeHolding, makeProfile, makeSale } from '@/test/fixtures';
 import { FUTURE } from '@/store/financeActions';
 import { SOLD_NO_REINVEST, UNKNOWN_SYMBOL } from '@/store/investActions';
@@ -257,6 +258,12 @@ describe('Holdings tab', () => {
       ),
     ).toBeInTheDocument();
     expect(screen.getByText('Prices delayed · not financial advice')).toBeInTheDocument();
+  });
+
+  it('explains the portfolio value, beside its title, and leaves the Add pill where it was', async () => {
+    renderInvest(portfolioData());
+    await expectHelpTip(region('Portfolio value'), 'portfolio value', 'investments');
+    expect(screen.getAllByRole('button', { name: 'Add a holding' })).toHaveLength(1);
   });
 
   it('has one add button, a compact primary pill in the Portfolio value row, that opens the add dialog', async () => {

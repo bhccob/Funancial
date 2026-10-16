@@ -1,5 +1,6 @@
 import { useId, useMemo, useState } from 'react';
 import { sliceColors } from '@/components/charts/colors';
+import { HelpTip } from '@/components/ui/HelpTip';
 import { Section } from '@/components/ui/Section';
 import { profitAndLoss } from '@/domain/sales';
 import { cn } from '@/lib/cn';
@@ -44,6 +45,7 @@ export function ProfitAndLoss() {
   return (
     <Section
       title="Profit & loss · all time"
+      help={<HelpTip pageId="investments" label="profit & loss" />}
       action={
         <button
           type="button"

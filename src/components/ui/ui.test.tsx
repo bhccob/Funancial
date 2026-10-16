@@ -1,5 +1,6 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { useState, type ComponentType } from 'react';
 import { MemoryRouter } from 'react-router';
 import { describe, expect, it, vi } from 'vitest';
 import { Banner } from './Banner';
@@ -9,6 +10,7 @@ import { ErrorBoundary } from './ErrorBoundary';
 import { PageHeader } from './PageHeader';
 import { ProgressBar } from './ProgressBar';
 import { EmptyLink, Section, SectionLink } from './Section';
+import { Sheet } from './Sheet';
 import { TextField } from './TextField';
 import { Toaster } from './Toaster';
 import { topDialog } from '@/lib/dialogStack';
@@ -155,6 +157,41 @@ describe('Dialog', () => {
     );
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
+});
+
+describe('Sheet and Dialog focus', () => {
+  /** A button that opens the overlay; Escape closes it. */
+  const overlays: Array<
+    [string, ComponentType<{ open: boolean; title: string; onClose(): void }>]
+  > = [
+    ['Sheet', Sheet],
+    ['Dialog', Dialog],
+  ];
+
+  it.each(overlays)(
+    '%s gives focus back to what opened it when it closes',
+    async (_name, Overlay) => {
+      function Harness() {
+        const [open, setOpen] = useState(false);
+        return (
+          <>
+            <button type="button" onClick={() => setOpen(true)}>
+              Open
+            </button>
+            <Overlay open={open} title="Details" onClose={() => setOpen(false)} />
+          </>
+        );
+      }
+      render(<Harness />);
+      const opener = screen.getByRole('button', { name: 'Open' });
+      await userEvent.click(opener);
+      expect(screen.getByRole('dialog', { name: 'Details' })).toBeVisible();
+      expect(opener).not.toHaveFocus();
+      await userEvent.keyboard('{Escape}');
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      expect(opener).toHaveFocus();
+    },
+  );
 });
 
 describe('Toaster', () => {

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, Navigate, useNavigate, useParams } from 'react-router';
 import { Banner } from '@/components/ui/Banner';
 import { Button } from '@/components/ui/Button';
+import { HelpTip } from '@/components/ui/HelpTip';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { RadioGroup } from '@/components/ui/RadioGroup';
 import { Section } from '@/components/ui/Section';
@@ -127,6 +128,10 @@ export function AnswerScreen() {
       </PageHeader>
 
       <Section>
+        <div className="mb-3 flex items-center justify-center gap-3">
+          <span className="text-muted text-sm font-bold">Buy meter</span>
+          <HelpTip pageId="buy-it" label="the buy meter" />
+        </div>
         <BuyMeter meter={decision.meter} />
         <p className="mt-5 text-center">
           <span className="text-[26px] leading-tight font-extrabold tracking-[-0.02em]">

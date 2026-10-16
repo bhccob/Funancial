@@ -8,6 +8,7 @@ import { Toaster } from '@/components/ui/Toaster';
 import { formatMoney } from '@/domain/money';
 import { formatDay } from '@/lib/format';
 import { renderWithStore } from '@/test/appStoreStub';
+import { expectHelpTip } from '@/test/helpTip';
 import { fakeNotifier, onPhone } from '@/test/fakeNotifier';
 import { makeBuyAsk, makeBuyDecision, makeLimit, makeProfile, makeSettings } from '@/test/fixtures';
 import { freshRealStore } from '@/test/realStore';
@@ -112,6 +113,11 @@ describe('the answer', () => {
     expect(screen.getByRole('meter')).toHaveAttribute('aria-valuetext', '38% a buy, Wait zone');
     expect(screen.getByText('Wait a few days')).toBeInTheDocument();
     expect(screen.getByText('· confidence medium')).toBeInTheDocument();
+  });
+
+  it('explains the buy meter, beside its label', async () => {
+    await renderAnswer(full());
+    await expectHelpTip(document.body, 'the buy meter', 'buy-it');
   });
 
   it.each([

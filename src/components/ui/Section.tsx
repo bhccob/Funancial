@@ -5,6 +5,8 @@ import { cn } from '@/lib/cn';
 
 export interface SectionProps {
   title?: string;
+  /** A `HelpTip` for the title: it sits just after it, and `action` stays on the right. */
+  help?: ReactNode;
   /** What sits on the right of the title: a `SectionLink`, tabs, a button or a figure. */
   action?: ReactNode;
   children: ReactNode;
@@ -16,7 +18,7 @@ export interface SectionProps {
  * No box: the padding above and below is the space between sections. A page's first section
  * supplies its own top space under the header.
  */
-export function Section({ title, action, children, className }: SectionProps) {
+export function Section({ title, help, action, children, className }: SectionProps) {
   const headingId = useId();
   return (
     <section
@@ -33,6 +35,7 @@ export function Section({ title, action, children, className }: SectionProps) {
               {title}
             </h2>
           )}
+          {help && <div className="mr-auto flex">{help}</div>}
           {action && <div className="text-muted text-[13.5px] font-bold">{action}</div>}
         </div>
       )}

@@ -10,16 +10,27 @@ export interface ModalDialogProps {
 /**
  * What `Dialog` and `Sheet` share: a native <dialog> that is shown modally while `open`
  * (focus trapping and an inert background come from showModal()) and sits on the dialog stack,
- * so the Android back gesture can find it. Spread the result onto the <dialog>.
+ * so the Android back gesture can find it. Spread the result onto the <dialog>. Closing hands focus
+ * back to what had it when the dialog opened (the browser does this itself; saying so here keeps it
+ * true under the test stand-in for showModal(), and where the opener is still in the page).
  */
 export function useModalDialog(open: boolean, onClose: () => void): ModalDialogProps {
   const ref = useRef<HTMLDialogElement>(null);
+  const opener = useRef<Element | null>(null);
 
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    if (open && !el.open) el.showModal();
-    if (!open && el.open) el.close();
+    if (open && !el.open) {
+      opener.current = document.activeElement;
+      el.showModal();
+    }
+    if (!open && el.open) {
+      el.close();
+      if (opener.current instanceof HTMLElement && opener.current.isConnected)
+        opener.current.focus();
+      opener.current = null;
+    }
     if (!open) return;
     pushDialog(el);
     return () => removeDialog(el);

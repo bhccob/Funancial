@@ -7,6 +7,7 @@ import { formatMoney } from '@/domain/money';
 import { emptySnapshot, type DataSnapshot } from '@/domain/snapshot';
 import { market } from '@/services/market';
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
+import { expectHelpTip } from '@/test/helpTip';
 import { makeDividend, makeHolding, makeProfile, makeSale, makeSettings } from '@/test/fixtures';
 import { InvestScreen } from './InvestScreen';
 
@@ -83,6 +84,13 @@ function gainData() {
 }
 
 describe('Profit & loss', () => {
+  it('explains profit & loss, beside its title, and Hide still hides it', async () => {
+    renderTab(gainData());
+    await expectHelpTip(region(), 'profit & loss', 'investments');
+    await userEvent.click(toggle());
+    expect(toggle()).toHaveTextContent('Show');
+  });
+
   it('shows the total and its three parts, up in the success colour', () => {
     renderTab(gainData());
     const total = within(region()).getByText(`▲ ${usd(170_00)}`);

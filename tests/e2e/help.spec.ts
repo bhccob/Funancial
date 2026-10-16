@@ -53,3 +53,22 @@ test('Help: the buy-it page draws its zones from the meter', async ({ page }) =>
     /Buy\s*67–100/,
   ]);
 });
+
+test('Home: the "?" on Available to spend opens a tip, gives focus back, and links to its page', async ({
+  page,
+}) => {
+  await startFresh(page);
+  const tip = page.getByRole('button', { name: 'What is available to spend?' });
+  await tip.click();
+  const sheet = page.getByRole('dialog', { name: 'Available to spend' });
+  await expect(sheet).toContainText('What you can still spend this month');
+
+  await page.keyboard.press('Escape');
+  await expect(sheet).toBeHidden();
+  await expect(tip).toBeFocused();
+
+  await tip.click();
+  await sheet.getByRole('link', { name: "How it's worked out ›" }).click();
+  await expect(page).toHaveURL(/\/help\/available$/);
+  await expect(page.getByRole('heading', { level: 1, name: 'Available to spend' })).toBeVisible();
+});

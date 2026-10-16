@@ -4,6 +4,7 @@ import { Link, useSearchParams } from 'react-router';
 import { Donut, DonutLegend } from '@/components/charts/Donut';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { HelpTip } from '@/components/ui/HelpTip';
 import { Section } from '@/components/ui/Section';
 import { underlineTab } from '@/components/ui/underlineTab';
 import type { Holding } from '@/domain/entities';
@@ -165,6 +166,7 @@ export function HoldingsTab({ refresh }: { refresh(): Promise<void> }) {
       ) : (
         <Section
           title="Portfolio value"
+          help={<HelpTip pageId="investments" label="portfolio value" />}
           action={
             <Button
               size="sm"
