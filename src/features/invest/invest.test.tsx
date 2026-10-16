@@ -1194,6 +1194,35 @@ describe('HoldingDialog editing', () => {
     );
   });
 
+  it('refuses a purchase date after a sale of some of the shares, at the date field', async () => {
+    const data = portfolioData();
+    // KO was bought on Sep 1; some were sold on Oct 2, and some on Sep 20.
+    data.tables.sale = [
+      makeSale({ holdingId: 'ko', soldOn: '2026-10-02' }),
+      makeSale({ holdingId: 'ko', soldOn: '2026-09-20' }),
+      makeSale({ holdingId: 'aapl', symbol: 'AAPL', soldOn: '2026-09-05' }),
+    ];
+    const { store } = renderInvest(data);
+    const dialog = await openEdit('KO');
+    const date = within(dialog).getByLabelText('Purchase date');
+    fireEvent.change(date, { target: { value: '2026-09-21' } });
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+    expect(date).toHaveAccessibleDescription(
+      `You sold some of these on ${formatDay('2026-09-20')}, so the purchase date can't be later.`,
+    );
+    expect(store.getState().put).not.toHaveBeenCalled();
+
+    // The day of the first sale is fine.
+    fireEvent.change(date, { target: { value: '2026-09-20' } });
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+    await waitFor(() =>
+      expect(store.getState().put).toHaveBeenCalledWith(
+        'holding',
+        expect.objectContaining({ id: 'ko', purchaseDate: '2026-09-20' }),
+      ),
+    );
+  });
+
   it('refuses a manual price that could be a thousand times out, and reads a clear one', async () => {
     const { store } = renderInvest(portfolioData());
     const dialog = await openEdit('AAPL');

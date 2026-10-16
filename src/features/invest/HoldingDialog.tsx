@@ -9,12 +9,19 @@ import { TextField } from '@/components/ui/TextField';
 import type { Holding } from '@/domain/entities';
 import { formatDecimal, parseDecimal } from '@/domain/money';
 import { costForShares, costPerShare } from '@/domain/portfolio';
+import { firstSoldOn } from '@/domain/sales';
 import { DateField } from '@/features/add/DateField';
 import { formatShares } from '@/lib/format';
 import { marketConfigured } from '@/services/market';
 import { useAction } from '@/lib/useAction';
 import { FUTURE } from '@/store/financeActions';
-import { UNKNOWN_SYMBOL, type HoldingInput, type HoldingPatch } from '@/store/investActions';
+import { useApp } from '@/store/AppStoreProvider';
+import {
+  purchaseAfterSale,
+  UNKNOWN_SYMBOL,
+  type HoldingInput,
+  type HoldingPatch,
+} from '@/store/investActions';
 import { useCurrency, useMoney, useToday } from '@/store/useFinance';
 import { useInvestActions } from '@/store/useInvest';
 import { SummaryLine } from './SummaryLine';
@@ -65,7 +72,14 @@ function totalCost(f: Form, holding: Holding | null): number | null {
 /** The friendly message for each field that is wrong, so the schema's own errors never show. */
 function validate(
   f: Form,
-  ctx: { today: string; editing: boolean; details: boolean; cost: number | null },
+  ctx: {
+    today: string;
+    editing: boolean;
+    details: boolean;
+    cost: number | null;
+    /** The day some of the shares were first sold, if any were. */
+    firstSale: string | undefined;
+  },
 ): Errors {
   const errors: Errors = {};
   const shares = parseDecimal(f.shares);
@@ -82,6 +96,7 @@ function validate(
   }
   if (!/^\d{4}-\d{2}-\d{2}$/.test(f.date)) errors.date = 'Choose the day you bought it';
   else if (f.date > ctx.today) errors.date = FUTURE;
+  else if (ctx.firstSale && f.date > ctx.firstSale) errors.date = purchaseAfterSale(ctx.firstSale);
   // Adding asks nothing about tax: a new holding starts at 0%, and Edit is where it is set.
   const tax = parseDecimal(f.withholding);
   if (ctx.editing && (tax === null || tax > 100)) {
@@ -112,6 +127,7 @@ function HoldingForm({
   const today = useToday();
   const run = useAction();
   const editing = holding !== null;
+  const firstSale = useApp((s) => (holding ? firstSoldOn(s.data, holding.id) : undefined));
 
   const [form, setForm] = useState<Form>({
     symbol: holding?.symbol ?? '',
@@ -149,7 +165,7 @@ function HoldingForm({
 
   async function submit(e: FormEvent) {
     e.preventDefault();
-    const found = validate(form, { today, editing, details, cost });
+    const found = validate(form, { today, editing, details, cost, firstSale });
     setErrors(found);
     if (Object.keys(found).length > 0) return;
 

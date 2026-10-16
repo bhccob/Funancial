@@ -37,6 +37,14 @@ export function planSale(h: Holding, shares: number, pricePerShareMinor: number)
   return { shares: sold, proceeds, cost, profit: proceeds - cost, all };
 }
 
+/** The day some of a holding's shares were first sold; undefined if none were. */
+export function firstSoldOn(data: DataSnapshot, holdingId: string): LocalDate | undefined {
+  return data.tables.sale
+    .filter((s) => s.holdingId === holdingId)
+    .map((s) => s.soldOn)
+    .sort()[0];
+}
+
 /** What the sales made over their cost, added up. */
 export function realisedProfit(data: DataSnapshot): number {
   return data.tables.sale.reduce((sum, s) => sum + s.proceeds - s.cost, 0);

@@ -1010,6 +1010,21 @@ describe('selling a holding', () => {
     expect(tables().sale).toHaveLength(1);
   });
 
+  it('refuses an edit that dates the purchase after a sale, naming the first sale', async () => {
+    const { actions, holding, h } = await withHolding();
+    await actions.sellHolding(h.id, sell);
+    await actions.sellHolding(h.id, { ...sell, shares: 1, soldOn: '2026-10-05' });
+    const kept = holding(h.id);
+
+    await expect(actions.updateHolding(h.id, { purchaseDate: '2026-10-06' })).rejects.toThrow(
+      `You sold some of these on ${formatDay('2026-10-05')}, so the purchase date can't be later.`,
+    );
+    expect(holding(h.id)).toEqual(kept);
+
+    await actions.updateHolding(h.id, { purchaseDate: '2026-10-05' });
+    expect(holding(h.id).purchaseDate).toBe('2026-10-05');
+  });
+
   describe('undoing a sale', () => {
     it('gives a partial sale its shares and cost back, and removes the record, in one write', async () => {
       const { actions, store, tables, holding, balances, h } = await withHolding();

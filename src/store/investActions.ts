@@ -11,7 +11,7 @@ import {
 import { newId, nowIso } from '@/domain/ids';
 import { minorDigits } from '@/domain/money';
 import { holdingPrice, holdingRate } from '@/domain/portfolio';
-import { planSale, type SalePlan } from '@/domain/sales';
+import { firstSoldOn, planSale, type SalePlan } from '@/domain/sales';
 import type { TableRecord } from '@/domain/snapshot';
 import { formatDay } from '@/lib/format';
 import { marketConfigured, type Market } from '@/services/market';
@@ -33,6 +33,9 @@ export const SOLD_NO_REINVEST =
 /** What a sale dated before the holding was bought is told, by `sellHolding` and by the Sell dialog alike. */
 export const saleBeforePurchase = (purchaseDate: LocalDate) =>
   `The sale can't be before you bought it (${formatDay(purchaseDate)}).`;
+/** What a purchase date after a sale is told, by `updateHolding` and by the holding dialog alike. */
+export const purchaseAfterSale = (soldOn: LocalDate) =>
+  `You sold some of these on ${formatDay(soldOn)}, so the purchase date can't be later.`;
 /** A currency code a holding can take; a quote with anything else keeps the holding's own. */
 const CURRENCY = /^[A-Z]{3}$/;
 /** A holding's dividend history is fetched again once it is older than this. */
@@ -171,7 +174,11 @@ export function createInvestActions(store: StoreApi<AppState>, market: Market) {
 
     async updateHolding(id: string, patch: HoldingPatch) {
       const holding = find(id);
-      if (patch.purchaseDate) notFuture(patch.purchaseDate);
+      if (patch.purchaseDate) {
+        notFuture(patch.purchaseDate);
+        const soldOn = firstSoldOn(state().data, id);
+        if (soldOn && patch.purchaseDate > soldOn) throw new Error(purchaseAfterSale(soldOn));
+      }
       await state().put('holding', {
         ...holding,
         ...patch,
