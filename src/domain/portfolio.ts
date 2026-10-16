@@ -1,7 +1,20 @@
 import type { Slice } from './charts';
-import type { Holding } from './entities';
+import type { Holding, Settings } from './entities';
 import { minorDigits } from './money';
 import type { DataSnapshot } from './snapshot';
+
+/**
+ * What Invest converts its profile-currency amounts at: the rate for the chosen currency, or null
+ * when it is shown in the profile currency (none chosen, the same one, or its rate has not loaded).
+ */
+export function investRate(
+  settings: Pick<Settings, 'investCurrency' | 'investFx'> | undefined,
+  profileCurrency: string,
+): number | null {
+  const chosen = settings?.investCurrency ?? null;
+  const fx = settings?.investFx ?? null;
+  return chosen !== null && chosen !== profileCurrency && fx?.currency === chosen ? fx.rate : null;
+}
 
 /** The price to value a holding at: the person's own, else the last quote. */
 export function holdingPrice(h: Holding): number | null {

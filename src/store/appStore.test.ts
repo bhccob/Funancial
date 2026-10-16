@@ -84,6 +84,8 @@ describe('first run', () => {
           prompted: false,
         },
         cosmetics: { theme: 'theme-violet', avatar: 'avatar-sprout', frame: 'frame-none' },
+        investCurrency: null,
+        investFx: null,
       },
     ]);
   });

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { makeHolding, makeProfile } from '@/test/fixtures';
+import { makeHolding, makeProfile, makeSettings } from '@/test/fixtures';
 import type { Holding } from './entities';
-import { allocation, holdingPrice, holdingValue, portfolio } from './portfolio';
+import { allocation, holdingPrice, holdingValue, investRate, portfolio } from './portfolio';
 import { emptySnapshot } from './snapshot';
 
 type Quote = NonNullable<Holding['quote']>;
@@ -215,5 +215,28 @@ describe('allocation', () => {
 
   it('is empty when nothing is priced', () => {
     expect(allocation(rowsOf([held('X', 'stock', null, 0, { quote: null })]), 'type')).toEqual([]);
+  });
+});
+
+describe('investRate', () => {
+  const fx = { currency: 'USD', rate: 1.1, asOf: '2026-10-16T10:00:00.000Z' };
+  const settings = (investCurrency: string | null, investFx: typeof fx | null) =>
+    makeSettings({ investCurrency, investFx });
+
+  it('is the stored rate while Invest is shown in the currency it is for', () => {
+    expect(investRate(settings('USD', fx), 'EUR')).toBe(1.1);
+  });
+
+  it('is nothing when Invest shows the profile currency, because none or the same was chosen', () => {
+    expect(investRate(settings(null, fx), 'EUR')).toBeNull();
+    expect(investRate(settings('EUR', null), 'EUR')).toBeNull();
+    expect(investRate(settings('EUR', { ...fx, currency: 'EUR' }), 'EUR')).toBeNull();
+    expect(investRate(undefined, 'EUR')).toBeNull();
+  });
+
+  it('is nothing until the rate for the chosen currency has loaded', () => {
+    expect(investRate(settings('USD', null), 'EUR')).toBeNull();
+    // A rate left from another choice is not this one's.
+    expect(investRate(settings('GBP', fx), 'EUR')).toBeNull();
   });
 });

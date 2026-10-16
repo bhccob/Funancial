@@ -55,6 +55,14 @@ const STEPS: Record<number, Step> = {
         ? { ...r, reminders: { ...r.reminders, dividends: true } }
         : r,
   },
+  6: {
+    // Spelled out like step 3: Invest starts in the profile currency, with no rate fetched yet.
+    settings: (r) => ({
+      ...r,
+      investCurrency: r.investCurrency ?? null,
+      investFx: r.investFx ?? null,
+    }),
+  },
 };
 
 export const LATEST_VERSION = Math.max(1, ...Object.keys(STEPS).map(Number));

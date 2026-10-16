@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  convertMinor,
   formatDecimal,
   formatMoney,
   isAmbiguousDecimal,
@@ -132,5 +133,40 @@ describe('formatMoney', () => {
     expect(formatMoney(-188436, 'USD', 'en-US', { whole: true })).toBe('-$1,884');
     expect(formatMoney(-500, 'USD', 'en-US', { whole: true, signDisplay: 'always' })).toBe('-$5');
     expect(formatMoney(1234, 'JPY', 'en-US', { whole: true })).toBe('¥1,234');
+  });
+});
+
+describe('convertMinor', () => {
+  it('converts euro cents to dollar cents at the rate', () => {
+    expect(convertMinor(100_00, 'EUR', 'USD', 1.1)).toBe(110_00);
+    expect(convertMinor(1, 'EUR', 'USD', 1.1)).toBe(1);
+    expect(convertMinor(0, 'EUR', 'USD', 1.1)).toBe(0);
+  });
+
+  it('follows the decimals of both currencies', () => {
+    // EUR 12.34 at 160 yen is 1974.4 yen, and yen have no minor units.
+    expect(convertMinor(12_34, 'EUR', 'JPY', 160)).toBe(1974);
+    // 1,000 yen at 0.00625 is EUR 6.25.
+    expect(convertMinor(1000, 'JPY', 'EUR', 0.00625)).toBe(6_25);
+    expect(convertMinor(5_00, 'EUR', 'USD', 1)).toBe(5_00);
+    expect(convertMinor(5_00, 'USD', 'JPY', 1)).toBe(5);
+  });
+
+  it('rounds once, at the end', () => {
+    // 0.01 euro at 150 yen is 1.5 yen: rounding the cent first or the yen first would give 0 or 1.
+    expect(convertMinor(1, 'EUR', 'JPY', 150)).toBe(2);
+    // 33.33 x 1.105 is 36.82965, so 36.83.
+    expect(convertMinor(33_33, 'EUR', 'USD', 1.105)).toBe(36_83);
+    // An exact half goes up.
+    expect(convertMinor(15, 'EUR', 'USD', 1.5)).toBe(23);
+    // A fractional amount, as a chart passes it, is rounded once too.
+    expect(convertMinor(10_00.4, 'EUR', 'USD', 1.1)).toBe(11_00);
+  });
+
+  it('converts a loss to the same size as the same gain, and never to -0', () => {
+    expect(convertMinor(-100_00, 'EUR', 'USD', 1.1)).toBe(-110_00);
+    expect(convertMinor(-15, 'EUR', 'USD', 1.5)).toBe(-23);
+    expect(convertMinor(-12_34, 'EUR', 'JPY', 160)).toBe(-1974);
+    expect(Object.is(convertMinor(-1, 'EUR', 'JPY', 0.1), 0)).toBe(true);
   });
 });

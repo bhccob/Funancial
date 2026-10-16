@@ -162,3 +162,13 @@ export function currencySymbol(currency: string, locale?: string): string {
       .find((p) => p.type === 'currency')?.value ?? currency
   );
 }
+
+/**
+ * `minor` units of `from` as minor units of `to` at `rate` (units of `to` for one of `from`),
+ * rounded once. The currencies may differ in decimals: ¥ has none, € has two. A loss rounds to the
+ * same size as the same gain, and the `+ 0` turns a rounded -0 into 0, which would print as "-¥0".
+ */
+export function convertMinor(minor: number, from: string, to: string, rate: number): number {
+  const converted = Math.abs(minor) * rate * 10 ** (minorDigits(to) - minorDigits(from));
+  return Math.sign(minor) * Math.round(converted) + 0;
+}

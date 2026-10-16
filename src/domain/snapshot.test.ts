@@ -147,10 +147,23 @@ describe('migrateSnapshot from older versions', () => {
       },
     };
     const s = migrateSnapshot(v4);
-    expect(s.schemaVersion).toBe(5);
+    expect(s.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
     expect(s.tables.settings[0]!.reminders).toEqual({ ...v4Reminders, dividends: true });
     expect(s.tables.holding).toEqual([]);
     expect(s.tables.dividend).toEqual([]);
+  });
+
+  it('migrates v5 settings to Invest in the profile currency, with no rate', () => {
+    const old: Record<string, unknown> = { ...makeSettings() };
+    delete old.investCurrency;
+    delete old.investFx;
+    const v5 = {
+      schemaVersion: 5,
+      tables: { ...emptySnapshot().tables, settings: [old] },
+    };
+    const s = migrateSnapshot(v5);
+    expect(s.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+    expect(s.tables.settings[0]).toMatchObject({ investCurrency: null, investFx: null });
   });
 
   it('keeps holdings and dividends through a round trip', () => {

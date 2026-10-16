@@ -103,6 +103,20 @@ export const SettingsSchema = z.object({
   lastBackupAt: IsoTimestampSchema.nullable(),
   reminders: ReminderSettingsSchema,
   cosmetics: CosmeticsSchema,
+  /** What Invest is shown in; null is the profile currency. Display only: amounts stay stored in the profile's. */
+  investCurrency: z
+    .string()
+    .regex(/^[A-Z]{3}$/, 'Use a 3-letter currency code')
+    .nullable(),
+  /** The latest rate from the profile currency to the one Invest was last shown in. */
+  investFx: z
+    .object({
+      currency: z.string().regex(/^[A-Z]{3}$/, 'Use a 3-letter currency code'),
+      /** Units of `currency` for one unit of the profile currency. */
+      rate: z.number().positive(),
+      asOf: IsoTimestampSchema,
+    })
+    .nullable(),
 });
 export type Settings = z.infer<typeof SettingsSchema>;
 export type AutoLockMinutes = Settings['autoLockMinutes'];
@@ -128,6 +142,8 @@ export function defaultSettings(now: string): Settings {
       prompted: false,
     },
     cosmetics: { theme: 'theme-violet', avatar: 'avatar-sprout', frame: 'frame-none' },
+    investCurrency: null,
+    investFx: null,
   };
 }
 

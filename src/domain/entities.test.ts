@@ -336,6 +336,26 @@ describe('Profile and Settings', () => {
   it('only allows the offered auto-lock choices', () => {
     expect(ok(SettingsSchema, { ...makeSettings(), autoLockMinutes: 2 })).toBe(false);
   });
+  it('takes a 3-letter currency for Invest, or none, with its positive rate', () => {
+    const fx = { currency: 'USD', rate: 1.1, asOf: '2026-10-14T10:00:00.000Z' };
+    expect(ok(SettingsSchema, makeSettings({ investCurrency: 'USD', investFx: fx }))).toBe(true);
+    for (const investCurrency of ['usd', 'US', 'USDX', '']) {
+      expect(ok(SettingsSchema, makeSettings({ investCurrency })), investCurrency).toBe(false);
+    }
+    for (const investFx of [
+      { ...fx, rate: 0 },
+      { ...fx, rate: -1 },
+      { ...fx, currency: 'us' },
+      { ...fx, asOf: 'yesterday' },
+    ]) {
+      expect(ok(SettingsSchema, makeSettings({ investFx }))).toBe(false);
+    }
+    for (const key of ['investCurrency', 'investFx']) {
+      const without: Record<string, unknown> = { ...makeSettings() };
+      delete without[key];
+      expect(ok(SettingsSchema, without), key).toBe(false);
+    }
+  });
   it('has the documented defaults', () => {
     const s = defaultSettings('2026-10-14T10:00:00.000Z');
     expect(s).toEqual({
@@ -358,6 +378,8 @@ describe('Profile and Settings', () => {
         prompted: false,
       },
       cosmetics: { theme: 'theme-violet', avatar: 'avatar-sprout', frame: 'frame-none' },
+      investCurrency: null,
+      investFx: null,
     });
     expect(ok(SettingsSchema, s)).toBe(true);
   });
