@@ -71,14 +71,15 @@ function usStock(symbol: string, name: string, price: number) {
 }
 
 /**
- * Opens the add dialog on the empty Holdings tab and saves a holding the person already owns. With
- * `search`, it types that and picks `symbol` from the list instead of typing the whole symbol.
+ * Opens the add dialog on the empty Holdings tab and saves a holding the person already owns:
+ * `shares` of it at `price` each, on average. The shares are typed one short and the stepper adds the
+ * last one. With `search`, it types that and picks `symbol` from the list instead of typing the whole symbol.
  */
 async function addHolding(
   page: Page,
   symbol: string,
   shares: string,
-  paid: string,
+  price: string,
   { bought, search }: { bought?: string; search?: string } = {},
 ) {
   await page.getByRole('button', { name: 'Add your first holding' }).click();
@@ -91,8 +92,13 @@ async function addHolding(
   } else {
     await dialog.getByLabel('Symbol').fill(symbol);
   }
-  await dialog.getByLabel('Shares').fill(shares);
-  await dialog.getByLabel('What you paid in total').fill(paid);
+  // `exact`: the stepper's buttons (Fewer shares, More shares) have "shares" in their labels too.
+  await dialog.getByLabel('Shares', { exact: true }).fill(String(Number(shares) - 1));
+  await dialog.getByRole('button', { name: 'More shares' }).click();
+  await expect(dialog.getByLabel('Shares', { exact: true })).toHaveValue(shares);
+  await dialog.getByLabel('Price per share (your average)').fill(price);
+  // The total is made live from the two.
+  await expect(dialog.getByText('Total paid')).toBeVisible();
   if (bought) await dialog.getByLabel('Purchase date').fill(bought);
   await dialog.getByRole('button', { name: 'Save' }).click();
   await expect(page.getByText('Holding added.')).toBeVisible();
@@ -102,7 +108,7 @@ test('a new holding shows its value and a slice of the allocation', async ({ pag
   await mockPriceService(page, usStock('AAPL', 'Apple', 200));
   await startFresh(page, '/invest');
 
-  await addHolding(page, 'AAPL', '5', '900', { search: 'appl' });
+  await addHolding(page, 'AAPL', '5', '180', { search: 'appl' });
 
   await expect(page.getByRole('link', { name: /^AAPL · Apple/ })).toContainText('$1,000.00');
   await expect(page.getByRole('button', { name: 'AAPL, $1,000.00, 100%' })).toHaveCount(1);
@@ -120,7 +126,7 @@ test('confirming a due dividend shows the reward and earns First Dividend', asyn
     },
   });
   await startFresh(page, '/invest');
-  await addHolding(page, 'ko', '10', '500', { bought: day(-30) });
+  await addHolding(page, 'ko', '10', '50', { bought: day(-30) });
 
   await page.getByRole('tab', { name: 'Dividends' }).click();
   await page.getByRole('region', { name: 'Due' }).getByRole('button', { name: 'Confirm' }).click();
@@ -162,7 +168,7 @@ test('a holding opens on its own page with a price chart, and Edit saves back to
 }) => {
   await mockPriceService(page, usStock('AAPL', 'Apple', 200));
   await startFresh(page, '/invest');
-  await addHolding(page, 'AAPL', '5', '900', { search: 'appl', bought: day(-60) });
+  await addHolding(page, 'AAPL', '5', '180', { search: 'appl', bought: day(-60) });
 
   // Tapping the row opens the page, which asks for the closes since the purchase.
   const asked = page.waitForRequest(
@@ -182,11 +188,15 @@ test('a holding opens on its own page with a price chart, and Edit saves back to
   await chart.hover({ position: { x: 1, y: 40 } });
   await expect(page.getByText(/^[A-Z][a-z]{2} \d{1,2}, \d{4} · \$190\.00$/)).toBeVisible();
   await expect(page.getByText('Bought on')).toBeVisible();
+  // Break-even sits under the chart: $180.00 paid a share, $200.00 now.
+  await expect(page.getByText('$180.00 break-even')).toBeVisible();
+  await expect(page.getByText('now $200.00')).toBeVisible();
+  await expect(page.getByText('$20.00 per share above break-even.')).toBeVisible();
 
   // Edit opens the form; saving it leaves the person on the page, with the new figures.
   await page.getByRole('button', { name: 'Edit' }).click();
   const dialog = page.getByRole('dialog', { name: 'Edit AAPL' });
-  await dialog.getByLabel('Shares').fill('6');
+  await dialog.getByLabel('Shares', { exact: true }).fill('6');
   await dialog.getByRole('button', { name: 'Save' }).click();
   await expect(page.getByText('Holding updated.')).toBeVisible();
   await expect(page.getByRole('heading', { level: 1, name: 'AAPL' })).toBeVisible();
@@ -207,7 +217,7 @@ test('Invest can be shown in another currency while the rest of the app keeps th
     fx: { from: 'USD', to: 'EUR', rate: 0.5, asOf: new Date().toISOString() },
   });
   await startFresh(page, '/invest');
-  await addHolding(page, 'AAPL', '5', '900', { search: 'appl', bought: day(-60) });
+  await addHolding(page, 'AAPL', '5', '180', { search: 'appl', bought: day(-60) });
   await expect(page.getByRole('link', { name: /^AAPL · Apple/ })).toContainText('$1,000.00');
 
   // The chip opens a sheet: the app's own currency is named, and is the one that is ticked.
@@ -239,8 +249,8 @@ test('Invest can be shown in another currency while the rest of the app keeps th
   ).toBeVisible();
   await page.getByRole('button', { name: 'Edit' }).click();
   await expect(
-    page.getByRole('dialog', { name: 'Edit AAPL' }).getByLabel('What you paid in total'),
-  ).toHaveValue('900.00');
+    page.getByRole('dialog', { name: 'Edit AAPL' }).getByLabel('Price per share (your average)'),
+  ).toHaveValue('180.00');
   await page
     .getByRole('dialog', { name: 'Edit AAPL' })
     .getByRole('button', { name: 'Cancel' })
@@ -262,4 +272,59 @@ test('Invest can be shown in another currency while the rest of the app keeps th
     .click();
   await expect(page.getByRole('button', { name: 'Shown in USD' })).toBeVisible();
   await expect(page.getByRole('link', { name: /^AAPL · Apple/ })).toContainText('$1,000.00');
+});
+
+test('selling part of a holding shows in History; profit & loss stays hidden after a reload; the pie switches to ETFs', async ({
+  page,
+}) => {
+  // The demo: 40 VWRL shares (an ETF), and AAPL and KO, with an earlier sale of 5 AAPL.
+  await page.route('**/api/**', (route) =>
+    route.fulfill({ status: 502, json: { error: 'upstream' } }),
+  );
+  await startDemo(page);
+  await page.goto('/invest');
+
+  // Sell 10 of the 40 VWRL shares, from its page: 9, and the stepper adds one.
+  await page.getByRole('link', { name: /^VWRL · / }).click();
+  await page.getByRole('button', { name: 'Sell', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Sell VWRL' });
+  await dialog.getByLabel('Shares to sell · of 40').fill('9');
+  await dialog.getByRole('button', { name: 'More shares' }).click();
+  await expect(dialog.getByText('30 shares stay.')).toBeVisible();
+  await dialog.getByRole('button', { name: 'Sell 10 shares' }).click();
+  await expect(page.getByText('Sold 10 VWRL.')).toBeVisible();
+  await expect(dialog).toBeHidden();
+  // The person stays on the page, and the holding is down to 30 shares.
+  await expect(page).toHaveURL(/\/invest\/holding\/[\w-]+$/);
+  await expect(page.getByRole('heading', { level: 1, name: 'VWRL' })).toBeVisible();
+  await page.getByRole('link', { name: 'Back to Invest' }).click();
+  await expect(page.getByRole('link', { name: /^VWRL · / })).toContainText('30 shares');
+
+  // History has the sale, dated today.
+  await page.goto('/history');
+  await expect(page.getByText('Sold 10 VWRL')).toBeVisible();
+
+  // Hide profit & loss: only its header is left, and it is still hidden after a reload.
+  await page.goto('/invest');
+  const pnl = page.getByRole('region', { name: 'Profit & loss · all time' });
+  await expect(pnl.getByText('From sales')).toBeVisible();
+  await pnl.getByRole('button', { name: 'Hide' }).click();
+  await expect(pnl.getByRole('button', { name: 'Show' })).toHaveAttribute('aria-expanded', 'false');
+  await expect(pnl.getByText('From sales')).toBeHidden();
+  await page.reload();
+  await expect(pnl.getByRole('button', { name: 'Show' })).toBeVisible();
+  await expect(pnl.getByText('From sales')).toBeHidden();
+
+  // The pie starts on All and switches to just the ETFs (the one, VWRL), kept in the address.
+  const choices = page.getByRole('group', { name: 'Allocation' });
+  await expect(choices.getByRole('button', { name: 'All' })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  await expect(page.getByRole('button', { name: /^AAPL, / })).toHaveCount(1);
+  await choices.getByRole('button', { name: 'ETFs' }).click();
+  await expect(page).toHaveURL(/\?pie=etfs$/);
+  await expect(page.getByRole('group', { name: 'ETFs' })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^VWRL, / })).toHaveCount(1);
+  await expect(page.getByRole('button', { name: /^AAPL, / })).toHaveCount(0);
 });
