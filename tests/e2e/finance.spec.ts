@@ -31,6 +31,31 @@ async function addExpense(
 
 const available = (page: Page) => page.getByRole('region', { name: 'Available to spend' });
 
+test('switching currency in Settings relabels amounts without converting them', async ({
+  page,
+}) => {
+  await start(page);
+  await expect(available(page)).toContainText('$6,000.00');
+
+  await page.goto('/settings');
+  await page.getByRole('button', { name: 'Change currency' }).click();
+  const picker = page.getByRole('dialog', { name: 'Change currency' });
+  await picker.getByLabel('New currency').selectOption('EUR');
+  const confirm = page.getByRole('dialog', { name: 'Change your currency to EUR?' });
+  await expect(confirm).toContainText('1,200 USD becomes 1,200 EUR.');
+  await confirm.getByRole('button', { name: 'Cancel' }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+
+  // Cancel changed nothing; do it again and confirm.
+  await page.getByRole('button', { name: 'Change currency' }).click();
+  await picker.getByLabel('New currency').selectOption('EUR');
+  await confirm.getByRole('button', { name: 'Change currency' }).click();
+  await expect(page.getByText('Currency changed to EUR.')).toBeVisible();
+
+  await page.goto('/');
+  await expect(available(page)).toContainText('€6,000.00');
+});
+
 test('a weekly food limit warns at 80% in the motivational tone', async ({ page }) => {
   await start(page);
   await page.goto('/budget');

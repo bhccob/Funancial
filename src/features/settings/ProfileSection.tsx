@@ -5,11 +5,10 @@ import { Section } from '@/components/ui/Section';
 import { Select } from '@/components/ui/Select';
 import { TextField } from '@/components/ui/TextField';
 import type { Profile } from '@/domain/entities';
-import { minorDigits } from '@/domain/money';
-import { currencyOptions } from '@/features/shared/currencies';
 import { useAction } from '@/lib/useAction';
 import { useApp } from '@/store/AppStoreProvider';
 import { useFinanceActions } from '@/store/useFinance';
+import { CurrencyRow } from './CurrencyRow';
 
 const DAY_OPTIONS = Array.from({ length: 31 }, (_, i) => ({
   value: String(i + 1),
@@ -19,12 +18,7 @@ const DAY_OPTIONS = Array.from({ length: 31 }, (_, i) => ({
 function ProfileForm({ profile }: { profile: Profile }) {
   const { updateProfile } = useFinanceActions();
   const run = useAction();
-  // Amounts are stored in minor units, so only currencies with the same decimals can relabel them.
-  const [options] = useState(() =>
-    currencyOptions((c) => minorDigits(c) === minorDigits(profile.currency)),
-  );
   const [name, setName] = useState(profile.name);
-  const [currency, setCurrency] = useState(profile.currency);
   const [salary, setSalary] = useState<number | null>(profile.salary?.monthlyAmount ?? null);
   const [payDay, setPayDay] = useState(String(profile.salary?.payDay ?? 25));
   const [busy, setBusy] = useState(false);
@@ -36,7 +30,6 @@ function ProfileForm({ profile }: { profile: Profile }) {
       () =>
         updateProfile({
           name: name.trim(),
-          currency,
           salary: salary && salary > 0 ? { monthlyAmount: salary, payDay: Number(payDay) } : null,
         }),
       { success: 'Profile saved.' },
@@ -52,17 +45,11 @@ function ProfileForm({ profile }: { profile: Profile }) {
         value={name}
         onChange={(e) => setName(e.target.value)}
       />
-      <Select
-        label="Currency"
-        value={currency}
-        onChange={setCurrency}
-        options={options}
-        hint="Changing this relabels amounts; it doesn't convert them."
-      />
+      <CurrencyRow current={profile.currency} />
       <div className="grid gap-5 sm:grid-cols-[1fr_8rem]">
         <MoneyField
           label="Monthly take-home pay"
-          currency={currency}
+          currency={profile.currency}
           value={salary}
           onChange={setSalary}
           hint="Leave empty if you don't have a regular salary."

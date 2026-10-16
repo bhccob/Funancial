@@ -1,10 +1,12 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { bucketBalances, debtBalance } from '@/domain/balances';
+import { holdingRate } from '@/domain/portfolio';
 import { freshRealStore } from '@/test/realStore';
 import {
   makeDebt,
   makeExpense,
   makeGoal,
+  makeHolding,
   makeLimit,
   makeProfile,
   makeSubscription,
@@ -343,6 +345,77 @@ describe('subscriptions', () => {
       audit: 'cancel',
       auditedAt: audited.auditedAt,
     });
+  });
+});
+
+describe('changing the currency', () => {
+  const quote = (price: number, fxRate: number | null) => ({
+    price,
+    previousClose: price - 1,
+    fxRate,
+    asOf: '2026-10-14T09:00:00.000Z',
+  });
+
+  async function withHoldings() {
+    const t = await setup();
+    await t.actions.addExpense({ ...lunch, amount: 1_200 });
+    const ko = makeHolding({ id: 'ko', currency: 'USD', quote: quote(60, 1) });
+    const vwrl = makeHolding({
+      id: 'vwrl',
+      symbol: 'VWRL',
+      currency: 'EUR',
+      quote: quote(100, 0.9),
+    });
+    const manual = makeHolding({ id: 'manual', manualPrice: 5, quote: null });
+    await t.store
+      .getState()
+      .putMany([ko, vwrl, manual].map((record) => ({ table: 'holding' as const, record })));
+    return t;
+  }
+  const holding = (store: Awaited<ReturnType<typeof setup>>['store'], id: string) =>
+    store.getState().data.tables.holding.find((h) => h.id === id)!;
+
+  it('relabels without converting: every amount keeps its number', async () => {
+    const { store, actions } = await withHoldings();
+    await actions.changeCurrency('EUR');
+    expect(store.getState().data.tables.profile[0]).toMatchObject({
+      currency: 'EUR',
+      openingCash: 1_000_00,
+      openingSavings: 5_000_00,
+    });
+    expect(store.getState().data.tables.expense.map((e) => e.amount)).toEqual([1_200]);
+    expect(holding(store, 'ko').costBasis).toBe(500_00);
+  });
+
+  it('clears the exchange rates, keeps prices, and writes the profile and holdings together', async () => {
+    const { store, actions } = await withHoldings();
+    const real = store.getState().putMany;
+    const putMany = vi.fn(real);
+    store.setState({ putMany });
+
+    await actions.changeCurrency('EUR');
+
+    expect(putMany).toHaveBeenCalledTimes(1);
+    expect(putMany.mock.calls[0]![0].map((i) => i.table)).toEqual([
+      'profile',
+      'holding',
+      'holding',
+    ]);
+    expect(holding(store, 'ko').quote).toEqual(quote(60, null));
+    expect(holding(store, 'vwrl').quote).toEqual(quote(100, null));
+    // No quote means nothing to clear: the holding is not written.
+    expect(holding(store, 'manual')).toMatchObject({ quote: null, manualPrice: 5 });
+    const profile = store.getState().data.tables.profile[0]!;
+    // A holding in the new currency needs no stored rate; one in another waits for the next refresh.
+    expect(holdingRate(holding(store, 'vwrl'), profile.currency)).toBe(1);
+    expect(holdingRate(holding(store, 'ko'), profile.currency)).toBeNull();
+  });
+
+  it('refuses a currency with other decimals, and writes nothing', async () => {
+    const { store, actions } = await withHoldings();
+    await expect(actions.changeCurrency('JPY')).rejects.toThrow(/decimals/);
+    expect(store.getState().data.tables.profile[0]?.currency).toBe('USD');
+    expect(holding(store, 'ko').quote?.fxRate).toBe(1);
   });
 });
 

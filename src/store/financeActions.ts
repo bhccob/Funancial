@@ -22,6 +22,7 @@ import {
   type Transaction,
 } from '@/domain/entities';
 import { newId, nowIso } from '@/domain/ids';
+import { minorDigits } from '@/domain/money';
 import { dayOfMonth, monthKey } from '@/domain/periods';
 import { nextOccurrence } from '@/domain/recurrence';
 import { expectedSalary, freezeLoss } from '@/domain/salary';
@@ -490,6 +491,35 @@ export function createFinanceActions(store: StoreApi<AppState>) {
         next.salary = { ...now, ...(was.since ? { since: was.since } : {}) };
       }
       await state().put('profile', next);
+    },
+
+    /**
+     * Relabels every amount in a currency with the same decimals: the numbers stay, and nothing is
+     * converted. Stored exchange rates were for the old currency, so each holding loses its own and
+     * keeps the rest of its quote; the next Invest refresh fetches rates for the new one. One write.
+     */
+    async changeCurrency(currency: string) {
+      const profile = state().data.tables.profile[0];
+      if (!profile) throw new Error('Finish setting up first.');
+      // Amounts are minor units: another decimal count would misread every one of them.
+      if (minorDigits(currency) !== minorDigits(profile.currency)) {
+        throw new Error(`${currency} has different decimals from ${profile.currency}.`);
+      }
+      const at = nowIso();
+      const holdings: TableRecord[] = state().data.tables.holding.flatMap((record) =>
+        record.quote?.fxRate == null
+          ? []
+          : [
+              {
+                table: 'holding' as const,
+                record: { ...record, quote: { ...record.quote, fxRate: null }, updatedAt: at },
+              },
+            ],
+      );
+      await state().putMany([
+        { table: 'profile', record: { ...profile, currency, updatedAt: at } },
+        ...holdings,
+      ]);
     },
 
     async updateSettings(patch: Partial<Omit<Settings, 'id' | 'createdAt'>>) {

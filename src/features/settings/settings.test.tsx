@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Toaster } from '@/components/ui/Toaster';
 import { InvalidBackupError } from '@/data/backup';
 import type { ReminderSettings } from '@/domain/entities';
+import { currencyOptions } from '@/features/shared/currencies';
 import { emptySnapshot } from '@/domain/snapshot';
 import { downloadText } from '@/lib/download';
 import { toastStore } from '@/lib/toast';
@@ -22,6 +23,7 @@ vi.mock('@/lib/download', async (importOriginal) => ({
 }));
 
 const finance = vi.hoisted(() => ({
+  changeCurrency: vi.fn<(currency: string) => Promise<void>>(async () => {}),
   updateProfile: vi.fn(async () => {}),
   updateSettings: vi.fn(async () => {}),
 }));
@@ -33,6 +35,7 @@ vi.mock('@/store/useFinance', async (importOriginal) => ({
 beforeEach(() => {
   toastStore.setState({ toasts: [] });
   vi.mocked(downloadText).mockClear();
+  finance.changeCurrency.mockClear();
   finance.updateProfile.mockClear();
   finance.updateSettings.mockClear();
 });
@@ -446,17 +449,109 @@ describe('Profile & salary', () => {
     renderWithStore(<SettingsScreen />, createStubStore({ data }));
     const profile = screen.getByRole('region', { name: 'Profile & salary' });
     expect(within(profile).getByLabelText('Name')).toHaveValue('Sam');
-    expect(within(profile).getByLabelText('Currency')).toHaveAccessibleDescription(
-      "Changing this relabels amounts; it doesn't convert them.",
-    );
     await userEvent.type(within(profile).getByLabelText('Monthly take-home pay'), '4200');
     await userEvent.selectOptions(within(profile).getByLabelText('Pay day'), '25');
     await userEvent.click(within(profile).getByRole('button', { name: 'Save' }));
     expect(finance.updateProfile).toHaveBeenCalledWith({
       name: 'Sam',
-      currency: 'USD',
       salary: { monthlyAmount: 420_000, payDay: 25 },
     });
+  });
+});
+
+describe('Currency', () => {
+  /** What the row and the list print for a code: the machine's language decides the name. */
+  const labelOf = (code: string) => currencyOptions((c) => c === code)[0]!.label;
+
+  function renderCurrency(currency = 'EUR') {
+    const data = snapshotWith();
+    data.tables.profile.push(makeProfile({ currency }));
+    return renderWithStore(
+      <>
+        <SettingsScreen />
+        <Toaster />
+      </>,
+      createStubStore({ data }),
+    );
+  }
+  const row = () => within(screen.getByRole('region', { name: 'Profile & salary' }));
+  const openPicker = async () => {
+    await userEvent.click(row().getByRole('button', { name: 'Change currency' }));
+    return screen.getByRole('dialog', { name: 'Change currency' });
+  };
+
+  it('shows the current code and name with a Change action', () => {
+    renderCurrency('EUR');
+    expect(row().getByText('Currency')).toBeInTheDocument();
+    expect(row().getByText(labelOf('EUR'))).toBeInTheDocument();
+    expect(row().getByRole('button', { name: 'Change currency' })).toHaveTextContent('Change');
+  });
+
+  it('lists only currencies with the same decimals as the current one, and not the current one', async () => {
+    renderCurrency('EUR');
+    const dialog = await openPicker();
+    const values = within(dialog)
+      .getAllByRole('option')
+      .map((o) => (o as HTMLOptionElement).value);
+    expect(values).toContain('USD');
+    expect(values).toContain('GBP');
+    expect(values).not.toContain('JPY');
+    expect(values).not.toContain('EUR');
+    expect(dialog).toHaveTextContent(
+      'Only currencies with the same decimals as EUR are listed. Your amounts keep their numbers; they are not converted.',
+    );
+  });
+
+  it('offers the whole-unit currencies from yen, and no cent currency', async () => {
+    renderCurrency('JPY');
+    const dialog = await openPicker();
+    const values = within(dialog)
+      .getAllByRole('option')
+      .map((o) => (o as HTMLOptionElement).value);
+    expect(values).toContain('KRW');
+    expect(values).not.toContain('EUR');
+  });
+
+  it('asks before changing, then relabels on confirm and closes', async () => {
+    renderCurrency('EUR');
+    const picker = await openPicker();
+    await userEvent.selectOptions(within(picker).getByLabelText('New currency'), 'GBP');
+
+    const confirm = screen.getByRole('dialog', { name: 'Change your currency to GBP?' });
+    expect(confirm).toHaveAccessibleDescription(
+      'Every amount keeps its number. 1,200 EUR becomes 1,200 GBP.',
+    );
+    expect(finance.changeCurrency).not.toHaveBeenCalled();
+
+    await userEvent.click(within(confirm).getByRole('button', { name: 'Change currency' }));
+    expect(finance.changeCurrency).toHaveBeenCalledExactlyOnceWith('GBP');
+    await vi.waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  });
+
+  it('changes nothing on Cancel', async () => {
+    renderCurrency('EUR');
+    const picker = await openPicker();
+    await userEvent.selectOptions(within(picker).getByLabelText('New currency'), 'GBP');
+    const confirm = screen.getByRole('dialog', { name: 'Change your currency to GBP?' });
+
+    await userEvent.click(within(confirm).getByRole('button', { name: 'Cancel' }));
+    expect(finance.changeCurrency).not.toHaveBeenCalled();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(row().getByText(labelOf('EUR'))).toBeInTheDocument();
+  });
+
+  it('stays open and says why when the change fails', async () => {
+    finance.changeCurrency.mockRejectedValueOnce(new Error('Storage is full.'));
+    renderCurrency('EUR');
+    const picker = await openPicker();
+    await userEvent.selectOptions(within(picker).getByLabelText('New currency'), 'GBP');
+    const confirm = screen.getByRole('dialog', { name: 'Change your currency to GBP?' });
+    await userEvent.click(within(confirm).getByRole('button', { name: 'Change currency' }));
+    expect(finance.changeCurrency).toHaveBeenCalledTimes(1);
+    expect(await screen.findByText('Storage is full.')).toBeInTheDocument();
+    expect(
+      screen.getByRole('dialog', { name: 'Change your currency to GBP?' }),
+    ).toBeInTheDocument();
   });
 });
 
