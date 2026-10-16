@@ -172,6 +172,13 @@ describe('Sell dialog', () => {
     expect(within(dialog).queryByText(/^▲/)).not.toBeInTheDocument();
   });
 
+  it('announces the figures politely as they change', async () => {
+    const { dialog } = await openSell();
+    for (const label of ['You get', 'Profit on these shares']) {
+      expect(within(dialog).getByText(label).closest('p')).toHaveAttribute('aria-live', 'polite');
+    }
+  });
+
   it('shows dashes for what you get while the shares or the price cannot be read', async () => {
     const { dialog } = await openSell();
     await enter(dialog, SHARES, 'abc');

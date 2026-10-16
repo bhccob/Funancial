@@ -1,6 +1,9 @@
 import type { ReactNode } from 'react';
 
-/** One line of a dialog's summary: a muted label on the left, the figure on the right. */
+/**
+ * One line of a dialog's summary: a muted label on the left, the figure on the right. The figure
+ * changes as the person types, so it is a polite live region and a screen reader hears it.
+ */
 export function SummaryLine({
   label,
   className,
@@ -12,7 +15,10 @@ export function SummaryLine({
   children: ReactNode;
 }) {
   return (
-    <p className="flex justify-between gap-3 text-[13.5px] font-extrabold tabular-nums">
+    <p
+      aria-live="polite"
+      className="flex justify-between gap-3 text-[13.5px] font-extrabold tabular-nums"
+    >
       <span className="text-muted font-bold">{label}</span>
       <span className={className}>{children}</span>
     </p>

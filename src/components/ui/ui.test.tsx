@@ -163,9 +163,9 @@ describe('Banner', () => {
   it('announces danger as an alert and other tones politely', () => {
     const { rerender } = render(<Banner tone="danger">Storage blocked</Banner>);
     expect(screen.getByRole('alert')).toHaveTextContent('Storage blocked');
-    rerender(<Banner tone="demo">You are using demo money.</Banner>);
+    rerender(<Banner tone="warning">Storage is nearly full</Banner>);
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-    expect(screen.getByRole('status')).toHaveTextContent('You are using demo money.');
+    expect(screen.getByRole('status')).toHaveTextContent('Storage is nearly full');
   });
 
   it('renders its action', () => {

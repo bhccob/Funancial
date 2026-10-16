@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { cn } from '@/lib/cn';
 
-export type BannerTone = 'info' | 'warning' | 'danger' | 'demo';
+export type BannerTone = 'info' | 'warning' | 'danger';
 
 export interface BannerProps {
   tone: BannerTone;
@@ -14,7 +14,6 @@ const bars: Record<BannerTone, string> = {
   info: 'border-l-text-muted',
   warning: 'border-l-warning',
   danger: 'border-l-danger',
-  demo: 'border-l-xp',
 };
 
 export function Banner({ tone, children, action, className }: BannerProps) {

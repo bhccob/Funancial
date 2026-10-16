@@ -7,12 +7,10 @@ import { safeStorage } from '@/lib/safeStorage';
 import { useApp } from '@/store/AppStoreProvider';
 import { useCurrency } from '@/store/useFinance';
 import { useInvestMoney } from '@/store/useInvest';
+import { arrow, tone } from './gain';
 
 /** Whether the block is open, kept on this device; open until the person hides it. */
 const SHOW_KEY = 'funancial.invest.showPnl';
-
-const tone = (n: number) => (n < 0 ? 'text-danger' : 'text-success');
-const arrow = (n: number) => (n < 0 ? '▼' : '▲');
 
 /**
  * Everything made on the investments, all time: the total and its three parts, with a thin bar of

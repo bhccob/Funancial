@@ -10,12 +10,13 @@ import { formatDecimal, parseDecimal } from '@/domain/money';
 import { holdingPrice, holdingRate, toMinor } from '@/domain/portfolio';
 import { NO_PROCEEDS, planSale, type SalePlan } from '@/domain/sales';
 import { DateField } from '@/features/add/DateField';
-import { formatShares } from '@/lib/format';
+import { formatShares, sharesText } from '@/lib/format';
 import { useAction } from '@/lib/useAction';
 import { FUTURE } from '@/store/financeActions';
 import { saleBeforePurchase } from '@/store/investActions';
 import { useCurrency, useMoney, useToday } from '@/store/useFinance';
 import { useInvestActions } from '@/store/useInvest';
+import { arrow, tone } from './gain';
 import { SummaryLine } from './SummaryLine';
 import { unreadable } from './unreadable';
 
@@ -26,8 +27,6 @@ interface Errors {
   price?: string;
   date?: string;
 }
-
-const sharesText = (n: number) => `${formatShares(n)} ${n === 1 ? 'share' : 'shares'}`;
 
 function SellForm({ holding, onDone }: { holding: Holding; onDone(): void }) {
   const { sellHolding } = useInvestActions();
@@ -164,9 +163,9 @@ function SellForm({ holding, onDone }: { holding: Holding; onDone(): void }) {
         <SummaryLine label="You get">{plan ? money(plan.proceeds) : '—'}</SummaryLine>
         <SummaryLine
           label="Profit on these shares"
-          className={plan ? (plan.profit < 0 ? 'text-danger' : 'text-success') : undefined}
+          className={plan ? tone(plan.profit) : undefined}
         >
-          {plan ? `${plan.profit < 0 ? '▼' : '▲'} ${money(Math.abs(plan.profit))}` : '—'}
+          {plan ? `${arrow(plan.profit)} ${money(Math.abs(plan.profit))}` : '—'}
         </SummaryLine>
       </div>
       <div className="flex gap-2">

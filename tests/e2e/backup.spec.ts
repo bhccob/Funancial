@@ -18,7 +18,7 @@ test('backup → leave demo → restore round-trip', async ({ page }) => {
   expect(download.suggestedFilename()).toMatch(/^funancial-backup-\d{4}-\d{2}-\d{2}\.funbak$/);
   const file = await download.path();
 
-  await page.getByRole('button', { name: 'Start with my real data' }).first().click();
+  await page.getByRole('button', { name: 'Start for real' }).click();
   await page
     .getByRole('dialog', { name: 'Leave demo?' })
     .getByRole('button', { name: 'Leave demo' })

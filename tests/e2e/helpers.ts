@@ -50,5 +50,5 @@ export async function startFresh(page: Page, path = '/') {
 export async function startDemo(page: Page) {
   await page.goto('/');
   await page.getByRole('button', { name: 'Try with demo money' }).click();
-  await expect(page.getByText("You're using demo money.")).toBeVisible();
+  await expect(page.getByText("You're exploring with demo money")).toBeVisible();
 }

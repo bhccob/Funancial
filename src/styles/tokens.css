@@ -27,6 +27,10 @@
   --color-danger-soft: #f5d9da;
   --color-success-soft: #d2eadf;
   --color-focus: #7c5cff;
+  /* The demo banner's gradient card and its muted line; its title and button use the ink tokens. */
+  --color-demo-from: #ede7ff;
+  --color-demo-to: #e3ecff;
+  --color-demo-muted: #5b5670;
 
   /* Categorical chart series, fixed order (validated incl. donut wrap-around). */
   --color-chart-1: #2a78d6;
@@ -76,6 +80,9 @@
   --color-danger-soft: #3d2326;
   --color-success-soft: #143a2e;
   --color-focus: #9d85ff;
+  --color-demo-from: #3b2a6b;
+  --color-demo-to: #1e2a4a;
+  --color-demo-muted: #c9c3e6;
 
   --color-chart-1: #3987e5;
   --color-chart-2: #d95926;

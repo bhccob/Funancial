@@ -13,6 +13,7 @@ import {
   ordinal,
   relativeDays,
   relativeTime,
+  sharesText,
 } from './format';
 
 describe('date display', () => {
@@ -96,5 +97,11 @@ describe('moments and percentages', () => {
     expect(formatShares(0.25, 'en-US')).toBe('0.25');
     expect(formatShares(0.123456, 'en-US')).toBe('0.1235');
     expect(formatShares(1234.5, 'en-US')).toBe('1,234.5');
+  });
+
+  it('says "share" for exactly one and "shares" for anything else', () => {
+    expect(sharesText(1, 'en-US')).toBe('1 share');
+    expect(sharesText(0.5, 'en-US')).toBe('0.5 shares');
+    expect(sharesText(40, 'en-US')).toBe('40 shares');
   });
 });

@@ -2,12 +2,10 @@ import { ChevronDown } from 'lucide-react';
 import { useId, useMemo, useState } from 'react';
 import { soldGroups } from '@/domain/sales';
 import { cn } from '@/lib/cn';
-import { formatShares } from '@/lib/format';
+import { sharesText } from '@/lib/format';
 import { useApp } from '@/store/AppStoreProvider';
 import { useInvestMoney } from '@/store/useInvest';
-
-const tone = (n: number) => (n < 0 ? 'text-danger' : 'text-success');
-const arrow = (n: number) => (n < 0 ? '▼' : '▲');
+import { arrow, tone } from './gain';
 
 /**
  * What was sold, one row per symbol (see `soldGroups`): a "Sold (n)" row that opens the list, each
@@ -49,7 +47,7 @@ export function SoldList() {
             <span className="flex min-w-0 flex-1 flex-col">
               <span className="truncate text-[15px] font-extrabold">{`${g.symbol} · ${g.name}`}</span>
               <span className="text-muted text-[13px] font-semibold">
-                {`${formatShares(g.shares)} ${g.shares === 1 ? 'share' : 'shares'} sold`}
+                {`${sharesText(g.shares)} sold`}
               </span>
             </span>
             <span className="flex flex-none flex-col items-end tabular-nums">

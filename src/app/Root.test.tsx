@@ -1,4 +1,4 @@
-import { act, cleanup, screen } from '@testing-library/react';
+import { act, cleanup, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { purchaseEntry } from '@/domain/game/shop';
@@ -82,14 +82,22 @@ describe('Root', () => {
 describe('DemoBanner', () => {
   it('is absent with real data', () => {
     renderWithStore(<DemoBanner />, createStubStore({ namespace: 'real' }));
-    expect(screen.queryByText("You're using demo money.")).not.toBeInTheDocument();
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Start for real' })).not.toBeInTheDocument();
+  });
+
+  it('says it is demo money, in a title, a line and a button', () => {
+    renderWithStore(<DemoBanner />, createStubStore({ namespace: 'demo' }));
+    const banner = screen.getByRole('status');
+    expect(within(banner).getByText("You're exploring with demo money")).toBeInTheDocument();
+    expect(within(banner).getByText('Nothing here is real yet.')).toBeInTheDocument();
+    expect(within(banner).getByRole('button', { name: 'Start for real' })).toBeInTheDocument();
   });
 
   it('asks before leaving demo, and only leaves on confirm', async () => {
     const { store } = renderWithStore(<DemoBanner />, createStubStore({ namespace: 'demo' }));
-    expect(screen.getByText("You're using demo money.")).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole('button', { name: 'Start with my real data' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Start for real' }));
     const dialog = screen.getByRole('dialog', { name: 'Leave demo?' });
     expect(dialog).toHaveAccessibleDescription(
       "Demo data will be deleted. Your real data isn't affected.",
@@ -97,7 +105,7 @@ describe('DemoBanner', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Stay' }));
     expect(store.getState().exitDemo).not.toHaveBeenCalled();
 
-    await userEvent.click(screen.getByRole('button', { name: 'Start with my real data' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Start for real' }));
     await userEvent.click(screen.getByRole('button', { name: 'Leave demo' }));
     expect(store.getState().exitDemo).toHaveBeenCalledTimes(1);
   });

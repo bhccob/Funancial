@@ -3,7 +3,7 @@ import { startDemo } from './helpers';
 
 test('try demo → banner → leave demo → welcome', async ({ page }) => {
   await startDemo(page);
-  await page.getByRole('button', { name: 'Start with my real data' }).click();
+  await page.getByRole('button', { name: 'Start for real' }).click();
   const dialog = page.getByRole('dialog', { name: 'Leave demo?' });
   await expect(dialog).toBeVisible();
   await dialog.getByRole('button', { name: 'Leave demo' }).click();

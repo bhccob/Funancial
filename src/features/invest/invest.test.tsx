@@ -201,11 +201,11 @@ describe('Holdings tab', () => {
     const value = region('Portfolio value');
     expect(within(value).getByText(usd(1_950_00))).toHaveClass('text-[34px]');
 
-    // Down $15 today (danger), up 2.6% on what was paid (accent).
+    // Down $15 today (danger), up 2.6% on what was paid (success).
     const day = within(value).getByText(`▼ ${usd(15_00)} today`);
     expect(day).toHaveClass('text-danger');
     const all = within(value).getByText(`▲ ${formatPercent((5_000 * 100) / 190_000)} all time`);
-    expect(all).toHaveClass('text-accent-text');
+    expect(all).toHaveClass('text-success');
     expect(day.parentElement).toHaveTextContent(
       `▼ ${usd(15_00)} today · ▲ ${formatPercent((5_000 * 100) / 190_000)} all time`,
     );
@@ -249,7 +249,7 @@ describe('Holdings tab', () => {
       `VWRL · All-World ETF4 shares · break-even ${usd(100_00)}${usd(400_00)}▲ ${formatPercent(0)}`,
     ]);
     expect(within(rows[1]!).getByText(`▼ ${formatPercent(5)}`)).toHaveClass('text-danger');
-    expect(within(rows[0]!).getByText(`▲ ${formatPercent(20)}`)).toHaveClass('text-accent-text');
+    expect(within(rows[0]!).getByText(`▲ ${formatPercent(20)}`)).toHaveClass('text-success');
 
     expect(
       screen.getByText(
@@ -273,7 +273,7 @@ describe('Holdings tab', () => {
     const data = noHoldings();
     data.tables.holding = [held({ shares: 10, costBasis: 700_00, quote: quote(60, 59) })];
     renderInvest(data);
-    expect(screen.getByText(`▲ ${usd(10_00)} today`)).toHaveClass('text-accent-text');
+    expect(screen.getByText(`▲ ${usd(10_00)} today`)).toHaveClass('text-success');
     expect(screen.getByText(`▼ ${formatPercent((100_00 * 100) / 700_00)} all time`)).toHaveClass(
       'text-danger',
     );
@@ -519,6 +519,11 @@ describe('HoldingDialog adding', () => {
     expect(dialog).toHaveTextContent(`Total paid39 × ${usd(96_40)} = ${usd(3_759_60)}`);
     await enter(dialog, 'Shares', 'abc');
     expect(dialog).toHaveTextContent('Total paid—');
+    // A screen reader hears the total change as the person types.
+    expect(within(dialog).getByText('Total paid').closest('p')).toHaveAttribute(
+      'aria-live',
+      'polite',
+    );
   });
 
   it('saves the cost basis as shares times the price per share, rounded once', async () => {

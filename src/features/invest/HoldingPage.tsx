@@ -12,12 +12,10 @@ import { useCurrency, useToday } from '@/store/useFinance';
 import { useGameView } from '@/store/useGame';
 import { useInvestActions, useInvestMoney, useInvestPortfolio } from '@/store/useInvest';
 import { BreakEven } from './BreakEven';
+import { arrow, tone } from './gain';
 import { HoldingChart } from './HoldingChart';
 import { HoldingDialog } from './HoldingDialog';
 import { SellDialog } from './SellDialog';
-
-const tone = (n: number) => (n < 0 ? 'text-danger' : 'text-accent-text');
-const arrow = (n: number) => (n < 0 ? '▼' : '▲');
 
 function Fact({ label, note, children }: { label: string; note?: string; children: ReactNode }) {
   return (

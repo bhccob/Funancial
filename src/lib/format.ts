@@ -106,3 +106,8 @@ export function formatPercent(pct: number, signed = false, locale?: string): str
 export function formatShares(n: number, locale?: string): string {
   return new Intl.NumberFormat(locale, { maximumFractionDigits: 4 }).format(n);
 }
+
+/** 1 → "1 share", 0.5 → "0.5 shares": the shares and the right noun for them. */
+export function sharesText(n: number, locale?: string): string {
+  return `${formatShares(n, locale)} ${n === 1 ? 'share' : 'shares'}`;
+}

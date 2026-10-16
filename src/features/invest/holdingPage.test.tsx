@@ -159,7 +159,7 @@ describe('Holding page', () => {
     expect(change).toHaveTextContent(
       `▲ ${usd(1_180_00)} · ▲ ${formatPercent((118_000 * 100) / 842_000)} since you bought`,
     );
-    expect(screen.getByText(`▲ ${usd(1_180_00)}`)).toHaveClass('text-accent-text');
+    expect(screen.getByText(`▲ ${usd(1_180_00)}`)).toHaveClass('text-success');
   });
 
   it('shows a loss with a down arrow in the danger colour', () => {

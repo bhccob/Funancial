@@ -15,9 +15,10 @@ import {
   type HoldingRow,
 } from '@/domain/portfolio';
 import { cn } from '@/lib/cn';
-import { formatPercent, formatShares } from '@/lib/format';
+import { formatPercent, sharesText } from '@/lib/format';
 import { useApp } from '@/store/AppStoreProvider';
 import { useInvestMoney, useInvestPortfolio } from '@/store/useInvest';
+import { arrow, tone } from './gain';
 import { HoldingDialog } from './HoldingDialog';
 import { ProfitAndLoss } from './ProfitAndLoss';
 import { SoldList } from './SoldList';
@@ -31,11 +32,6 @@ const PIE_PARAMS: Record<Holding['type'], string> = {
   etf: 'etfs',
   other: 'other',
 };
-
-const sharesText = (n: number) => `${formatShares(n)} ${n === 1 ? 'share' : 'shares'}`;
-
-const tone = (n: number) => (n < 0 ? 'text-danger' : 'text-accent-text');
-const arrow = (n: number) => (n < 0 ? '▼' : '▲');
 
 function HoldingItem({ row }: { row: HoldingRow }) {
   const { format, formatConverted: money } = useInvestMoney();

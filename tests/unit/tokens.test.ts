@@ -95,3 +95,17 @@ it('keeps the Other chart colour at 3:1 or better against the page, light and da
   expect(contrast(light['--color-chart-other']!, light['--color-bg']!)).toBeGreaterThanOrEqual(3);
   expect(contrast(dark['--color-chart-other']!, dark['--color-bg']!)).toBeGreaterThanOrEqual(3);
 });
+
+it('keeps the demo banner readable on both ends of its gradient, light and dark', () => {
+  for (const base of [declarations('@theme static'), declarations(":root[data-theme='dark']")]) {
+    for (const end of [base['--color-demo-from']!, base['--color-demo-to']!]) {
+      // Title, muted line, and the card against the button (both ink tokens).
+      expect(contrast(base['--color-text']!, end)).toBeGreaterThanOrEqual(4.5);
+      expect(contrast(base['--color-demo-muted']!, end)).toBeGreaterThanOrEqual(4.5);
+      expect(contrast(base['--color-primary']!, end)).toBeGreaterThanOrEqual(3);
+    }
+    expect(
+      contrast(base['--color-primary-contrast']!, base['--color-primary']!),
+    ).toBeGreaterThanOrEqual(4.5);
+  }
+});
