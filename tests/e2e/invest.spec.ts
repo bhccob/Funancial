@@ -191,9 +191,9 @@ test('a holding opens on its own page with a price chart, and Edit saves back to
   await expect(page.getByRole('heading', { level: 1, name: 'AAPL' })).toBeVisible();
   await expect(page.getByText('$1,200.00').first()).toBeVisible();
 
-  // And back to the list.
+  // And back to the Invest it came from.
   await page.getByRole('link', { name: 'Back to Invest' }).click();
-  await expect(page).toHaveURL(/\/invest\?tab=holdings$/);
+  await expect(page).toHaveURL(/\/invest$/);
   await expect(page.getByRole('link', { name: /^AAPL · Apple/ })).toContainText('$1,200.00');
 });
 
