@@ -4,7 +4,10 @@ import { MemoryRouter } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { EXAMPLES } from '@/domain/examples';
 import { formatMoney } from '@/domain/money';
+import type { DataSnapshot } from '@/domain/snapshot';
+import { formatMonthYear } from '@/lib/format';
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
+import { makeDividend } from '@/test/fixtures';
 import { HistoryScreen } from './HistoryScreen';
 
 const actions = vi.hoisted(() => ({
@@ -20,20 +23,51 @@ vi.mock('@/store/useFinance', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/store/useFinance')>()),
   useFinanceActions: () => actions,
 }));
+const invest = vi.hoisted(() => ({ deleteDividend: vi.fn(async () => {}) }));
+vi.mock('@/store/useInvest', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/store/useInvest')>()),
+  useInvestActions: () => invest,
+}));
 
 const usd = (minor: number) => formatMoney(minor, 'USD');
 const bal = EXAMPLES.find((e) => e.id === 'BAL-1');
 if (!bal) throw new Error('BAL-1 missing');
 
-beforeEach(() => Object.values(actions).forEach((a) => a.mockClear()));
+beforeEach(() => [...Object.values(actions), invest.deleteDividend].forEach((a) => a.mockClear()));
 
-function renderHistory() {
+function renderHistory(data = bal?.data) {
   renderWithStore(
     <MemoryRouter>
       <HistoryScreen />
     </MemoryRouter>,
-    createStubStore({ data: bal?.data, today: bal?.today }),
+    createStubStore({ data, today: bal?.today }),
   );
+}
+
+/** BAL-1 with dividends of October (into cash, reinvested, skipped) and one of August. */
+function withDividends(): DataSnapshot {
+  const data = structuredClone(bal!.data);
+  data.tables.dividend = [
+    makeDividend({ id: 'd-ko', symbol: 'KO', paidOn: '2026-10-08', amount: 11_20, bucket: 'cash' }),
+    makeDividend({
+      id: 'd-vwrl',
+      symbol: 'VWRL',
+      paidOn: '2026-10-06',
+      amount: 8_50,
+      bucket: 'reinvest',
+      sharesAdded: 0.07,
+    }),
+    makeDividend({
+      id: 'd-aapl',
+      symbol: 'AAPL',
+      paidOn: '2026-10-05',
+      status: 'skipped',
+      amount: 0,
+      bucket: null,
+    }),
+    makeDividend({ id: 'd-aug', symbol: 'MSFT', paidOn: '2026-08-20', bucket: 'savings' }),
+  ];
+  return data;
 }
 
 const row = (text: string) => {
@@ -90,6 +124,37 @@ describe('HistoryScreen', () => {
     const dialog = screen.getByRole('dialog', { name: 'Delete this entry?' });
     await userEvent.click(within(dialog).getByRole('button', { name: 'Delete' }));
     expect(actions.deleteIncome).toHaveBeenCalledWith(gig?.id);
+  });
+
+  it('lists confirmed and skipped dividends, with where the money went', async () => {
+    renderHistory(withDividends());
+    expect(row('Dividend · KO').getByText(`+${usd(11_20)}`)).toBeInTheDocument();
+    expect(row('Dividend · KO').getByText('To cash')).toBeInTheDocument();
+    expect(row('Dividend · VWRL').getByText(`+${usd(8_50)}`)).toBeInTheDocument();
+    expect(row('Dividend · VWRL').getByText('Reinvested')).toBeInTheDocument();
+    expect(row('Skipped dividend · AAPL').getByText(usd(0))).toBeInTheDocument();
+    // A month with only a dividend in it is one to choose.
+    await userEvent.selectOptions(screen.getByLabelText('Month'), formatMonthYear('2026-08'));
+    expect(row('Dividend · MSFT').getByText('To savings')).toBeInTheDocument();
+  });
+
+  it('shows dividends with income, not with spending or transfers', async () => {
+    renderHistory(withDividends());
+    await userEvent.click(screen.getByRole('radio', { name: 'Income' }));
+    expect(screen.getByText('Dividend · KO')).toBeInTheDocument();
+    for (const name of ['Spending', 'Transfers']) {
+      await userEvent.click(screen.getByRole('radio', { name }));
+      expect(screen.queryByText('Dividend · KO')).not.toBeInTheDocument();
+    }
+  });
+
+  it('deletes a dividend after asking', async () => {
+    renderHistory(withDividends());
+    const name = 'Delete Skipped dividend · AAPL';
+    await userEvent.click(row('Skipped dividend · AAPL').getByRole('button', { name }));
+    const dialog = screen.getByRole('dialog', { name: 'Delete this entry?' });
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Delete' }));
+    expect(invest.deleteDividend).toHaveBeenCalledWith('d-aapl');
   });
 
   it('sets the actual cash balance', async () => {

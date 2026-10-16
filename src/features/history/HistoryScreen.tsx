@@ -11,6 +11,7 @@ import {
   CategorySchema,
   type Bucket,
   type Category,
+  type Dividend,
   type Expense,
   type Income,
   type Transaction,
@@ -22,6 +23,7 @@ import { formatDate, formatMonthYear } from '@/lib/format';
 import { useAction } from '@/lib/useAction';
 import { useApp } from '@/store/AppStoreProvider';
 import { useFinanceActions, useMoney, useToday } from '@/store/useFinance';
+import { useInvestActions } from '@/store/useInvest';
 import { ActualBalanceDialog } from './ActualBalanceDialog';
 
 type Show = 'all' | 'spending' | 'income' | 'transfers';
@@ -29,7 +31,10 @@ type Show = 'all' | 'spending' | 'income' | 'transfers';
 type Entry =
   | { kind: 'expense'; item: Expense }
   | { kind: 'income'; item: Income }
-  | { kind: 'transaction'; item: Transaction };
+  | { kind: 'transaction'; item: Transaction }
+  | { kind: 'dividend'; item: Dividend };
+
+const dateOf = (e: Entry) => (e.kind === 'dividend' ? e.item.paidOn : e.item.date);
 
 const BUCKET: Record<Bucket, string> = {
   cash: 'Cash',
@@ -42,11 +47,11 @@ const CATEGORY_OPTIONS = [
   ...CategorySchema.options.map((c) => ({ value: c, label: categoryLabel(c) })),
 ];
 
-const SHOWS: Record<Show, Entry['kind'] | null> = {
+const SHOWS: Record<Show, Array<Entry['kind']> | null> = {
   all: null,
-  spending: 'expense',
-  income: 'income',
-  transfers: 'transaction',
+  spending: ['expense'],
+  income: ['income', 'dividend'],
+  transfers: ['transaction'],
 };
 
 function Amount({ children, tone }: { children: string; tone?: 'in' | 'out' }) {
@@ -103,6 +108,7 @@ export function HistoryScreen() {
   const today = useToday();
   const money = useMoney();
   const { deleteIncome, deleteTransaction } = useFinanceActions();
+  const { deleteDividend } = useInvestActions();
   const run = useAction();
 
   const [month, setMonth] = useState(() => monthKey(today));
@@ -114,35 +120,37 @@ export function HistoryScreen() {
   );
   const [correcting, setCorrecting] = useState(false);
 
-  const { expense, income, transaction, debt } = data.tables;
+  const { expense, income, transaction, dividend, debt } = data.tables;
 
   const months = useMemo(() => {
     const keys = new Set([monthKey(today)]);
     for (const r of [...expense, ...income, ...transaction]) keys.add(monthKey(r.date));
+    for (const d of dividend) keys.add(monthKey(d.paidOn));
     return [...keys].sort().reverse();
-  }, [expense, income, transaction, today]);
+  }, [expense, income, transaction, dividend, today]);
 
   const days = useMemo(() => {
     const entries: Entry[] = [
       ...expense.map((item) => ({ kind: 'expense' as const, item })),
       ...income.map((item) => ({ kind: 'income' as const, item })),
       ...transaction.map((item) => ({ kind: 'transaction' as const, item })),
+      ...dividend.map((item) => ({ kind: 'dividend' as const, item })),
     ].filter(
       (e) =>
-        monthKey(e.item.date) === month &&
-        (SHOWS[show] === null || e.kind === SHOWS[show]) &&
+        monthKey(dateOf(e)) === month &&
+        (SHOWS[show]?.includes(e.kind) ?? true) &&
         (show !== 'spending' ||
           category === 'all' ||
           (e.kind === 'expense' && e.item.category === category)),
     );
     entries.sort(
       (a, b) =>
-        b.item.date.localeCompare(a.item.date) || b.item.createdAt.localeCompare(a.item.createdAt),
+        dateOf(b).localeCompare(dateOf(a)) || b.item.createdAt.localeCompare(a.item.createdAt),
     );
     const grouped = new Map<string, Entry[]>();
-    for (const e of entries) grouped.set(e.item.date, [...(grouped.get(e.item.date) ?? []), e]);
+    for (const e of entries) grouped.set(dateOf(e), [...(grouped.get(dateOf(e)) ?? []), e]);
     return [...grouped];
-  }, [expense, income, transaction, month, show, category]);
+  }, [expense, income, transaction, dividend, month, show, category]);
 
   const debtName = (id: string | null) => debt.find((d) => d.id === id)?.name ?? 'a card or loan';
 
@@ -190,6 +198,31 @@ export function HistoryScreen() {
             )
           }
           onDelete={() => setDeleting({ title: i.label, remove: () => deleteIncome(i.id) })}
+        />
+      );
+    }
+    if (entry.kind === 'dividend') {
+      const d = entry.item;
+      const title = `${d.status === 'skipped' ? 'Skipped dividend' : 'Dividend'} · ${d.symbol}`;
+      return (
+        <Row
+          key={d.id}
+          title={title}
+          detail={
+            d.bucket === null
+              ? ''
+              : d.bucket === 'reinvest'
+                ? 'Reinvested'
+                : `To ${BUCKET[d.bucket].toLowerCase()}`
+          }
+          amount={
+            d.status === 'skipped' ? (
+              <Amount>{money(0)}</Amount>
+            ) : (
+              <Amount tone="in">{`+${money(d.amount)}`}</Amount>
+            )
+          }
+          onDelete={() => setDeleting({ title, remove: () => deleteDividend(d.id) })}
         />
       );
     }

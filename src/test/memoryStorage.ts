@@ -10,8 +10,9 @@ export function memoryStorage(): StorageBackend {
     meta,
     records: {
       all: async () => [...rows.values()],
-      write: async (next, { replace, dataVersion }) => {
+      write: async (next, { replace, dataVersion, remove = [] }) => {
         if (replace) rows.clear();
+        for (const r of remove) rows.delete(slot(r.table, r.id));
         for (const row of next) rows.set(slot(row.table, row.id), row);
         if (dataVersion !== undefined) await meta.put(DATA_VERSION_KEY, dataVersion);
       },

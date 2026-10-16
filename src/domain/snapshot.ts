@@ -65,6 +65,8 @@ export const CURRENT_SCHEMA_VERSION = 5;
 
 /** One record tagged with its table, for batch writes. */
 export type TableRecord = { [K in TableName]: { table: K; record: EntityOf<K> } }[TableName];
+/** Names one stored record, to remove it. */
+export type RecordKey = { table: TableName; id: string };
 
 const SINGLETONS = new Set<TableName>(['profile', 'settings']);
 

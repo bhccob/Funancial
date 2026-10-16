@@ -15,6 +15,9 @@ export const UNKNOWN_SYMBOL =
   "We couldn't find that symbol. Check it, or enter the name and currency yourself.";
 const NO_PRICE =
   'Reinvesting needs a price for this holding. Refresh prices or set a manual price.';
+/** What `deleteDividend` says when taking a reinvested payout's shares back would leave none. */
+export const SHARES_GONE =
+  'The holding has fewer shares than this dividend bought. Edit the holding first.';
 /** A holding's dividend history is fetched again once it is older than this. */
 const DIVIDENDS_MAX_AGE_MS = 24 * 3_600_000;
 
@@ -273,6 +276,31 @@ export function createInvestActions(store: StoreApi<AppState>, market: Market) {
           sharesAdded: null,
         }),
       );
+    },
+
+    /**
+     * Removes a confirmed or skipped payout, so it is due again while it is recent. A reinvested one
+     * takes its shares and cost back off the holding, if it is still held, in the same write.
+     */
+    async deleteDividend(id: string) {
+      const dividend = state().data.tables.dividend.find((d) => d.id === id);
+      if (!dividend) throw new Error('That item no longer exists.');
+      const holding = holdings().find((h) => h.id === dividend.holdingId);
+      const items: TableRecord[] = [];
+      if (dividend.bucket === 'reinvest' && holding) {
+        const shares = holding.shares - (dividend.sharesAdded ?? 0);
+        if (shares <= 0) throw new Error(SHARES_GONE);
+        items.push({
+          table: 'holding',
+          record: {
+            ...holding,
+            shares,
+            costBasis: Math.max(0, holding.costBasis - dividend.amount),
+            updatedAt: nowIso(),
+          },
+        });
+      }
+      await state().putMany(items, [{ table: 'dividend', id }]);
     },
 
     async markChecked(id: string) {

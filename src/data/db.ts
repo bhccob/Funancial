@@ -53,9 +53,10 @@ export function dexieMetaStore(db: FunancialDb): MetaStore {
 function dexieRecordStore(db: FunancialDb): RecordStore {
   return {
     all: () => db.records.toArray(),
-    write: (rows, { replace, dataVersion }) =>
+    write: (rows, { replace, dataVersion, remove = [] }) =>
       db.transaction('rw', db.records, db.meta, async () => {
         if (replace) await db.records.clear();
+        await db.records.bulkDelete(remove.map((r) => [r.table, r.id]));
         await db.records.bulkPut(rows);
         if (dataVersion !== undefined)
           await db.meta.put({ key: DATA_VERSION_KEY, value: dataVersion });

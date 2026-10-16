@@ -5,7 +5,7 @@ import type { Holding } from '@/domain/entities';
 import { MarketError, type Market } from '@/services/market';
 import { makeDividend, makeHolding, makeProfile, makeTransaction } from '@/test/fixtures';
 import { freshRealStore } from '@/test/realStore';
-import { createInvestActions } from './investActions';
+import { createInvestActions, SHARES_GONE } from './investActions';
 
 const TODAY = '2026-10-14';
 const ASOF = '2026-10-14T09:00:00.000Z';
@@ -483,6 +483,82 @@ describe('dividend payouts', () => {
     );
     expect(tables().dividend).toEqual([]);
     expect(holding(h.id)).toEqual(kept);
+  });
+
+  describe('deleting a dividend record', () => {
+    it('reopens a confirmed payout and takes back its money and logging XP', async () => {
+      const { actions, tables, balances, due, payout } = await withDuePayout();
+      const before = balances();
+      await actions.confirmDividend(payout, {
+        amount: 3_79,
+        paidOn: '2026-10-12',
+        bucket: 'savings',
+      });
+      const [dividend] = tables().dividend;
+      const xp = () =>
+        tables()
+          .ledger.filter((e) => e.key === `log:dividend:${dividend!.id}`)
+          .reduce((sum, e) => sum + e.xp, 0);
+      expect(xp()).toBeGreaterThan(0);
+
+      await actions.deleteDividend(dividend!.id);
+      expect(tables().dividend).toEqual([]);
+      expect(due()).toEqual([payout]);
+      expect(balances()).toEqual(before);
+      expect(xp()).toBe(0);
+    });
+
+    it('reopens a skipped payout', async () => {
+      const { actions, tables, due, payout } = await withDuePayout();
+      await actions.skipDividend(payout);
+      await actions.deleteDividend(tables().dividend[0]!.id);
+      expect(due()).toEqual([payout]);
+    });
+
+    it('takes reinvested shares and cost back off the holding in the same write', async () => {
+      const { actions, store, tables, holding, h, payout } = await withDuePayout();
+      await actions.confirmDividend(payout, {
+        amount: 3_79,
+        paidOn: '2026-10-12',
+        bucket: 'reinvest',
+      });
+      const putMany = vi.spyOn(store.getState(), 'putMany');
+
+      await actions.deleteDividend(tables().dividend[0]!.id);
+      expect(putMany).toHaveBeenCalledOnce();
+      expect(tables().dividend).toEqual([]);
+      expect(holding(h.id).shares).toBeCloseTo(10, 12);
+      expect(holding(h.id).costBasis).toBe(500_00);
+    });
+
+    it('refuses when the holding no longer has the shares the dividend bought', async () => {
+      const { actions, tables, holding, h, payout } = await withDuePayout();
+      await actions.confirmDividend(payout, {
+        amount: 3_79,
+        paidOn: '2026-10-12',
+        bucket: 'reinvest',
+      });
+      const [dividend] = tables().dividend;
+      await actions.updateHolding(h.id, { shares: dividend!.sharesAdded! });
+      const kept = holding(h.id);
+
+      await expect(actions.deleteDividend(dividend!.id)).rejects.toThrow(SHARES_GONE);
+      expect(tables().dividend).toEqual([dividend]);
+      expect(holding(h.id)).toEqual(kept);
+    });
+
+    it('removes a reinvested record of a holding that was deleted', async () => {
+      const { actions, tables, h, payout } = await withDuePayout();
+      await actions.confirmDividend(payout, {
+        amount: 3_79,
+        paidOn: '2026-10-12',
+        bucket: 'reinvest',
+      });
+      await actions.deleteHolding(h.id);
+      await actions.deleteDividend(tables().dividend[0]!.id);
+      expect(tables().dividend).toEqual([]);
+      expect(tables().holding).toEqual([]);
+    });
   });
 
   it('skips a payout so it is not due again', async () => {

@@ -7,6 +7,7 @@ import {
   TABLES,
   type DataSnapshot,
   type EntityOf,
+  type RecordKey,
   type TableName,
   type TableRecord,
 } from '@/domain/snapshot';
@@ -22,8 +23,8 @@ export type LoadResult = { snapshot: DataSnapshot; skipped: SkippedRecord[] };
 export interface Repository {
   loadAll(): Promise<LoadResult>;
   put<T extends TableName>(table: T, record: EntityOf<T>): Promise<void>;
-  /** Write several records in one transaction; all or nothing. */
-  putMany(items: TableRecord[]): Promise<void>;
+  /** Write several records, and remove the `remove` ones, in one transaction; all or nothing. */
+  putMany(items: TableRecord[], remove?: RecordKey[]): Promise<void>;
   remove(table: TableName, id: string): Promise<void>;
   /** Replace every record at once (restore). Validates first; never leaves partial data. */
   replaceAll(snapshot: DataSnapshot): Promise<void>;
@@ -89,13 +90,13 @@ export function createRepository(backend: StorageBackend, key: CryptoKey): Repos
       await records.write([await toRow(key, table, valid)], { replace: false });
     },
 
-    async putMany(items: TableRecord[]) {
+    async putMany(items: TableRecord[], remove: RecordKey[] = []) {
       const valid = items.map(({ table, record }) => ({
         table,
         record: SCHEMAS[table].parse(record),
       }));
       const rows = await Promise.all(valid.map((v) => toRow(key, v.table, v.record)));
-      await records.write(rows, { replace: false });
+      await records.write(rows, { replace: false, remove });
     },
 
     async remove(table, id) {
