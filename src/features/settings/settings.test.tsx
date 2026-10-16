@@ -520,6 +520,21 @@ describe('Currency', () => {
     expect(values).not.toContain('EUR');
   });
 
+  it('has no confirmation in the page until a currency is picked', async () => {
+    renderCurrency('EUR');
+    const picker = await openPicker();
+    expect(document.body).not.toHaveTextContent('Change your currency');
+    await userEvent.selectOptions(within(picker).getByLabelText('New currency'), 'GBP');
+    expect(document.body).toHaveTextContent('Change your currency to GBP?');
+    await userEvent.click(
+      within(screen.getByRole('dialog', { name: 'Change your currency to GBP?' })).getByRole(
+        'button',
+        { name: 'Cancel' },
+      ),
+    );
+    expect(document.body).not.toHaveTextContent('Change your currency');
+  });
+
   it('asks before changing, then relabels on confirm and closes', async () => {
     renderCurrency('EUR');
     const picker = await openPicker();

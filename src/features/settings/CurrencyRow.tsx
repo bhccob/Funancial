@@ -87,23 +87,25 @@ export function CurrencyRow({ current }: { current: string }) {
           hint={`Only currencies with the same decimals as ${current} are listed. Your amounts keep their numbers; they are not converted.`}
         />
       </Dialog>
-      {/* Opens over the list; Cancel and a confirmed change close both. */}
-      <Dialog
-        open={next !== null}
-        title={`Change your currency to ${next}?`}
-        description={`Every amount keeps its number. 1,200 ${current} becomes 1,200 ${next}.`}
-        onClose={close}
-        actions={
-          <>
-            <Button variant="secondary" onClick={close}>
-              Cancel
-            </Button>
-            <Button disabled={busy} onClick={() => void confirm()}>
-              Change currency
-            </Button>
-          </>
-        }
-      />
+      {/* Opens over the list once a currency is picked; Cancel and a confirmed change close both. */}
+      {next !== null && (
+        <Dialog
+          open
+          title={`Change your currency to ${next}?`}
+          description={`Every amount keeps its number. 1,200 ${current} becomes 1,200 ${next}.`}
+          onClose={close}
+          actions={
+            <>
+              <Button variant="secondary" onClick={close}>
+                Cancel
+              </Button>
+              <Button disabled={busy} onClick={() => void confirm()}>
+                Change currency
+              </Button>
+            </>
+          }
+        />
+      )}
     </div>
   );
 }
