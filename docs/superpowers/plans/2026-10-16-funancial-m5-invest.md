@@ -49,7 +49,7 @@
   - With no `FUNANCIAL_ACCESS_TOKEN` set, every request gets `500 {"error":"not configured"}`, `no-store`.
 - **CORS.** Allowed origins: `http://localhost:5173`, `capacitor://localhost`, `https://localhost`, plus `process.env.FUNANCIAL_APP_ORIGIN` when set.
   - `OPTIONS` answers `204` with `Access-Control-Allow-Origin` (the matching origin), `Access-Control-Allow-Headers: X-Funancial-Token` and `Access-Control-Allow-Methods: GET, OPTIONS`.
-- **Caching:** quote `s-maxage=60, stale-while-revalidate=60`; profile `s-maxage=86400`; dividends `s-maxage=21600`; news `s-maxage=3600`; fx `s-maxage=3600`. Errors are always `no-store`.
+- **Caching:** quote `s-maxage=60, stale-while-revalidate=60`; profile `s-maxage=86400`; dividends `s-maxage=21600`; news `s-maxage=3600`; fx `s-maxage=3600`; search `s-maxage=86400`; history `s-maxage=3600`. Errors are always `no-store`.
 - **Bad input.** Symbols must match `/^[A-Za-z0-9.^=-]{1,15}$/`, at most 25 per request. Currencies are `/^[A-Z]{3}$/`. Anything else gets `400 {"error":"bad request"}`. When Yahoo fails, the reply is `502 {"error":"upstream"}`, with no stack trace or secret in the body.
 - **Minor-unit currencies** are normalised on the server: `GBp` becomes `GBP` ÷ 100, `ZAc` becomes `ZAR` ÷ 100, `ILA` becomes `ILS` ÷ 100.
 - **Money rules.** Derived money is always integer minor units of the profile currency, rounded once at the edge (`Math.round`). Shares, prices, exchange rates and per-share dividends are plain numbers. Money is formatted only through `useMoney()` / `formatMoney`, and dates only through `src/lib/format.ts`.
@@ -103,6 +103,8 @@
 | `GET /api/dividends?symbol=KO` | `{ symbol, currency, history: Array<{ date: 'YYYY-MM-DD', amount: number }>, next: { exDate: string \| null, payDate: string \| null, amount: number \| null } }`. History covers the last 5 years, oldest first. |
 | `GET /api/news?symbols=AAPL,KO` | `{ items: Array<{ symbol, title, publisher, url, publishedAt: string }> }`. At most 10 per symbol, de-duplicated by url, newest first. Only `http`/`https` urls. |
 | `GET /api/fx?from=USD&to=EUR` | `{ from, to, rate: number, asOf: string }`. Identical currencies return rate 1 without calling Yahoo. |
+| `GET /api/search?q=apple` | `{ results: Array<{ symbol, name, exchange: string \| null, type: 'stock' \| 'etf' }> }`. `q` is 1 to 40 letters, digits, spaces or `. & ' -`, else `400`. At most 8 results, stocks and ETFs only, de-duplicated by symbol, best match first. |
+| `GET /api/history?symbol=AAPL&from=2025-03-03` | `{ symbol, currency, points: Array<{ date: 'YYYY-MM-DD', close: number }> }`. `from` is a real day, not after today, else `400`. Closes since `from`, oldest first, on the exchange's calendar day: daily for the last 92 days, weekly for 2 years, monthly beyond that. Minor-unit currencies are normalised like quotes. |
 
 **Helpers:**
 - `api/_lib/http.ts` exports:
