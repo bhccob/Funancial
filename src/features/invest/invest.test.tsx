@@ -2,15 +2,24 @@ import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/re
 import userEvent from '@testing-library/user-event';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
-import { formatMoney } from '@/domain/money';
-import { emptySnapshot, type DataSnapshot } from '@/domain/snapshot';
+import type { Holding } from '@/domain/entities';
+import { formatMoney, formatMoneyPlain } from '@/domain/money';
+import { emptySnapshot, type DataSnapshot, type TableRecord } from '@/domain/snapshot';
 import { toastStore } from '@/lib/toast';
-import { formatDateTime, formatPercent } from '@/lib/format';
-import { market, MarketError, type Market } from '@/services/market';
+import {
+  formatDateTime,
+  formatDay,
+  formatMonthShort,
+  formatMonthYear,
+  formatPercent,
+} from '@/lib/format';
+import { market, MarketError, type Market, type NewsItem } from '@/services/market';
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
-import { makeHolding, makeProfile } from '@/test/fixtures';
+import { makeDividend, makeHolding, makeProfile } from '@/test/fixtures';
+import { FUTURE } from '@/store/financeActions';
 import { UNKNOWN_SYMBOL } from '@/store/investActions';
 import { InvestScreen } from './InvestScreen';
+import { clearNewsCache } from './newsCache';
 
 const TODAY = '2026-10-14';
 const ASOF = '2026-10-14T14:05:00.000Z';
@@ -23,6 +32,7 @@ const UNREACHABLE = "Couldn't reach the price service. Showing your last prices.
 
 let fetchQuotes: MockInstance<Market['fetchQuotes']>;
 let fetchProfile: MockInstance<Market['fetchProfile']>;
+let fetchNews: MockInstance<Market['fetchNews']>;
 
 beforeEach(() => {
   // No token unless a test sets one: the screen then never asks the network for anything.
@@ -30,6 +40,8 @@ beforeEach(() => {
   fetchQuotes = vi.spyOn(market, 'fetchQuotes').mockResolvedValue({ quotes: [], missing: [] });
   fetchProfile = vi.spyOn(market, 'fetchProfile').mockRejectedValue(new MarketError());
   vi.spyOn(market, 'fetchDividends').mockRejectedValue(new MarketError());
+  fetchNews = vi.spyOn(market, 'fetchNews').mockResolvedValue({ items: [] });
+  clearNewsCache();
   toastStore.setState({ toasts: [] });
 });
 afterEach(() => {
@@ -115,12 +127,16 @@ describe('Invest tabs', () => {
     expect(tab('News')).toHaveAttribute('aria-selected', 'true');
     expect(tab('Holdings')).toHaveAttribute('aria-selected', 'false');
     expect(screen.queryByRole('region', { name: 'Portfolio value' })).not.toBeInTheDocument();
-    expect(screen.getByRole('tabpanel', { name: 'News' })).toHaveTextContent('Coming soon.');
+    expect(screen.getByRole('tabpanel', { name: 'News' })).toHaveTextContent(
+      'News needs the price service.',
+    );
 
     await userEvent.click(tab('Dividends'));
     expect(tab('Dividends')).toHaveAttribute('aria-selected', 'true');
     expect(router.state.location.search).toBe('?tab=dividends');
-    expect(screen.getByRole('tabpanel', { name: 'Dividends' })).toHaveTextContent('Coming soon.');
+    expect(screen.getByRole('tabpanel', { name: 'Dividends' })).toHaveTextContent(
+      'No dividends yet. Holdings that pay dividends show up here.',
+    );
 
     await userEvent.click(tab('Holdings'));
     expect(tab('Holdings')).toHaveAttribute('aria-selected', 'true');
@@ -793,5 +809,458 @@ describe('HoldingDialog editing', () => {
     expect(within(dialog).queryByLabelText('Currency')).not.toBeInTheDocument();
     await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(store.getState().put).toHaveBeenCalledTimes(1));
+  });
+});
+
+type Info = NonNullable<Holding['dividendInfo']>;
+
+const info = (extra: Partial<Info>): Info => ({
+  history: [],
+  nextExDate: null,
+  nextPayDate: null,
+  nextAmount: null,
+  fetchedAt: ASOF,
+  ...extra,
+});
+const quarterly = (...dates: string[]) => dates.map((date) => ({ date, amount: 1 }));
+
+/**
+ * KO pays $1.32 a share (10 shares, 15% withheld: $11.22) on Oct 28 and every three months after.
+ * VWRL paid $2.50 a share (4 shares: $8.50) on Oct 12, so that payout is due; it pays again in
+ * Jan, Apr, Jul and Oct. MSFT is no longer held: it paid $346.30 in March and $42.10 on Oct 5.
+ * Next 12 months: 4 x $11.22 + 4 x $8.50 = $78.88, on a portfolio worth $1,000.
+ */
+function dividendData(): DataSnapshot {
+  const data = noHoldings();
+  data.tables.holding = [
+    held({
+      id: 'ko',
+      symbol: 'KO',
+      name: 'Coca-Cola',
+      shares: 10,
+      purchaseDate: '2025-01-01',
+      quote: quote(60, 59),
+      dividendInfo: info({
+        history: quarterly('2026-01-17', '2026-04-18', '2026-07-18'),
+        nextExDate: '2026-10-18',
+        nextPayDate: '2026-10-28',
+        nextAmount: 1.32,
+      }),
+    }),
+    held({
+      id: 'vwrl',
+      symbol: 'VWRL',
+      name: 'All-World ETF',
+      type: 'etf',
+      sector: null,
+      shares: 4,
+      purchaseDate: '2025-01-01',
+      quote: quote(100, 100),
+      dividendInfo: info({
+        history: quarterly('2026-01-08', '2026-04-08', '2026-07-08'),
+        nextExDate: '2026-10-08',
+        nextPayDate: '2026-10-12',
+        nextAmount: 2.5,
+      }),
+    }),
+  ];
+  data.tables.dividend = [
+    makeDividend({
+      holdingId: 'gone',
+      symbol: 'MSFT',
+      expectedPayDate: '2026-03-15',
+      paidOn: '2026-03-16',
+      amount: 346_30,
+    }),
+    makeDividend({
+      holdingId: 'gone',
+      symbol: 'MSFT',
+      expectedPayDate: '2026-10-05',
+      paidOn: '2026-10-05',
+      amount: 42_10,
+    }),
+  ];
+  return data;
+}
+
+/** A store whose writes land in its data, so a confirmed payout really leaves the list. */
+function liveStore(data: DataSnapshot) {
+  const store = createStubStore({ data, today: TODAY });
+  const putMany = vi.fn(async (items: TableRecord[]) => {
+    store.setState((s) => {
+      const tables: Record<string, Array<{ id: string }>> = { ...s.data.tables };
+      for (const { table, record } of items) {
+        tables[table] = [...tables[table]!.filter((r) => r.id !== record.id), record];
+      }
+      return { data: { ...s.data, tables } as DataSnapshot };
+    });
+  });
+  store.setState({
+    putMany,
+    put: vi.fn(async (table, record) => putMany([{ table, record } as TableRecord])),
+  });
+  return store;
+}
+
+function renderDividends(data: DataSnapshot = dividendData(), live = false) {
+  const store = live ? liveStore(data) : createStubStore({ data, today: TODAY });
+  const router = createMemoryRouter([{ path: '/invest', element: <InvestScreen /> }], {
+    initialEntries: ['/invest?tab=dividends'],
+  });
+  renderWithStore(<RouterProvider router={router} />, store);
+  return store;
+}
+
+const monthKeys = (from: string) =>
+  Array.from({ length: 12 }, (_, i) => {
+    const n = Number(from.slice(0, 4)) * 12 + Number(from.slice(5)) - 1 + i;
+    return `${Math.floor(n / 12)}-${String((n % 12) + 1).padStart(2, '0')}`;
+  });
+/** The chart's bars as their accessible names, oldest month first. */
+const bars = () =>
+  screen.getAllByRole('button', { name: /^[A-Z]{3,4}: / }).map((b) => b.getAttribute('aria-label'));
+const barsFor = (from: string, minor: Record<string, number>) =>
+  monthKeys(from).map((m) => `${formatMonthShort(`${m}-01`)}: ${usd(minor[m] ?? 0)}`);
+const bar = (month: string, minor: number) =>
+  screen.getByRole('button', { name: `${formatMonthShort(`${month}-01`)}: ${usd(minor)}` });
+
+describe('Dividends tab', () => {
+  it('shows month, year, next-12-months and yield figures', () => {
+    renderDividends();
+    const figure = (label: string) => screen.getByText(label, { selector: 'dt' }).closest('div');
+    expect(figure('This month')).toHaveTextContent(`This month${usd(42_10)}`);
+    expect(figure('This year')).toHaveTextContent(`This year${usd(388_40)}`);
+    expect(figure('Next 12 months')).toHaveTextContent(`Next 12 months~${usdWhole(78_88)}`);
+    expect(figure('Yield')).toHaveTextContent(`Yield${formatPercent((78_88 * 100) / 1_000_00)}`);
+
+    // Nothing is worth anything yet, so there is no yield to divide by.
+    cleanup();
+    const unpriced = dividendData();
+    unpriced.tables.holding = unpriced.tables.holding.map((h) => ({ ...h, quote: null }));
+    renderDividends(unpriced);
+    expect(figure('Yield')).toHaveTextContent('Yield—');
+  });
+
+  it('toggles the income bars between next and last 12 months', async () => {
+    renderDividends();
+    const period = screen.getByRole('group', { name: 'Months shown' });
+    const toggle = (name: string) => within(period).getByRole('button', { name });
+    expect(toggle('Next 12 months')).toHaveAttribute('aria-pressed', 'true');
+
+    // Expected from today on, net, by pay date: KO's Oct 28, then both payers each quarter.
+    expect(bars()).toEqual(
+      barsFor('2026-10', {
+        '2026-10': 11_22,
+        '2027-01': 19_72,
+        '2027-04': 19_72,
+        '2027-07': 19_72,
+      }),
+    );
+    // This month stands in ink, as today does on the week's bars.
+    expect(bar('2026-10', 11_22)).toHaveClass('text-text');
+    expect(bar('2026-11', 0)).toHaveClass('text-muted');
+
+    await userEvent.click(toggle('Last 12 months'));
+    expect(toggle('Last 12 months')).toHaveAttribute('aria-pressed', 'true');
+    expect(toggle('Next 12 months')).toHaveAttribute('aria-pressed', 'false');
+    // What was confirmed, by the day it was paid, ending with this month.
+    expect(bars()).toEqual(barsFor('2025-11', { '2026-03': 346_30, '2026-10': 42_10 }));
+    expect(bar('2026-10', 42_10)).toHaveClass('text-text');
+
+    // A tap names the month and its amount.
+    await userEvent.click(bar('2026-03', 346_30));
+    expect(screen.getByText(formatMonthYear('2026-03')).parentElement).toHaveTextContent(
+      `${formatMonthYear('2026-03')} · ${usd(346_30)}`,
+    );
+  });
+
+  it('confirms a due payout into reinvest and it leaves the list', async () => {
+    const store = renderDividends(dividendData(), true);
+    const due = region('Due');
+    const rows = within(due).getAllByRole('listitem');
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toHaveTextContent(`VWRL · paid ${formatDay('2026-10-12')}${usd(8_50)}`);
+
+    await userEvent.click(within(due).getByRole('button', { name: 'Confirm' }));
+    const dialog = screen.getByRole('dialog', { name: 'Confirm VWRL dividend' });
+    // The net and the pay date are what the payout was expected to be.
+    expect(within(dialog).getByLabelText('Amount received')).toHaveValue(
+      formatMoneyPlain(8_50, 'USD'),
+    );
+    expect(within(dialog).getByLabelText('Date')).toHaveValue('2026-10-12');
+    const where = within(dialog).getByRole('group', { name: 'Where did it go?' });
+    expect(
+      within(where)
+        .getAllByRole('radio')
+        .map((r) => r.closest('label')?.textContent),
+    ).toEqual(['Cash', 'Savings', 'Passive', 'Reinvest']);
+    expect(within(where).getByRole('radio', { name: 'Cash' })).toBeChecked();
+
+    await userEvent.click(within(where).getByRole('radio', { name: 'Reinvest' }));
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Confirm' }));
+
+    await waitFor(() =>
+      expect(screen.queryByRole('region', { name: 'Due' })).not.toBeInTheDocument(),
+    );
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    const data = store.getState().data.tables;
+    expect(data.dividend.find((d) => d.holdingId === 'vwrl')).toMatchObject({
+      status: 'confirmed',
+      amount: 8_50,
+      paidOn: '2026-10-12',
+      bucket: 'reinvest',
+    });
+    // $8.50 buys 0.085 of a share at $100.
+    expect(data.holding.find((h) => h.id === 'vwrl')?.shares).toBeCloseTo(4.085, 6);
+    expect(toastStore.getState().toasts.at(-1)?.message).toBe('Dividend confirmed.');
+  });
+
+  it('skips a due payout', async () => {
+    const store = renderDividends(dividendData(), true);
+    await userEvent.click(within(region('Due')).getByRole('button', { name: "Didn't get it" }));
+    await waitFor(() =>
+      expect(screen.queryByRole('region', { name: 'Due' })).not.toBeInTheDocument(),
+    );
+    expect(store.getState().put).toHaveBeenCalledWith(
+      'dividend',
+      expect.objectContaining({ holdingId: 'vwrl', status: 'skipped', amount: 0 }),
+    );
+    // It counts for nothing.
+    expect(screen.getByText('This year', { selector: 'dt' }).closest('div')).toHaveTextContent(
+      `This year${usd(388_40)}`,
+    );
+  });
+
+  it('checks the amount and the day before it confirms', async () => {
+    const store = renderDividends();
+    await userEvent.click(within(region('Due')).getByRole('button', { name: 'Confirm' }));
+    const dialog = screen.getByRole('dialog', { name: 'Confirm VWRL dividend' });
+    const confirm = () => userEvent.click(within(dialog).getByRole('button', { name: 'Confirm' }));
+
+    await enter(dialog, 'Amount received', '');
+    await confirm();
+    expect(dialog.textContent).toContain('Enter an amount like 12.50');
+
+    await enter(dialog, 'Amount received', '8.50');
+    fireEvent.change(within(dialog).getByLabelText('Date'), { target: { value: '2026-10-20' } });
+    await confirm();
+    expect(dialog.textContent).toContain(FUTURE);
+    expect(store.getState().putMany).not.toHaveBeenCalled();
+  });
+
+  it('says why a payout cannot be reinvested without a price, and keeps the dialog open', async () => {
+    const data = dividendData();
+    data.tables.holding = data.tables.holding.map((h) => ({ ...h, quote: null }));
+    const store = renderDividends(data);
+    await userEvent.click(within(region('Due')).getByRole('button', { name: 'Confirm' }));
+    const dialog = screen.getByRole('dialog', { name: 'Confirm VWRL dividend' });
+    await userEvent.click(within(dialog).getByRole('radio', { name: 'Reinvest' }));
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Confirm' }));
+    await waitFor(() =>
+      expect(toastStore.getState().toasts.at(-1)?.message).toBe(
+        'Reinvesting needs a price for this holding. Refresh prices or set a manual price.',
+      ),
+    );
+    expect(dialog).toBeInTheDocument();
+    expect(store.getState().putMany).not.toHaveBeenCalled();
+  });
+
+  it('lists coming payouts with ex-date and tax', () => {
+    const data = dividendData();
+    data.tables.holding.push(
+      held({
+        id: 'sap',
+        symbol: 'SAP',
+        name: 'SAP SE',
+        currency: 'EUR',
+        shares: 5,
+        purchaseDate: '2025-01-01',
+        // A price in euros and no rate to turn it into dollars.
+        quote: quote(120, 119, null),
+        dividendInfo: info({ nextExDate: '2026-11-05', nextPayDate: '2026-11-12', nextAmount: 1 }),
+      }),
+    );
+    renderDividends(data);
+    const rows = within(region('Coming up')).getAllByRole('listitem');
+    // The next 60 days: VWRL's January payout is further off, and its due one is above.
+    expect(rows.map((r) => r.textContent)).toEqual([
+      `KO · pays ${formatDay('2026-10-28')}ex-date ${formatDay('2026-10-18')} · after 15% tax${usd(11_22)}`,
+      `SAP · pays ${formatDay('2026-11-12')}ex-date ${formatDay('2026-11-05')} · after 15% tax—`,
+    ]);
+  });
+
+  it('ranks the top payers by what they are expected to pay', () => {
+    renderDividends();
+    const rows = within(region('Top payers')).getAllByRole('listitem');
+    expect(rows.map((r) => r.textContent)).toEqual([
+      `KO · Coca-Cola${usd(44_88)} a year`,
+      `VWRL · All-World ETF${usd(34_00)} a year`,
+    ]);
+    expect(screen.queryByText('Dividend streak')).not.toBeInTheDocument();
+  });
+
+  it('says so when no holding pays dividends', () => {
+    renderDividends(portfolioData());
+    expect(
+      screen.getByText('No dividends yet. Holdings that pay dividends show up here.'),
+    ).toBeInTheDocument();
+    expect(screen.queryByText('This month', { selector: 'dt' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Due' })).not.toBeInTheDocument();
+  });
+});
+
+const ago = (ms: number) => new Date(Date.now() - ms).toISOString();
+const HOUR = 3_600_000;
+
+const headlines = (): NewsItem[] => [
+  {
+    symbol: 'AAPL',
+    title: 'Apple unveils a new phone',
+    publisher: 'Reuters',
+    url: 'https://example.com/apple',
+    publishedAt: ago(2 * HOUR + 60_000),
+  },
+  {
+    symbol: 'KO',
+    title: 'Coca-Cola raises its dividend',
+    publisher: 'Bloomberg',
+    url: 'https://example.com/ko',
+    publishedAt: ago(5 * HOUR + 60_000),
+  },
+  {
+    symbol: 'VWRL',
+    title: 'Global markets close higher',
+    publisher: 'FT',
+    url: 'https://example.com/markets',
+    publishedAt: ago(26 * HOUR),
+  },
+  {
+    symbol: 'KO',
+    title: 'A link that is not a web page',
+    publisher: 'Nobody',
+    url: 'javascript:alert(1)',
+    publishedAt: ago(HOUR),
+  },
+];
+
+function renderNews(data: DataSnapshot = portfolioData()) {
+  return renderInvest(data, '/invest?tab=news');
+}
+
+const DISCLAIMER = 'News data is for informational purposes only. Not financial advice.';
+
+describe('News tab', () => {
+  it('filters news by holding, links out safely and shows the disclaimer', async () => {
+    configured();
+    fetchNews.mockResolvedValue({ items: headlines() });
+    renderNews();
+
+    const apple = await screen.findByRole('link', { name: /Apple unveils a new phone/ });
+    expect(fetchNews).toHaveBeenCalledWith(['KO', 'AAPL', 'VWRL']);
+    // Opens in a new tab without handing over the app's window.
+    expect(apple).toHaveAttribute('href', 'https://example.com/apple');
+    expect(apple).toHaveAttribute('target', '_blank');
+    expect(apple).toHaveAttribute('rel', 'noopener noreferrer');
+    // The title, then the symbol, the publisher and how long ago.
+    expect(apple).toHaveTextContent('Apple unveils a new phoneAAPL · Reuters · 2 h ago');
+    expect(screen.getByRole('link', { name: /Coca-Cola raises/ })).toHaveTextContent(
+      'KO · Bloomberg · 5 h ago',
+    );
+    expect(screen.getByRole('link', { name: /Global markets/ })).toHaveTextContent(
+      'VWRL · FT · 1 day ago',
+    );
+    // Only web links are shown.
+    expect(screen.getAllByRole('link')).toHaveLength(3);
+    expect(screen.queryByText(/not a web page/)).not.toBeInTheDocument();
+    expect(screen.getByText(DISCLAIMER)).toBeInTheDocument();
+
+    const chips = screen.getByRole('group', { name: 'Filter by holding' });
+    expect(
+      within(chips)
+        .getAllByRole('button')
+        .map((b) => b.textContent),
+    ).toEqual(['All', 'KO', 'AAPL', 'VWRL']);
+    expect(within(chips).getByRole('button', { name: 'All' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+
+    await userEvent.click(within(chips).getByRole('button', { name: 'KO' }));
+    expect(within(chips).getByRole('button', { name: 'KO' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(screen.getAllByRole('link').map((a) => a.textContent)).toEqual([
+      'Coca-Cola raises its dividendKO · Bloomberg · 5 h ago',
+    ]);
+
+    await userEvent.click(within(chips).getByRole('button', { name: 'All' }));
+    expect(screen.getAllByRole('link')).toHaveLength(3);
+  });
+
+  it('asks for the same holdings once an hour', async () => {
+    configured();
+    fetchNews.mockResolvedValue({ items: headlines() });
+    renderNews();
+    await screen.findByRole('link', { name: /Apple unveils/ });
+
+    // Back on the tab later, within the hour: no new request.
+    cleanup();
+    renderNews();
+    await screen.findByRole('link', { name: /Apple unveils/ });
+    expect(fetchNews).toHaveBeenCalledTimes(1);
+
+    // Another set of holdings is another request.
+    cleanup();
+    const other = noHoldings();
+    other.tables.holding = [held({ symbol: 'MSFT', name: 'Microsoft' })];
+    renderNews(other);
+    await waitFor(() => expect(fetchNews).toHaveBeenCalledTimes(2));
+    expect(fetchNews).toHaveBeenLastCalledWith(['MSFT']);
+
+    // After the hour it asks again.
+    cleanup();
+    vi.useFakeTimers({ toFake: ['Date'], now: Date.now() + 61 * 60_000 });
+    try {
+      renderNews();
+      await waitFor(() => expect(fetchNews).toHaveBeenCalledTimes(3));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('explains when news is unavailable', () => {
+    renderNews();
+    expect(screen.getByText('News needs the price service.')).toBeInTheDocument();
+    expect(fetchNews).not.toHaveBeenCalled();
+    expect(screen.getByText(DISCLAIMER)).toBeInTheDocument();
+  });
+
+  it('says so when the headlines cannot be loaded, and asks again next time', async () => {
+    configured();
+    fetchNews.mockRejectedValue(new MarketError());
+    renderNews();
+    expect(await screen.findByText("Couldn't load news right now.")).toBeInTheDocument();
+
+    // A failure is not kept for the hour.
+    cleanup();
+    fetchNews.mockResolvedValue({ items: headlines() });
+    renderNews();
+    expect(await screen.findByRole('link', { name: /Apple unveils/ })).toBeInTheDocument();
+    expect(fetchNews).toHaveBeenCalledTimes(2);
+  });
+
+  it('says so when there are no headlines, or nothing is held', async () => {
+    configured();
+    renderNews();
+    expect(
+      await screen.findByText('No headlines for your holdings right now.'),
+    ).toBeInTheDocument();
+
+    cleanup();
+    fetchNews.mockClear();
+    renderNews(noHoldings());
+    expect(screen.getByText('No headlines for your holdings right now.')).toBeInTheDocument();
+    expect(fetchNews).not.toHaveBeenCalled();
   });
 });

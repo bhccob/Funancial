@@ -11,6 +11,7 @@ import {
   formatWeekday,
   ordinal,
   relativeDays,
+  relativeTime,
 } from './format';
 
 describe('date display', () => {
@@ -60,6 +61,24 @@ describe('moments and percentages', () => {
     // Local time: built from parts, so the test machine's zone does not matter.
     const moment = new Date(2026, 9, 14, 15, 5).toISOString();
     expect(formatDateTime(moment, 'en-US')).toMatch(/^Oct 14, 3:05\s?PM$/);
+  });
+
+  it('says how long ago a moment was, from minutes to days', () => {
+    const now = Date.parse('2026-10-14T12:00:00.000Z');
+    const before = (ms: number) => new Date(now - ms).toISOString();
+    const MIN = 60_000;
+    expect(relativeTime(before(0), now)).toBe('just now');
+    expect(relativeTime(before(59_000), now)).toBe('just now');
+    expect(relativeTime(before(MIN), now)).toBe('1 min ago');
+    expect(relativeTime(before(59 * MIN), now)).toBe('59 min ago');
+    expect(relativeTime(before(60 * MIN), now)).toBe('1 h ago');
+    expect(relativeTime(before(5 * 60 * MIN + 30 * MIN), now)).toBe('5 h ago');
+    expect(relativeTime(before(23 * 60 * MIN + 59 * MIN), now)).toBe('23 h ago');
+    expect(relativeTime(before(24 * 60 * MIN), now)).toBe('1 day ago');
+    expect(relativeTime(before(3 * 24 * 60 * MIN), now)).toBe('3 days ago');
+    // A clock that runs ahead, or a time that cannot be read, never says "-5 min ago".
+    expect(relativeTime(before(-5 * MIN), now)).toBe('just now');
+    expect(relativeTime('not a date', now)).toBe('');
   });
 
   it('shows a percentage with one decimal, and a true minus when signed', () => {

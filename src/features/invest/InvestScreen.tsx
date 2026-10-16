@@ -3,13 +3,14 @@ import { useId, type KeyboardEvent } from 'react';
 import { useSearchParams } from 'react-router';
 import { Button } from '@/components/ui/Button';
 import { PageHeader } from '@/components/ui/PageHeader';
-import { Section } from '@/components/ui/Section';
 import { cn } from '@/lib/cn';
 import { formatDateTime } from '@/lib/format';
 import { marketConfigured } from '@/services/market';
 import { useApp } from '@/store/AppStoreProvider';
 import { useMarketRefresh } from '@/store/useInvest';
+import { DividendsTab } from './DividendsTab';
 import { HoldingsTab } from './HoldingsTab';
+import { NewsTab } from './NewsTab';
 
 const TABS = [
   { id: 'holdings', label: 'Holdings' },
@@ -110,10 +111,10 @@ export function InvestScreen() {
       <div role="tabpanel" id={`${ids}-panel`} aria-labelledby={`${ids}-${tab}`}>
         {tab === 'holdings' ? (
           <HoldingsTab refresh={refresh} />
+        ) : tab === 'dividends' ? (
+          <DividendsTab />
         ) : (
-          <Section>
-            <p className="text-muted font-semibold">Coming soon.</p>
-          </Section>
+          <NewsTab />
         )}
       </div>
     </div>

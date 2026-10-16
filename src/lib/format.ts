@@ -66,6 +66,21 @@ export function relativeDays(today: LocalDate, d: LocalDate): string {
   return days === -1 ? '1 day ago' : `${-days} days ago`;
 }
 
+/**
+ * How long before `now` (epoch ms) a moment (an ISO timestamp) was: "just now", "5 min ago",
+ * "2 h ago", "1 day ago". A moment ahead of `now` reads "just now"; one that cannot be read, "".
+ */
+export function relativeTime(iso: string, now: number): string {
+  const minutes = Math.floor((now - Date.parse(iso)) / 60_000);
+  if (Number.isNaN(minutes)) return '';
+  if (minutes < 1) return 'just now';
+  if (minutes < 60) return `${minutes} min ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} h ago`;
+  const days = Math.floor(hours / 24);
+  return days === 1 ? '1 day ago' : `${days} days ago`;
+}
+
 /** "Oct 14, 3:05 PM": a moment (an ISO timestamp) in the reader's own time zone. */
 export function formatDateTime(iso: string, locale?: string): string {
   return new Intl.DateTimeFormat(locale, {
