@@ -57,18 +57,71 @@ function parseCurrency(v: unknown): string | null {
   return /^[A-Z]{3}$/.test(code) ? code : null;
 }
 
-/** Every Product in a JSON-LD value, whether it stands alone, in an array or in an @graph. */
-function productsIn(node: unknown): Obj[] {
-  if (Array.isArray(node)) return node.flatMap(productsIn);
-  if (!isObj(node)) return [];
-  const isProduct = [node['@type']].flat().some((type) => /Product$/.test(String(type)));
-  return [...(isProduct ? [node] : []), ...productsIn(node['@graph'])];
+// Where a page's Product can sit: in an @graph or an array, in a list (itemListElement, item) or
+// as a variant of a group, and an offer is a node of its own.
+const LINKS = ['@graph', 'itemListElement', 'item', 'hasVariant', 'offers'];
+const MAX_DEPTH = 8;
+const MAX_NODES = 500;
+
+/**
+ * The objects a JSON-LD value reaches through LINKS, in document order. The root is level 0 and
+ * each nested object or array is one more; it stops at 8 levels or 500 objects, so a hostile page
+ * cannot make it run long.
+ */
+function walk(root: unknown): Obj[] {
+  const nodes: Obj[] = [];
+  const visit = (value: unknown, depth: number): void => {
+    if (depth >= MAX_DEPTH || nodes.length >= MAX_NODES) return;
+    if (Array.isArray(value)) {
+      for (const item of value) visit(item, depth + 1);
+    } else if (isObj(value)) {
+      nodes.push(value);
+      for (const link of LINKS) visit(value[link], depth + 1);
+    }
+  };
+  visit(root, 0);
+  return nodes;
 }
+
+const isProduct = (node: Obj) =>
+  [node['@type']].flat().some((type) => /Product(Group)?$/.test(String(type)));
+
+type Quote = { price: number | null; currency: string | null };
+
+/** What one offer asks: `price`, else `priceSpecification.price` (an object or an array), else `lowPrice`. */
+function quoteOf(offer: Obj): Quote | null {
+  const spec = [offer.priceSpecification]
+    .flat()
+    .filter(isObj)
+    .find((s) => parsePrice(s.price) !== null);
+  const price = parsePrice(offer.price) ?? parsePrice(spec?.price) ?? parsePrice(offer.lowPrice);
+  if (price === null) return null;
+  return {
+    price,
+    currency: parseCurrency(offer.priceCurrency) ?? parseCurrency(spec?.priceCurrency),
+  };
+}
+
+const firstQuote = (offers: unknown): Quote | null =>
+  [offers]
+    .flat()
+    .filter(isObj)
+    .map(quoteOf)
+    .find((q) => q !== null) ?? null;
+
+/** A product's own offers first, then those of its first variant that has a usable price. */
+const productQuote = (product: Obj): Quote | null =>
+  firstQuote(product.offers) ??
+  [product.hasVariant]
+    .flat()
+    .filter(isObj)
+    .map((v) => firstQuote(v.offers))
+    .find((q) => q !== null) ??
+  null;
 
 // The patterns below are bounded, and the scan skips what it has read, so a hostile page
 // (the whole page is the other party's) cannot make them backtrack for long.
-function jsonLdProducts(html: string): Obj[] {
-  const found: Obj[] = [];
+function jsonLdProduct(html: string): Obj | undefined {
   const open = /<script\b[^>]{0,500}>/gi;
   const close = /<\/script/gi;
   let tag: RegExpExecArray | null;
@@ -78,13 +131,14 @@ function jsonLdProducts(html: string): Obj[] {
     const end = close.exec(html);
     if (!end) break;
     try {
-      found.push(...productsIn(JSON.parse(html.slice(open.lastIndex, end.index))));
+      const product = walk(JSON.parse(html.slice(open.lastIndex, end.index))).find(isProduct);
+      if (product) return product;
     } catch {
       // Malformed JSON-LD is common; the page's other sources are still read.
     }
     open.lastIndex = end.index;
   }
-  return found;
+  return undefined;
 }
 
 function metaContent(html: string): Map<string, string> {
@@ -98,23 +152,19 @@ function metaContent(html: string): Map<string, string> {
 }
 
 function readProduct(html: string) {
-  const products = jsonLdProducts(html);
+  const product = jsonLdProduct(html);
   const meta = metaContent(html);
   const title = /<title\b[^>]{0,200}>([\s\S]{0,1000}?)<\/title>/i.exec(html)?.[1];
 
-  // A price and its currency come from one source, so a currency is never paired with another's price.
-  const offer = products
-    .flatMap((product) => [product.offers].flat())
-    .filter(isObj)
-    .map((o) => ({ price: parsePrice(o.price), currency: parseCurrency(o.priceCurrency) }))
-    .find((o) => o.price !== null);
+  // The name and the price come from the first Product, and a price keeps the currency of its own
+  // source, so a name or a currency is never paired with another source's price.
   // `og:price:*` is the older spelling of `product:price:*`; Shopify stores still use it.
-  const { price, currency } = offer ?? {
+  const { price, currency } = (product && productQuote(product)) || {
     price: parsePrice(meta.get('product:price:amount') ?? meta.get('og:price:amount')),
     currency: parseCurrency(meta.get('product:price:currency') ?? meta.get('og:price:currency')),
   };
 
-  const names = [...products.map((p) => p.name), meta.get('og:title'), title];
+  const names = [product?.name, meta.get('og:title'), title];
   return { name: names.map(tidy).find((n) => n !== null) ?? null, price, currency };
 }
 

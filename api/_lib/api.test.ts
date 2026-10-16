@@ -1082,6 +1082,142 @@ describe('price service', () => {
       ).toEqual(want);
     });
 
+    it('finds a Product inside an ItemList and prices it through offers.priceSpecification', async () => {
+      const listed = (offers: unknown) =>
+        ld({
+          '@context': 'https://schema.org',
+          '@graph': [
+            { '@type': 'Organization', name: 'IKEA' },
+            {
+              '@type': 'ItemList',
+              itemListElement: [
+                {
+                  '@type': 'ListItem',
+                  position: 1,
+                  item: { '@type': 'Product', name: 'BILLY Bookcase', offers },
+                },
+                {
+                  '@type': 'ListItem',
+                  position: 2,
+                  item: { '@type': 'Product', name: 'Another', offers: { price: 5 } },
+                },
+              ],
+            },
+          ],
+        });
+      const want = { name: 'BILLY Bookcase', price: 79, currency: 'USD' };
+      const spec = { '@type': 'UnitPriceSpecification', price: 79, priceCurrency: 'USD' };
+      expect(await read(listed({ '@type': 'Offer', priceSpecification: [spec] }))).toEqual(want);
+      // An object works as well as an array, and the first specification with a price is the one taken.
+      expect(await read(listed({ priceSpecification: spec }))).toEqual(want);
+      expect(
+        await read(listed({ priceSpecification: [{ priceCurrency: 'EUR' }, spec, { price: 1 }] })),
+      ).toEqual(want);
+      // `price` comes first, and its own priceCurrency before the specification's.
+      expect(await read(listed({ price: '80', priceSpecification: [spec] }))).toEqual({
+        ...want,
+        price: 80,
+      });
+      expect(
+        await read(listed({ price: '80', priceCurrency: 'gbp', priceSpecification: [spec] })),
+      ).toEqual({ ...want, price: 80, currency: 'GBP' });
+      // A list may also hold the Product itself, without a ListItem around it.
+      expect(
+        await read(
+          ld({
+            '@type': 'ItemList',
+            itemListElement: [{ '@type': 'Product', name: 'Bare', offers: { price: 3 } }],
+          }),
+        ),
+      ).toEqual({ name: 'Bare', price: 3, currency: null });
+    });
+
+    it('takes a ProductGroup name and its first variant with offers', async () => {
+      const group = {
+        '@context': 'https://schema.org',
+        '@type': 'ProductGroup',
+        name: 'Arrival Shorts',
+        hasVariant: [
+          { '@type': 'Product', name: 'Arrival Shorts - Unpriced' },
+          {
+            '@type': 'Product',
+            name: 'Arrival Shorts - S',
+            offers: [{ '@type': 'Offer', price: '35.00', priceCurrency: 'USD' }],
+          },
+          {
+            '@type': 'Product',
+            name: 'Arrival Shorts - M',
+            offers: { '@type': 'Offer', price: '40.00', priceCurrency: 'USD' },
+          },
+        ],
+      };
+      expect(await read(ld(group))).toEqual({ name: 'Arrival Shorts', price: 35, currency: 'USD' });
+      // The group's own offers come before any variant's.
+      const own = { ...group, offers: { price: 30, priceCurrency: 'EUR' } };
+      expect(await read(ld(own))).toEqual({ name: 'Arrival Shorts', price: 30, currency: 'EUR' });
+      // Inside an @graph too, and a variant that has offers without a usable price is passed over.
+      const unusable = {
+        ...group,
+        hasVariant: [{ '@type': 'Product', offers: { price: 'ask' } }, ...group.hasVariant],
+      };
+      expect(await read(ld({ '@graph': [{ '@type': 'WebPage' }, unusable] }))).toEqual({
+        name: 'Arrival Shorts',
+        price: 35,
+        currency: 'USD',
+      });
+    });
+
+    it('prices an AggregateOffer by its lowPrice, after price and priceSpecification', async () => {
+      const aggregate = {
+        '@type': 'AggregateOffer',
+        lowPrice: '19.99',
+        highPrice: '49',
+        priceCurrency: 'EUR',
+      };
+      const product = (offers: unknown) => ld({ '@type': 'Product', name: 'Lamp', offers });
+      expect(await read(product(aggregate))).toEqual({
+        name: 'Lamp',
+        price: 19.99,
+        currency: 'EUR',
+      });
+      expect(await read(product({ ...aggregate, price: 25 }))).toMatchObject({ price: 25 });
+      expect(
+        await read(
+          product({ ...aggregate, priceSpecification: { price: 22, priceCurrency: 'GBP' } }),
+        ),
+      ).toEqual({ name: 'Lamp', price: 22, currency: 'EUR' });
+      expect(await read(product({ '@type': 'AggregateOffer', highPrice: 49 }))).toMatchObject({
+        price: null,
+      });
+    });
+
+    it('walks JSON-LD only 8 levels deep and 500 nodes wide', async () => {
+      const product = {
+        '@type': 'Product',
+        name: 'Deep',
+        offers: { price: 9, priceCurrency: 'USD' },
+      };
+      const found = { name: 'Deep', price: 9, currency: 'USD' };
+      const missed = { name: 'Fallback', price: null, currency: null };
+      const withFallback = (data: unknown) => `<title>Fallback</title>${ld(data)}`;
+
+      // The root is level 0, and each nested object or array is one level further.
+      const nested = (levels: number) =>
+        Array.from({ length: levels }).reduce<unknown>((inner) => ({ item: inner }), product);
+      expect(await read(withFallback(nested(7)))).toEqual(found);
+      expect(await read(withFallback(nested(8)))).toEqual(missed);
+      // Far deeper than JSON.stringify itself could write.
+      const deep = `${'{"item":'.repeat(5000)}${JSON.stringify(product)}${'}'.repeat(5000)}`;
+      const script = `<script type="application/ld+json">${deep}</script>`;
+      expect(await read(`<title>Fallback</title>${script}`)).toEqual(missed);
+
+      // The root counts as the first node, so the Product is the 500th here and the 501st below.
+      const filler = (n: number) => Array.from({ length: n }, () => ({ '@type': 'Thing' }));
+      expect(await read(withFallback({ '@graph': [...filler(498), product] }))).toEqual(found);
+      expect(await read(withFallback({ '@graph': [...filler(499), product] }))).toEqual(missed);
+      expect(await read(withFallback({ '@graph': [...filler(20_000), product] }))).toEqual(missed);
+    });
+
     it('turns price spellings into a number of major units, or null', async () => {
       const cases: Array<[unknown, number | null]> = [
         [12, 12],
