@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { AddScreen } from '@/features/add/AddScreen';
 import { BudgetScreen } from '@/features/budget/BudgetScreen';
+import { AboutYouScreen } from '@/features/buy/AboutYouScreen';
 import { AnswerScreen } from '@/features/buy/AnswerScreen';
 import { BuyScreen } from '@/features/buy/BuyScreen';
 import { DashboardScreen } from '@/features/dashboard/DashboardScreen';
@@ -36,6 +37,7 @@ export const APP_ROUTES: AppRoute[] = [
   { path: '/buy', element: <BuyScreen /> },
   { path: '/buy/:id', element: <AnswerScreen /> },
   { path: '/quests', element: <QuestsScreen /> },
+  { path: '/about-you', element: <AboutYouScreen /> },
   { path: '/subscriptions', element: <SubscriptionsScreen /> },
   { path: '/freeze', element: <FreezeScreen /> },
   { path: '/goals', element: <GoalsScreen /> },

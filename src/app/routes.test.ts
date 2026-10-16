@@ -1,5 +1,6 @@
 import { isValidElement } from 'react';
 import { expect, it } from 'vitest';
+import { AboutYouScreen } from '@/features/buy/AboutYouScreen';
 import { AnswerScreen } from '@/features/buy/AnswerScreen';
 import { BuyScreen } from '@/features/buy/BuyScreen';
 import { HoldingPage } from '@/features/invest/HoldingPage';
@@ -16,6 +17,7 @@ it('routes every spec screen', () => {
   expect(APP_ROUTES.map((r) => r.path).sort()).toEqual(
     [
       '/',
+      '/about-you',
       '/add',
       '/budget',
       '/buy',
@@ -69,4 +71,9 @@ it('serves Buy it? from its own screens: the Ask form and list, and an answer', 
   expect(isValidElement(ask?.element) && ask.element.type).toBe(BuyScreen);
   const answer = APP_ROUTES.find((r) => r.path === '/buy/:id');
   expect(isValidElement(answer?.element) && answer.element.type).toBe(AnswerScreen);
+});
+
+it('serves About you from its own screen', () => {
+  const about = APP_ROUTES.find((r) => r.path === '/about-you');
+  expect(isValidElement(about?.element) && about.element.type).toBe(AboutYouScreen);
 });

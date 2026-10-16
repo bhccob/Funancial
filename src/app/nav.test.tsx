@@ -145,6 +145,7 @@ describe('Menu sheet', () => {
     );
     expect(row(sheet, 'Buy it\\?')).toHaveTextContent('Ask before you spend');
     expect(row(sheet, 'Quests')).toHaveTextContent('Level 1');
+    expect(row(sheet, 'About you')).toHaveTextContent('What the buy check knows');
     expect(row(sheet, 'Shop')).toHaveTextContent('130 coins to spend');
     expect(row(sheet, 'Inbox')).toHaveTextContent('Your notices');
     expect(row(sheet, 'Help')).toHaveTextContent('How everything works');
@@ -247,6 +248,22 @@ describe('Menu sheet', () => {
     expect(screen.queryByRole('dialog', { name: 'Menu' })).not.toBeInTheDocument();
   });
 
+  it('lists About you under You, right after Quests, and opens it', async () => {
+    renderAt('/');
+    const sheet = await openMenu();
+    const you = within(sheet).getByRole('heading', { level: 3, name: 'You' }).parentElement!;
+    expect(
+      within(you)
+        .getAllByRole('link')
+        .map((a) => a.getAttribute('href'))
+        .slice(0, 3),
+    ).toEqual(['/quests', '/about-you', '/shop']);
+
+    await userEvent.click(row(sheet, 'About you'));
+    expect(screen.getByRole('heading', { level: 1, name: 'About you' })).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Menu' })).not.toBeInTheDocument();
+  });
+
   it('closes on Escape', async () => {
     renderAt('/');
     await openMenu();
@@ -327,7 +344,7 @@ describe('menu items', () => {
   it('has the two groups in order, with a fixed chip colour that holds 3:1 against a white icon', () => {
     expect(MENU_GROUPS.map((g) => [g.title, g.items.length])).toEqual([
       ['Your money', 5],
-      ['You', 5],
+      ['You', 6],
     ]);
     const luminance = (hex: string) => {
       const [r, g, b] = [1, 3, 5].map((i) => {
@@ -336,7 +353,10 @@ describe('menu items', () => {
       }) as [number, number, number];
       return 0.2126 * r + 0.7152 * g + 0.0722 * b;
     };
-    for (const { label, color } of MENU_GROUPS.flatMap((g) => g.items)) {
+    const items = MENU_GROUPS.flatMap((g) => g.items);
+    const about = items.find((i) => i.path === '/about-you')!;
+    expect(items.filter((i) => i.color === about.color)).toEqual([about]); // a colour of its own
+    for (const { label, color } of items) {
       expect(1.05 / (luminance(color) + 0.05), label).toBeGreaterThanOrEqual(3);
     }
   });
