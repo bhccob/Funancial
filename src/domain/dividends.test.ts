@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { makeDividend, makeHolding, makeProfile } from '@/test/fixtures';
+import { makeDividend, makeHolding, makeProfile, makeSale } from '@/test/fixtures';
 import { addDays } from './dates';
 import {
   addMonths,
@@ -596,6 +596,68 @@ describe('expectedPayouts from history, Yahoo next and forward steps', () => {
       makeDividend({ holdingId: lot.id, symbol: 'KO', expectedPayDate: '2026-10-01' }),
     ];
     expect(duePayouts(data, 'USD', TODAY).map((p) => p.holding.id)).toEqual([ko.id]);
+  });
+});
+
+describe('payouts of a fully sold holding', () => {
+  /** Data where `ko` was sold, every share, on `soldOn`: only the sale keeps it, as `restore`. */
+  function soldData(ko: Holding, soldOn: string, live: Holding[] = []) {
+    const data = dataOf(live);
+    data.tables.sale = [makeSale({ holdingId: ko.id, shares: ko.shares, soldOn, restore: ko })];
+    return data;
+  }
+
+  it('keeps a payout that was due when the shares were sold, at the shares sold', () => {
+    const ko = payer({ nextExDate: '2026-09-15', nextPayDate: '2026-10-01', nextAmount: 0.51 });
+    const data = soldData(ko, '2026-10-05');
+    const due = duePayouts(data, 'USD', TODAY);
+    expect(dates(due)).toEqual([['2026-09-15', '2026-10-01']]);
+    expect(due[0]!.holding.id).toBe(ko.id);
+    expect(due[0]!.net).toBe(5_10);
+    // Its record matches it by the sold holding's id.
+    data.tables.dividend = [makeDividend({ holdingId: ko.id, expectedPayDate: '2026-10-01' })];
+    expect(duePayouts(data, 'USD', TODAY)).toEqual([]);
+    expect(dates(settledPayouts(data, 'USD', '2026-10-01', '2026-10-31', TODAY))).toEqual([
+      ['2026-09-15', '2026-10-01'],
+    ]);
+  });
+
+  it('keeps a payout whose ex-date was on or before the sale, though it pays after it', () => {
+    const ko = payer({ nextExDate: '2026-10-10', nextPayDate: '2026-10-25', nextAmount: 0.5 });
+    const coming = (soldOn: string) =>
+      dates(expectedPayouts(soldData(ko, soldOn), 'USD', '2026-10-17', '2026-12-31', TODAY));
+    expect(coming('2026-10-12')).toEqual([['2026-10-10', '2026-10-25']]);
+    expect(coming('2026-10-10')).toEqual([['2026-10-10', '2026-10-25']]);
+    // Sold the day before the ex-date: that payout, and every one after it, was not earned.
+    expect(coming('2026-10-09')).toEqual([]);
+  });
+
+  it('goes by the pay date when there is no ex-date', () => {
+    const ko = payer({ history: [], nextPayDate: '2026-10-14', nextAmount: 0.5 });
+    const due = (soldOn: string) => duePayouts(soldData(ko, soldOn), 'USD', TODAY).length;
+    expect([due('2026-10-14'), due('2026-10-13')]).toEqual([1, 0]);
+  });
+
+  it('walks a holding once when a sale that kept it sits beside it again', () => {
+    const ko = payer({ nextExDate: '2026-09-15', nextPayDate: '2026-10-01', nextAmount: 0.51 });
+    expect(duePayouts(soldData(ko, '2026-10-05', [ko]), 'USD', TODAY)).toHaveLength(1);
+  });
+
+  it('settles a sold lot’s payouts by its own records only, and no other lot’s by them', () => {
+    const announced = { nextExDate: '2026-09-15', nextPayDate: '2026-10-01', nextAmount: 0.51 };
+    const sold = payer(announced);
+    const lot = payer(announced);
+    const data = soldData(sold, '2026-10-05', [lot]);
+    // Confirmed on the sold lot: the KO lot still held keeps its own payout due.
+    data.tables.dividend = [
+      makeDividend({ holdingId: sold.id, symbol: 'KO', expectedPayDate: '2026-10-01' }),
+    ];
+    expect(duePayouts(data, 'USD', TODAY).map((p) => p.holding.id)).toEqual([lot.id]);
+    // Confirmed on the lot still held: the sold lot's payout is still due.
+    data.tables.dividend = [
+      makeDividend({ holdingId: lot.id, symbol: 'KO', expectedPayDate: '2026-10-01' }),
+    ];
+    expect(duePayouts(data, 'USD', TODAY).map((p) => p.holding.id)).toEqual([sold.id]);
   });
 });
 

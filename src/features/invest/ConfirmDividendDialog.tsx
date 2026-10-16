@@ -8,7 +8,8 @@ import type { ExpectedPayout } from '@/domain/dividends';
 import { formatDay } from '@/lib/format';
 import { useAction } from '@/lib/useAction';
 import { FUTURE } from '@/store/financeActions';
-import type { DividendInput } from '@/store/investActions';
+import { useApp } from '@/store/AppStoreProvider';
+import { SOLD_NO_REINVEST, type DividendInput } from '@/store/investActions';
 import { useCurrency, useToday } from '@/store/useFinance';
 import { useInvestActions } from '@/store/useInvest';
 
@@ -24,6 +25,7 @@ const BUCKETS: Array<{ value: Bucket; label: string }> = [
 interface Errors {
   amount?: string;
   paidOn?: string;
+  bucket?: string;
 }
 
 function ConfirmForm({ payout, onDone }: { payout: ExpectedPayout; onDone(): void }) {
@@ -31,6 +33,8 @@ function ConfirmForm({ payout, onDone }: { payout: ExpectedPayout; onDone(): voi
   const currency = useCurrency();
   const today = useToday();
   const run = useAction();
+  // A payout of a holding sold since has no holding to reinvest in.
+  const sold = useApp((s) => !s.data.tables.holding.some((h) => h.id === payout.holding.id));
 
   // What the payout was expected to be; the person corrects it to what really arrived.
   const [amount, setAmount] = useState<number | null>(payout.net);
@@ -46,6 +50,7 @@ function ConfirmForm({ payout, onDone }: { payout: ExpectedPayout; onDone(): voi
     else if (amount <= 0) found.amount = "Enter what you received, or choose Didn't get it";
     if (!/^\d{4}-\d{2}-\d{2}$/.test(paidOn)) found.paidOn = 'Choose the day it arrived';
     else if (paidOn > today) found.paidOn = FUTURE;
+    if (sold && bucket === 'reinvest') found.bucket = SOLD_NO_REINVEST;
     setErrors(found);
     if (Object.keys(found).length > 0) return;
 
@@ -84,7 +89,11 @@ function ConfirmForm({ payout, onDone }: { payout: ExpectedPayout; onDone(): voi
       <RadioGroup<Bucket>
         legend="Where did it go?"
         value={bucket}
-        onChange={setBucket}
+        error={errors.bucket}
+        onChange={(b) => {
+          setBucket(b);
+          setErrors((f) => ({ ...f, bucket: undefined }));
+        }}
         options={BUCKETS}
       />
       <div className="flex justify-end gap-2">

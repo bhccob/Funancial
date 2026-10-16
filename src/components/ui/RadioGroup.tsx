@@ -15,6 +15,8 @@ export interface RadioGroupProps<T extends string> {
   onChange(value: T): void;
   /** `underline` is the Invest forms' tabs: no well, the choice marked by a line under it. */
   variant?: 'segmented' | 'underline';
+  /** Said under the choices, which it describes. */
+  error?: string;
 }
 
 /** Native radios presented as a segmented control, or as underline tabs. */
@@ -24,11 +26,13 @@ export function RadioGroup<T extends string>({
   options,
   onChange,
   variant = 'segmented',
+  error,
 }: RadioGroupProps<T>) {
   const name = useId();
+  const errorId = `${name}-error`;
   const underline = variant === 'underline';
   return (
-    <fieldset className="flex flex-col gap-2">
+    <fieldset className="flex flex-col gap-2" aria-describedby={error ? errorId : undefined}>
       <legend className={underline ? cn(lineLabel, 'mb-0.5') : 'mb-2 text-sm font-bold'}>
         {legend}
       </legend>
@@ -67,6 +71,11 @@ export function RadioGroup<T extends string>({
           </label>
         ))}
       </div>
+      {error && (
+        <p id={errorId} className="text-danger text-sm font-semibold">
+          {error}
+        </p>
+      )}
     </fieldset>
   );
 }

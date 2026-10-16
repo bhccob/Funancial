@@ -807,6 +807,77 @@ describe('dividend payouts', () => {
     });
   });
 
+  describe('of a holding sold since', () => {
+    /** The due October payout after every share was sold on 13 October, three days after its ex-date. */
+    async function soldAfterExDate() {
+      const t = await withDuePayout();
+      const sell = {
+        shares: 10,
+        pricePerShareMinor: 54_00,
+        soldOn: '2026-10-13',
+        to: 'cash' as const,
+      };
+      await t.actions.sellHolding(t.h.id, sell);
+      return t;
+    }
+
+    it('is still due, and is confirmed into cash with no holding to update', async () => {
+      const { actions, tables, balances, due, h, payout } = await soldAfterExDate();
+      expect(tables().holding).toEqual([]);
+      expect(due()).toHaveLength(1);
+      expect(due()[0]).toMatchObject({ payDate: payout.payDate, net: payout.net });
+      const before = balances();
+
+      await actions.confirmDividend(due()[0]!, {
+        amount: 3_79,
+        paidOn: '2026-10-12',
+        bucket: 'cash',
+      });
+      expect(tables().dividend).toMatchObject([
+        { holdingId: h.id, symbol: 'KO', status: 'confirmed', amount: 3_79, bucket: 'cash' },
+      ]);
+      expect(tables().holding).toEqual([]);
+      expect(due()).toEqual([]);
+      expect(balances()).toEqual({ ...before, cash: before.cash + 3_79 });
+    });
+
+    it('cannot be reinvested', async () => {
+      const { actions, tables, due } = await soldAfterExDate();
+      await expect(
+        actions.confirmDividend(due()[0]!, {
+          amount: 3_79,
+          paidOn: '2026-10-12',
+          bucket: 'reinvest',
+        }),
+      ).rejects.toThrow(
+        "This holding was sold, so the dividend can't be reinvested. Choose where the money went.",
+      );
+      expect(tables().dividend).toEqual([]);
+      expect(tables().holding).toEqual([]);
+    });
+
+    it('is skipped', async () => {
+      const { actions, tables, due } = await soldAfterExDate();
+      await actions.skipDividend(due()[0]!);
+      expect(tables().dividend).toMatchObject([{ status: 'skipped', amount: 0 }]);
+      expect(due()).toEqual([]);
+    });
+
+    it('is due once, not twice, after the sale is undone', async () => {
+      const { actions, tables, due, h } = await soldAfterExDate();
+      await actions.undoSale(tables().sale[0]!.id);
+      expect(due().map((p) => p.holding.id)).toEqual([h.id]);
+    });
+
+    it('is not confirmed once the holding was deleted with nothing sold', async () => {
+      const { actions, h, payout } = await withDuePayout();
+      await actions.deleteHolding(h.id);
+      await expect(
+        actions.confirmDividend(payout, { amount: 3_79, paidOn: '2026-10-12', bucket: 'cash' }),
+      ).rejects.toThrow('That item no longer exists.');
+    });
+  });
+
   it('skips a payout so it is not due again', async () => {
     const { actions, tables, balances, due, payout } = await withDuePayout();
     const before = balances();

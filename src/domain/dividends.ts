@@ -140,10 +140,11 @@ function schedule(
 /**
  * The payouts of the holdings that pay from `from` through `to` (inclusive), earned by holding the
  * shares on the ex-date (the pay date, without one), that a record settles (`settled`) or that
- * still wait. A payout is settled by a confirmed or skipped record of the same holding whose
+ * still wait. A fully sold holding, as its sale kept it, still has the payouts it earned up to the
+ * sale day. A payout is settled by a confirmed or skipped record of the same holding whose
  * `expectedPayDate` is within half a step of its pay date (see `SETTLE_WITHIN`); a record whose
  * holding was deleted settles by symbol, so deleting and adding a holding again cannot reopen a
- * payout, while two lots of one symbol keep their records apart.
+ * payout, while two lots of one symbol, held or sold, keep their records apart.
  */
 function payouts(
   data: DataSnapshot,
@@ -154,24 +155,41 @@ function payouts(
   settled: boolean,
 ): ExpectedPayout[] {
   const held = new Set(data.tables.holding.map((h) => h.id));
+  // A sale's holding is walked only while it is not held again, so an undone sale counts once.
+  const sold = data.tables.sale.flatMap((s) =>
+    s.restore && !held.has(s.holdingId) ? [{ holding: s.restore, soldOn: s.soldOn }] : [],
+  );
+  const own = new Set([...held, ...sold.map((s) => s.holding.id)]);
+  const walked: Array<{ holding: Holding; soldOn: LocalDate | null }> = [
+    ...data.tables.holding.map((holding) => ({ holding, soldOn: null })),
+    ...sold,
+  ];
   const out: ExpectedPayout[] = [];
 
-  for (const holding of data.tables.holding) {
+  for (const { holding, soldOn } of walked) {
     const frequency = inferFrequency(holding.dividendInfo?.history ?? []);
     const settleWithin = frequency ? SETTLE_WITHIN[frequency] : SETTLE_WITHIN_UNKNOWN;
     const records = data.tables.dividend.filter((d) =>
-      held.has(d.holdingId) ? d.holdingId === holding.id : d.symbol === holding.symbol,
+      own.has(d.holdingId) ? d.holdingId === holding.id : d.symbol === holding.symbol,
     );
     const rate = holdingRate(holding, profileCurrency);
 
     for (const p of schedule(holding, frequency, to, today)) {
-      if (p.payDate < from || p.payDate > to || (p.exDate ?? p.payDate) < holding.purchaseDate) {
+      const earnedOn = p.exDate ?? p.payDate;
+      if (
+        p.payDate < from ||
+        p.payDate > to ||
+        earnedOn < holding.purchaseDate ||
+        (soldOn !== null && earnedOn > soldOn)
+      ) {
         continue;
       }
       const isSettled = records.some(
         (d) => Math.abs(daysApart(d.expectedPayDate, p.payDate)) < settleWithin,
       );
       if (isSettled !== settled) continue;
+      // shortcut: a partial sale after the ex-date under-states this payout, as it takes today's
+      // shares; the person corrects the amount when confirming. Upgrade if shares are kept per day.
       const net =
         rate === null
           ? null

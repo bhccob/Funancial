@@ -23,9 +23,9 @@ import {
   type SearchResponse,
 } from '@/services/market';
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
-import { makeDividend, makeHolding, makeProfile } from '@/test/fixtures';
+import { makeDividend, makeHolding, makeProfile, makeSale } from '@/test/fixtures';
 import { FUTURE } from '@/store/financeActions';
-import { UNKNOWN_SYMBOL } from '@/store/investActions';
+import { SOLD_NO_REINVEST, UNKNOWN_SYMBOL } from '@/store/investActions';
 import { HoldingPage } from './HoldingPage';
 import { InvestScreen } from './InvestScreen';
 import { clearNewsCache } from './newsCache';
@@ -1502,6 +1502,42 @@ describe('Dividends tab', () => {
     );
     expect(dialog).toBeInTheDocument();
     expect(store.getState().putMany).not.toHaveBeenCalled();
+  });
+
+  it('keeps a sold holding’s payout due, and says at the choice that it cannot be reinvested', async () => {
+    // Every VWRL share was sold on Oct 10, after its Oct 8 ex-date.
+    const data = dividendData();
+    const vwrl = data.tables.holding.find((h) => h.id === 'vwrl')!;
+    data.tables.holding = data.tables.holding.filter((h) => h !== vwrl);
+    data.tables.sale = [
+      makeSale({
+        holdingId: 'vwrl',
+        symbol: 'VWRL',
+        shares: 4,
+        soldOn: '2026-10-10',
+        restore: vwrl,
+      }),
+    ];
+    const store = renderDividends(data);
+    await userEvent.click(within(region('Due')).getByRole('button', { name: 'Confirm' }));
+    const dialog = screen.getByRole('dialog', { name: 'Confirm VWRL dividend' });
+    const where = within(dialog).getByRole('group', { name: 'Where did it go?' });
+
+    await userEvent.click(within(where).getByRole('radio', { name: 'Reinvest' }));
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Confirm' }));
+    expect(where).toHaveAccessibleDescription(SOLD_NO_REINVEST);
+    expect(store.getState().putMany).not.toHaveBeenCalled();
+
+    await userEvent.click(within(where).getByRole('radio', { name: 'Cash' }));
+    expect(within(dialog).queryByText(SOLD_NO_REINVEST)).not.toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Confirm' }));
+    await waitFor(() => expect(store.getState().putMany).toHaveBeenCalledOnce());
+    expect(store.getState().putMany).toHaveBeenCalledWith([
+      {
+        table: 'dividend',
+        record: expect.objectContaining({ holdingId: 'vwrl', amount: 8_50, bucket: 'cash' }),
+      },
+    ]);
   });
 
   it('lists coming payouts with ex-date and tax', () => {

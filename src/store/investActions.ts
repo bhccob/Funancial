@@ -27,6 +27,9 @@ const NO_RATE = 'Reinvesting needs an exchange rate for this holding. Refresh pr
 /** What `deleteDividend` says when taking a reinvested payout's shares back would leave none. */
 export const SHARES_GONE =
   'The holding has fewer shares than this dividend bought. Edit the holding first.';
+/** What `confirmDividend` and the confirm dialog say to reinvesting a payout of a fully sold holding. */
+export const SOLD_NO_REINVEST =
+  "This holding was sold, so the dividend can't be reinvested. Choose where the money went.";
 /** What a sale dated before the holding was bought is told, by `sellHolding` and by the Sell dialog alike. */
 export const saleBeforePurchase = (purchaseDate: LocalDate) =>
   `The sale can't be before you bought it (${formatDay(purchaseDate)}).`;
@@ -343,15 +346,18 @@ export function createInvestActions(store: StoreApi<AppState>, market: Market) {
     /**
      * Records a payout as received. A payout already confirmed or skipped is left as it is, so a
      * second tap cannot count it twice. Reinvesting buys shares at the holding's price instead of
-     * paying a bucket.
+     * paying a bucket. A payout of a fully sold holding pays a bucket, and cannot be reinvested.
      */
     async confirmDividend(p: ExpectedPayout, input: DividendInput) {
       notFuture(input.paidOn);
       if (settledBefore(p)) return;
-      const holding = find(p.holding.id);
+      const holding = holdings().find((h) => h.id === p.holding.id);
+      const sold = state().data.tables.sale.some((s) => s.holdingId === p.holding.id && s.restore);
+      if (!holding && !sold) throw new Error('That item no longer exists.');
       const items: TableRecord[] = [];
       let sharesAdded: number | null = null;
       if (input.bucket === 'reinvest') {
+        if (!holding) throw new Error(SOLD_NO_REINVEST);
         const price = holdingPrice(holding) ?? 0;
         const rate = holdingRate(holding, profileCurrency());
         if (price <= 0) throw new Error(NO_PRICE);
