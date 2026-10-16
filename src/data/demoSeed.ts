@@ -1,6 +1,9 @@
+import { analyse, buildSnapshot } from '@/domain/advisor';
 import { addDays, type LocalDate } from '@/domain/dates';
 import {
   defaultSettings,
+  type BuyAsk,
+  type BuyDecision,
   type Category,
   type Expense,
   type Holding,
@@ -494,6 +497,82 @@ export function buildDemoSnapshot(today: LocalDate, seed = 42): DataSnapshot {
     to: null,
     debtId: null,
     note: 'Bought AAPL',
+  });
+
+  // Three earlier "Should I buy it?" answers, worked out by the app's own rules over the demo as it
+  // stands (before About you), oldest first so each counts the ones before it.
+  const answer = (daysAgo: number, ask: BuyAsk): BuyDecision => {
+    const { facts, meter, verdict, confidence, guards, notes } = analyse(
+      buildSnapshot(snap, today, ask, t.buyDecision),
+      ask,
+      today,
+    );
+    return {
+      id: id('decision'),
+      ...stampFor(addDays(today, -daysAgo)),
+      ask,
+      facts,
+      rulesMeter: meter,
+      rulesVerdict: verdict,
+      meter,
+      verdict,
+      confidence,
+      guards,
+      notes,
+      status: 'open',
+      remindOn: null,
+      boughtOn: null,
+      usage: null,
+    };
+  };
+  const base = {
+    quantity: 1,
+    payWith: 'debit',
+    cardId: null,
+    link: null,
+  } as const;
+  const shoes = answer(21, {
+    ...base,
+    item: 'Running shoes',
+    price: 85_00,
+    category: 'shopping',
+    urgency: 'need',
+    howSoon: 'norush',
+    why: null,
+  });
+  t.buyDecision.push({ ...shoes, status: 'bought', boughtOn: addDays(today, -20), usage: 4 });
+  const gameConsole = answer(9, {
+    ...base,
+    item: 'Game console',
+    price: 450_00,
+    category: 'entertainment',
+    urgency: 'treat',
+    howSoon: 'today',
+    why: null,
+  });
+  t.buyDecision.push({ ...gameConsole, status: 'skipped' });
+  const concert = answer(2, {
+    ...base,
+    item: 'Concert tickets',
+    price: 140_00,
+    category: 'entertainment',
+    urgency: 'want',
+    howSoon: 'month',
+    why: "My friend's band is playing.",
+  });
+  t.buyDecision.push({
+    ...concert,
+    status: 'waiting',
+    remindOn: concert.facts.resetsOn ?? addDays(today, 2),
+  });
+
+  t.aboutYou.push({
+    id: 'about',
+    ...stampFor(addDays(today, -1)),
+    matters: 'Paying off my card and the bike fund.',
+    situation: '',
+    overspend: ['entertainment'],
+    protectGoalId: t.goal.find((g) => g.name === 'New bike')!.id,
   });
 
   return snap;

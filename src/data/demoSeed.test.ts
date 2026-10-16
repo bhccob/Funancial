@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import { analyse, buildSnapshot } from '@/domain/advisor';
 import { bucketBalances } from '@/domain/balances';
 import { addDays } from '@/domain/dates';
 import { duePayouts, expectedPayouts } from '@/domain/dividends';
+import { AboutYouSchema, BuyDecisionSchema } from '@/domain/entities';
 import { costForShares, portfolio } from '@/domain/portfolio';
 import { profitAndLoss, realisedProfit } from '@/domain/sales';
 import { SnapshotSchema } from '@/domain/snapshot';
@@ -251,5 +253,61 @@ describe('demo investments', () => {
         note: 'Bought AAPL',
       },
     ]);
+  });
+});
+
+describe('demo buy decisions', () => {
+  const byStatus = (status: string) => t.buyDecision.filter((d) => d.status === status);
+
+  it('has three that parse: one waiting, one bought and rated, one skipped over a limit', () => {
+    expect(t.buyDecision.map((d) => BuyDecisionSchema.safeParse(d).success)).toEqual([
+      true,
+      true,
+      true,
+    ]);
+    expect(t.buyDecision.map((d) => d.status).sort()).toEqual(['bought', 'skipped', 'waiting']);
+
+    const [waiting] = byStatus('waiting');
+    expect(waiting!.ask).toMatchObject({ category: 'entertainment', urgency: 'want' });
+    expect(waiting!.facts.overBy).toBeGreaterThan(0);
+    expect(waiting!.remindOn).toBe(waiting!.facts.resetsOn);
+    expect(waiting!.remindOn! > TODAY).toBe(true);
+
+    const [bought] = byStatus('bought');
+    expect(bought).toMatchObject({ boughtOn: addDays(TODAY, -20), usage: 4, remindOn: null });
+
+    const [skipped] = byStatus('skipped');
+    expect(skipped!.facts.overBy).toBeGreaterThan(0);
+  });
+
+  it('are the rules answers over the demo before they were asked, not written by hand', () => {
+    const bare = { ...demo, tables: { ...t, buyDecision: [], aboutYou: [] } };
+    const oldestFirst = [...t.buyDecision].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    expect(oldestFirst).toHaveLength(3);
+    oldestFirst.forEach((d, i) => {
+      const answer = analyse(
+        buildSnapshot(bare, TODAY, d.ask, oldestFirst.slice(0, i)),
+        d.ask,
+        TODAY,
+      );
+      expect(d).toMatchObject({
+        ...answer,
+        rulesMeter: answer.meter,
+        rulesVerdict: answer.verdict,
+      });
+    });
+  });
+
+  it('has the About you record, protecting the bike goal', () => {
+    const bike = t.goal.find((g) => g.name === 'New bike')!;
+    expect(t.aboutYou).toHaveLength(1);
+    expect(AboutYouSchema.safeParse(t.aboutYou[0]).success).toBe(true);
+    expect(t.aboutYou[0]).toMatchObject({
+      id: 'about',
+      matters: 'Paying off my card and the bike fund.',
+      situation: '',
+      overspend: ['entertainment'],
+      protectGoalId: bike.id,
+    });
   });
 });
