@@ -8,7 +8,7 @@ import {
 } from './advisorSchema.js';
 
 const DEFAULT_MODEL = 'claude-opus-5-5';
-const MAX_TOKENS = 1500;
+const MAX_TOKENS = 4000;
 // One attempt, ended before the 30 s the function is given (vercel.json) and about when the app
 // stops waiting, so a slow answer is an upstream failure and the person keeps the Basic check.
 const TIMEOUT_MS = 20_000;

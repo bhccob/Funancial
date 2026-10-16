@@ -57,12 +57,12 @@ afterEach(() => {
 const sent = () => create.mock.calls[0]![0];
 
 describe('askClaude', () => {
-  it('asks Opus 5.5 for JSON, 1500 tokens at most, with the input as the user message', async () => {
+  it('asks Opus 5.5 for JSON, 4000 tokens at most, with the input as the user message', async () => {
     await askClaude(input);
     expect(create).toHaveBeenCalledTimes(1);
     expect(sent()).toMatchObject({
       model: 'claude-opus-5-5',
-      max_tokens: 1500,
+      max_tokens: 4000,
       messages: [{ role: 'user', content: JSON.stringify(input) }],
     });
     // Nothing the person typed rides in the system prompt.
