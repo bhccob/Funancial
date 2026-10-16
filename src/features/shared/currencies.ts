@@ -15,7 +15,8 @@ export function currencyOptions(
 // shortcut: common regions only, so anyone elsewhere starts on USD; widen these two tables when
 // someone from another region uses the app. Australian zones are matched by prefix.
 const words = (list: string) => list.split(/\s+/);
-const ZONES: Record<string, string[]> = {
+/** Exported so a test can check every entry. */
+export const ZONES: Record<string, string[]> = {
   EUR: words(`Europe/Amsterdam Europe/Brussels Europe/Paris Europe/Berlin Europe/Madrid Europe/Rome
     Europe/Lisbon Europe/Vienna Europe/Dublin Europe/Helsinki Europe/Athens Europe/Luxembourg
     Europe/Bratislava Europe/Ljubljana Europe/Tallinn Europe/Riga Europe/Vilnius Europe/Valletta
@@ -36,7 +37,7 @@ const ZONES: Record<string, string[]> = {
   USD: words(`America/New_York America/Chicago America/Denver America/Los_Angeles America/Phoenix
     America/Anchorage Pacific/Honolulu`),
 };
-const REGIONS: Record<string, string[]> = {
+export const REGIONS: Record<string, string[]> = {
   EUR: words('AT BE BG CY DE EE ES FI FR GR HR IE IT LT LU LV MT NL PT SI SK'),
   GBP: ['GB'],
   CHF: ['CH'],

@@ -5,6 +5,7 @@ import type { Holding } from '@/domain/entities';
 import { MarketError, type Market } from '@/services/market';
 import { makeDividend, makeHolding, makeProfile, makeTransaction } from '@/test/fixtures';
 import { freshRealStore } from '@/test/realStore';
+import { createFinanceActions } from './financeActions';
 import { createInvestActions, SHARES_GONE } from './investActions';
 
 const TODAY = '2026-10-14';
@@ -386,6 +387,27 @@ describe('refreshing the market', () => {
     edit = ctx.actions.updateHolding(h.id, { shares: 20 });
     await ctx.actions.refreshMarket();
     expect(ctx.holding(h.id)).toMatchObject({ shares: 20, quote: { price: 100 } });
+  });
+
+  it('writes nothing when the currency was switched while the answers were out', async () => {
+    let switchCurrency = async () => {};
+    const ctx = await setup({
+      fetchQuotes: async (symbols) => {
+        await switchCurrency(); // the person switches currency while the request is out
+        return fakeMarket().fetchQuotes(symbols);
+      },
+    });
+    switchCurrency = () => createFinanceActions(ctx.store).changeCurrency('GBP');
+    const old = { price: 60, previousClose: 59, fxRate: 0.9, asOf: '2026-10-13T09:00:00.000Z' };
+    const h = makeHolding({ currency: 'USD', quote: old });
+    await ctx.store.getState().put('holding', h);
+
+    // The rates it fetched were for the euro, which is no longer the profile's currency.
+    await expect(ctx.actions.refreshMarket()).resolves.toBe('failed');
+    expect(ctx.market.fetchFx).toHaveBeenCalledWith('USD', 'EUR');
+    expect(ctx.tables().profile[0]?.currency).toBe('GBP');
+    // The switch cleared the stale rate; the refresh did not put one for the euro back.
+    expect(ctx.holding(h.id).quote).toEqual({ ...old, fxRate: null });
   });
 
   it('returns "not configured" without a token and makes no request', async () => {

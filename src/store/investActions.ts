@@ -164,7 +164,8 @@ export function createInvestActions(store: StoreApi<AppState>, market: Market) {
     /**
      * Fetches quotes, exchange rates and stale dividend info, and saves them in one write. A holding
      * the service has nothing new for keeps its last values. It never throws: `failed` is the
-     * quotes not arriving (or not saving), and then nothing is written.
+     * quotes not arriving (or not saving), or the profile currency changing meanwhile, and then
+     * nothing is written.
      */
     async refreshMarket(): Promise<RefreshResult> {
       if (!marketConfigured()) return 'not configured';
@@ -228,6 +229,8 @@ export function createInvestActions(store: StoreApi<AppState>, market: Market) {
           };
           updated.push({ table: 'holding', record });
         }
+        // The rates are for `home`; a currency switched meanwhile would store them for the wrong one.
+        if (profileCurrency() !== home) return 'failed';
         await state().putMany(updated);
         return 'ok';
       } catch {

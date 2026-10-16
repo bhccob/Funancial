@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { currencyOptions, defaultCurrency } from './currencies';
+import { currencyOptions, defaultCurrency, REGIONS, ZONES } from './currencies';
 
 describe('defaultCurrency', () => {
   it('reads the time zone first: Amsterdam is EUR even on an English (US) phone', () => {
@@ -36,6 +36,20 @@ describe('defaultCurrency', () => {
   it('survives a locale it cannot parse', () => {
     expect(defaultCurrency(undefined, 'not a locale')).toBe('USD');
     expect(defaultCurrency('', '')).toBe('USD');
+  });
+
+  it('maps every zone and region to its own currency, and every currency to one the picker offers', () => {
+    const offered = new Set(currencyOptions().map((o) => o.value));
+    for (const [currency, zones] of Object.entries(ZONES)) {
+      expect(offered.has(currency), currency).toBe(true);
+      for (const zone of zones) expect(defaultCurrency(zone, undefined), zone).toBe(currency);
+    }
+    for (const [currency, regions] of Object.entries(REGIONS)) {
+      expect(offered.has(currency), currency).toBe(true);
+      for (const region of regions) {
+        expect(defaultCurrency(undefined, `en-${region}`), region).toBe(currency);
+      }
+    }
   });
 
   it('always names a currency the picker offers', () => {

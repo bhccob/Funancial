@@ -1,6 +1,6 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, expectTypeOf, it, vi } from 'vitest';
 import { bucketBalances, debtBalance } from '@/domain/balances';
-import { holdingRate } from '@/domain/portfolio';
+import { holdingRate, holdingValue } from '@/domain/portfolio';
 import { freshRealStore } from '@/test/realStore';
 import {
   makeDebt,
@@ -366,10 +366,13 @@ describe('changing the currency', () => {
       currency: 'EUR',
       quote: quote(100, 0.9),
     });
+    // Priced by hand, in the profile's own currency: no quote, so nothing says what it trades in.
     const manual = makeHolding({ id: 'manual', manualPrice: 5, quote: null });
+    // Priced by hand in another currency.
+    const abroad = makeHolding({ id: 'abroad', currency: 'GBP', manualPrice: 3, quote: null });
     await t.store
       .getState()
-      .putMany([ko, vwrl, manual].map((record) => ({ table: 'holding' as const, record })));
+      .putMany([ko, vwrl, manual, abroad].map((record) => ({ table: 'holding' as const, record })));
     return t;
   }
   const holding = (store: Awaited<ReturnType<typeof setup>>['store'], id: string) =>
@@ -396,19 +399,54 @@ describe('changing the currency', () => {
     await actions.changeCurrency('EUR');
 
     expect(putMany).toHaveBeenCalledTimes(1);
+    // The profile, then the three holdings that change; the one priced by hand abroad is not written.
     expect(putMany.mock.calls[0]![0].map((i) => i.table)).toEqual([
       'profile',
       'holding',
       'holding',
+      'holding',
     ]);
-    expect(holding(store, 'ko').quote).toEqual(quote(60, null));
+    // Listed holdings keep the currency they trade in and lose only the rate.
+    expect(holding(store, 'ko')).toMatchObject({ currency: 'USD', quote: quote(60, null) });
     expect(holding(store, 'vwrl').quote).toEqual(quote(100, null));
-    // No quote means nothing to clear: the holding is not written.
-    expect(holding(store, 'manual')).toMatchObject({ quote: null, manualPrice: 5 });
     const profile = store.getState().data.tables.profile[0]!;
     // A holding in the new currency needs no stored rate; one in another waits for the next refresh.
     expect(holdingRate(holding(store, 'vwrl'), profile.currency)).toBe(1);
     expect(holdingRate(holding(store, 'ko'), profile.currency)).toBeNull();
+  });
+
+  it('relabels a holding priced by hand in the old currency, so it stays in the totals', async () => {
+    const { store, actions } = await withHoldings();
+    expect(holdingValue(holding(store, 'manual'), 'USD')).toBe(50_00);
+    const abroad = holding(store, 'abroad');
+
+    await actions.changeCurrency('EUR');
+
+    // Its price keeps its number, like every other amount.
+    expect(holding(store, 'manual')).toMatchObject({
+      currency: 'EUR',
+      manualPrice: 5,
+      quote: null,
+    });
+    expect(holdingValue(holding(store, 'manual'), 'EUR')).toBe(50_00);
+    // A price in another currency is not the profile's to relabel.
+    expect(holding(store, 'abroad')).toEqual(abroad);
+  });
+
+  it('writes nothing when the currency is the one already in use', async () => {
+    const { store, actions } = await withHoldings();
+    const real = store.getState().putMany;
+    const putMany = vi.fn(real);
+    store.setState({ putMany });
+    await actions.changeCurrency('USD');
+    expect(putMany).not.toHaveBeenCalled();
+    expect(holding(store, 'ko').quote?.fxRate).toBe(1);
+  });
+
+  it('is the only way to change it: updateProfile takes no currency', () => {
+    expectTypeOf<
+      Parameters<ReturnType<typeof createFinanceActions>['updateProfile']>[0]
+    >().not.toHaveProperty('currency');
   });
 
   it('refuses a currency with other decimals, and writes nothing', async () => {
