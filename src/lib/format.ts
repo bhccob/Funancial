@@ -101,3 +101,8 @@ export function formatPercent(pct: number, signed = false, locale?: string): str
   }).format(rounded / 100);
   return signed && rounded !== 0 ? `${pct < 0 ? '−' : '+'}${text}` : text;
 }
+
+/** 40 → "40", 0.123456 → "0.1235", 1234.5 → "1,234.5": a number of shares, to four decimals at most. */
+export function formatShares(n: number, locale?: string): string {
+  return new Intl.NumberFormat(locale, { maximumFractionDigits: 4 }).format(n);
+}

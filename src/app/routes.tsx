@@ -5,6 +5,7 @@ import { DashboardScreen } from '@/features/dashboard/DashboardScreen';
 import { FreezeScreen } from '@/features/freeze/FreezeScreen';
 import { GoalsScreen } from '@/features/goals/GoalsScreen';
 import { HistoryScreen } from '@/features/history/HistoryScreen';
+import { HoldingPage } from '@/features/invest/HoldingPage';
 import { InvestScreen } from '@/features/invest/InvestScreen';
 import { PlaceholderScreen } from '@/features/placeholder/PlaceholderScreen';
 import { QuestsScreen } from '@/features/quests/QuestsScreen';
@@ -29,6 +30,7 @@ export const APP_ROUTES: AppRoute[] = [
   { path: '/', element: <DashboardScreen /> },
   { path: '/budget', element: <BudgetScreen /> },
   { path: '/invest', element: <InvestScreen /> },
+  { path: '/invest/holding/:id', element: <HoldingPage /> },
   placeholder('/buy', 'Should I Buy It?'),
   { path: '/quests', element: <QuestsScreen /> },
   { path: '/subscriptions', element: <SubscriptionsScreen /> },

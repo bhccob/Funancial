@@ -97,7 +97,7 @@ export function portfolio(data: DataSnapshot, profileCurrency: string): Portfoli
   };
 }
 
-const TYPE_LABELS: Record<Holding['type'], string> = {
+export const TYPE_LABELS: Record<Holding['type'], string> = {
   stock: 'Stocks',
   etf: 'ETFs',
   other: 'Other',

@@ -8,6 +8,7 @@ import {
   formatMonthShort,
   formatMonthYear,
   formatPercent,
+  formatShares,
   formatWeekday,
   ordinal,
   relativeDays,
@@ -88,5 +89,12 @@ describe('moments and percentages', () => {
     expect(formatPercent(-3, true, 'en-US')).toBe('−3.0%');
     expect(formatPercent(-0.04, true, 'en-US')).toBe('0.0%');
     expect(formatPercent(0, true, 'en-US')).toBe('0.0%');
+  });
+
+  it('shows shares with up to four decimals and no trailing zeros', () => {
+    expect(formatShares(40, 'en-US')).toBe('40');
+    expect(formatShares(0.25, 'en-US')).toBe('0.25');
+    expect(formatShares(0.123456, 'en-US')).toBe('0.1235');
+    expect(formatShares(1234.5, 'en-US')).toBe('1,234.5');
   });
 });

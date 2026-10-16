@@ -24,6 +24,7 @@ import { createStubStore, renderWithStore } from '@/test/appStoreStub';
 import { makeDividend, makeHolding, makeProfile } from '@/test/fixtures';
 import { FUTURE } from '@/store/financeActions';
 import { UNKNOWN_SYMBOL } from '@/store/investActions';
+import { HoldingPage } from './HoldingPage';
 import { InvestScreen } from './InvestScreen';
 import { clearNewsCache } from './newsCache';
 
@@ -117,16 +118,27 @@ function noHoldings(): DataSnapshot {
 
 function renderInvest(data: DataSnapshot, path = '/invest') {
   const store = createStubStore({ data, today: TODAY });
-  const router = createMemoryRouter([{ path: '/invest', element: <InvestScreen /> }], {
-    initialEntries: [path],
-  });
+  const router = createMemoryRouter(
+    [
+      { path: '/invest', element: <InvestScreen /> },
+      { path: '/invest/holding/:id', element: <HoldingPage /> },
+    ],
+    { initialEntries: [path] },
+  );
   renderWithStore(<RouterProvider router={router} />, store);
   return { store, router };
 }
 
 const tab = (name: string) => screen.getByRole('tab', { name });
 const region = (name: string) => screen.getByRole('region', { name });
-const rowOf = (symbol: string) => screen.getByRole('button', { name: new RegExp(`^${symbol} · `) });
+const rowOf = (symbol: string) => screen.getByRole('link', { name: new RegExp(`^${symbol} · `) });
+
+/** Opens a holding's page from its row, then its edit dialog. */
+async function openEdit(symbol: string) {
+  await userEvent.click(rowOf(symbol));
+  await userEvent.click(screen.getByRole('button', { name: 'Edit' }));
+  return screen.getByRole('dialog', { name: `Edit ${symbol}` });
+}
 
 describe('Invest tabs', () => {
   it('opens the tab from ?tab= and switches tabs', async () => {
@@ -182,7 +194,7 @@ describe('Invest tabs', () => {
 });
 
 describe('Holdings tab', () => {
-  it('shows value, today and all-time change, allocation chips and rows', async () => {
+  it('shows value, today and all-time change, a pie each for stocks and ETFs, and rows by type', () => {
     renderInvest(portfolioData());
     const value = region('Portfolio value');
     expect(within(value).getByText(usd(1_950_00))).toHaveClass('text-[34px]');
@@ -196,45 +208,31 @@ describe('Holdings tab', () => {
       `▼ ${usd(15_00)} today · ▲ ${formatPercent((5_000 * 100) / 190_000)} all time`,
     );
 
-    // By holding to start with: the legend names each holding, biggest first.
-    const by = within(value).getByRole('group', { name: 'Group by' });
+    // Split to start with: a pie for the stocks and a pie for the ETFs, each with its legend.
+    const view = within(value).getByRole('group', { name: 'Pie view' });
     expect(
-      within(by)
+      within(view)
         .getAllByRole('button')
         .map((b) => b.textContent),
-    ).toEqual(['By holding', 'By type', 'By sector']);
-    expect(within(by).getByRole('button', { name: 'By holding' })).toHaveAttribute(
+    ).toEqual(['Split', 'Together']);
+    expect(within(view).getByRole('button', { name: 'Split' })).toHaveAttribute(
       'aria-pressed',
       'true',
     );
-    // The legend's rows: the buttons that carry text and are not the chips.
-    const chips = ['By holding', 'By type', 'By sector'];
-    const legend = () =>
-      within(value)
+    const legend = (name: string) =>
+      within(within(value).getByRole('group', { name }))
         .getAllByRole('button')
         .map((b) => b.textContent ?? '')
-        .filter((text) => text !== '' && !chips.includes(text));
-    expect(legend()).toEqual([
-      `AAPL${usdWhole(950_00)}`,
-      `KO${usdWhole(600_00)}`,
-      `VWRL${usdWhole(400_00)}`,
-    ]);
+        .filter((text) => text !== '');
+    expect(legend('Stocks')).toEqual([`AAPL${usdWhole(950_00)}61%`, `KO${usdWhole(600_00)}39%`]);
+    expect(legend('ETFs')).toEqual([`VWRL${usdWhole(400_00)}100%`]);
 
-    await userEvent.click(within(by).getByRole('button', { name: 'By type' }));
-    expect(within(by).getByRole('button', { name: 'By type' })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    );
-    expect(legend()).toEqual([`Stocks${usdWhole(1_550_00)}`, `ETFs${usdWhole(400_00)}`]);
-
-    await userEvent.click(within(by).getByRole('button', { name: 'By sector' }));
-    expect(legend()).toEqual([
-      `Technology${usdWhole(950_00)}`,
-      `Consumer Defensive${usdWhole(600_00)}`,
-      `ETF (diversified)${usdWhole(400_00)}`,
-    ]);
-
-    const rows = within(screen.getByRole('list', { name: 'Holdings' })).getAllByRole('listitem');
+    // The rows are grouped under the same headings.
+    const rows = [
+      ...within(screen.getByRole('list', { name: 'Stocks' })).getAllByRole('listitem'),
+      ...within(screen.getByRole('list', { name: 'ETFs' })).getAllByRole('listitem'),
+    ];
+    expect(screen.queryByRole('list', { name: 'Other' })).not.toBeInTheDocument();
     expect(rows.map((r) => r.textContent)).toEqual([
       `KO · Coca-Cola10 shares${usd(600_00)}▲ ${formatPercent(20)}`,
       `AAPL · Apple5 shares${usd(950_00)}▼ ${formatPercent(5)}`,
@@ -889,8 +887,7 @@ describe('HoldingDialog symbol search', () => {
     configured();
     const { store } = renderInvest(portfolioData());
     await settled(store);
-    await userEvent.click(rowOf('KO'));
-    const dialog = screen.getByRole('dialog', { name: 'Edit KO' });
+    const dialog = await openEdit('KO');
     expect(within(dialog).queryByRole('combobox')).not.toBeInTheDocument();
     expect(within(dialog).getByLabelText('Symbol')).toBeDisabled();
     await pastDebounce();
@@ -902,8 +899,7 @@ describe('HoldingDialog editing', () => {
   it('edits a manual price and marks a holding checked', async () => {
     const data = portfolioData();
     const { store } = renderInvest(data);
-    await userEvent.click(rowOf('KO'));
-    const dialog = screen.getByRole('dialog', { name: 'Edit KO' });
+    const dialog = await openEdit('KO');
     expect(dialog).toHaveAccessibleDescription('Coca-Cola');
     expect(within(dialog).getByLabelText('Symbol')).toBeDisabled();
     expect(within(dialog).getByLabelText('Shares')).toHaveValue('10');
@@ -938,7 +934,7 @@ describe('HoldingDialog editing', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(toastStore.getState().toasts.at(-1)?.message).toBe('Holding updated.');
 
-    await userEvent.click(rowOf('KO'));
+    await userEvent.click(screen.getByRole('button', { name: 'Edit' }));
     await userEvent.click(
       within(screen.getByRole('dialog', { name: 'Edit KO' })).getByRole('button', {
         name: 'Mark as checked',
@@ -955,8 +951,7 @@ describe('HoldingDialog editing', () => {
 
   it('refuses a withholding that could be a thousand times out, or over 100', async () => {
     const { store } = renderInvest(portfolioData());
-    await userEvent.click(rowOf('KO'));
-    const dialog = screen.getByRole('dialog', { name: 'Edit KO' });
+    const dialog = await openEdit('KO');
     await enter(dialog, 'Tax withheld on dividends (%)', '15,000');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
     expect(dialog.textContent).toContain('Is 15,000 a thousand or a fraction?');
@@ -970,8 +965,7 @@ describe('HoldingDialog editing', () => {
     const data = portfolioData();
     data.tables.holding[0] = { ...data.tables.holding[0]!, manualPrice: 61.25 };
     const { store } = renderInvest(data);
-    await userEvent.click(rowOf('KO'));
-    const dialog = screen.getByRole('dialog', { name: 'Edit KO' });
+    const dialog = await openEdit('KO');
     expect(within(dialog).getByLabelText('Manual price')).toHaveValue('61.25');
     expect(within(dialog).getByLabelText('Manual price')).toHaveAccessibleDescription(
       'In USD. Leave it empty to use the live price.',
@@ -988,8 +982,7 @@ describe('HoldingDialog editing', () => {
 
   it('rejects a manual price that is not a number, without a raw schema error', async () => {
     const { store } = renderInvest(portfolioData());
-    await userEvent.click(rowOf('AAPL'));
-    const dialog = screen.getByRole('dialog', { name: 'Edit AAPL' });
+    const dialog = await openEdit('AAPL');
     await enter(dialog, 'Manual price', 'a lot');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
     expect(dialog.textContent).toContain('Enter a price like 12.50, or leave it empty');
@@ -1005,8 +998,7 @@ describe('HoldingDialog editing', () => {
       withholdingPct: 12.125,
     };
     const { store } = renderInvest(data);
-    await userEvent.click(rowOf('KO'));
-    const dialog = screen.getByRole('dialog', { name: 'Edit KO' });
+    const dialog = await openEdit('KO');
     // Filled in the way the person would have to write them.
     expect(within(dialog).getByLabelText('Shares')).toHaveValue('1.1250');
     expect(within(dialog).getByLabelText('Manual price')).toHaveValue('12.3450');
@@ -1031,8 +1023,7 @@ describe('HoldingDialog editing', () => {
 
   it('refuses a manual price that could be a thousand times out, and reads a clear one', async () => {
     const { store } = renderInvest(portfolioData());
-    await userEvent.click(rowOf('AAPL'));
-    const dialog = screen.getByRole('dialog', { name: 'Edit AAPL' });
+    const dialog = await openEdit('AAPL');
     for (const text of ['1,234', '1.234']) {
       await enter(dialog, 'Manual price', text);
       await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
@@ -1051,24 +1042,33 @@ describe('HoldingDialog editing', () => {
     );
   });
 
-  it('deletes a holding', async () => {
-    const { store } = renderInvest(portfolioData());
-    await userEvent.click(rowOf('AAPL'));
-    await userEvent.click(
-      within(screen.getByRole('dialog', { name: 'Edit AAPL' })).getByRole('button', {
-        name: 'Delete',
-      }),
-    );
-    await waitFor(() => expect(store.getState().remove).toHaveBeenCalledWith('holding', 'aapl'));
+  it('deletes a holding and goes back to Invest', async () => {
+    const { store, router } = renderInvest(portfolioData());
+    // The stub store only records the call; this one drops the holding, as the real one does.
+    vi.mocked(store.getState().remove).mockImplementation(async (_table, id) => {
+      store.setState((s) => ({
+        data: {
+          ...s.data,
+          tables: { ...s.data.tables, holding: s.data.tables.holding.filter((h) => h.id !== id) },
+        },
+      }));
+    });
+    const dialog = await openEdit('AAPL');
+    expect(router.state.location.pathname).toBe('/invest/holding/aapl');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Delete' }));
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/invest'));
+    expect(store.getState().remove).toHaveBeenCalledWith('holding', 'aapl');
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(region('Portfolio value')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /^AAPL · / })).not.toBeInTheDocument();
   });
 
   it('keeps the name, type and currency out of an edit while the price service names them', async () => {
     configured();
     const { store } = renderInvest(portfolioData());
     await settled(store);
-    await userEvent.click(rowOf('KO'));
-    const dialog = screen.getByRole('dialog', { name: 'Edit KO' });
+    const dialog = await openEdit('KO');
     expect(within(dialog).queryByLabelText('Name')).not.toBeInTheDocument();
     expect(within(dialog).queryByLabelText('Type')).not.toBeInTheDocument();
     expect(within(dialog).queryByLabelText('Currency')).not.toBeInTheDocument();

@@ -102,6 +102,7 @@ Numbers are tabular. Money always goes through `useMoney()` / `formatMoney`, dat
   lives on Home (and in the sidebar), so the bar has no + and there is no floating quick-add button.
   Toasts float just above the bar.
 - **Invest:** Holdings, Dividends and News are tabs inside Invest, not separate pages or Menu rows.
+  A holding in the list opens its own page (`/invest/holding/:id`), with Edit on it.
 - **Menu:** a tall sheet that slides up from the bottom (280ms ease-out, only under `motion-safe:`)
   with a grab handle and rounded top corners. It is a plain list in three groups (section titles at
   21px); each row is at least 48px tall with a coloured round icon, the name, a line saying what is
@@ -143,6 +144,12 @@ Small hand-written SVG components in `src/components/charts/`, no chart library.
    text such as "$X left" or "$X over". Budget bars carry a pace mark showing how far through the
    period today is.
 5. The 7-day bars put today in ink and label it "Today"; the net-worth trend is a 30-day line.
+6. A donut can write each slice's share just outside the ring (`showPercent`), for slices of 6% or
+   more, in the text colour and never the slice colour; smaller slices show it in the legend only.
+   Invest's pies use it: one for stocks and one for ETFs (or all together), each by holding.
+7. A holding's price chart (`PriceLine`) is an ink line with a dashed line at what was paid per
+   share, a dot where it starts and the latest price at its end. Touching it, or the arrow keys,
+   read out a day and its price.
 
 ## Rules
 
