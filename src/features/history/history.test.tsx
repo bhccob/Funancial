@@ -7,7 +7,7 @@ import { formatMoney } from '@/domain/money';
 import type { DataSnapshot } from '@/domain/snapshot';
 import { formatMonthYear } from '@/lib/format';
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
-import { makeDividend } from '@/test/fixtures';
+import { makeDividend, makeTransaction } from '@/test/fixtures';
 import { HistoryScreen } from './HistoryScreen';
 
 const actions = vi.hoisted(() => ({
@@ -155,6 +155,24 @@ describe('HistoryScreen', () => {
     const dialog = screen.getByRole('dialog', { name: 'Delete this entry?' });
     await userEvent.click(within(dialog).getByRole('button', { name: 'Delete' }));
     expect(invest.deleteDividend).toHaveBeenCalledWith('d-aapl');
+  });
+
+  it('shows a stock purchase as what was bought and where the money came from', () => {
+    const data = structuredClone(bal!.data);
+    data.tables.transaction.push(
+      makeTransaction({
+        type: 'investment',
+        amount: 500_00,
+        date: '2026-10-07',
+        from: 'savings',
+        to: null,
+        note: 'Bought KO',
+      }),
+    );
+    renderHistory(data);
+    expect(row('Bought KO').getByText('From savings')).toBeInTheDocument();
+    expect(row('Bought KO').getByText(`−${usd(500_00)}`)).toBeInTheDocument();
+    expect(screen.queryByText('Paid a card or loan')).not.toBeInTheDocument();
   });
 
   it('sets the actual cash balance', async () => {

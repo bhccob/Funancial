@@ -238,7 +238,8 @@ export function HistoryScreen() {
       detail = [BUCKET[t.to ?? 'cash'], t.note === title ? '' : t.note].filter(Boolean).join(' · ');
       amount = t.amount < 0 ? `−${money(-t.amount)}` : `+${money(t.amount)}`;
     } else {
-      title = `Paid ${debtName(t.debtId)}`;
+      // A purchase's note names what was bought ("Bought KO"); a payment names the card or loan.
+      title = t.type === 'investment' ? t.note || 'Investment' : `Paid ${debtName(t.debtId)}`;
       detail = t.from ? `From ${BUCKET[t.from].toLowerCase()}` : '';
       amount = `−${money(t.amount)}`;
     }
