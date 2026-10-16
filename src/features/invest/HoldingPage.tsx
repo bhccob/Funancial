@@ -12,6 +12,7 @@ import { useCurrency, useToday } from '@/store/useFinance';
 import { useInvestActions, useInvestMoney, useInvestPortfolio } from '@/store/useInvest';
 import { HoldingChart } from './HoldingChart';
 import { HoldingDialog } from './HoldingDialog';
+import { SellDialog } from './SellDialog';
 
 const tone = (n: number) => (n < 0 ? 'text-danger' : 'text-accent-text');
 const arrow = (n: number) => (n < 0 ? '▼' : '▲');
@@ -46,6 +47,7 @@ export function HoldingPage() {
   const { markChecked } = useInvestActions();
   const run = useAction();
   const [editing, setEditing] = useState(false);
+  const [selling, setSelling] = useState(false);
 
   if (!holding || !row) return <Navigate to="/invest" replace />;
 
@@ -120,19 +122,20 @@ export function HoldingPage() {
           <Fact label="Dividends received">{format(received)}</Fact>
         </dl>
         <div className="mt-7 flex gap-2">
-          <Button className="flex-1" onClick={() => setEditing(true)}>
+          <Button variant="secondary" className="flex-1" onClick={() => setEditing(true)}>
             Edit
           </Button>
-          <Button
-            variant="secondary"
-            className="flex-1"
-            onClick={() =>
-              void run(() => markChecked(holding.id), { success: 'Marked as checked.' })
-            }
-          >
-            Mark as checked
+          <Button className="flex-1" onClick={() => setSelling(true)}>
+            Sell
           </Button>
         </div>
+        <Button
+          variant="secondary"
+          className="mt-2 w-full"
+          onClick={() => void run(() => markChecked(holding.id), { success: 'Marked as checked.' })}
+        >
+          Mark as checked
+        </Button>
       </Section>
       <p className="text-muted pt-1 text-[12.5px] font-bold">
         Prices delayed · not financial advice
@@ -143,6 +146,7 @@ export function HoldingPage() {
         onClose={() => setEditing(false)}
         onAdded={() => {}}
       />
+      <SellDialog holding={selling ? holding : null} onClose={() => setSelling(false)} />
     </div>
   );
 }

@@ -6,7 +6,8 @@ import { MarketError, type Market } from '@/services/market';
 import { makeDividend, makeHolding, makeProfile, makeTransaction } from '@/test/fixtures';
 import { freshRealStore } from '@/test/realStore';
 import { createFinanceActions } from './financeActions';
-import { createInvestActions, SHARES_GONE } from './investActions';
+import { formatDay } from '@/lib/format';
+import { createInvestActions, saleBeforePurchase, SHARES_GONE } from './investActions';
 
 const TODAY = '2026-10-14';
 const ASOF = '2026-10-14T09:00:00.000Z';
@@ -920,6 +921,22 @@ describe('selling a holding', () => {
     await expect(actions.sellHolding('nope', sell)).rejects.toThrow('That item no longer exists.');
     expect(tables().sale).toEqual([]);
     expect(holding(h.id)).toEqual(kept);
+  });
+
+  it('refuses a sale dated before the holding was bought, and takes one on the day it was', async () => {
+    const { actions, tables, holding, h } = await withHolding();
+    const kept = holding(h.id);
+    await expect(actions.sellHolding(h.id, { ...sell, soldOn: '2026-09-30' })).rejects.toThrow(
+      saleBeforePurchase('2026-10-01'),
+    );
+    await expect(actions.sellHolding(h.id, { ...sell, soldOn: '2026-09-30' })).rejects.toThrow(
+      `The sale can't be before you bought it (${formatDay('2026-10-01')}).`,
+    );
+    expect(tables().sale).toEqual([]);
+    expect(holding(h.id)).toEqual(kept);
+
+    await actions.sellHolding(h.id, { ...sell, soldOn: '2026-10-01' });
+    expect(tables().sale).toHaveLength(1);
   });
 
   describe('undoing a sale', () => {

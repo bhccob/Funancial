@@ -7,7 +7,7 @@ import { Select } from '@/components/ui/Select';
 import { ShareStepper } from '@/components/ui/ShareStepper';
 import { TextField } from '@/components/ui/TextField';
 import type { Holding } from '@/domain/entities';
-import { formatDecimal, isAmbiguousDecimal, parseDecimal } from '@/domain/money';
+import { formatDecimal, parseDecimal } from '@/domain/money';
 import { costForShares, costPerShare } from '@/domain/portfolio';
 import { DateField } from '@/features/add/DateField';
 import { formatShares } from '@/lib/format';
@@ -17,7 +17,9 @@ import { FUTURE } from '@/store/financeActions';
 import { UNKNOWN_SYMBOL, type HoldingInput, type HoldingPatch } from '@/store/investActions';
 import { useCurrency, useMoney, useToday } from '@/store/useFinance';
 import { useInvestActions } from '@/store/useInvest';
+import { SummaryLine } from './SummaryLine';
 import { SymbolSearchField } from './SymbolSearchField';
+import { unreadable } from './unreadable';
 
 type PaidFrom = HoldingInput['paidFrom'];
 
@@ -28,14 +30,6 @@ const TYPE_OPTIONS = [
   { value: 'etf', label: 'ETF' },
   { value: 'other', label: 'Other' },
 ];
-
-/** What to say about a number that could not be read: "1,000" is a thousand or one, so say how to settle it. */
-function unreadable(text: string, fallback: string): string {
-  const t = text.trim();
-  return isAmbiguousDecimal(t)
-    ? `Is ${t} a thousand or a fraction? Write ${t.replace(/[.,]/, '')}, or ${t.replace(',', '.')}0 for the fraction`
-    : fallback;
-}
 
 interface Form {
   symbol: string;
@@ -267,14 +261,11 @@ function HoldingForm({
         error={errors.perShare}
         onChange={(v) => set('perShare', v)}
       />
-      <p className="flex justify-between gap-3 text-[13.5px] font-extrabold tabular-nums">
-        <span className="text-muted font-bold">Total paid</span>
-        <span>
-          {cost === null
-            ? '—'
-            : `${formatShares(parseDecimal(form.shares)!)} × ${money(form.perShare!)} = ${money(cost)}`}
-        </span>
-      </p>
+      <SummaryLine label="Total paid">
+        {cost === null
+          ? '—'
+          : `${formatShares(parseDecimal(form.shares)!)} × ${money(form.perShare!)} = ${money(cost)}`}
+      </SummaryLine>
       <DateField
         variant="line"
         label="Purchase date"

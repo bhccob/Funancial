@@ -7,6 +7,9 @@ import type { DataSnapshot } from './snapshot';
 /** Selling this close to every share is selling every share: the rest is floating-point dust. */
 const ALL = 1e-9;
 
+/** What `planSale` says about a price that leaves no proceeds; the Sell dialog shows it at the price. */
+export const NO_PROCEEDS = 'Enter a price above 0.';
+
 export type SalePlan = {
   shares: number;
   proceeds: number;
@@ -29,7 +32,7 @@ export function planSale(h: Holding, shares: number, pricePerShareMinor: number)
   const sold = all ? h.shares : shares;
   const cost = costForShares(h, sold);
   const proceeds = Math.round(sold * pricePerShareMinor);
-  if (!(proceeds > 0)) throw new Error('Enter a price above 0.');
+  if (!(proceeds > 0)) throw new Error(NO_PROCEEDS);
   return { shares: sold, proceeds, cost, profit: proceeds - cost, all };
 }
 

@@ -13,6 +13,7 @@ import { minorDigits } from '@/domain/money';
 import { holdingPrice, holdingRate } from '@/domain/portfolio';
 import { planSale, type SalePlan } from '@/domain/sales';
 import type { TableRecord } from '@/domain/snapshot';
+import { formatDay } from '@/lib/format';
 import { marketConfigured, type Market } from '@/services/market';
 import type { AppState } from './appStore';
 import { FUTURE } from './financeActions';
@@ -26,6 +27,9 @@ const NO_RATE = 'Reinvesting needs an exchange rate for this holding. Refresh pr
 /** What `deleteDividend` says when taking a reinvested payout's shares back would leave none. */
 export const SHARES_GONE =
   'The holding has fewer shares than this dividend bought. Edit the holding first.';
+/** What a sale dated before the holding was bought is told, by `sellHolding` and by the Sell dialog alike. */
+export const saleBeforePurchase = (purchaseDate: LocalDate) =>
+  `The sale can't be before you bought it (${formatDay(purchaseDate)}).`;
 /** A currency code a holding can take; a quote with anything else keeps the holding's own. */
 const CURRENCY = /^[A-Z]{3}$/;
 /** A holding's dividend history is fetched again once it is older than this. */
@@ -186,6 +190,8 @@ export function createInvestActions(store: StoreApi<AppState>, market: Market) {
     async sellHolding(id: string, input: SaleInput): Promise<SalePlan> {
       notFuture(input.soldOn);
       const holding = find(id);
+      if (input.soldOn < holding.purchaseDate)
+        throw new Error(saleBeforePurchase(holding.purchaseDate));
       const plan = planSale(holding, input.shares, input.pricePerShareMinor);
       const sale: Sale = {
         id: newId(),
