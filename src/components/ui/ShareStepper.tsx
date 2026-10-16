@@ -56,10 +56,9 @@ export function ShareStepper({ label, value, onChange, error }: ShareStepperProp
     <div>
       <div
         className={cn(
-          'flex items-center gap-1 border-b',
-          error
-            ? 'border-danger focus-within:shadow-[0_1px_0_0_var(--color-danger)]'
-            : 'border-border focus-within:border-text focus-within:shadow-[0_1px_0_0_var(--color-text)]',
+          // The line is 2px tall either way: a hairline and a pixel of padding, or the thick line.
+          'flex items-center gap-1 border-b pb-px focus-within:border-b-2 focus-within:pb-0',
+          error ? 'border-danger' : 'border-border focus-within:border-text',
         )}
       >
         <div className="flex min-w-0 flex-1 flex-col py-1">

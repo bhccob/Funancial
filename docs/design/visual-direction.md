@@ -94,6 +94,13 @@ Numbers are tabular. Money always goes through `useMoney()` / `formatMoney`, dat
   component.
 - **Buttons:** pills. `sm` 44px tall, `md` 48px, `lg` 56px. Primary is ink, secondary a hairline
   outline, tertiary a text button. Round actions are 56px circles with a word under the icon.
+- **Line fields** (`variant="line"` on `TextField`, `MoneyField` and `Select`; so far only the Invest
+  dialogs use them, and M7 restyles the other forms): a 13px muted label over a 16px extra-bold
+  value, no box, a 1px hairline under it that turns ink and 2px thick on focus (that line is the
+  focus indicator, so there is no outline). `ShareStepper` is the same row with a 20px typable share
+  count and round − / + buttons (30px to look at, 44px to hit; it steps by 1 and never down to 0).
+  Underline tabs (`RadioGroup variant="underline"`, and `underlineTab()` for tab-like buttons) mark
+  the choice with an ink 2px line under it.
 - **Desktop (≥ `md`):** the sidebar (210px) stays. Home and Budget put their sections in two columns
   from `lg`.
 
@@ -137,8 +144,8 @@ Small hand-written SVG components in `src/components/charts/`, no chart library.
    between Week and Month, or between months. The reason: the palette is validated only in its fixed
    adjacent order.
 2. **Donuts** show the top 5 categories plus "Other", with a 3px gap between arcs and the total (or
-   the chosen slice) in the centre. Two-part splits are bars, not pies, except Invest's pies of stocks
-   and of ETFs, which the owner asked for and which can have two slices.
+   the chosen slice) in the centre. Two-part splits are bars, not pies, except Invest's pie, which the owner asked for and which can have
+   two slices.
 3. **Every chart shows exact amounts** on tap or in a legend, and carries a screen-reader label.
    Identity is never by colour alone: legends have the name, the amount and, where it helps, the share.
    Tapping a slice or a legend row highlights it (150ms, `motion-safe:` only); a keyboard reaches the
@@ -149,7 +156,8 @@ Small hand-written SVG components in `src/components/charts/`, no chart library.
 5. The 7-day bars put today in ink and label it "Today"; the net-worth trend is a 30-day line.
 6. A donut can write each slice's share just outside the ring (`showPercent`), for slices of 6% or
    more, in the text colour and never the slice colour; smaller slices show it in the legend only.
-   Invest's pies use it: one for stocks and one for ETFs (or all together), each by holding.
+   Invest's pie uses it: one pie, 180px, by holding, of everything (All) or of just Stocks, ETFs or
+   Other, chosen with underline tabs, with a full-width legend under it.
 7. A holding's price chart (`PriceLine`) is an ink line with a dashed line at what was paid per
    share, a dot where it starts and the latest price at its end. Touching it, or the arrow keys,
    read out a day and its price.

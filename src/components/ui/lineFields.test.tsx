@@ -24,15 +24,14 @@ describe('the line variant of the fields', () => {
   it('turns the line ink and 2px thick on focus, without a box around the field', () => {
     render(<TextField variant="line" label="Symbol" />);
     const input = screen.getByLabelText('Symbol');
-    expect(input).toHaveClass('focus:border-text', 'focus:outline-none');
-    expect(input.className).toContain('focus:shadow-[0_1px_0_0_var(--color-text)]');
+    expect(input).toHaveClass('focus:border-text', 'focus:border-b-2', 'focus:outline-none');
   });
 
   it('puts an error under the line, and turns the line danger', () => {
     render(<TextField variant="line" label="Symbol" error="Use letters and numbers only" />);
     const input = screen.getByLabelText('Symbol');
     expect(input).toBeInvalid();
-    expect(input).toHaveClass('border-b', 'border-danger');
+    expect(input).toHaveClass('border-b', 'border-danger', 'focus:border-b-2');
     expect(input).not.toHaveClass('border-border', 'focus:border-text');
     expect(input).toHaveAccessibleDescription('Use letters and numbers only');
     expect(screen.getByText('Use letters and numbers only')).toHaveClass('text-danger');
