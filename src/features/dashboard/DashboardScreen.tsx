@@ -57,7 +57,7 @@ export function DashboardScreen() {
                 <div className="flex gap-2">
                   <Button
                     size="sm"
-                    variant="secondary"
+                    variant="banner"
                     aria-label={`Didn't arrive (${m} salary)`}
                     onClick={() =>
                       void run(() => skipIncome(income.id), {

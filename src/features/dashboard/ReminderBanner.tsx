@@ -25,7 +25,7 @@ function Invitation({ notifier }: { notifier: Notifier }) {
       action={
         <div className="flex gap-2">
           <Button
-            variant="secondary"
+            variant="banner"
             onClick={() =>
               void run(() => updateSettings({ reminders: { ...reminders, prompted: true } }))
             }

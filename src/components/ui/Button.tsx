@@ -2,7 +2,8 @@ import type { ButtonHTMLAttributes, Ref } from 'react';
 import { Link, type LinkProps } from 'react-router';
 import { cn } from '@/lib/cn';
 
-export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'danger-ghost';
+export type ButtonVariant =
+  'primary' | 'secondary' | 'banner' | 'ghost' | 'danger' | 'danger-ghost';
 export type ButtonSize = 'sm' | 'md' | 'lg';
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -19,6 +20,8 @@ const base =
 const variants: Record<ButtonVariant, string> = {
   primary: 'bg-primary text-primary-contrast hover:opacity-90',
   secondary: 'border border-border-strong bg-transparent text-text hover:bg-surface-2',
+  // A secondary button for a gradient card: the page colour, part see-through, so its edge shows.
+  banner: 'border border-border-strong bg-bg/60 text-text hover:bg-bg',
   ghost: 'bg-transparent text-text hover:bg-surface-2',
   danger: 'bg-danger text-white hover:opacity-90',
   'danger-ghost': 'bg-transparent text-danger hover:bg-surface-2',

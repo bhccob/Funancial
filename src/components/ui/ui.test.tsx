@@ -25,6 +25,15 @@ describe('Button', () => {
     expect(colours).toEqual(['text-danger']);
   });
 
+  it('gives the banner button a see-through page-colour surface, so its edge shows on a gradient', () => {
+    render(<Button variant="banner">Not now</Button>);
+    expect(screen.getByRole('button', { name: 'Not now' })).toHaveClass(
+      'border-border-strong',
+      'bg-bg/60',
+      'text-text',
+    );
+  });
+
   it('makes medium buttons 48px tall', () => {
     render(
       <MemoryRouter>
@@ -163,18 +172,72 @@ describe('Banner', () => {
   it('announces danger as an alert and other tones politely', () => {
     const { rerender } = render(<Banner tone="danger">Storage blocked</Banner>);
     expect(screen.getByRole('alert')).toHaveTextContent('Storage blocked');
-    rerender(<Banner tone="warning">Storage is nearly full</Banner>);
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-    expect(screen.getByRole('status')).toHaveTextContent('Storage is nearly full');
+    for (const tone of ['demo', 'info', 'warning'] as const) {
+      rerender(<Banner tone={tone}>Storage is nearly full</Banner>);
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+      expect(screen.getByRole('status')).toHaveTextContent('Storage is nearly full');
+    }
   });
 
-  it('renders its action', () => {
+  it('puts its action after the text, on the right', () => {
     render(
       <Banner tone="info" action={<button>Fix it</button>}>
         Heads up
       </Banner>,
     );
-    expect(screen.getByRole('button', { name: 'Fix it' })).toBeInTheDocument();
+    const banner = screen.getByRole('status');
+    expect(banner).toHaveClass('flex', 'flex-wrap', 'items-center');
+    expect(banner.firstElementChild).toHaveClass('min-w-0', 'flex-1', 'basis-40');
+    expect(banner.lastElementChild).toBe(screen.getByRole('button', { name: 'Fix it' }));
+  });
+
+  it('sets a lone sentence as 13px bold text', () => {
+    render(<Banner tone="info">Heads up</Banner>);
+    expect(screen.getByText('Heads up')).toHaveClass('text-[13px]', 'font-bold');
+  });
+
+  it('sets a title as the 13px extra-bold line, with the children under it as the muted line', () => {
+    render(
+      <Banner tone="warning" title="Careful">
+        Storage is nearly full
+      </Banner>,
+    );
+    expect(screen.getByText('Careful')).toHaveClass('text-[13px]', 'font-extrabold');
+    const line = screen.getByText('Storage is nearly full');
+    expect(line).toHaveClass('text-warning-muted', 'text-[11px]', 'font-bold');
+    expect(line.previousElementSibling).toBe(screen.getByText('Careful'));
+  });
+
+  it.each(['demo', 'info', 'warning', 'danger'] as const)(
+    'is a soft gradient card from the %s tokens',
+    (tone) => {
+      render(
+        <Banner tone={tone} title="Title">
+          Line
+        </Banner>,
+      );
+      const banner = screen.getByRole(tone === 'danger' ? 'alert' : 'status');
+      expect(banner).toHaveClass(
+        'rounded-lg',
+        'px-3.5',
+        'py-3',
+        'bg-linear-120/srgb',
+        `from-${tone}-from`,
+        `to-${tone}-to`,
+      );
+      expect(screen.getByText('Line')).toHaveClass(`text-${tone}-muted`);
+      // No grey surface, no left bar, no tone-coloured text: the gradient and the role carry the tone.
+      expect(banner.className).not.toMatch(/bg-surface|border-l|text-danger|text-warning/);
+    },
+  );
+
+  it('takes a class from its caller', () => {
+    render(
+      <Banner tone="demo" className="mb-4">
+        Hi
+      </Banner>,
+    );
+    expect(screen.getByRole('status')).toHaveClass('mb-4');
   });
 });
 
