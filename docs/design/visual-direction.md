@@ -135,7 +135,8 @@ Small hand-written SVG components in `src/components/charts/`, no chart library.
    between Week and Month, or between months. The reason: the palette is validated only in its fixed
    adjacent order.
 2. **Donuts** show the top 5 categories plus "Other", with a 3px gap between arcs and the total (or
-   the chosen slice) in the centre. Two-part splits are bars, not pies.
+   the chosen slice) in the centre. Two-part splits are bars, not pies, except Invest's pies of stocks
+   and of ETFs, which the owner asked for and which can have two slices.
 3. **Every chart shows exact amounts** on tap or in a legend, and carries a screen-reader label.
    Identity is never by colour alone: legends have the name, the amount and, where it helps, the share.
    Tapping a slice or a legend row highlights it (150ms, `motion-safe:` only); a keyboard reaches the
