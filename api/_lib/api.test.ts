@@ -75,6 +75,8 @@ describe('price service', () => {
     expect(ok.headers.get('Access-Control-Allow-Origin')).toBe(ORIGIN);
     expect(ok.headers.get('Access-Control-Allow-Headers')).toBe('X-Funancial-Token');
     expect(ok.headers.get('Access-Control-Allow-Methods')).toBe('GET, OPTIONS');
+    // Browsers cap it, but without it every request from the phone pays a preflight first.
+    expect(ok.headers.get('Access-Control-Max-Age')).toBe('86400');
 
     for (const origin of ['capacitor://localhost', 'https://localhost']) {
       expect(preflight(origin).headers.get('Access-Control-Allow-Origin')).toBe(origin);
