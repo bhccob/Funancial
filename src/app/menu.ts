@@ -48,11 +48,8 @@ export const MENU_GROUPS: MenuGroup[] = [
       { path: '/goals', label: 'Goals', icon: Target, color: '#128a60' },
       { path: '/history', label: 'History', icon: Clock, color: '#d9541e' },
       { path: '/freeze', label: 'Salary freeze', icon: Snowflake, color: '#4458d6' },
+      { path: '/buy', label: 'Buy it?', icon: ShoppingBag, color: '#c43b6a' },
     ],
-  },
-  {
-    title: 'Coming next',
-    items: [{ path: '/buy', label: 'Buy it?', icon: ShoppingBag, color: '#c43b6a', soon: true }],
   },
   {
     title: 'You',

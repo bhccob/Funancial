@@ -122,7 +122,7 @@ describe('bottom bar', () => {
 });
 
 describe('Menu sheet', () => {
-  it('opens the Menu sheet with three groups and live subtitles', async () => {
+  it('opens the Menu sheet with two groups and live subtitles', async () => {
     renderAt('/', liveData());
     const sheet = await openMenu();
 
@@ -130,7 +130,7 @@ describe('Menu sheet', () => {
       within(sheet)
         .getAllByRole('heading', { level: 3 })
         .map((h) => h.textContent),
-    ).toEqual(['Your money', 'Coming next', 'You']);
+    ).toEqual(['Your money', 'You']);
     expect(
       within(sheet)
         .getAllByRole('link')
@@ -211,7 +211,7 @@ describe('Menu sheet', () => {
   it('marks soon items', async () => {
     renderAt('/');
     const sheet = await openMenu();
-    expect(row(sheet, 'Buy it\\?')).toHaveTextContent('Soon');
+    expect(row(sheet, 'Buy it\\?')).not.toHaveTextContent('Soon');
     expect(row(sheet, 'Inbox')).toHaveTextContent('Soon');
     expect(row(sheet, 'Quests')).not.toHaveTextContent('Soon');
     expect(row(sheet, 'Subscriptions')).not.toHaveTextContent('Soon');
@@ -226,6 +226,24 @@ describe('Menu sheet', () => {
     const sheet = await openMenu();
     await userEvent.click(row(sheet, 'Settings'));
     expect(screen.getByRole('heading', { level: 1, name: 'Settings' })).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Menu' })).not.toBeInTheDocument();
+  });
+
+  it('lists Buy it? under Your money, after Salary freeze, and opens the Ask form', async () => {
+    renderAt('/');
+    const sheet = await openMenu();
+    const money = within(sheet).getByRole('heading', {
+      level: 3,
+      name: 'Your money',
+    }).parentElement!;
+    expect(
+      within(money)
+        .getAllByRole('link')
+        .map((a) => a.getAttribute('href')),
+    ).toEqual(['/subscriptions', '/goals', '/history', '/freeze', '/buy']);
+
+    await userEvent.click(row(sheet, 'Buy it\\?'));
+    expect(screen.getByRole('heading', { level: 1, name: 'Should I buy it?' })).toBeInTheDocument();
     expect(screen.queryByRole('dialog', { name: 'Menu' })).not.toBeInTheDocument();
   });
 
@@ -290,9 +308,9 @@ describe('sidebar', () => {
   it('tags the soon items', () => {
     renderAt('/');
     const sidebar = screen.getByRole('navigation', { name: 'All sections' });
-    expect(within(sidebar).getByRole('link', { name: /^Buy it/ })).toHaveTextContent('Soon');
+    expect(within(sidebar).getByRole('link', { name: /^Buy it/ })).not.toHaveTextContent('Soon');
     expect(within(sidebar).getByRole('link', { name: /^Settings/ })).not.toHaveTextContent('Soon');
-    expect(within(sidebar).getAllByText('Soon')).toHaveLength(3);
+    expect(within(sidebar).getAllByText('Soon')).toHaveLength(2);
   });
 
   it('marks the current screen', () => {
@@ -306,10 +324,9 @@ describe('sidebar', () => {
 });
 
 describe('menu items', () => {
-  it('has the three groups in order, with a fixed chip colour that holds 3:1 against a white icon', () => {
+  it('has the two groups in order, with a fixed chip colour that holds 3:1 against a white icon', () => {
     expect(MENU_GROUPS.map((g) => [g.title, g.items.length])).toEqual([
-      ['Your money', 4],
-      ['Coming next', 1],
+      ['Your money', 5],
       ['You', 5],
     ]);
     const luminance = (hex: string) => {

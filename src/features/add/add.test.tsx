@@ -1,6 +1,6 @@
 import { fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter, Route, Routes } from 'react-router';
+import { MemoryRouter, Route, Routes, type InitialEntry } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Toaster } from '@/components/ui/Toaster';
 import { periodRange } from '@/domain/periods';
@@ -44,7 +44,7 @@ beforeEach(() => {
   actions.addIncome.mockReset().mockResolvedValue({});
 });
 
-function renderAdd(path = '/add', tone: Settings['warningTone'] = 'motivational') {
+function renderAdd(path: InitialEntry = '/add', tone: Settings['warningTone'] = 'motivational') {
   const data = emptySnapshot();
   data.tables.settings.push(makeSettings({ warningTone: tone }));
   data.tables.debt.push(makeDebt({ id: 'card-1', name: 'Visa', kind: 'credit_card' }));
@@ -141,6 +141,69 @@ describe('Add expense', () => {
     await save();
     await userEvent.click(screen.getByRole('button', { name: 'Save anyway' }));
     expect(actions.addExpense).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('Add expense from a buy check', () => {
+  const fromCheck = (prefill: unknown) => ({ pathname: '/add', state: { prefill } });
+  const bought = { item: 'Noise-cancelling headphones', amount: 249_00, category: 'entertainment' };
+  const ASK_FIRST = "Haven't bought it yet? Ask first →";
+
+  it('offers to ask first, on an expense and not on income', async () => {
+    renderAdd();
+    expect(screen.getByRole('link', { name: ASK_FIRST })).toHaveAttribute('href', '/buy');
+    await userEvent.click(screen.getByRole('radio', { name: 'Income' }));
+    expect(screen.queryByRole('link', { name: ASK_FIRST })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('radio', { name: 'Expense' }));
+    expect(screen.getByRole('link', { name: ASK_FIRST })).toBeInTheDocument();
+  });
+
+  it('has the item in the note, the price and the category, ready to save', async () => {
+    renderAdd(fromCheck(bought));
+    expect(screen.getByLabelText('Amount')).toHaveValue('249.00');
+    expect(screen.getByRole('radio', { name: 'Fun' })).toBeChecked();
+    expect(screen.getByLabelText('Note')).toHaveValue('Noise-cancelling headphones');
+
+    await save();
+    expect(actions.addExpense).toHaveBeenCalledWith({
+      amount: 249_00,
+      category: 'entertainment',
+      date: TODAY,
+      note: 'Noise-cancelling headphones',
+      paymentMethod: 'cash',
+      cardId: null,
+      repeat: null,
+    });
+  });
+
+  it('can still be changed before it is saved', async () => {
+    renderAdd(fromCheck(bought));
+    await userEvent.clear(screen.getByLabelText('Amount'));
+    await userEvent.type(screen.getByLabelText('Amount'), '199');
+    await userEvent.click(screen.getByRole('radio', { name: 'Shopping' }));
+    await save();
+    expect(actions.addExpense).toHaveBeenCalledWith(
+      expect.objectContaining({ amount: 199_00, category: 'shopping' }),
+    );
+  });
+
+  it('does not ask whether to buy what was just bought', () => {
+    renderAdd(fromCheck(bought));
+    expect(screen.queryByRole('link', { name: ASK_FIRST })).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ['nothing', undefined],
+    ['text', 'Headphones'],
+    ['an unknown category', { ...bought, category: 'yachts' }],
+    ['an amount of nothing', { ...bought, amount: 0 }],
+    ['a fractional amount', { ...bought, amount: 12.5 }],
+    ['an item that is not text', { ...bought, item: 5 }],
+  ])('starts empty for a prefill of %s', (_, prefill) => {
+    renderAdd(fromCheck(prefill));
+    expect(screen.getByLabelText('Amount')).toHaveValue('');
+    expect(screen.getByRole('radio', { name: 'Food' })).toBeChecked();
+    expect(screen.getByLabelText('Note')).toHaveValue('');
   });
 });
 

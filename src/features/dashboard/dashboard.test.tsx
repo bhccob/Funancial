@@ -326,11 +326,19 @@ describe('DashboardScreen actions', () => {
       '/add?type=income',
     );
     expect(screen.getByRole('link', { name: 'Goals' })).toHaveAttribute('href', '/goals');
-    // The Last 7 days section links to the history too; the action comes first.
-    const [history] = screen.getAllByRole('link', { name: 'History' });
-    expect(history).toHaveAttribute('href', '/history');
-    expect(history).toHaveTextContent('History');
-    expect(history!.querySelector('svg.lucide-clock')).toBeInTheDocument();
+    const buy = screen.getByRole('link', { name: 'Buy it?' });
+    expect(buy).toHaveAttribute('href', '/buy');
+    expect(buy.querySelector('svg.lucide-shopping-bag')).toBeInTheDocument();
+  });
+
+  it("gives History's place to Buy it?; History stays one tap away in Last 7 days", () => {
+    renderDashboard(emptySnapshot(), TODAY);
+    expect(screen.getAllByRole('link', { name: 'History' })).toHaveLength(1);
+    expect(within(region('Last 7 days')).getByRole('link', { name: 'History' })).toHaveAttribute(
+      'href',
+      '/history',
+    );
+    expect(document.querySelector('svg.lucide-clock')).not.toBeInTheDocument();
   });
 
   it('makes each a 56px round icon with its word under it, and fills the first', () => {

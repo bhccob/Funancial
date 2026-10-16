@@ -11,6 +11,7 @@ import { CategorySchema, type Category, type Cycle, type Expense } from '@/domai
 import { toast } from '@/lib/toast';
 import { useAction } from '@/lib/useAction';
 import { useApp } from '@/store/AppStoreProvider';
+import type { BuyPrefill } from '@/store/buyActions';
 import type { ExpenseInput } from '@/store/financeActions';
 import { useCurrency, useFinanceActions, useToday } from '@/store/useFinance';
 import {
@@ -32,21 +33,34 @@ const REPEAT_OPTIONS = [
   { value: 'yearly', label: 'Yearly' },
 ];
 
-/** Adds an expense, or edits `expense` when given (no repeat, no limit check, plus Delete). */
-export function ExpenseForm({ onDone, expense }: { onDone(): void; expense?: Expense }) {
+/**
+ * Adds an expense, or edits `expense` when given (no repeat, no limit check, plus Delete). A new
+ * one can start from `prefill`: what a purchase check says was bought.
+ */
+export function ExpenseForm({
+  onDone,
+  expense,
+  prefill,
+}: {
+  onDone(): void;
+  expense?: Expense;
+  prefill?: BuyPrefill;
+}) {
   const actions = useFinanceActions();
   const currency = useCurrency();
   const today = useToday();
   const tone = useApp((s) => s.data.tables.settings[0]?.warningTone ?? 'motivational');
   const run = useAction();
 
-  const [amount, setAmount] = useState<number | null>(expense?.amount ?? null);
-  const [category, setCategory] = useState<Category>(expense?.category ?? 'food');
+  const [amount, setAmount] = useState<number | null>(expense?.amount ?? prefill?.amount ?? null);
+  const [category, setCategory] = useState<Category>(
+    expense?.category ?? prefill?.category ?? 'food',
+  );
   const [date, setDate] = useState(expense?.date ?? today);
   const [paidWith, setPaidWith] = useState(
     expense ? paidWithValue(expense.paymentMethod, expense.cardId) : 'cash',
   );
-  const [note, setNote] = useState(expense?.note ?? '');
+  const [note, setNote] = useState(expense?.note ?? prefill?.item ?? '');
   const [repeat, setRepeat] = useState('none');
   const [errors, setErrors] = useState<{ amount?: string; date?: string }>({});
   const [crossing, setCrossing] = useState<LimitStatus[] | null>(null);

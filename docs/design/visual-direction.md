@@ -113,11 +113,10 @@ Numbers are tabular. Money always goes through `useMoney()` / `formatMoney`, dat
 - **Invest:** Holdings, Dividends and News are tabs inside Invest, not separate pages or Menu rows.
   A holding in the list opens its own page (`/invest/holding/:id`), with Edit on it.
 - **Menu:** a tall sheet that slides up from the bottom (280ms ease-out, only under `motion-safe:`)
-  with a grab handle and rounded top corners. It is a plain list in three groups (section titles at
+  with a grab handle and rounded top corners. It is a plain list in two groups (section titles at
   21px); each row is at least 48px tall with a coloured round icon, the name, a line saying what is
   inside right now, and an arrow. Escape and the Android back gesture close it.
-  - **Your money:** Subscriptions, Goals, History, Salary freeze.
-  - **Coming next:** Buy it?, marked "Soon".
+  - **Your money:** Subscriptions, Goals, History, Salary freeze, Buy it?.
   - **You:** Quests, Shop, Inbox ("Soon"), Help ("Soon"), Settings.
 - **Desktop:** the sidebar lists Home, Budget and Invest, then the same groups, under an "Add
   expense" button.
