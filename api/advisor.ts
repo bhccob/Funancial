@@ -2,6 +2,7 @@ import {
   AdvisorAskSchema,
   AdvisorRequestSchema,
   type AdvisorAnswer,
+  type AdvisorRequest,
 } from './_lib/advisorSchema.js';
 import { askClaude } from './_lib/claude.js';
 import { badRequest, guard, json, preflight, upstream } from './_lib/http.js';
@@ -16,24 +17,46 @@ const BAND = 30;
 // The top of the wait zone: with a guard, the meter never reaches Buy.
 const WAIT_CAP = 66;
 
-type Rules = { meter: number; guards: { capAtWait: boolean } };
+type Checked = Pick<AdvisorRequest, 'rules' | 'facts'>;
 
 /**
- * The answer held within the guards. The meter stays within the rules meter ± 30 and 0–100; under
- * `capAtWait` it is also at most 66 (which wins over the band) and a Buy becomes a Wait. `clamped`
- * says a guard changed something; rounding to a whole number is not one.
+ * Whether the purchase hits a hard guard: the client's own flag, or either of the guards its facts
+ * show (it needs debt, or leaves the available balance below zero), so a client that says "no
+ * guard" about a purchase whose facts need one still gets the cap.
  */
-function withGuards(answer: AdvisorAnswer, { meter: base, guards }: Rules) {
+const capAtWait = ({ rules, facts }: Checked) =>
+  rules.guards.capAtWait || facts.requiresDebt || facts.availableAfter < 0;
+
+/**
+ * The answer held within the guards. The meter stays within the rules meter ± 30 and 0–100, and
+ * under a guard at most 66 (which wins over the band), so a Buy never comes out of one. The verdict
+ * and confidence then agree with the final, whole-number meter. `clamped` says something was
+ * changed; rounding to a whole number is not a change.
+ */
+function withGuards(answer: AdvisorAnswer, request: Checked) {
+  const base = request.rules.meter;
   const lowest = Math.max(0, base - BAND);
-  const highest = Math.min(100, base + BAND, guards.capAtWait ? WAIT_CAP : 100);
-  const meter = Math.min(highest, Math.max(lowest, answer.meter));
-  const recommendation =
-    guards.capAtWait && answer.recommendation === 'buy' ? 'wait' : answer.recommendation;
+  const highest = Math.min(100, base + BAND, capAtWait(request) ? WAIT_CAP : 100);
+  const held = Math.min(highest, Math.max(lowest, answer.meter));
+  const meter = Math.round(held);
+
+  // As the app reads a meter: skip to 33, wait 34–66, buy from 67. A verdict must fit its meter:
+  // Buy in the buy zone, Skip in the skip zone, Cheaper in the wait zone, and any other is Wait.
+  const zone = meter >= 67 ? 'buy' : meter >= 34 ? 'wait' : 'skip';
+  const fits = { buy: zone === 'buy', skip: zone === 'skip', cheaper: zone === 'wait', wait: true };
+  const recommendation = fits[answer.recommendation] ? answer.recommendation : 'wait';
+  const away = Math.abs(meter - 50);
+  const confidence = away >= 30 ? 'high' : away >= 15 ? 'medium' : 'low';
+
   return {
     ...answer,
     recommendation,
-    meter: Math.round(meter),
-    clamped: meter !== answer.meter || recommendation !== answer.recommendation,
+    meter,
+    confidence,
+    clamped:
+      held !== answer.meter ||
+      recommendation !== answer.recommendation ||
+      confidence !== answer.confidence,
   };
 }
 
@@ -65,7 +88,7 @@ export async function POST(req: Request): Promise<Response> {
       ask: AdvisorAskSchema.parse(ask),
       debate: debate.slice(-DEBATE_TURNS),
     });
-    return json(req, withGuards(answer, rules), 'no-store');
+    return json(req, withGuards(answer, parsed.data), 'no-store');
   } catch (err) {
     return upstream(req, err);
   }

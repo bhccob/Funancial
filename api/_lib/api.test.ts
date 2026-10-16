@@ -1824,20 +1824,27 @@ describe('advisor route', () => {
   const capped = set('rules.guards', { capAtWait: true, reasons: ["Needs money you don't have"] });
   const rulesMeter = (n: number) => set('rules.meter', n);
 
-  const answer = (over: Json = {}) => ({
-    recommendation: 'wait',
-    meter: 45,
-    confidence: 'low',
-    summary: 'Hold off for now.',
-    pros: ['You need them'],
-    cons: ['Over the limit'],
-    alternatives: ['A cheaper pair'],
-    coolingOffHours: 48,
-    reply: '',
-    question: 'Would you still want them in a week?',
-    remember: null,
-    ...over,
-  });
+  // How sure a meter is: far from the middle, sure (the rules engine's reading, as a plain table).
+  const sureAt = (meter: number) =>
+    Math.abs(meter - 50) >= 30 ? 'high' : Math.abs(meter - 50) >= 15 ? 'medium' : 'low';
+  // A model answer that agrees with itself: its confidence is the one its meter calls for.
+  const answer = (over: Json = {}) => {
+    const meter = typeof over.meter === 'number' ? over.meter : 45;
+    return {
+      recommendation: 'wait',
+      meter,
+      confidence: sureAt(meter),
+      summary: 'Hold off for now.',
+      pros: ['You need them'],
+      cons: ['Over the limit'],
+      alternatives: ['A cheaper pair'],
+      coolingOffHours: 48,
+      reply: '',
+      question: 'Would you still want them in a week?',
+      remember: null,
+      ...over,
+    };
+  };
   // What the route answers when the model says `model` for a body edited by `edit`.
   const reply = async (model: Json, edit: Edit = () => {}) => {
     const b = body();
@@ -2081,9 +2088,14 @@ describe('advisor route', () => {
       recommendation: 'wait',
       clamped: true,
     });
-    for (const recommendation of ['wait', 'cheaper', 'skip']) {
-      expect(await reply(answer({ meter: 20, recommendation }), capped)).toMatchObject({
-        meter: 20,
+    const kept = [
+      ['wait', 40],
+      ['cheaper', 40],
+      ['skip', 20],
+    ] as const;
+    for (const [recommendation, meter] of kept) {
+      expect(await reply(answer({ meter, recommendation }), capped)).toMatchObject({
+        meter,
         recommendation,
         clamped: false,
       });
@@ -2126,6 +2138,93 @@ describe('advisor route', () => {
     });
   });
 
+  it('caps from the facts too, whatever capAtWait says', async () => {
+    const crafted = answer({ meter: 95, recommendation: 'buy' });
+    // The body says no guard, but its facts say the purchase needs debt, or overdraws.
+    for (const edit of [set('facts.requiresDebt', true), set('facts.availableAfter', -1)]) {
+      expect(await reply(crafted, edit)).toMatchObject({
+        meter: 66,
+        recommendation: 'wait',
+        clamped: true,
+      });
+    }
+    // Exactly nothing left is not an overdraft: then only the band applies.
+    expect(await reply(crafted, set('facts.availableAfter', 0))).toMatchObject({
+      meter: 70,
+      recommendation: 'buy',
+      clamped: true,
+    });
+    expect(await reply(crafted, set('facts.requiresDebt', false))).toMatchObject({ meter: 70 });
+  });
+
+  it('matches the verdict to the clamped meter', async () => {
+    // The rules said 20, the model pushes to 95 and Buy: held to 50, where Buy is not a verdict.
+    const pushed = answer({ meter: 95, recommendation: 'buy', confidence: 'high' });
+    expect(await reply(pushed, rulesMeter(20))).toMatchObject({
+      meter: 50,
+      recommendation: 'wait',
+      confidence: 'low',
+      clamped: true,
+    });
+
+    // Buy only from 67, Skip only up to 33, Cheaper only from 34 to 66; any other is Wait.
+    const verdicts: Array<[string, number, string]> = [
+      ['skip', 60, 'wait'],
+      ['buy', 66, 'wait'],
+      ['buy', 67, 'buy'],
+      ['skip', 33, 'skip'],
+      ['skip', 34, 'wait'],
+      ['cheaper', 34, 'cheaper'],
+      ['cheaper', 50, 'cheaper'],
+      ['cheaper', 66, 'cheaper'],
+      ['cheaper', 33, 'wait'],
+      ['cheaper', 67, 'wait'],
+      ['wait', 10, 'wait'],
+      ['wait', 70, 'wait'],
+      // The zone is the rounded meter's, as the app reads it.
+      ['buy', 66.4, 'wait'],
+      ['buy', 66.6, 'buy'],
+    ];
+    for (const [recommendation, meter, expected] of verdicts) {
+      const res = await reply(answer({ meter, recommendation }));
+      expect(res.recommendation, `${recommendation} at ${meter}`).toBe(expected);
+      // Only the verdict moved, so only a changed verdict is a clamp.
+      expect(res.clamped, `${recommendation} at ${meter}`).toBe(expected !== recommendation);
+    }
+  });
+
+  it('works out confidence from the final meter, as the rules engine does', async () => {
+    const sure: Array<[number, string]> = [
+      [0, 'high'],
+      [20, 'high'],
+      [21, 'medium'],
+      [35, 'medium'],
+      [36, 'low'],
+      [50, 'low'],
+      [64, 'low'],
+      [65, 'medium'],
+      [79, 'medium'],
+      [80, 'high'],
+      [100, 'high'],
+    ];
+    for (const [meter, confidence] of sure) {
+      // Rules meter on the model's own, so nothing is clamped.
+      expect(
+        await reply(answer({ meter, confidence }), rulesMeter(meter)),
+        `${meter}`,
+      ).toMatchObject({ meter, confidence, clamped: false });
+    }
+    // The model's own word is not taken, and a different one counts as a change.
+    expect(await reply(answer({ meter: 50, confidence: 'high' }), rulesMeter(50))).toMatchObject({
+      confidence: 'low',
+      clamped: true,
+    });
+    // It follows a clamped meter: 95 held to 70 reads medium, not the high the model gave.
+    expect(
+      await reply(answer({ meter: 95, recommendation: 'buy', confidence: 'high' })),
+    ).toMatchObject({ meter: 70, confidence: 'medium', clamped: true });
+  });
+
   it('rounds the meter to a whole number after clamping, and does not call rounding a clamp', async () => {
     expect(await reply(answer({ meter: 54.4 }))).toMatchObject({ meter: 54, clamped: false });
     expect(await reply(answer({ meter: 54.5 }))).toMatchObject({ meter: 55, clamped: false });
@@ -2136,8 +2235,7 @@ describe('advisor route', () => {
   it('answers with the model output, the meter clamped, and clamped', async () => {
     const model = answer({
       recommendation: 'cheaper',
-      meter: 25,
-      confidence: 'medium',
+      meter: 45,
       coolingOffHours: null,
       reply: 'Fair point.',
       remember: 'Has a cat',

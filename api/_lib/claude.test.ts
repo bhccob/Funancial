@@ -194,6 +194,18 @@ describe('askClaude', () => {
     expect((await askClaude(input)).coolingOffHours).toBeNull();
   });
 
+  it('reads a remembered fact longer than 200 characters as none', async () => {
+    // An About-you fact holds 200 characters, and a longer one would fail the person's next ask.
+    const remember = async (value: unknown) => {
+      create.mockResolvedValue(message([text({ ...model, remember: value })]));
+      return (await askClaude(input)).remember;
+    };
+    expect(await remember('Has a cat')).toBe('Has a cat');
+    expect(await remember('r'.repeat(200))).toBe('r'.repeat(200));
+    expect(await remember('r'.repeat(201))).toBeNull();
+    expect(await remember(null)).toBeNull();
+  });
+
   it('passes a meter through as given, for the route to hold within the guards', async () => {
     create.mockResolvedValue(message([text({ ...model, meter: 95.5 })]));
     expect((await askClaude(input)).meter).toBe(95.5);

@@ -2,8 +2,11 @@ import { z } from 'zod';
 
 // The advisor's contract, as a standalone copy: the api tsconfig cannot import src (its aliases).
 // It mirrors src/domain/entities.ts (BuyAskSchema, FactsSchema, VerdictSchema, ConfidenceSchema),
-// src/domain/advisor/snapshot.ts (AdvisorSnapshot) and rules.ts (Analysis). A test under src parses
-// the body the client builds with it, so a drift shows up there.
+// src/domain/advisor/snapshot.ts (AdvisorSnapshot) and rules.ts (Analysis). Task 5 adds a test under
+// src that parses the body the client builds with it, so a drift shows up there.
+
+/** The longest fact About you holds, and so the longest the advisor may offer to remember. */
+const MAX_FACT = 200;
 
 const Money = z.number().int();
 const Category = z.enum([
@@ -127,11 +130,12 @@ const AboutSchema = z.object({
   situation: z.string().max(500),
   matters: z.string().max(500),
   overspend: z.string().max(500),
-  facts: z.array(z.string().max(200)).max(50),
+  facts: z.array(z.string().max(MAX_FACT)).max(50),
 });
 
-// A turn of the advisor is its reply and question, up to what max_tokens allows, so this is roomy;
-// the 64 KB limit on the body is what bounds the whole.
+// An advisor turn is its reply and question, and max_tokens (4000, about 16,000 characters) lets one
+// run past this, so the client clips a turn to 8000 when it builds the body. The 64 KB limit on the
+// body is what bounds the whole.
 const Turn = z.object({ role: z.enum(['advisor', 'you']), text: z.string().max(8000) });
 
 export const AdvisorRequestSchema = z.object({
@@ -172,7 +176,9 @@ export const AdvisorAnswerFormat = z.object(answerShape);
 
 /**
  * What is accepted back. The same, except that hours which are no number read as none and negative
- * hours as zero: a decision is stored with them, and a bad one would make the save throw.
+ * hours as zero (a decision is stored with them, and a bad one would make the save throw), and a
+ * fact to remember of more than 200 characters reads as none (an About-you fact holds 200, and a
+ * longer one would make the next ask fail the request schema).
  */
 export const AdvisorAnswerSchema = z.object({
   ...answerShape,
@@ -181,6 +187,10 @@ export const AdvisorAnswerSchema = z.object({
   coolingOffHours: z.preprocess(
     (h) => (typeof h === 'number' && Number.isFinite(h) ? Math.max(0, h) : null),
     z.number().nullable(),
+  ),
+  remember: z.preprocess(
+    (r) => (typeof r === 'string' && r.length > MAX_FACT ? null : r),
+    z.string().nullable(),
   ),
 });
 export type AdvisorAnswer = z.infer<typeof AdvisorAnswerSchema>;
