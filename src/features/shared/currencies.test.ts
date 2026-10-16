@@ -16,6 +16,8 @@ describe('defaultCurrency', () => {
     expect(defaultCurrency('Asia/Nicosia', undefined)).toBe('EUR');
     expect(defaultCurrency('Europe/Zurich', undefined)).toBe('CHF');
     expect(defaultCurrency('Asia/Kolkata', undefined)).toBe('INR');
+    // V8 reports India under the older name.
+    expect(defaultCurrency('Asia/Calcutta', undefined)).toBe('INR');
     expect(defaultCurrency('America/Vancouver', undefined)).toBe('CAD');
     expect(defaultCurrency('Pacific/Honolulu', undefined)).toBe('USD');
   });
@@ -42,7 +44,11 @@ describe('defaultCurrency', () => {
     const offered = new Set(currencyOptions().map((o) => o.value));
     for (const [currency, zones] of Object.entries(ZONES)) {
       expect(offered.has(currency), currency).toBe(true);
-      for (const zone of zones) expect(defaultCurrency(zone, undefined), zone).toBe(currency);
+      for (const zone of zones) {
+        // A zone V8 throws on can never be the one a phone reports.
+        expect(() => new Intl.DateTimeFormat('en', { timeZone: zone }), zone).not.toThrow();
+        expect(defaultCurrency(zone, undefined), zone).toBe(currency);
+      }
     }
     for (const [currency, regions] of Object.entries(REGIONS)) {
       expect(offered.has(currency), currency).toBe(true);

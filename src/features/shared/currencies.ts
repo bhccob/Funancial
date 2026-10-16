@@ -30,7 +30,7 @@ const words = (list: string) => list.split(/\s+/);
 export const ZONES: Record<string, string[]> = {
   EUR: words(`Europe/Amsterdam Europe/Brussels Europe/Paris Europe/Berlin Europe/Madrid Europe/Rome
     Europe/Lisbon Europe/Vienna Europe/Dublin Europe/Helsinki Europe/Athens Europe/Luxembourg
-    Europe/Bratislava Europe/Ljubljana Europe/Tallinn Europe/Riga Europe/Vilnius Europe/Valletta
+    Europe/Bratislava Europe/Ljubljana Europe/Tallinn Europe/Riga Europe/Vilnius Europe/Malta
     Europe/Zagreb Europe/Sofia Europe/Nicosia Asia/Nicosia`),
   GBP: ['Europe/London'],
   CHF: ['Europe/Zurich'],
@@ -42,7 +42,7 @@ export const ZONES: Record<string, string[]> = {
   HUF: ['Europe/Budapest'],
   JPY: ['Asia/Tokyo'],
   SGD: ['Asia/Singapore'],
-  INR: ['Asia/Kolkata'],
+  INR: ['Asia/Kolkata', 'Asia/Calcutta'],
   ZAR: ['Africa/Johannesburg'],
   CAD: words('America/Toronto America/Vancouver America/Edmonton America/Winnipeg America/Halifax'),
   USD: words(`America/New_York America/Chicago America/Denver America/Los_Angeles America/Phoenix
