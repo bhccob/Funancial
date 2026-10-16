@@ -1,6 +1,6 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { formatMoney } from '@/domain/money';
 import type { AboutYou } from '@/domain/entities';
 import { CATEGORY_OPTIONS } from '@/features/shared/categories';
@@ -26,8 +26,8 @@ async function renderAbout(opts: { about?: AboutYou; goals?: ReturnType<typeof m
   await store.getState().put('profile', makeProfile({ currency: 'USD' }));
   for (const g of opts.goals ?? []) await store.getState().put('goal', g);
   if (opts.about) await store.getState().put('aboutYou', opts.about);
-  renderWithStore(<AboutYouScreen />, store);
-  return { store, saved: () => store.getState().data.tables.aboutYou[0] };
+  const { unmount } = renderWithStore(<AboutYouScreen />, store);
+  return { store, unmount, saved: () => store.getState().data.tables.aboutYou[0] };
 }
 
 async function pasteInto(label: string, text: string) {
@@ -36,6 +36,23 @@ async function pasteInto(label: string, text: string) {
 }
 
 const chip = (name: string) => screen.getByRole('button', { name });
+
+type Store = Awaited<ReturnType<typeof renderAbout>>['store'];
+
+/** Every write to the store waits a while first, so a tap can come before the last one has landed. */
+function slowWrites(store: Store, ms: number) {
+  const { put } = store.getState();
+  store.setState({
+    put: (async (...args: Parameters<typeof put>) => {
+      await new Promise((resolve) => setTimeout(resolve, ms));
+      return put(...args);
+    }) as typeof put,
+  });
+}
+
+/** Every write to the store fails. */
+const failingWrites = (store: Store) =>
+  store.setState({ put: vi.fn().mockRejectedValue(new Error('Disk is full')) });
 
 describe('About you', () => {
   it('shows the heading, intro, four fields and the note, and saves nothing until a change', async () => {
@@ -253,5 +270,90 @@ describe('About you', () => {
       await waitFor(() => expect(saved()?.overspend).toEqual(['entertainment']));
       expect(saved()?.matters).toBe('');
     });
+  });
+
+  describe('leaving the screen', () => {
+    it.each([
+      [MATTERS, 'matters'],
+      [SITUATION, 'situation'],
+    ] as const)('saves %s typed but never left, trimmed', async (label, key) => {
+      const { saved, unmount } = await renderAbout();
+      await userEvent.type(screen.getByLabelText(label), '  A house deposit ');
+      expect(saved()).toBeUndefined();
+      unmount(); // Back on a phone hides the keyboard without leaving the field
+      await waitFor(() => expect(saved()?.[key]).toBe('A house deposit'));
+    });
+
+    it('saves nothing when no text was changed', async () => {
+      const { saved, store, unmount } = await renderAbout({
+        about: makeAboutYou({ matters: 'Kept' }),
+      });
+      const before = saved();
+      await userEvent.click(screen.getByLabelText(SITUATION));
+      unmount();
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(store.getState().data.tables.aboutYou[0]).toBe(before);
+    });
+
+    it('does not save a text that is too long', async () => {
+      const { saved, unmount } = await renderAbout();
+      await pasteInto(MATTERS, 'x'.repeat(501));
+      unmount();
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(saved()).toBeUndefined();
+    });
+  });
+
+  describe('when a write fails', () => {
+    it('puts a chip back as it was, says why, and does not say Saved', async () => {
+      const { store, saved } = await renderAbout({
+        about: makeAboutYou({ overspend: ['shopping'] }),
+      });
+      failingWrites(store);
+      await userEvent.click(chip('Fun'));
+      expect(await screen.findByText('Disk is full')).toBeInTheDocument();
+      expect(chip('Fun')).toHaveAttribute('aria-pressed', 'false');
+      expect(chip('Shopping')).toHaveAttribute('aria-pressed', 'true');
+      expect(screen.queryByText('Saved')).not.toBeInTheDocument();
+      expect(saved()?.overspend).toEqual(['shopping']);
+    });
+
+    it('puts the goal back as it was, says why, and does not say Saved', async () => {
+      const { store } = await renderAbout({
+        goals: [bike, fund],
+        about: makeAboutYou({ protectGoalId: 'fund' }),
+      });
+      failingWrites(store);
+      await userEvent.selectOptions(screen.getByLabelText(GOAL), 'bike');
+      expect(await screen.findByText('Disk is full')).toBeInTheDocument();
+      expect(screen.getByLabelText(GOAL)).toHaveValue('fund');
+      expect(screen.queryByText('Saved')).not.toBeInTheDocument();
+    });
+
+    it('does not say Saved beside another field that is still wrong', async () => {
+      await renderAbout();
+      await pasteInto(MATTERS, 'x'.repeat(501));
+      await userEvent.tab();
+      expect(await screen.findByText(TOO_LONG)).toBeInTheDocument();
+
+      await userEvent.click(chip('Fun'));
+      await waitFor(() => expect(chip('Fun')).toHaveAttribute('aria-pressed', 'true'));
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(screen.getByText(TOO_LONG)).toBeInTheDocument();
+      expect(screen.queryByText('Saved')).not.toBeInTheDocument();
+    });
+  });
+
+  it('keeps a goal picked a moment ago when the next save comes before it has landed', async () => {
+    const { store, saved } = await renderAbout({
+      goals: [fund, bike],
+      about: makeAboutYou({ protectGoalId: 'gone' }), // the stored goal was deleted
+    });
+    slowWrites(store, 200);
+    await userEvent.selectOptions(screen.getByLabelText(GOAL), 'bike');
+    await userEvent.click(chip('Fun'));
+    await waitFor(() => expect(saved()?.overspend).toEqual(['entertainment']));
+    expect(saved()?.protectGoalId).toBe('bike');
+    expect(screen.getByLabelText(GOAL)).toHaveValue('bike');
   });
 });

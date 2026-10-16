@@ -1,4 +1,4 @@
-import { useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { lineLabel } from '@/components/ui/lineField';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Section } from '@/components/ui/Section';
@@ -8,7 +8,7 @@ import type { Category } from '@/domain/entities';
 import { CATEGORY_OPTIONS } from '@/features/shared/categories';
 import { cn } from '@/lib/cn';
 import { formatDay } from '@/lib/format';
-import { useApp } from '@/store/AppStoreProvider';
+import { useApp, useAppStore } from '@/store/AppStoreProvider';
 import type { AboutPatch } from '@/store/buyActions';
 import { useAboutYou, useBuyActions } from '@/store/useBuy';
 import { useMoney } from '@/store/useFinance';
@@ -24,6 +24,7 @@ type Field = keyof AboutPatch;
  * at a time, so a text that is too long holds back only itself.
  */
 export function AboutYouScreen() {
+  const store = useAppStore();
   const about = useAboutYou();
   const actions = useBuyActions();
   const money = useMoney();
@@ -37,10 +38,15 @@ export function AboutYouScreen() {
   const [goalId, setGoalId] = useState(about?.protectGoalId ?? '');
   const [errors, setErrors] = useState<Partial<Record<Field, string>>>({});
   const [saved, setSaved] = useState(false);
+  // What is typed in each text, for the save when the screen is left with the cursor still in one.
+  const pending = useRef({ matters, situation });
+  const flush = useRef(() => {});
 
   // A goal deleted since it was picked reads as None, and the next save lets go of it.
   const goalGone = about?.protectGoalId != null && !goals.some((g) => g.id === about.protectGoalId);
   const shownGoal = goals.some((g) => g.id === goalId) ? goalId : '';
+  // Saved says so only while nothing on the screen is wrong.
+  const allSaved = saved && !Object.values(errors).some(Boolean);
 
   function edited(field: Field) {
     setSaved(false);
@@ -50,11 +56,21 @@ export function AboutYouScreen() {
   async function save(field: Field, patch: AboutPatch) {
     edited(field);
     try {
-      await actions.saveAbout({ ...(goalGone ? { protectGoalId: null } : {}), ...patch });
+      // The goal the person has now, not null: a pick still being saved must not be undone.
+      await actions.saveAbout({
+        ...(goalGone ? { protectGoalId: shownGoal || null } : {}),
+        ...patch,
+      });
       setSaved(true);
     } catch (e) {
       const message = e instanceof Error && e.message ? e.message : 'Something went wrong.';
       setErrors((prev) => ({ ...prev, [field]: message }));
+      if (field === 'overspend' || field === 'protectGoalId') {
+        // A chip or goal that did not save goes back to what is stored.
+        const stored = store.getState().data.tables.aboutYou[0];
+        setOverspend(stored?.overspend ?? []);
+        setGoalId(stored?.protectGoalId ?? '');
+      }
     }
   }
 
@@ -62,6 +78,7 @@ export function AboutYouScreen() {
   function leave(field: 'matters' | 'situation', text: string, set: (text: string) => void) {
     const value = text.trim();
     set(value);
+    pending.current[field] = value;
     if (value !== (about?.[field] ?? '')) void save(field, { [field]: value });
   }
 
@@ -72,6 +89,20 @@ export function AboutYouScreen() {
     setOverspend(next);
     void save('overspend', { overspend: next });
   }
+
+  // Back on a phone can hide the keyboard without leaving the field, and React does not blur a
+  // field it removes, so what is typed is saved here too, the same way.
+  useEffect(() => {
+    flush.current = () => {
+      for (const field of ['matters', 'situation'] as const) {
+        const value = pending.current[field].trim();
+        if (value !== (store.getState().data.tables.aboutYou[0]?.[field] ?? '')) {
+          void save(field, { [field]: value });
+        }
+      }
+    };
+  });
+  useEffect(() => () => flush.current(), []);
 
   const goalOptions = [
     NONE,
@@ -96,6 +127,7 @@ export function AboutYouScreen() {
             autoComplete="off"
             onChange={(e) => {
               setMatters(e.target.value);
+              pending.current.matters = e.target.value;
               edited('matters');
             }}
             onBlur={() => leave('matters', matters, setMatters)}
@@ -154,13 +186,14 @@ export function AboutYouScreen() {
             autoComplete="off"
             onChange={(e) => {
               setSituation(e.target.value);
+              pending.current.situation = e.target.value;
               edited('situation');
             }}
             onBlur={() => leave('situation', situation, setSituation)}
           />
 
           <p role="status" className="text-muted min-h-5 text-sm font-bold">
-            {saved ? 'Saved' : ''}
+            {allSaved ? 'Saved' : ''}
           </p>
         </div>
 
