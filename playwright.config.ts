@@ -30,5 +30,8 @@ export default defineConfig({
     url: `http://localhost:${PORT}`,
     reuseExistingServer: !process.env.CI,
     timeout: 180_000,
+    // Process env beats .env* files in Vite, so the build never reads a developer's .env.local.
+    // The URL is empty: the app calls its own origin, where the specs mock `/api/**`.
+    env: { VITE_FUNANCIAL_API_URL: '', VITE_FUNANCIAL_API_TOKEN: 'e2e-token' },
   },
 });

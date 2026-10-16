@@ -3,9 +3,11 @@ import {
   defaultSettings,
   type Category,
   type Expense,
+  type Holding,
   type PaymentMethod,
   type Subscription,
 } from '@/domain/entities';
+import { toMinor } from '@/domain/portfolio';
 import { emptySnapshot, type DataSnapshot } from '@/domain/snapshot';
 
 /** Fake money for demo mode. Deterministic: the same day and seed always give the same data. */
@@ -14,6 +16,9 @@ const WINDOW_DAYS = 60;
 const MONTHLY_SALARY = 4_200_00;
 const PAY_DAY = 25;
 const CARD_ID = 'demo-card';
+/** Percent of each demo dividend withheld as tax. */
+const TAX = 15;
+const KO_PRICE = 68.4;
 
 function mulberry32(seed: number): () => number {
   let a = seed;
@@ -321,6 +326,143 @@ export function buildDemoSnapshot(today: LocalDate, seed = 42): DataSnapshot {
       deadline: addDays(today, 120),
     },
   );
+
+  // Investments as the price service last left them, so Invest works with no service. The stored
+  // prices are a day old: opening Invest with a service asks for fresh ones.
+  const quotedAt = `${addDays(today, -1)}T09:00:00.000Z`;
+  const quote = (price: number, previousClose: number, fxRate: number) => ({
+    price,
+    previousClose,
+    fxRate,
+    asOf: quotedAt,
+  });
+  // Quarterly ex-dates 91 days apart, the last `lastEx` days from today; the next payout is given
+  // by ex-date and pay date (days from today), with the last paid amount standing in for its own.
+  const quarterly = (lastEx: number, amounts: number[], nextEx: number, nextPay: number) => ({
+    history: amounts.map((amount, i) => ({
+      date: addDays(today, lastEx - 91 * (amounts.length - 1 - i)),
+      amount,
+    })),
+    nextExDate: addDays(today, nextEx),
+    nextPayDate: addDays(today, nextPay),
+    nextAmount: amounts[amounts.length - 1]!,
+    fetchedAt: quotedAt,
+  });
+  const holding = (
+    h: Pick<
+      Holding,
+      | 'symbol'
+      | 'name'
+      | 'type'
+      | 'exchange'
+      | 'sector'
+      | 'currency'
+      | 'shares'
+      | 'costBasis'
+      | 'purchaseDate'
+      | 'quote'
+      | 'dividendInfo'
+    >,
+  ): Holding => ({
+    id: id('holding'),
+    ...stampFor(h.purchaseDate > start ? h.purchaseDate : start),
+    withholdingPct: TAX,
+    manualPrice: null,
+    checkedAt: null,
+    ...h,
+  });
+
+  // KO's first payout was reinvested at today's stored price, the second went to Passive, on the
+  // shares the first one bought.
+  const koFirst = toMinor(60 * 0.51 * (1 - TAX / 100), 1, 'USD');
+  const koAdded = koFirst / (KO_PRICE * 100);
+  const koSecond = toMinor((60 + koAdded) * 0.53 * (1 - TAX / 100), 1, 'USD');
+
+  const aapl = holding({
+    symbol: 'AAPL',
+    name: 'Apple',
+    type: 'stock',
+    exchange: 'NMS',
+    sector: 'Technology',
+    currency: 'USD',
+    shares: 12,
+    costBasis: 2_550_00,
+    purchaseDate: addDays(today, -30),
+    quote: quote(228.5, 229.8, 1),
+    dividendInfo: quarterly(-79, [0.24, 0.25, 0.25, 0.26], 12, 15),
+  });
+  const ko = holding({
+    symbol: 'KO',
+    name: 'Coca-Cola',
+    type: 'stock',
+    exchange: 'NYQ',
+    sector: 'Consumer Defensive',
+    currency: 'USD',
+    shares: 60 + koAdded,
+    costBasis: 3_300_00 + koFirst,
+    purchaseDate: addDays(today, -400),
+    quote: quote(KO_PRICE, 67.9, 1),
+    // The announced payout is already past (ex 29 days ago, paid 13 days ago), as Yahoo gives it.
+    dividendInfo: quarterly(-29, [0.5, 0.5, 0.51, 0.53], -29, -13),
+  });
+  t.holding.push(
+    holding({
+      symbol: 'VWRL',
+      name: 'Vanguard All-World ETF',
+      type: 'etf',
+      exchange: 'AMS',
+      sector: null,
+      currency: 'EUR',
+      shares: 40,
+      costBasis: 4_600_00,
+      purchaseDate: addDays(today, -200),
+      quote: quote(118.4, 117.9, 1.08),
+      dividendInfo: quarterly(-58, [0.38, 0.52, 0.41, 0.47], 33, 38),
+    }),
+    aapl,
+    ko,
+    holding({
+      symbol: 'ASML',
+      name: 'ASML Holding',
+      type: 'stock',
+      exchange: 'AMS',
+      sector: 'Technology',
+      currency: 'EUR',
+      shares: 5,
+      costBasis: 4_300_00,
+      purchaseDate: addDays(today, -300),
+      quote: quote(742.3, 748.1, 1.08),
+      dividendInfo: quarterly(-70, [1.52, 1.52, 1.52, 1.6], 21, 30),
+    }),
+  );
+  const paid = (payDays: number, amount: number, bucket: 'reinvest' | 'passive') => {
+    const payDate = addDays(today, -payDays);
+    t.dividend.push({
+      id: `${ko.id}:${payDate}`,
+      ...stampFor(payDate),
+      holdingId: ko.id,
+      symbol: ko.symbol,
+      expectedPayDate: payDate,
+      paidOn: payDate,
+      status: 'confirmed',
+      amount,
+      bucket,
+      sharesAdded: bucket === 'reinvest' ? koAdded : null,
+    });
+  };
+  paid(104, koFirst, 'reinvest');
+  paid(13, koSecond, 'passive');
+  t.transaction.push({
+    id: id('transaction'),
+    ...stampFor(aapl.purchaseDate),
+    type: 'investment',
+    amount: aapl.costBasis,
+    date: aapl.purchaseDate,
+    from: 'savings',
+    to: null,
+    debtId: null,
+    note: 'Bought AAPL',
+  });
 
   return snap;
 }
