@@ -58,6 +58,9 @@ function fakeMarket(over: Partial<Market> = {}) {
       over.fetchFx ?? (async (from, to) => ({ from, to, rate: 0.92, asOf: ASOF })),
     ),
     fetchSearch: vi.fn<Market['fetchSearch']>(over.fetchSearch ?? (async () => ({ results: [] }))),
+    fetchHistory: vi.fn<Market['fetchHistory']>(
+      over.fetchHistory ?? (async (symbol) => ({ symbol, currency: 'USD', points: [] })),
+    ),
   };
 }
 

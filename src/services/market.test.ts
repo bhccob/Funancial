@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   fetchDividends,
   fetchFx,
+  fetchHistory,
   fetchNews,
   fetchProfile,
   fetchQuotes,
@@ -47,6 +48,8 @@ describe('market client', () => {
     await fetchFx('USD', 'EUR');
     answer({ results: [] });
     await fetchSearch('vusa etf');
+    answer({ symbol: 'VUSA.AS', currency: 'EUR', points: [] });
+    await fetchHistory('vusa.as', '2025-03-03');
 
     const calls = fetchMock.mock.calls as Array<[string, RequestInit]>;
     expect(calls.map(([url]) => url)).toEqual([
@@ -56,6 +59,7 @@ describe('market client', () => {
       'https://prices.example/api/news?symbols=KO%2CMSFT',
       'https://prices.example/api/fx?from=USD&to=EUR',
       'https://prices.example/api/search?q=vusa+etf',
+      'https://prices.example/api/history?symbol=VUSA.AS&from=2025-03-03',
     ]);
     for (const [, init] of calls) {
       expect(init.headers).toEqual({ 'X-Funancial-Token': 'secret' });
@@ -91,6 +95,16 @@ describe('market client', () => {
     };
     answer(body);
     await expect(fetchSearch('vusa')).resolves.toEqual(body);
+  });
+
+  it('returns the price history as the service sent it', async () => {
+    const body = {
+      symbol: 'VUSA.AS',
+      currency: 'EUR',
+      points: [{ date: '2025-03-03', close: 99.5 }],
+    };
+    answer(body);
+    await expect(fetchHistory('VUSA.AS', '2025-03-03')).resolves.toEqual(body);
   });
 
   it('sends 26 symbols as two requests and joins the answers', async () => {

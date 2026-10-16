@@ -53,6 +53,12 @@ export type SearchResult = {
   type: 'stock' | 'etf';
 };
 export type SearchResponse = { results: SearchResult[] };
+/** Closes oldest first, in the trading currency, one per day, week or month by how far back it goes. */
+export type HistoryResponse = {
+  symbol: string;
+  currency: string;
+  points: Array<{ date: LocalDate; close: number }>;
+};
 
 /** Live prices need a token; without one the app never asks. */
 export const marketConfigured = (): boolean => Boolean(import.meta.env.VITE_FUNANCIAL_API_TOKEN);
@@ -102,6 +108,9 @@ export const fetchFx = (from: string, to: string) => get<FxResponse>('fx', { fro
 
 export const fetchSearch = (q: string) => get<SearchResponse>('search', { q });
 
+export const fetchHistory = (symbol: string, from: LocalDate) =>
+  get<HistoryResponse>('history', { symbol: symbol.toUpperCase(), from });
+
 /** What the invest actions need from the price service; tests hand them a fake. */
 export const market = {
   fetchQuotes,
@@ -110,5 +119,6 @@ export const market = {
   fetchNews,
   fetchFx,
   fetchSearch,
+  fetchHistory,
 };
 export type Market = typeof market;
