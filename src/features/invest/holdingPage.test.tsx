@@ -111,14 +111,14 @@ describe('the way to a holding', () => {
     expect(screen.getByRole('tab', { name: 'Holdings' })).toHaveAttribute('aria-selected', 'true');
   });
 
-  it('goes back one step to the Invest it came from, with its pies choice kept', async () => {
-    const { router } = renderPage(dataOf(), '/invest?pies=together');
+  it('goes back one step to the Invest it came from, with its pie choice kept', async () => {
+    const { router } = renderPage(dataOf(), '/invest?pie=etfs');
     await userEvent.click(screen.getByRole('link', { name: /^VUSA\.AS · / }));
     await userEvent.click(screen.getByRole('link', { name: 'Back to Invest' }));
     // A step back in the history, not a new entry, so the first Android Back leaves Invest.
     expect(router.state.historyAction).toBe('POP');
     expect(router.state.location.pathname).toBe('/invest');
-    expect(router.state.location.search).toBe('?pies=together');
+    expect(router.state.location.search).toBe('?pie=etfs');
     expect(screen.queryByRole('heading', { level: 1, name: 'VUSA.AS' })).not.toBeInTheDocument();
   });
 

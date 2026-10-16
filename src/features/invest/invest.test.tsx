@@ -196,7 +196,7 @@ describe('Invest tabs', () => {
 });
 
 describe('Holdings tab', () => {
-  it('shows value, today and all-time change, a pie each for stocks and ETFs, and rows by type', () => {
+  it('shows value, today and all-time change, one pie with a choice of type, and rows by type', async () => {
     renderInvest(portfolioData());
     const value = region('Portfolio value');
     expect(within(value).getByText(usd(1_950_00))).toHaveClass('text-[34px]');
@@ -210,23 +210,30 @@ describe('Holdings tab', () => {
       `▼ ${usd(15_00)} today · ▲ ${formatPercent((5_000 * 100) / 190_000)} all time`,
     );
 
-    // Split to start with: a pie for the stocks and a pie for the ETFs, each with its legend.
-    const view = within(value).getByRole('group', { name: 'Pie view' });
+    // All to start with, one pie with its legend; Stocks and ETFs are a tap away.
+    const choices = screen.getByRole('group', { name: 'Allocation' });
     expect(
-      within(view)
+      within(choices)
         .getAllByRole('button')
         .map((b) => b.textContent),
-    ).toEqual(['Split', 'Together']);
-    expect(within(view).getByRole('button', { name: 'Split' })).toHaveAttribute(
+    ).toEqual(['All', 'Stocks', 'ETFs']);
+    expect(within(choices).getByRole('button', { name: 'All' })).toHaveAttribute(
       'aria-pressed',
       'true',
     );
     const legend = (name: string) =>
-      within(within(value).getByRole('group', { name }))
+      within(screen.getByRole('group', { name }))
         .getAllByRole('button')
         .map((b) => b.textContent ?? '')
         .filter((text) => text !== '');
+    expect(legend('All holdings')).toEqual([
+      `AAPL${usdWhole(950_00)}49%`,
+      `KO${usdWhole(600_00)}31%`,
+      `VWRL${usdWhole(400_00)}21%`,
+    ]);
+    await userEvent.click(within(choices).getByRole('button', { name: 'Stocks' }));
     expect(legend('Stocks')).toEqual([`AAPL${usdWhole(950_00)}61%`, `KO${usdWhole(600_00)}39%`]);
+    await userEvent.click(within(choices).getByRole('button', { name: 'ETFs' }));
     expect(legend('ETFs')).toEqual([`VWRL${usdWhole(400_00)}100%`]);
 
     // The rows are grouped under the same headings.
@@ -235,10 +242,11 @@ describe('Holdings tab', () => {
       ...within(screen.getByRole('list', { name: 'ETFs' })).getAllByRole('listitem'),
     ];
     expect(screen.queryByRole('list', { name: 'Other' })).not.toBeInTheDocument();
+    // Each says its break-even: what it cost a share.
     expect(rows.map((r) => r.textContent)).toEqual([
-      `KO · Coca-Cola10 shares${usd(600_00)}▲ ${formatPercent(20)}`,
-      `AAPL · Apple5 shares${usd(950_00)}▼ ${formatPercent(5)}`,
-      `VWRL · All-World ETF4 shares${usd(400_00)}▲ ${formatPercent(0)}`,
+      `KO · Coca-Cola10 shares · break-even ${usd(50_00)}${usd(600_00)}▲ ${formatPercent(20)}`,
+      `AAPL · Apple5 shares · break-even ${usd(200_00)}${usd(950_00)}▼ ${formatPercent(5)}`,
+      `VWRL · All-World ETF4 shares · break-even ${usd(100_00)}${usd(400_00)}▲ ${formatPercent(0)}`,
     ]);
     expect(within(rows[1]!).getByText(`▼ ${formatPercent(5)}`)).toHaveClass('text-danger');
     expect(within(rows[0]!).getByText(`▲ ${formatPercent(20)}`)).toHaveClass('text-accent-text');
@@ -256,7 +264,8 @@ describe('Holdings tab', () => {
     const data = noHoldings();
     data.tables.holding = [held({ shares: 1, quote: quote(60, 59) })];
     renderInvest(data);
-    expect(screen.getByText('1 share')).toBeInTheDocument();
+    // The default holding cost 500.00.
+    expect(screen.getByText(`1 share · break-even ${usd(500_00)}`)).toBeInTheDocument();
     expect(screen.queryByText(/^Best:/)).not.toBeInTheDocument();
   });
 

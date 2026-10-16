@@ -1,4 +1,4 @@
-import { screen, within } from '@testing-library/react';
+import { cleanup, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -63,6 +63,12 @@ function renderTab(data: DataSnapshot, path = '/invest') {
   return { router };
 }
 
+const selector = () => screen.getByRole('group', { name: 'Allocation' });
+const options = () =>
+  within(selector())
+    .getAllByRole('button')
+    .map((b) => b.textContent);
+const choose = (name: string) => userEvent.click(within(selector()).getByRole('button', { name }));
 const pie = (name: string) => screen.getByRole('group', { name });
 const none = (name: string) =>
   expect(screen.queryByRole('group', { name })).not.toBeInTheDocument();
@@ -73,58 +79,18 @@ const legend = (name: string) =>
     .map((b) => b.textContent)
     .filter(Boolean);
 
-describe('Holdings pies', () => {
-  it('splits into a pie of stocks and a pie of ETFs, each headed by its value and share', () => {
+describe('Holdings pie', () => {
+  it('starts on All: one pie of everything, with the share of each holding in its legend', () => {
     renderTab(mixed());
-    expect(screen.getByRole('button', { name: 'Split' })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByRole('button', { name: 'Together' })).toHaveAttribute(
-      'aria-pressed',
-      'false',
-    );
-    // By holding, biggest first, each with its share of its own pie.
-    expect(legend('Stocks')).toEqual([
-      `AAPL${usdWhole(2000_00)}67%`,
-      `KO${usdWhole(600_00)}20%`,
-      `ASML${usdWhole(400_00)}13%`,
-    ]);
-    expect(legend('ETFs')).toEqual([`VUSA${usdWhole(600_00)}60%`, `VWRL${usdWhole(400_00)}40%`]);
-    // The heading says what the type adds up to and its share of the whole portfolio.
-    expect(within(pie('Stocks')).getByText(`${usdWhole(3000_00)} · 75%`)).toBeInTheDocument();
-    expect(within(pie('ETFs')).getByText(`${usdWhole(1000_00)} · 25%`)).toBeInTheDocument();
-    none('All holdings');
-    // The stocks come first, in the pies and in the rows below them.
-    expect(screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent)).toEqual([
-      'Stocks',
-      'ETFs',
-      'Stocks',
-      'ETFs',
-    ]);
-  });
-
-  it('writes the share on each slice of 6% or more, and leaves smaller ones to the legend', () => {
-    // $10,000: 80%, 10%, exactly 6% and 4%.
-    renderTab(dataOf(worth('AAA', 8000), worth('BBB', 1000), worth('CCC', 600), worth('DDD', 400)));
-    const stocks = pie('Stocks');
-    // Once on the pie and once in the legend ...
-    for (const text of ['80%', '10%', '6%']) {
-      expect(within(stocks).getAllByText(text), text).toHaveLength(2);
-    }
-    // ... but the 4% slice is too small for the pie.
-    expect(within(stocks).getAllByText('4%')).toHaveLength(1);
-    expect(within(stocks).getByText('DDD').closest('button')).toHaveTextContent('4%');
-  });
-
-  it('shows everything in one pie when Together is chosen, and keeps the choice in the address', async () => {
-    const { router } = renderTab(mixed());
-    await userEvent.click(screen.getByRole('button', { name: 'Together' }));
-
-    expect(screen.getByRole('button', { name: 'Together' })).toHaveAttribute(
+    expect(options()).toEqual(['All', 'Stocks', 'ETFs']);
+    expect(within(selector()).getByRole('button', { name: 'All' })).toHaveAttribute(
       'aria-pressed',
       'true',
     );
-    expect(router.state.location.search).toBe('?pies=together');
-    none('Stocks');
-    none('ETFs');
+    expect(within(selector()).getByRole('button', { name: 'Stocks' })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    );
     // $4,000 in all, biggest holding first.
     expect(legend('All holdings')).toEqual([
       `AAPL${usdWhole(2000_00)}50%`,
@@ -133,29 +99,116 @@ describe('Holdings pies', () => {
       `ASML${usdWhole(400_00)}10%`,
       `VWRL${usdWhole(400_00)}10%`,
     ]);
-    // The rows below keep their groups.
-    expect(screen.getByRole('list', { name: 'Stocks' })).toBeInTheDocument();
-    expect(screen.getByRole('list', { name: 'ETFs' })).toBeInTheDocument();
-
-    await userEvent.click(screen.getByRole('button', { name: 'Split' }));
-    expect(router.state.location.search).toBe('');
-    expect(pie('Stocks')).toBeInTheDocument();
-    none('All holdings');
+    // The centre says what the selection adds up to.
+    expect(within(pie('All holdings')).getAllByText(usdWhole(4000_00))).toHaveLength(1);
+    expect(within(pie('All holdings')).getAllByText('All holdings')).toHaveLength(1);
+    none('Stocks');
+    none('ETFs');
+    // The old switch is gone.
+    for (const name of ['Split', 'Together']) {
+      expect(screen.queryByRole('button', { name })).not.toBeInTheDocument();
+    }
   });
 
-  it('opens Together from the address, and keeps other parts of it', async () => {
-    const { router } = renderTab(mixed(), '/invest?tab=holdings&pies=together');
+  it('draws one bigger pie, 180px wide', () => {
+    renderTab(mixed());
+    expect(pie('All holdings').querySelector('svg')).toHaveAttribute('width', '180');
+  });
+
+  it('shows only the stocks, or only the ETFs, when chosen, and keeps the choice in the address', async () => {
+    const { router } = renderTab(mixed());
+    await choose('Stocks');
+    expect(within(selector()).getByRole('button', { name: 'Stocks' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(router.state.location.search).toBe('?pie=stocks');
+    none('All holdings');
+    expect(legend('Stocks')).toEqual([
+      `AAPL${usdWhole(2000_00)}67%`,
+      `KO${usdWhole(600_00)}20%`,
+      `ASML${usdWhole(400_00)}13%`,
+    ]);
+    expect(within(pie('Stocks')).getByText(usdWhole(3000_00))).toBeInTheDocument();
+
+    await choose('ETFs');
+    expect(router.state.location.search).toBe('?pie=etfs');
+    expect(legend('ETFs')).toEqual([`VUSA${usdWhole(600_00)}60%`, `VWRL${usdWhole(400_00)}40%`]);
+    expect(within(pie('ETFs')).getByText(usdWhole(1000_00))).toBeInTheDocument();
+    none('Stocks');
+
+    await choose('All');
+    expect(router.state.location.search).toBe('');
     expect(pie('All holdings')).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'Split' }));
+  });
+
+  it('opens a choice from the address, and keeps other parts of it', async () => {
+    const { router } = renderTab(mixed(), '/invest?tab=holdings&pie=etfs');
+    expect(pie('ETFs')).toBeInTheDocument();
+    expect(within(selector()).getByRole('button', { name: 'ETFs' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    await choose('Stocks');
+    expect(router.state.location.search).toBe('?tab=holdings&pie=stocks');
+    await choose('All');
     expect(router.state.location.search).toBe('?tab=holdings');
-    await userEvent.click(screen.getByRole('button', { name: 'Together' }));
-    expect(router.state.location.search).toBe('?tab=holdings&pies=together');
+  });
+
+  it('ignores the old ?pies= in the address, and a choice it does not know', () => {
+    renderTab(mixed(), '/invest?pies=together');
+    expect(pie('All holdings')).toBeInTheDocument();
+    cleanup();
+    renderTab(mixed(), '/invest?pie=bonds');
+    expect(pie('All holdings')).toBeInTheDocument();
+  });
+
+  it('leaves out an option that has nothing priced, and falls back to All for it', () => {
+    const unpriced = makeHolding({
+      id: 'new',
+      symbol: 'NEW',
+      name: 'New ETF',
+      type: 'etf',
+      quote: null,
+    });
+    renderTab(dataOf(worth('AAPL', 1000), unpriced), '/invest?pie=etfs');
+    // The ETF has no price: no ETFs option, so the address's choice shows All instead.
+    expect(options()).toEqual(['All', 'Stocks']);
+    expect(pie('All holdings')).toBeInTheDocument();
+    // Its row still stands under the ETFs heading, saying it has no price yet.
+    const row = within(screen.getByRole('list', { name: 'ETFs' })).getByRole('link');
+    expect(row).toHaveTextContent('Not priced yet');
+  });
+
+  it('has Other as a choice when there are other holdings, and puts it last', async () => {
+    renderTab(dataOf(worth('AAPL', 1000), worth('GOLD', 500, 'other')));
+    expect(options()).toEqual(['All', 'Stocks', 'Other']);
+    await choose('Other');
+    // Its one holding is the whole pie: in the centre and in the legend.
+    expect(within(pie('Other')).getAllByText(usdWhole(500_00))).toHaveLength(2);
+    expect(legend('Other')).toEqual([`GOLD${usdWhole(500_00)}100%`]);
+    // The rows' lists are the ones with a name.
+    const lists = screen.getAllByRole('list', { name: /^(Stocks|ETFs|Other)$/ });
+    expect(lists.map((l) => l.getAttribute('aria-label'))).toEqual(['Stocks', 'Other']);
+  });
+
+  it('writes the share on each slice of 6% or more, and leaves smaller ones to the legend', () => {
+    // $10,000: 80%, 10%, exactly 6% and 4%.
+    renderTab(dataOf(worth('AAA', 8000), worth('BBB', 1000), worth('CCC', 600), worth('DDD', 400)));
+    const all = pie('All holdings');
+    // Once on the pie and once in the legend ...
+    for (const text of ['80%', '10%', '6%']) {
+      expect(within(all).getAllByText(text), text).toHaveLength(2);
+    }
+    // ... but the 4% slice is too small for the pie.
+    expect(within(all).getAllByText('4%')).toHaveLength(1);
+    expect(within(all).getByText('DDD').closest('button')).toHaveTextContent('4%');
   });
 
   it('folds all but the biggest five into Other', () => {
     const many = ['A', 'B', 'C', 'D', 'E', 'F', 'G'].map((s, i) => worth(s, (7 - i) * 100));
     renderTab(dataOf(...many));
-    expect(legend('Stocks')).toEqual([
+    expect(legend('All holdings')).toEqual([
       `A${usdWhole(700_00)}25%`,
       `B${usdWhole(600_00)}21%`,
       `C${usdWhole(500_00)}18%`,
@@ -165,56 +218,42 @@ describe('Holdings pies', () => {
     ]);
   });
 
-  it('has no pie for a type with nothing priced, but still lists its holdings', () => {
-    const unpriced = makeHolding({
-      id: 'new',
-      symbol: 'NEW',
-      name: 'New ETF',
-      type: 'etf',
-      quote: null,
-    });
-    renderTab(dataOf(worth('AAPL', 1000), unpriced));
-    expect(pie('Stocks')).toBeInTheDocument();
-    none('ETFs');
-    expect(legend('Stocks')).toEqual([`AAPL${usdWhole(1000_00)}100%`]);
-    // Its row stands under the ETFs heading, saying it has no price yet.
-    const row = within(screen.getByRole('list', { name: 'ETFs' })).getByRole('link');
-    expect(row).toHaveTextContent('Not priced yet');
-  });
-
-  it('leaves out a type that has no holdings, and puts Other last', () => {
-    renderTab(dataOf(worth('AAPL', 1000), worth('GOLD', 500, 'other')));
-    none('ETFs');
-    expect(screen.queryByRole('list', { name: 'ETFs' })).not.toBeInTheDocument();
-    expect(within(pie('Stocks')).getByText(`${usdWhole(1000_00)} · 67%`)).toBeInTheDocument();
-    expect(within(pie('Other')).getByText(`${usdWhole(500_00)} · 33%`)).toBeInTheDocument();
-    // The rows' lists are the ones with a name.
-    const lists = screen.getAllByRole('list', { name: /^(Stocks|ETFs|Other)$/ });
-    expect(lists.map((l) => l.getAttribute('aria-label'))).toEqual(['Stocks', 'Other']);
-  });
-
-  it('shows the tapped slice in the middle of its own pie only', async () => {
+  it('shows the tapped slice in the middle of the pie, and starts clear on the next choice', async () => {
     renderTab(mixed());
     await userEvent.click(
-      within(pie('Stocks')).getByRole('button', { name: `KO, ${usd(600_00)}, 20%` }),
+      within(pie('All holdings')).getByRole('button', { name: `KO, ${usd(600_00)}, 15%` }),
     );
-    expect(within(pie('Stocks')).getByText(usd(600_00))).toBeInTheDocument();
-    expect(within(pie('Stocks')).getByText('KO · 20%')).toBeInTheDocument();
-    expect(within(pie('ETFs')).queryByText(/^V[A-Z]+ · \d+%$/)).not.toBeInTheDocument();
-    expect(within(pie('ETFs')).getAllByText('ETFs')).toHaveLength(2); // heading, and its idle centre
+    expect(within(pie('All holdings')).getByText(usd(600_00))).toBeInTheDocument();
+    expect(within(pie('All holdings')).getByText('KO · 15%')).toBeInTheDocument();
+
+    await choose('Stocks');
+    expect(within(pie('Stocks')).queryByText(/ · \d+%$/)).not.toBeInTheDocument();
+    expect(within(pie('Stocks')).getAllByText('Stocks')).toHaveLength(1); // its idle centre
   });
 
-  it('shows no pies, and no choice between them, with nothing priced', () => {
+  it('shows no pie, and no choice between them, with nothing priced', () => {
     renderTab(dataOf(makeHolding({ quote: null })));
-    expect(screen.queryByRole('button', { name: 'Split' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Together' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: 'Allocation' })).not.toBeInTheDocument();
     expect(screen.queryAllByRole('group')).toEqual([]);
   });
 
-  it('no longer groups by type or sector with chips', () => {
+  it('lists the rows under their type, Stocks first, and no longer by type or sector with chips', () => {
     renderTab(mixed());
+    expect(screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent)).toEqual([
+      'Stocks',
+      'ETFs',
+    ]);
     for (const name of ['By holding', 'By type', 'By sector']) {
       expect(screen.queryByRole('button', { name })).not.toBeInTheDocument();
+    }
+  });
+
+  it('has choices at least 44px tall, and animates nothing unless motion is welcome', () => {
+    renderTab(mixed());
+    for (const name of ['All', 'Stocks', 'ETFs']) {
+      const button = within(selector()).getByRole('button', { name });
+      expect(button).toHaveClass('min-h-11');
+      expect(button.className).not.toMatch(/(^|\s)(transition|animate-)/);
     }
   });
 });

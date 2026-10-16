@@ -107,7 +107,7 @@ const pie = (name: string) => screen.getByRole('group', { name });
 const noRateNote = (chosen: string) => `Showing EUR until a ${chosen} rate loads.`;
 
 describe('Invest shown in another currency: Holdings', () => {
-  it('converts the value, the day and the pies, and leaves the percentages as they are', () => {
+  it('converts the value, the day and the pie, and leaves the percentages as they are', async () => {
     renderInvest(dataOf([ko(), vusa()], inDollars));
     expect(chip('USD')).toHaveTextContent('Shown in USD ▾');
     // EUR 1,000.00 at 1.1.
@@ -116,17 +116,28 @@ describe('Invest shown in another currency: Holdings', () => {
     // 120 on 880 paid, in euros and in dollars alike.
     expect(screen.getByText(`▲ ${formatPercent((120 * 100) / 880)} all time`)).toBeInTheDocument();
 
-    // The type headings say what each adds up to.
-    expect(within(pie('Stocks')).getByText(`${usdWhole(660_00)} · 60%`)).toBeInTheDocument();
-    expect(within(pie('ETFs')).getByText(`${usdWhole(440_00)} · 40%`)).toBeInTheDocument();
-    // Each pie's legend and its centre.
+    // The pie of everything: its legend and its centre.
+    const all = within(pie('All holdings'));
+    expect(all.getByText('KO').closest('button')).toHaveTextContent(`KO${usdWhole(660_00)}60%`);
+    expect(all.getByText('VUSA').closest('button')).toHaveTextContent(`VUSA${usdWhole(440_00)}40%`);
+    expect(all.getByText(usdWhole(1_100_00))).toBeInTheDocument();
+    // And of each type, with its own total in the centre.
+    await userEvent.click(screen.getByRole('button', { name: 'Stocks' }));
     const stocks = within(pie('Stocks'));
     expect(stocks.getByText('KO').closest('button')).toHaveTextContent(`KO${usdWhole(660_00)}100%`);
     expect(stocks.getAllByText(usdWhole(660_00)).length).toBeGreaterThanOrEqual(2);
+    await userEvent.click(screen.getByRole('button', { name: 'ETFs' }));
+    expect(within(pie('ETFs')).getAllByText(usdWhole(440_00)).length).toBeGreaterThanOrEqual(2);
 
-    // The rows.
+    // The rows, and the break-even of each: EUR 50.00 and EUR 95.00 a share at 1.1.
     expect(screen.getByRole('link', { name: /^KO · / })).toHaveTextContent(usd(660_00));
+    expect(screen.getByRole('link', { name: /^KO · / })).toHaveTextContent(
+      `break-even ${usd(55_00)}`,
+    );
     expect(screen.getByRole('link', { name: /^VUSA · / })).toHaveTextContent(usd(440_00));
+    expect(screen.getByRole('link', { name: /^VUSA · / })).toHaveTextContent(
+      `break-even ${usd(104_50)}`,
+    );
     expect(screen.getByText(/^Best: /)).toHaveTextContent(
       `Best: KO ${formatPercent(20, true)} · Worst: VUSA ${formatPercent((20 * 100) / 380, true)}`,
     );
@@ -137,8 +148,8 @@ describe('Invest shown in another currency: Holdings', () => {
 
   it('names a selected slice in the currency Invest is shown in', async () => {
     renderInvest(dataOf([ko(), vusa()], inDollars));
-    await userEvent.click(within(pie('Stocks')).getByText('KO').closest('button')!);
-    expect(within(pie('Stocks')).getAllByText(usd(660_00)).length).toBeGreaterThanOrEqual(1);
+    await userEvent.click(within(pie('All holdings')).getByText('KO').closest('button')!);
+    expect(within(pie('All holdings')).getAllByText(usd(660_00)).length).toBeGreaterThanOrEqual(1);
   });
 
   it('shows the profile currency and says so until the rate loads', () => {
@@ -217,8 +228,8 @@ describe('Invest shown in another currency: totals that add up', () => {
 
   it('names a selected slice by its row, so the pie adds up to the portfolio too', async () => {
     renderInvest(dataOf(twins(), inDollars));
-    await userEvent.click(within(pie('Stocks')).getByText('AAA').closest('button')!);
-    expect(within(pie('Stocks')).getAllByText(usd(660_04)).length).toBeGreaterThanOrEqual(1);
+    await userEvent.click(within(pie('All holdings')).getByText('AAA').closest('button')!);
+    expect(within(pie('All holdings')).getAllByText(usd(660_04)).length).toBeGreaterThanOrEqual(1);
   });
 });
 
