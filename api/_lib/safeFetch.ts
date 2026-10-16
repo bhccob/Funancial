@@ -1,5 +1,7 @@
 import { lookup } from 'node:dns/promises';
-import { BlockList, isIP } from 'node:net';
+import { request as httpRequest, type IncomingMessage } from 'node:http';
+import { request as httpsRequest } from 'node:https';
+import { BlockList, isIP, type LookupFunction } from 'node:net';
 
 const TIMEOUT_MS = 5000;
 // 2 MiB, not 1: IKEA product pages put their JSON-LD, and so the price, at about 1.1 MB. The 5 s
@@ -47,7 +49,31 @@ function isPrivate(address: string): boolean {
   return family === 0 || PRIVATE.check(address, family === 6 ? 'ipv6' : 'ipv4');
 }
 
-async function assertPublic(url: URL): Promise<void> {
+/**
+ * The lookup every socket connects through. It refuses a name that has any private address, and
+ * hands the socket the very addresses it checked, so the check and the connection are one answer:
+ * a second lookup, by the socket or anything else, is where DNS rebinding would swap in a private
+ * one. It answers in the shape the socket asked for: an array under `all`, else one address.
+ */
+export const checkedLookup: LookupFunction = (host, options, callback) => {
+  lookup(host, { ...options, all: true }).then(
+    (addresses) => {
+      const [first] = addresses;
+      if (!first || addresses.some(({ address }) => isPrivate(address))) {
+        callback(new BlockedUrlError('not a public address'), []);
+      } else if (options.all) {
+        callback(null, addresses);
+      } else {
+        callback(null, first.address, first.family);
+      }
+    },
+    (err: NodeJS.ErrnoException) => callback(err, []),
+  );
+};
+
+// What can be judged before connecting. A literal address never reaches the lookup, so it is
+// judged here; a name is judged by checkedLookup, in the one lookup that connects.
+function assertAllowed(url: URL): void {
   if (url.protocol !== 'http:' && url.protocol !== 'https:') {
     throw new BlockedUrlError('only http and https');
   }
@@ -55,29 +81,44 @@ async function assertPublic(url: URL): Promise<void> {
   // Square brackets frame an IPv6 literal, a trailing dot is the same host ("localhost.").
   const host = url.hostname.replace(/^\[|\]$/g, '').replace(/\.$/, '');
   if (host === 'localhost' || host.endsWith('.localhost')) throw new BlockedUrlError('localhost');
-  // shortcut: fetch resolves the name again after this check, so a hostile DNS server can answer
-  // differently the second time (DNS rebinding), and the lookup itself ignores the timeout.
-  // Pinning the checked address with a custom undici dispatcher closes both; do that before this
-  // route serves anyone but its owner.
-  const addresses = isIP(host) ? [{ address: host }] : await lookup(host, { all: true });
-  if (addresses.length === 0 || addresses.some(({ address }) => isPrivate(address))) {
-    throw new BlockedUrlError('not a public address');
-  }
+  if (isIP(host) && isPrivate(host)) throw new BlockedUrlError('not a public address');
+}
+
+// node:http never follows a redirect, so every hop is the caller's to check. The signal covers the
+// lookup, the connection, the headers and the body.
+function send(url: URL, signal: AbortSignal): Promise<IncomingMessage> {
+  return new Promise((resolve, reject) => {
+    const request = url.protocol === 'https:' ? httpsRequest : httpRequest;
+    request(
+      url,
+      {
+        lookup: checkedLookup,
+        signal,
+        headers: {
+          Accept: 'text/html,application/xhtml+xml',
+          // Left out, a server may choose any encoding, and the body is read as it comes.
+          'Accept-Encoding': 'identity',
+          'User-Agent': 'Mozilla/5.0 (compatible; Funancial/1.0)',
+        },
+      },
+      resolve,
+    )
+      .on('error', reject)
+      .end();
+  });
 }
 
 // A bigger page is cut at the cap, not refused: a product's name and price sit well inside it.
-async function readCapped(res: Response): Promise<string> {
-  const reader = res.body?.getReader();
-  if (!reader) return '';
-  const chunks: Uint8Array[] = [];
+async function readCapped(res: IncomingMessage): Promise<string> {
+  const chunks: Buffer[] = [];
   let size = 0;
-  while (size < MAX_BYTES) {
-    const { done, value } = await reader.read();
-    if (done) return Buffer.concat(chunks).toString('utf8');
-    chunks.push(value.subarray(0, MAX_BYTES - size));
-    size += value.byteLength;
+  // An abort, the 5 s timeout included, also fails this stream (ECONNRESET), so a body that
+  // stalls cannot outlast the budget. Leaving the loop early destroys the stream and its socket.
+  for await (const chunk of res as AsyncIterable<Buffer>) {
+    chunks.push(chunk.subarray(0, MAX_BYTES - size));
+    size += chunk.byteLength;
+    if (size >= MAX_BYTES) break;
   }
-  await reader.cancel();
   return Buffer.concat(chunks).toString('utf8');
 }
 
@@ -92,29 +133,24 @@ export async function safeFetch(link: string): Promise<string> {
   } catch {
     throw new BlockedUrlError('not a link');
   }
-  // One budget for every hop and the body.
+  // One budget for every hop, the lookup and the body.
   const signal = AbortSignal.timeout(TIMEOUT_MS);
   for (let redirects = 0; ; redirects += 1) {
-    await assertPublic(url);
-    const res = await fetch(url.href, {
-      redirect: 'manual',
-      signal,
-      headers: {
-        Accept: 'text/html,application/xhtml+xml',
-        'User-Agent': 'Mozilla/5.0 (compatible; Funancial/1.0)',
-      },
-    });
-    if (res.status >= 300 && res.status < 400) {
-      await res.body?.cancel();
-      const location = res.headers.get('Location');
-      if (!location || redirects === MAX_REDIRECTS) throw new Error(`redirect ${res.status} stops`);
+    signal.throwIfAborted();
+    assertAllowed(url);
+    const res = await send(url, signal);
+    const status = res.statusCode ?? 0;
+    if (status >= 300 && status < 400) {
+      res.destroy();
+      const location = res.headers.location;
+      if (!location || redirects === MAX_REDIRECTS) throw new Error(`redirect ${status} stops`);
       url = new URL(location, url);
       continue;
     }
-    const type = res.headers.get('Content-Type') ?? '';
-    if (!res.ok || !HTML.test(type)) {
-      await res.body?.cancel();
-      throw new Error(`unreadable page: ${res.status} ${type}`);
+    const type = res.headers['content-type'] ?? '';
+    if (status < 200 || status >= 300 || !HTML.test(type)) {
+      res.destroy();
+      throw new Error(`unreadable page: ${status} ${type}`);
     }
     return readCapped(res);
   }

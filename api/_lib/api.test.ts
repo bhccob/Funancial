@@ -1,4 +1,9 @@
 import { lookup } from 'node:dns/promises';
+import { EventEmitter } from 'node:events';
+import type { IncomingMessage, RequestOptions } from 'node:http';
+import { isIP, type LookupFunction } from 'node:net';
+import { Readable } from 'node:stream';
+import type { ReadableStream as WebReadableStream } from 'node:stream/web';
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import { GET as dividendsGET } from '../dividends.js';
 import { GET as extractGET } from '../extract.js';
@@ -9,9 +14,15 @@ import { GET as profileGET } from '../profile.js';
 import { GET as quoteGET, OPTIONS as quoteOPTIONS } from '../quote.js';
 import { GET as searchGET } from '../search.js';
 import { parseSymbols } from './http.js';
+import { BlockedUrlError, checkedLookup } from './safeFetch.js';
 import * as yahoo from './yahoo.js';
 
 vi.mock('node:dns/promises', () => ({ lookup: vi.fn() }));
+
+// safeFetch connects with node:http(s). Both are one mock here, which is told which module it is.
+const { requestMock } = vi.hoisted(() => ({ requestMock: vi.fn() }));
+vi.mock('node:http', () => ({ request: (...args: unknown[]) => requestMock('http:', ...args) }));
+vi.mock('node:https', () => ({ request: (...args: unknown[]) => requestMock('https:', ...args) }));
 
 vi.mock('./yahoo.js', async (orig) => ({
   ...(await orig<typeof import('./yahoo.js')>()),
@@ -625,7 +636,10 @@ describe('price service', () => {
     const dns = vi.mocked(lookup) as unknown as Mock<
       (host: string, options: { all: true }) => Promise<Found[]>
     >;
-    const fetchMock = vi.fn<typeof fetch>();
+    // The "network": what the page at a URL answers, as a Response, and the options it was asked with.
+    const serve = vi.fn<(href: string, options: RequestOptions) => Response | Promise<Response>>();
+    // What `checkedLookup` handed each socket: [error, addresses or address, family].
+    const handed: unknown[][] = [];
     const PUBLIC: Found[] = [{ address: '93.184.216.34', family: 4 }];
     const HTML = { 'Content-Type': 'text/html; charset=utf-8' };
     const page = (body: BodyInit | null, headers: Record<string, string> = HTML) =>
@@ -634,11 +648,77 @@ describe('price service', () => {
       new Response(null, { status, headers: { Location: to } });
     const extract = (url: string, headers?: Record<string, string>) =>
       extractGET(request(`/api/extract?url=${encodeURIComponent(url)}`, headers));
-    const fetched = () => fetchMock.mock.calls.map(([url]) => String(url));
+    const fetched = () => serve.mock.calls.map(([href]) => href);
+
+    // A stand-in for node:http's request. Like the real one it asks the `lookup` option for the
+    // address to connect to (unless the host is a literal address), honours `signal`, never
+    // follows a redirect, and answers with a stream carrying statusCode and headers.
+    function fakeRequest(
+      via: string,
+      url: URL,
+      options: RequestOptions,
+      onResponse: (res: IncomingMessage) => void,
+    ) {
+      // As the real ones do, node:http takes only http: and node:https only https:.
+      if (url.protocol !== via) throw new TypeError(`Protocol "${url.protocol}" not supported`);
+      const req = new EventEmitter();
+      let failed = false;
+      const fail = (err: unknown) => {
+        if (failed) return;
+        failed = true;
+        queueMicrotask(() => req.emit('error', err));
+      };
+      let body: Readable | undefined;
+      const abort = () => {
+        fail(
+          Object.assign(new Error('The operation was aborted'), {
+            name: 'AbortError',
+            code: 'ABORT_ERR',
+            cause: options.signal?.reason,
+          }),
+        );
+        // A body being read fails too, with a reset.
+        body?.destroy(Object.assign(new Error('aborted'), { code: 'ECONNRESET' }));
+      };
+      if (options.signal?.aborted) abort();
+      else options.signal?.addEventListener('abort', abort, { once: true });
+
+      const connect = async () => {
+        try {
+          const host = url.hostname.replace(/^\[|\]$/g, '');
+          if (!isIP(host)) {
+            await new Promise<void>((resolve, reject) => {
+              (options.lookup as LookupFunction)(host, { all: true }, (err, ...answer) => {
+                handed.push([err, ...answer]);
+                if (err) reject(err);
+                else resolve();
+              });
+            });
+          }
+          const res = await serve(url.href, options);
+          if (failed) return;
+          body = res.body ? Readable.fromWeb(res.body as WebReadableStream) : Readable.from([]);
+          onResponse(
+            Object.assign(body, {
+              statusCode: res.status,
+              headers: Object.fromEntries(res.headers),
+            }) as unknown as IncomingMessage,
+          );
+        } catch (err) {
+          fail(err);
+        }
+      };
+      return Object.assign(req, {
+        end() {
+          setImmediate(connect);
+          return req;
+        },
+      });
+    }
     const ld = (data: unknown) =>
       `<script type="application/ld+json">${JSON.stringify(data)}</script>`;
     const read = async (body: string) => {
-      fetchMock.mockImplementation(async () => page(body));
+      serve.mockImplementation(async () => page(body));
       const res = await extract('https://shop.example/p');
       expect(res.status).toBe(200);
       return res.json();
@@ -651,12 +731,12 @@ describe('price service', () => {
 
     beforeEach(() => {
       dns.mockResolvedValue(PUBLIC);
-      vi.stubGlobal('fetch', fetchMock);
+      requestMock.mockImplementation(fakeRequest);
+      handed.length = 0;
       vi.spyOn(console, 'error').mockImplementation(() => {});
     });
 
     afterEach(() => {
-      vi.unstubAllGlobals();
       vi.restoreAllMocks();
     });
 
@@ -672,7 +752,7 @@ describe('price service', () => {
       expect(res.status).toBe(401);
       expect(res.headers.get('Cache-Control')).toBe('no-store');
       expect(dns).not.toHaveBeenCalled();
-      expect(fetchMock).not.toHaveBeenCalled();
+      expect(requestMock).not.toHaveBeenCalled();
     });
 
     it('refuses a missing, malformed or non-http(s) link without looking it up', async () => {
@@ -690,7 +770,7 @@ describe('price service', () => {
       for (const url of bad) await refused(url);
       expect((await extractGET(request('/api/extract'))).status).toBe(400);
       expect(dns).not.toHaveBeenCalled();
-      expect(fetchMock).not.toHaveBeenCalled();
+      expect(requestMock).not.toHaveBeenCalled();
     });
 
     it('refuses localhost and private, loopback, link-local, ULA and unspecified addresses', async () => {
@@ -765,11 +845,13 @@ describe('price service', () => {
         await refused(`http://${host}/`);
         await refused(`https://${host}:8443/admin?x=1`);
       }
-      expect(fetchMock).not.toHaveBeenCalled();
+      // Refused before any connection, and without a lookup either.
+      expect(requestMock).not.toHaveBeenCalled();
+      expect(dns).not.toHaveBeenCalled();
     });
 
     it('lets public literal addresses next to the private ranges through', async () => {
-      fetchMock.mockImplementation(async () => page('<title>x</title>'));
+      serve.mockImplementation(async () => page('<title>x</title>'));
       const hosts = [
         '8.8.8.8',
         '11.0.0.1',
@@ -797,7 +879,7 @@ describe('price service', () => {
       for (const host of hosts) {
         expect((await extract(`https://${host}/p`)).status, host).toBe(200);
       }
-      expect(fetchMock).toHaveBeenCalledTimes(hosts.length);
+      expect(serve).toHaveBeenCalledTimes(hosts.length);
     });
 
     it('refuses a hostname when any address it resolves to is private', async () => {
@@ -831,7 +913,7 @@ describe('price service', () => {
         await refused('https://evil.example/p');
       }
       expect(dns).toHaveBeenCalledWith('evil.example', { all: true });
-      expect(fetchMock).not.toHaveBeenCalled();
+      expect(serve).not.toHaveBeenCalled();
     });
 
     it('lets a hostname that resolves only to public addresses through', async () => {
@@ -839,13 +921,17 @@ describe('price service', () => {
         { address: '93.184.216.34', family: 4 },
         { address: '2606:2800:220:1::1', family: 6 },
       ]);
-      fetchMock.mockImplementation(async () => page('<title>Chair</title>'));
+      serve.mockImplementation(async () => page('<title>Chair</title>'));
       const res = await extract('https://shop.example/chair?id=7');
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({ name: 'Chair', price: null, currency: null });
       expect(dns).toHaveBeenCalledWith('shop.example', { all: true });
       expect(fetched()).toEqual(['https://shop.example/chair?id=7']);
-      expect(fetchMock.mock.calls[0]![1]).toMatchObject({ redirect: 'manual' });
+      // Sent through the checked lookup, naming what it takes and no encoding but identity.
+      expect(serve.mock.calls[0]![1]).toMatchObject({
+        lookup: checkedLookup,
+        headers: { Accept: 'text/html,application/xhtml+xml', 'Accept-Encoding': 'identity' },
+      });
     });
 
     it('refuses a redirect to a private address, a private hostname or a non-http scheme', async () => {
@@ -868,8 +954,8 @@ describe('price service', () => {
       ];
       for (const to of targets) {
         for (const status of [301, 302, 303, 307, 308]) {
-          fetchMock.mockReset();
-          fetchMock.mockImplementation(async () => redirect(to, status));
+          serve.mockReset();
+          serve.mockImplementation(async () => redirect(to, status));
           await refused('https://shop.example/short');
           // The public first hop was fetched; the target never was.
           expect(fetched(), to).toEqual(['https://shop.example/short']);
@@ -887,12 +973,11 @@ describe('price service', () => {
         'https://b.example/3?x=1': () => redirect('//c.example/4'),
         'https://c.example/4': () => page('<title>Landed</title>'),
       };
-      fetchMock.mockImplementation(async (url) => hops[String(url)]!());
+      serve.mockImplementation(async (url) => hops[String(url)]!());
       const res = await extract('https://a.example/1');
       expect(await res.json()).toEqual({ name: 'Landed', price: null, currency: null });
       expect(fetched()).toEqual(Object.keys(hops));
-      for (const [, init] of fetchMock.mock.calls)
-        expect(init).toMatchObject({ redirect: 'manual' });
+      for (const [, options] of serve.mock.calls) expect(options.lookup).toBe(checkedLookup);
       expect(dns.mock.calls.map(([host]) => host)).toEqual([
         'a.example',
         'a.example',
@@ -901,21 +986,21 @@ describe('price service', () => {
       ]);
 
       // A public first hop that bounces to a private hostname is stopped at that hop.
-      fetchMock.mockReset();
-      fetchMock.mockImplementation(async () => redirect('https://internal.example/'));
+      serve.mockReset();
+      serve.mockImplementation(async () => redirect('https://internal.example/'));
       await refused('https://a.example/1');
       expect(fetched()).toEqual(['https://a.example/1']);
     });
 
     it('gives up on a fourth redirect, and on a loop, as an upstream failure', async () => {
-      fetchMock.mockImplementation(async (url) => redirect(`${String(url)}x`));
+      serve.mockImplementation(async (url) => redirect(`${String(url)}x`));
       await upstreamFailure(await extract('https://a.example/'));
       // The first request plus three redirects.
-      expect(fetchMock).toHaveBeenCalledTimes(4);
+      expect(serve).toHaveBeenCalledTimes(4);
     });
 
     it('treats a redirect with no Location as a failure', async () => {
-      fetchMock.mockImplementation(async () => new Response(null, { status: 302 }));
+      serve.mockImplementation(async () => new Response(null, { status: 302 }));
       await upstreamFailure(await extract('https://a.example/'));
     });
 
@@ -926,17 +1011,17 @@ describe('price service', () => {
       const room = cap - head.length - tag.length;
       const want = { name: 'Big', price: 7, currency: null };
 
-      fetchMock.mockImplementation(async () => page(head + ' '.repeat(room) + tag));
+      serve.mockImplementation(async () => page(head + ' '.repeat(room) + tag));
       expect(await (await extract('https://shop.example/p')).json()).toEqual(want);
 
       // One byte further and the tag is cut off at the cap: the page is read, not refused.
-      fetchMock.mockImplementation(async () => page(head + ' '.repeat(room + 1) + tag));
+      serve.mockImplementation(async () => page(head + ' '.repeat(room + 1) + tag));
       const cut = await extract('https://shop.example/p');
       expect(cut.status).toBe(200);
       expect(await cut.json()).toEqual({ name: 'Big', price: null, currency: null });
 
       // Whatever follows the cap is never read.
-      fetchMock.mockImplementation(async () => page(head + ' '.repeat(cap) + tag));
+      serve.mockImplementation(async () => page(head + ' '.repeat(cap) + tag));
       expect(await (await extract('https://shop.example/p')).json()).toEqual({
         name: 'Big',
         price: null,
@@ -964,7 +1049,7 @@ describe('price service', () => {
       ].join('');
       const body = `<!doctype html><html><head>${head}</head><body>${'<p>filler</p>'.repeat(250_000)}</body></html>`;
       expect(body.length).toBeGreaterThan(3 * 1024 * 1024);
-      fetchMock.mockImplementation(async () => page(body));
+      serve.mockImplementation(async () => page(body));
       const res = await extract('https://shop.example/p');
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({ name: 'Standing Desk', price: 249, currency: 'GBP' });
@@ -974,7 +1059,7 @@ describe('price service', () => {
       let pulls = 0;
       const first = new TextEncoder().encode('<title>Endless</title>'.padEnd(256 * 1024, ' '));
       const chunk = new Uint8Array(256 * 1024).fill(32);
-      fetchMock.mockImplementation(async () => {
+      serve.mockImplementation(async () => {
         const body = new ReadableStream<Uint8Array>({
           pull(controller) {
             pulls += 1;
@@ -994,15 +1079,10 @@ describe('price service', () => {
     it('gives up after 5 seconds, as one budget for the whole chain', async () => {
       const clock = new AbortController();
       const timeout = vi.spyOn(AbortSignal, 'timeout').mockReturnValue(clock.signal);
-      fetchMock.mockImplementation(
-        (_url, init) =>
-          new Promise<Response>((_resolve, reject) => {
-            init!.signal!.addEventListener('abort', () => reject(init!.signal!.reason));
-          }),
-      );
+      serve.mockImplementation(() => new Promise<Response>(() => {}));
       const pending = extract('https://shop.example/p');
-      await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled());
-      expect(fetchMock.mock.calls[0]![1]!.signal).toBe(clock.signal);
+      await vi.waitFor(() => expect(serve).toHaveBeenCalled());
+      expect(serve.mock.calls[0]![1].signal).toBe(clock.signal);
       clock.abort(new DOMException('The operation timed out.', 'TimeoutError'));
       await upstreamFailure(await pending);
       expect(timeout).toHaveBeenCalledTimes(1);
@@ -1010,13 +1090,146 @@ describe('price service', () => {
     });
 
     it('sends the same timeout signal on every hop', async () => {
-      fetchMock
+      serve
         .mockImplementationOnce(async () => redirect('/next'))
         .mockImplementationOnce(async () => page('<title>x</title>'));
       await extract('https://shop.example/p');
-      const [first, second] = fetchMock.mock.calls.map(([, init]) => init!.signal);
+      const [first, second] = serve.mock.calls.map(([, options]) => options.signal);
       expect(first).toBeInstanceOf(AbortSignal);
       expect(second).toBe(first);
+    });
+
+    it('does not start a hop once the budget is spent', async () => {
+      const spent = AbortSignal.abort(new DOMException('The operation timed out.', 'TimeoutError'));
+      vi.spyOn(AbortSignal, 'timeout').mockReturnValue(spent);
+      await upstreamFailure(await extract('https://shop.example/p'));
+      expect(requestMock).not.toHaveBeenCalled();
+      expect(dns).not.toHaveBeenCalled();
+    });
+
+    it('ends a body that stalls when the budget runs out', async () => {
+      const clock = new AbortController();
+      vi.spyOn(AbortSignal, 'timeout').mockReturnValue(clock.signal);
+      let pulls = 0;
+      serve.mockImplementation(async () =>
+        page(
+          new ReadableStream<Uint8Array>({
+            pull(controller) {
+              pulls += 1;
+              if (pulls === 1) controller.enqueue(new TextEncoder().encode('<title>Half</title>'));
+              else return new Promise<void>(() => {});
+            },
+          }),
+        ),
+      );
+      const pending = extract('https://shop.example/p');
+      // The second pull means the first chunk was read and the body has gone quiet.
+      await vi.waitFor(() => expect(pulls).toBeGreaterThan(1));
+      clock.abort(new DOMException('The operation timed out.', 'TimeoutError'));
+      await upstreamFailure(await pending);
+    });
+
+    it('counts the DNS lookup in the 5 seconds, through the real http client', async () => {
+      // The real request with a lookup that never answers: nothing connects, and the signal ends it.
+      const http = await vi.importActual<typeof import('node:http')>('node:http');
+      requestMock.mockImplementation((_via, url, options, onResponse) =>
+        http.request(url, options, onResponse),
+      );
+      dns.mockImplementation(() => new Promise(() => {}));
+      const clock = new AbortController();
+      vi.spyOn(AbortSignal, 'timeout').mockReturnValue(clock.signal);
+      const pending = extract('http://slow-dns.example/p');
+      await vi.waitFor(() => expect(dns).toHaveBeenCalled());
+      clock.abort(new DOMException('The operation timed out.', 'TimeoutError'));
+      await upstreamFailure(await pending);
+      expect(serve).not.toHaveBeenCalled();
+    });
+
+    it('refuses a private answer through the real http client too', async () => {
+      const http = await vi.importActual<typeof import('node:http')>('node:http');
+      requestMock.mockImplementation((_via, url, options, onResponse) =>
+        http.request(url, options, onResponse),
+      );
+      dns.mockResolvedValue([{ address: '10.0.0.5', family: 4 }]);
+      await refused('http://internal.example/p');
+      expect(dns).toHaveBeenCalledTimes(1);
+    });
+
+    it('connects with the addresses it checked, never a second answer (DNS rebinding)', async () => {
+      const checked = [{ address: '93.184.216.34', family: 4 }];
+      dns.mockResolvedValueOnce(checked).mockResolvedValue([{ address: '127.0.0.1', family: 4 }]);
+      serve.mockImplementation(async () => page('<title>Ok</title>'));
+      const res = await extract('https://rebind.example/p');
+      expect(res.status).toBe(200);
+      // One lookup serves both the check and the connection, and the socket gets that answer.
+      expect(dns).toHaveBeenCalledTimes(1);
+      expect(handed).toEqual([[null, checked]]);
+      expect(serve.mock.calls[0]![1].lookup).toBe(checkedLookup);
+
+      // A name that answers private is refused before anything is sent, whatever it says next.
+      dns.mockReset();
+      dns
+        .mockResolvedValueOnce([{ address: '169.254.169.254', family: 4 }])
+        .mockResolvedValue(checked);
+      handed.length = 0;
+      serve.mockClear();
+      await refused('https://rebind.example/p');
+      expect(serve).not.toHaveBeenCalled();
+      expect(dns).toHaveBeenCalledTimes(1);
+      expect(handed).toHaveLength(1);
+      expect(handed[0]![0]).toBeInstanceOf(BlockedUrlError);
+    });
+
+    describe('checkedLookup', () => {
+      const ask = (host: string, options: { all?: boolean; family?: number } = {}) =>
+        new Promise<unknown[]>((resolve) => {
+          checkedLookup(host, options, (...answer) => resolve(answer));
+        });
+      const v4 = (address: string) => ({ address, family: 4 });
+
+      it('hands the socket every checked address under all, and the first one otherwise', async () => {
+        const answer = [v4('93.184.216.34'), { address: '2606:2800:220:1::1', family: 6 }];
+        dns.mockResolvedValue(answer);
+        expect(await ask('a.example', { all: true })).toEqual([null, answer]);
+        expect(await ask('a.example')).toEqual([null, '93.184.216.34', 4]);
+        expect(await ask('a.example', { all: false })).toEqual([null, '93.184.216.34', 4]);
+      });
+
+      it('asks the resolver for every address, passing the socket’s other options on', async () => {
+        await ask('a.example', { family: 4 });
+        expect(dns).toHaveBeenCalledWith('a.example', { family: 4, all: true });
+        await ask('b.example', { all: false });
+        expect(dns).toHaveBeenLastCalledWith('b.example', { all: true });
+      });
+
+      it('refuses a name with any private address, or none, in either answer shape', async () => {
+        const refusals: Found[][] = [
+          [v4('10.0.0.1')],
+          [v4('93.184.216.34'), v4('127.0.0.1')],
+          [v4('127.0.0.1'), v4('93.184.216.34')],
+          [{ address: '::ffff:169.254.169.254', family: 6 }],
+          [{ address: '64:ff9b::7f00:1', family: 6 }],
+          [v4('not-an-ip')],
+          [],
+        ];
+        for (const answer of refusals) {
+          dns.mockResolvedValue(answer);
+          for (const options of [{ all: true }, {}]) {
+            const [err, address] = await ask('evil.example', options);
+            expect(err, JSON.stringify(answer)).toBeInstanceOf(BlockedUrlError);
+            expect(address).toEqual([]);
+          }
+        }
+      });
+
+      it('passes a resolver error on unchanged', async () => {
+        const boom = Object.assign(new Error('getaddrinfo ENOTFOUND a.example'), {
+          code: 'ENOTFOUND',
+        });
+        dns.mockRejectedValue(boom);
+        const [err] = await ask('a.example', { all: true });
+        expect(err).toBe(boom);
+      });
     });
 
     it('takes only text/html and application/xhtml+xml', async () => {
@@ -1028,13 +1241,11 @@ describe('price service', () => {
         'text/htmlx',
       ];
       for (const type of wrong) {
-        fetchMock.mockImplementation(async () =>
-          page('<title>x</title>', { 'Content-Type': type }),
-        );
+        serve.mockImplementation(async () => page('<title>x</title>', { 'Content-Type': type }));
         await upstreamFailure(await extract('https://shop.example/p'));
       }
       // Bytes carry no default type, unlike a string body.
-      fetchMock.mockImplementation(async () => new Response(new Uint8Array([60, 62])));
+      serve.mockImplementation(async () => new Response(new Uint8Array([60, 62])));
       await upstreamFailure(await extract('https://shop.example/p'));
 
       const right = [
@@ -1044,20 +1255,18 @@ describe('price service', () => {
         'application/xhtml+xml; charset=utf-8',
       ];
       for (const type of right) {
-        fetchMock.mockImplementation(async () =>
-          page('<title>x</title>', { 'Content-Type': type }),
-        );
+        serve.mockImplementation(async () => page('<title>x</title>', { 'Content-Type': type }));
         expect((await extract('https://shop.example/p')).status, type).toBe(200);
       }
     });
 
     it('answers 502 without details for an error status, a network error or a DNS failure', async () => {
-      fetchMock.mockImplementation(
+      serve.mockImplementation(
         async () => new Response('<title>Gone</title>', { status: 404, headers: HTML }),
       );
       await upstreamFailure(await extract('https://shop.example/p'));
 
-      fetchMock.mockImplementation(async () => {
+      serve.mockImplementation(async () => {
         throw new TypeError('fetch failed: ECONNREFUSED 10.1.2.3:443 /secret/path');
       });
       await upstreamFailure(await extract('https://shop.example/p'));
@@ -1067,7 +1276,7 @@ describe('price service', () => {
     });
 
     it('caches a successful read for an hour', async () => {
-      fetchMock.mockImplementation(async () => page('<title>x</title>'));
+      serve.mockImplementation(async () => page('<title>x</title>'));
       const res = await extract('https://shop.example/p');
       expect(res.headers.get('Cache-Control')).toBe('s-maxage=3600');
     });
