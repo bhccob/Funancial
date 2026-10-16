@@ -31,7 +31,8 @@ export function InvestScreen() {
   const { status, refresh } = useMarketRefresh();
   const holdings = useApp((s) => s.data.tables.holding);
   const profile = useCurrency();
-  const chosen = useApp((s) => s.data.tables.settings[0]?.investCurrency) ?? profile;
+  const stored = useApp((s) => s.data.tables.settings[0]?.investCurrency);
+  const chosen = stored ?? profile;
   const { currency } = useInvestMoney();
   const [picking, setPicking] = useState(false);
   const ids = useId();
@@ -69,18 +70,22 @@ export function InvestScreen() {
     <div>
       <PageHeader
         title="Invest"
+        // Without the price service no rate can load, so there is nothing to choose; a currency
+        // already chosen keeps its chip, as the way back.
         action={
-          <Button
-            size="sm"
-            variant="secondary"
-            aria-haspopup="dialog"
-            onClick={() => setPicking(true)}
-          >
-            <span>
-              {`Shown in ${currency} `}
-              <span aria-hidden>▾</span>
-            </span>
-          </Button>
+          (marketConfigured() || stored) && (
+            <Button
+              size="sm"
+              variant="secondary"
+              aria-haspopup="dialog"
+              onClick={() => setPicking(true)}
+            >
+              <span>
+                {`Shown in ${currency} `}
+                <span aria-hidden>▾</span>
+              </span>
+            </Button>
+          )
         }
       />
       {/* Under the header, not in it, so a long line never pushes the currency off the title's row. */}

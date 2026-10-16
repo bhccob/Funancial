@@ -151,6 +151,7 @@ describe('Invest shown in another currency: Holdings', () => {
   });
 
   it('shows the profile currency, with no note, when no currency was chosen', () => {
+    configured();
     renderInvest(dataOf([ko(), vusa()], null));
     expect(screen.getByText(eur(1_000_00))).toHaveClass('text-[34px]');
     expect(chip('EUR')).toBeInTheDocument();
@@ -166,6 +167,24 @@ describe('Invest shown in another currency: Holdings', () => {
     );
     expect(screen.getByText(eur(1_000_00))).toBeInTheDocument();
     expect(screen.getByText(noRateNote('GBP'))).toBeInTheDocument();
+  });
+});
+
+describe('The Shown in chip without the price service', () => {
+  it('is not there with no token and no currency chosen: no rate could ever load', () => {
+    renderInvest(dataOf([ko(), vusa()], null));
+    expect(screen.queryByRole('button', { name: /^Shown in / })).not.toBeInTheDocument();
+  });
+
+  it('is there with no token when a currency was chosen, so the person can undo it', () => {
+    renderInvest(dataOf([ko(), vusa()], inDollars));
+    expect(chip('USD')).toBeInTheDocument();
+  });
+
+  it('is there once the price service is set up', () => {
+    configured();
+    renderInvest(dataOf([ko(), vusa()], null));
+    expect(chip('EUR')).toBeInTheDocument();
   });
 });
 
@@ -407,6 +426,8 @@ describe('Invest shown in another currency: the holding dialog', () => {
 });
 
 describe('The currency sheet', () => {
+  beforeEach(configured);
+
   const open = async (data = dataOf([ko(), vusa()], null)) => {
     const store = renderInvest(data);
     await userEvent.click(chip('EUR'));
