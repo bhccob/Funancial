@@ -86,6 +86,23 @@
 - `type HelpPage = { id: string; title: string; summary: string; group: 'numbers' | 'how' | 'more'; body: string[]; exampleIds?: string[] }`.
 - `HELP_PAGES: HelpPage[]`, `GLOSSARY: Array<{ term; meaning }>`, `FAQ: Array<{ q; a }>`, `LEGAL: { privacy: string[]; terms: string[]; disclaimers: Array<{ title; text }> }`.
 - `helpPage(id): HelpPage | undefined`.
+- **Page ids (Task 2 links to these):**
+  - `available` (AVL-1)
+  - `limits` (LIM-1)
+  - `salary-freeze` (SAL-1)
+  - `cards` (BAL-1, EXP-1)
+  - `subscriptions` (SUB-1)
+  - `net-worth`: everything you have minus everything you owe; no worked example
+  - `investments`: portfolio value, and profit & loss = gain on what you hold + realised profit from sales + every confirmed dividend; no worked example
+  - `dividends`
+  - `buy-it`
+  - `game`
+  - `glossary`
+  - `faq`
+  - `privacy`
+  - `terms`
+
+  `placeholder('/help', 'Help')` in `routes.tsx` gives way to the real screens.
 
 **Screens:**
 - **Help index:** a `Search help` line field filtering by title and summary; three groups (`How your numbers work`, `How it works`, `More`), each row with title and summary.
@@ -118,6 +135,13 @@
 
 **What to build:**
 - `HelpTip({ pageId, label })`: a 44px button showing a small "?", with the accessible name `What is ${label}?`.
+- Page ids, from Task 1:
+  - Available → `available`
+  - Net worth → `net-worth`
+  - a limit row → `limits`
+  - Portfolio value → `investments`
+  - Profit & loss → `investments`
+  - the buy meter → `buy-it`
 - It opens a popover. Use the existing `Sheet` on phones, or a small anchored panel if the codebase has one; pick one and say which.
 - The popover shows the page's title and `summary`, then a `How it's worked out ›` link to `/help/${pageId}`. It closes with Escape or a tap outside, and focus returns to the "?".
 
