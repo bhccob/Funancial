@@ -1,5 +1,7 @@
 import { isValidElement } from 'react';
 import { expect, it } from 'vitest';
+import { AnswerScreen } from '@/features/buy/AnswerScreen';
+import { BuyScreen } from '@/features/buy/BuyScreen';
 import { HoldingPage } from '@/features/invest/HoldingPage';
 import { InvestScreen } from '@/features/invest/InvestScreen';
 import { ShopScreen } from '@/features/shop/ShopScreen';
@@ -17,6 +19,7 @@ it('routes every spec screen', () => {
       '/add',
       '/budget',
       '/buy',
+      '/buy/:id',
       '/freeze',
       '/goals',
       '/help',
@@ -59,4 +62,11 @@ it('serves Invest from its own screen, and has no separate Dividends or News rou
 it("serves a holding's own page from /invest/holding/:id", () => {
   const holding = APP_ROUTES.find((r) => r.path === '/invest/holding/:id');
   expect(isValidElement(holding?.element) && holding.element.type).toBe(HoldingPage);
+});
+
+it('serves Buy it? from its own screens: the Ask form and list, and an answer', () => {
+  const ask = APP_ROUTES.find((r) => r.path === '/buy');
+  expect(isValidElement(ask?.element) && ask.element.type).toBe(BuyScreen);
+  const answer = APP_ROUTES.find((r) => r.path === '/buy/:id');
+  expect(isValidElement(answer?.element) && answer.element.type).toBe(AnswerScreen);
 });

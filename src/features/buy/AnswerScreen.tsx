@@ -1,0 +1,181 @@
+import { useState } from 'react';
+import { Link, Navigate, useNavigate, useParams } from 'react-router';
+import { Banner } from '@/components/ui/Banner';
+import { Button } from '@/components/ui/Button';
+import { PageHeader } from '@/components/ui/PageHeader';
+import { RadioGroup } from '@/components/ui/RadioGroup';
+import { Section } from '@/components/ui/Section';
+import { categoryLabel } from '@/domain/budget';
+import type { BuyDecision, Facts } from '@/domain/entities';
+import { formatDay } from '@/lib/format';
+import { useAction } from '@/lib/useAction';
+import { RATE_RANGE, remindDay, type BuyPrefill } from '@/store/buyActions';
+import { useBuyActions, useDecision } from '@/store/useBuy';
+import { useMoney, useToday } from '@/store/useFinance';
+import { BuyMeter } from './BuyMeter';
+import { statusLine, VERDICT_LABEL } from './text';
+
+const RATINGS = ['1', '2', '3', '4', '5'].map((v) => ({ value: v, label: v }));
+const months = new Intl.NumberFormat(undefined, {
+  minimumFractionDigits: 1,
+  maximumFractionDigits: 1,
+});
+
+/** The facts the rules found, as a name and a value each, with the ones that are not known left out. */
+function factLines({ ask, facts }: BuyDecision, money: (minor: number) => string) {
+  const lines: Array<[name: string, value: string]> = [];
+  const limit = (name: string, line: Facts['categoryAfter']) => {
+    if (line === null) return;
+    const over = line.spentAfter - line.limit;
+    lines.push([
+      `${name} limit after`,
+      `${line.pct}%${over > 0 ? ` · over by ${money(over)}` : ''}`,
+    ]);
+  };
+  limit(categoryLabel(ask.category), facts.categoryAfter);
+  limit('Overall', facts.overallAfter);
+  lines.push(['Available after', money(facts.availableAfter)]);
+  const { emergencyBefore, emergencyAfter, goalDelay } = facts;
+  if (emergencyBefore !== null && emergencyAfter !== null) {
+    lines.push([
+      'Emergency fund',
+      `${months.format(emergencyBefore)} → ${months.format(emergencyAfter)} months`,
+    ]);
+  }
+  if (goalDelay) {
+    const { name, days } = goalDelay;
+    lines.push([`${name} goal`, `+${days} ${days === 1 ? 'day' : 'days'} later`]);
+  }
+  return lines;
+}
+
+/**
+ * The answer to one ask: the buy meter, the verdict, the facts behind it, why it was held at Wait,
+ * the person's own notes, and the choice (remind me, bought it, skip it) with where it stands. A
+ * decision that is gone (deleted, or a bad link) sends the person back to the list.
+ */
+export function AnswerScreen() {
+  const { id = '' } = useParams();
+  const decision = useDecision(id);
+  const actions = useBuyActions();
+  const navigate = useNavigate();
+  const money = useMoney();
+  const today = useToday();
+  const run = useAction();
+  const [busy, setBusy] = useState(false);
+
+  if (!decision) return <Navigate to="/buy" replace />;
+
+  const { ask, facts, guards, notes, status } = decision;
+  const decided = statusLine(decision);
+
+  async function decide(fn: () => Promise<unknown>) {
+    setBusy(true);
+    const done = await run(fn);
+    setBusy(false);
+    return done;
+  }
+
+  async function bought() {
+    const result: { prefill?: BuyPrefill } = {};
+    const done = await decide(async () => {
+      result.prefill = await actions.bought(id);
+    });
+    if (done) void navigate('/add', { state: { prefill: result.prefill } });
+  }
+
+  return (
+    <div className="max-w-xl">
+      <Link
+        to="/buy"
+        aria-label="Back to Buy it?"
+        className="text-muted -mb-1 inline-flex min-h-11 items-center text-[15px] font-extrabold"
+      >
+        ‹ Buy it?
+      </Link>
+      <PageHeader title={ask.item}>
+        {ask.quantity === 1
+          ? money(facts.total)
+          : `${ask.quantity} × ${money(ask.price)} = ${money(facts.total)}`}
+      </PageHeader>
+
+      <Section>
+        <BuyMeter meter={decision.meter} />
+        <p className="mt-5 text-center">
+          <span className="text-[26px] leading-tight font-extrabold tracking-[-0.02em]">
+            {VERDICT_LABEL[decision.verdict]}
+          </span>{' '}
+          <span className="text-muted text-sm font-bold">· confidence {decision.confidence}</span>
+        </p>
+
+        <ul aria-label="The facts" className="mt-6 grid grid-cols-2 gap-x-4 gap-y-4">
+          {factLines(decision, money).map(([key, value]) => (
+            <li key={key}>
+              <p className="text-muted text-[13px] font-bold">{key}</p>
+              <p className="text-[15px] font-extrabold tabular-nums">{value}</p>
+            </li>
+          ))}
+        </ul>
+
+        {guards.capAtWait && (
+          <Banner tone="warning" className="mt-6">
+            {guards.reasons.map((reason) => (
+              <p key={reason}>{reason}</p>
+            ))}
+          </Banner>
+        )}
+
+        {notes.length > 0 && (
+          <ul className="mt-6 flex flex-col gap-1">
+            {notes.map((note, i) => (
+              <li key={i} className="text-muted text-sm font-semibold">
+                {note}
+              </li>
+            ))}
+          </ul>
+        )}
+      </Section>
+
+      <Section>
+        <div aria-live="polite">
+          {decided && <p className="text-[17px] font-extrabold">{decided}</p>}
+        </div>
+        {(status === 'open' || status === 'waiting') && (
+          <div className={decided ? 'mt-4 flex flex-wrap gap-2' : 'flex flex-wrap gap-2'}>
+            <Button
+              variant="secondary"
+              disabled={busy}
+              onClick={() => void decide(() => actions.wait(decision.id))}
+            >
+              Remind me {formatDay(remindDay(facts.resetsOn, today))}
+            </Button>
+            <Button variant="secondary" disabled={busy} onClick={() => void bought()}>
+              I bought it
+            </Button>
+            <Button
+              variant="secondary"
+              disabled={busy}
+              onClick={() => void decide(() => actions.skip(decision.id))}
+            >
+              Skip it
+            </Button>
+          </div>
+        )}
+        {status === 'bought' && (
+          <div className="mt-4 flex flex-col gap-2">
+            <RadioGroup
+              variant="underline"
+              legend="Was it worth it?"
+              value={decision.usage === null ? '' : String(decision.usage)}
+              options={RATINGS}
+              onChange={(v) => void run(() => actions.rate(decision.id, Number(v)))}
+            />
+            <p className="text-muted text-sm font-semibold">{RATE_RANGE}</p>
+          </div>
+        )}
+      </Section>
+
+      <p className="text-muted pt-2 text-[13px] font-semibold">Not financial advice</p>
+    </div>
+  );
+}
