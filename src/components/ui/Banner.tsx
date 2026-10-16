@@ -5,7 +5,7 @@ export type BannerTone = 'demo' | 'info' | 'warning' | 'danger';
 
 export interface BannerProps {
   tone: BannerTone;
-  /** The bold first line. Without it, `children` is the bold sentence. */
+  /** The bold first line. Without it (also `null` or `false`, as `cond && '…'` gives), `children` is the bold sentence. */
   title?: ReactNode;
   children: ReactNode;
   action?: ReactNode;
@@ -37,7 +37,7 @@ export function Banner({ tone, title, children, action, className }: BannerProps
       )}
     >
       <div className="min-w-0 flex-1 basis-40">
-        {title === undefined ? (
+        {title == null || title === false ? (
           <div className="text-[13px] font-bold">{children}</div>
         ) : (
           <>

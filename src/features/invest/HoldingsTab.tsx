@@ -163,7 +163,20 @@ export function HoldingsTab({ refresh }: { refresh(): Promise<void> }) {
           />
         </Section>
       ) : (
-        <Section title="Portfolio value">
+        <Section
+          title="Portfolio value"
+          action={
+            <Button
+              size="sm"
+              aria-label="Add a holding"
+              className="-my-3"
+              onClick={() => setAdding(true)}
+            >
+              <Plus aria-hidden="true" className="size-4" />
+              Add
+            </Button>
+          }
+        >
           <p className="text-[34px] leading-tight font-extrabold tracking-[-0.035em] tabular-nums">
             {money(value)}
           </p>
@@ -229,16 +242,6 @@ export function HoldingsTab({ refresh }: { refresh(): Promise<void> }) {
             </p>
           )}
           <SoldList />
-          {rows.length > 0 && (
-            <button
-              type="button"
-              onClick={() => setAdding(true)}
-              className="mt-2 -mb-1 inline-flex min-h-11 items-center gap-2 text-[15px] font-extrabold"
-            >
-              <Plus aria-hidden="true" className="size-[18px]" />
-              Add a holding
-            </button>
-          )}
         </Section>
       )}
       <p className="text-muted pt-1 text-[12.5px] font-bold">

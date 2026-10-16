@@ -112,6 +112,13 @@ test('a new holding shows its value and a slice of the allocation', async ({ pag
 
   await expect(page.getByRole('link', { name: /^AAPL · Apple/ })).toContainText('$1,000.00');
   await expect(page.getByRole('button', { name: 'AAPL, $1,000.00, 100%' })).toHaveCount(1);
+  // With a holding, the one add button is the pill in the Portfolio value row.
+  await expect(
+    page
+      .getByRole('region', { name: 'Portfolio value' })
+      .getByRole('button', { name: 'Add a holding' }),
+  ).toHaveCount(1);
+  await expect(page.getByRole('button', { name: 'Add a holding' })).toHaveCount(1);
 });
 
 test('confirming a due dividend shows the reward and earns First Dividend', async ({ page }) => {

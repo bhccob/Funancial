@@ -257,7 +257,24 @@ describe('Holdings tab', () => {
       ),
     ).toBeInTheDocument();
     expect(screen.getByText('Prices delayed · not financial advice')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Add a holding' })).toBeInTheDocument();
+  });
+
+  it('has one add button, a compact primary pill in the Portfolio value row, that opens the add dialog', async () => {
+    renderInvest(portfolioData());
+    const add = screen.getByRole('button', { name: 'Add a holding' });
+    expect(screen.getAllByRole('button', { name: 'Add a holding' })).toHaveLength(1);
+    // On the heading's line, in the section's action slot, and not at the bottom with the sold list.
+    expect(within(region('Portfolio value')).getByRole('button', { name: 'Add a holding' })).toBe(
+      add,
+    );
+    expect(add.parentElement?.parentElement).toBe(
+      screen.getByRole('heading', { name: 'Portfolio value' }).parentElement,
+    );
+    // "+ Add", 44px tall, and the muted colour of the action slot does not reach it.
+    expect(add).toHaveTextContent('Add');
+    expect(add).toHaveClass('h-11', 'rounded-full', 'bg-primary', 'text-primary-contrast');
+    await userEvent.click(add);
+    expect(screen.getByRole('dialog', { name: 'Add a holding' })).toBeInTheDocument();
   });
 
   it('uses the singular for one share, and leaves out best and worst for a single holding', () => {
@@ -376,6 +393,8 @@ describe('Holdings tab', () => {
     expect(screen.getByText('No investments yet')).toBeInTheDocument();
     expect(screen.queryByRole('region', { name: 'Portfolio value' })).not.toBeInTheDocument();
     expect(screen.queryByText(NOT_CONFIGURED)).not.toBeInTheDocument();
+    // The empty state has its own button; the pill that belongs to the Portfolio value row is not there.
+    expect(screen.getAllByRole('button', { name: /^Add (a|your first) holding$/ })).toHaveLength(1);
     await userEvent.click(screen.getByRole('button', { name: 'Add your first holding' }));
     expect(screen.getByRole('dialog', { name: 'Add a holding' })).toBeInTheDocument();
   });

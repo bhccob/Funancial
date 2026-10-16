@@ -208,6 +208,20 @@ describe('Banner', () => {
     expect(line.previousElementSibling).toBe(screen.getByText('Careful'));
   });
 
+  it.each([null, false])(
+    'treats a title of %s as no title, so the children are the bold sentence',
+    (title) => {
+      render(
+        <Banner tone="info" title={title}>
+          Heads up
+        </Banner>,
+      );
+      expect(screen.getByText('Heads up')).toHaveClass('text-[13px]', 'font-bold');
+      // One line, not an empty title row above the sentence.
+      expect(screen.getByRole('status').firstElementChild?.children).toHaveLength(1);
+    },
+  );
+
   it.each(['demo', 'info', 'warning', 'danger'] as const)(
     'is a soft gradient card from the %s tokens',
     (tone) => {
