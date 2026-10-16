@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import { bucketBalances } from '@/domain/balances';
 import { addDays } from '@/domain/dates';
 import { duePayouts, expectedPayouts } from '@/domain/dividends';
-import { portfolio } from '@/domain/portfolio';
+import { costForShares, portfolio } from '@/domain/portfolio';
+import { profitAndLoss, realisedProfit } from '@/domain/sales';
 import { SnapshotSchema } from '@/domain/snapshot';
 import { buildDemoSnapshot } from './demoSeed';
 
@@ -134,7 +136,7 @@ describe('demo investments', () => {
     const book = portfolio(demo, 'USD');
     expect(book.unpriced).toBe(0);
     expect(row('VWRL').value).toBe(511_488); // 40 × €118.40 × 1.08
-    expect(row('AAPL').value).toBe(274_200); // 12 × $228.50
+    expect(row('AAPL').value).toBe(159_950); // 7 × $228.50, after the sale of 5
     expect(row('ASML').value).toBe(400_842); // 5 × €742.30 × 1.08
     expect([book.best?.holding.symbol, book.worst?.holding.symbol]).toEqual(['KO', 'ASML']);
   });
@@ -195,12 +197,54 @@ describe('demo investments', () => {
     expect(ko.costBasis).toBe(3_300_00 + reinvested!.amount);
   });
 
+  it('sold 5 of the 12 AAPL shares into savings 20 days ago, at a profit', () => {
+    const aapl = holdingOf('AAPL');
+    const [sale] = t.sale;
+    expect(t.sale).toHaveLength(1);
+    expect(sale).toMatchObject({
+      holdingId: aapl.id,
+      symbol: 'AAPL',
+      name: 'Apple',
+      type: 'stock',
+      shares: 5,
+      proceeds: 1_120_00, // 5 × $224.00
+      cost: 1_062_50, // 5 of the 12 shares, at the average of $2,550.00
+      soldOn: '2026-09-24',
+      to: 'savings',
+      restore: null,
+    });
+    // The holding is as selling would have left it: 7 shares, and the cost the 5 did not carry.
+    expect(aapl.shares).toBe(7);
+    expect(aapl.costBasis).toBe(2_550_00 - sale!.cost);
+    const bought = { ...aapl, shares: 12, costBasis: 2_550_00 };
+    expect(costForShares(bought, 5)).toBe(sale!.cost);
+    expect(sale!.soldOn > aapl.purchaseDate && sale!.soldOn <= TODAY).toBe(true);
+  });
+
+  it('puts the proceeds of the sale into savings from the day of the sale', () => {
+    const [sale] = t.sale;
+    const unsold = { ...demo, tables: { ...t, sale: [] } };
+    const savings = (data: typeof demo, day: string) => bucketBalances(data, day).savings;
+    expect(savings(demo, TODAY) - savings(unsold, TODAY)).toBe(1_120_00);
+    expect(savings(demo, addDays(sale!.soldOn, -1))).toBe(
+      savings(unsold, addDays(sale!.soldOn, -1)),
+    );
+    expect(bucketBalances(demo, TODAY).cash).toBe(bucketBalances(unsold, TODAY).cash);
+  });
+
+  it('shows realised profit, so Profit & loss has a From sales line', () => {
+    expect(realisedProfit(demo)).toBe(1_120_00 - 1_062_50);
+    const pl = profitAndLoss(demo, 'USD');
+    expect(pl.sales).toBe(57_50);
+    expect(pl.total).toBe(pl.held + pl.sales + pl.dividends);
+  });
+
   it('records the purchase of AAPL inside the window, from savings', () => {
     const aapl = holdingOf('AAPL');
     expect(aapl.purchaseDate).toBe('2026-09-14');
     expect(t.transaction.filter((x) => x.type === 'investment')).toMatchObject([
       {
-        amount: aapl.costBasis,
+        amount: 2_550_00, // what the 12 shares cost, before any were sold
         date: aapl.purchaseDate,
         from: 'savings',
         to: null,

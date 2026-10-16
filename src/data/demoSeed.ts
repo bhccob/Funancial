@@ -8,6 +8,7 @@ import {
   type Subscription,
 } from '@/domain/entities';
 import { toMinor } from '@/domain/portfolio';
+import { planSale } from '@/domain/sales';
 import { emptySnapshot, type DataSnapshot } from '@/domain/snapshot';
 
 /** Fake money for demo mode. Deterministic: the same day and seed always give the same data. */
@@ -19,6 +20,9 @@ const CARD_ID = 'demo-card';
 /** Percent of each demo dividend withheld as tax. */
 const TAX = 15;
 const KO_PRICE = 68.4;
+/** AAPL: of the 12 shares bought, this many were sold 20 days ago, at this price each. */
+const AAPL_SOLD = 5;
+const AAPL_SOLD_PRICE = 224;
 
 function mulberry32(seed: number): () => number {
   let a = seed;
@@ -420,9 +424,33 @@ export function buildDemoSnapshot(today: LocalDate, seed = 42): DataSnapshot {
     dividendInfo: quarterly(-58, [0.38, 0.52, 0.41, 0.47], 33, 38),
   });
   const vwrlLast = toMinor(40 * 0.47 * (1 - TAX / 100), 1.08, 'USD');
+  // Five of the twelve AAPL shares were sold into savings, at a profit. It is written as `sellHolding`
+  // writes it: the sale on its own, and the holding left with the shares and cost the five did not carry.
+  const soldOn = addDays(today, -20);
+  const plan = planSale(aapl, AAPL_SOLD, toMinor(AAPL_SOLD_PRICE, 1, 'USD'));
+  const aaplLeft: Holding = {
+    ...aapl,
+    shares: aapl.shares - plan.shares,
+    costBasis: aapl.costBasis - plan.cost,
+    updatedAt: stampFor(soldOn).updatedAt,
+  };
+  t.sale.push({
+    id: id('sale'),
+    ...stampFor(soldOn),
+    holdingId: aapl.id,
+    symbol: aapl.symbol,
+    name: aapl.name,
+    type: aapl.type,
+    shares: plan.shares,
+    proceeds: plan.proceeds,
+    cost: plan.cost,
+    soldOn,
+    to: 'savings',
+    restore: null,
+  });
   t.holding.push(
     vwrl,
-    aapl,
+    aaplLeft,
     ko,
     holding({
       symbol: 'ASML',

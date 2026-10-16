@@ -153,7 +153,8 @@ test('with the price service down, Invest shows the last prices and says so', as
   await expect(page.getByText('Live prices need the price service.')).toHaveCount(0);
   // 40 VWRL at €118.40, in dollars at the stored 1.08.
   await expect(page.getByRole('link', { name: /^VWRL · / })).toContainText('$5,114.88');
-  await expect(page.getByRole('region', { name: 'Portfolio value' })).toContainText('$15,995.31');
+  // After the demo's sale of 5 of the 12 AAPL shares: $15,995.31 less 5 × $228.50.
+  await expect(page.getByRole('region', { name: 'Portfolio value' })).toContainText('$14,852.81');
 });
 
 test('a holding opens on its own page with a price chart, and Edit saves back to it', async ({
