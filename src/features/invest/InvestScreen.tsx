@@ -97,7 +97,7 @@ export function InvestScreen() {
               tabIndex={on ? 0 : -1}
               onClick={() => choose(id)}
               className={cn(
-                '-mb-px min-h-11 border-b-2 px-0.5 text-[15px] font-extrabold',
+                '-mb-px min-h-11 min-w-11 border-b-2 px-0.5 text-[15px] font-extrabold',
                 on ? 'border-text text-text' : 'text-muted border-transparent',
               )}
             >

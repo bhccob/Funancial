@@ -6,6 +6,7 @@ import { RadioGroup } from '@/components/ui/RadioGroup';
 import { Select } from '@/components/ui/Select';
 import { TextField } from '@/components/ui/TextField';
 import type { Holding } from '@/domain/entities';
+import { isAmbiguousDecimal, parseDecimal } from '@/domain/money';
 import { marketConfigured } from '@/services/market';
 import { useAction } from '@/lib/useAction';
 import { FUTURE } from '@/store/financeActions';
@@ -23,12 +24,12 @@ const TYPE_OPTIONS = [
   { value: 'other', label: 'Other' },
 ];
 
-/** "12", "0.5" or "1,5" as a number; null for anything else (no sign, no exponent, no text). */
-function parseDecimal(text: string): number | null {
+/** What to say about a number that could not be read: "1,000" is a thousand or one, so say how to settle it. */
+function unreadable(text: string, fallback: string): string {
   const t = text.trim();
-  const n = /^(\d+[.,]?\d*|[.,]\d+)$/.test(t) ? Number(t.replace(',', '.')) : NaN;
-  // Hundreds of digits overflow to Infinity, which the schema would refuse.
-  return Number.isFinite(n) ? n : null;
+  return isAmbiguousDecimal(t)
+    ? `Is ${t} a thousand or a fraction? Write ${t.replace(/[.,]/, '')}, or ${t.replace(',', '.')}0 for the fraction`
+    : fallback;
 }
 
 interface Form {
@@ -53,7 +54,9 @@ function validate(f: Form, ctx: { today: string; editing: boolean; details: bool
   if (!ctx.editing && !SYMBOL.test(f.symbol.trim())) {
     errors.symbol = 'Use letters and numbers only, like KO or VWRL.L';
   }
-  if (shares === null || shares <= 0) errors.shares = 'Enter how many shares, like 2 or 0.5';
+  if (shares === null || shares <= 0) {
+    errors.shares = unreadable(f.shares, 'Enter how many shares, like 2 or 0.5');
+  }
   if (f.cost === null) errors.cost = 'Enter an amount like 12.50';
   // The purchase moves money, and a move of nothing is not one.
   else if (f.cost === 0 && f.paidFrom !== 'owned' && !ctx.editing) {
@@ -61,9 +64,11 @@ function validate(f: Form, ctx: { today: string; editing: boolean; details: bool
   }
   if (!/^\d{4}-\d{2}-\d{2}$/.test(f.date)) errors.date = 'Choose the day you bought it';
   else if (f.date > ctx.today) errors.date = FUTURE;
-  if (tax === null || tax > 100) errors.withholding = 'Enter a percentage from 0 to 100';
+  if (tax === null || tax > 100) {
+    errors.withholding = unreadable(f.withholding, 'Enter a percentage from 0 to 100');
+  }
   if (f.price.trim() !== '' && parseDecimal(f.price) === null) {
-    errors.price = 'Enter a price like 12.50, or leave it empty';
+    errors.price = unreadable(f.price, 'Enter a price like 12.50, or leave it empty');
   }
   if (ctx.details) {
     if (f.name.trim() === '') errors.name = 'Enter the name';

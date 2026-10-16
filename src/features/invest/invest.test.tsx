@@ -133,6 +133,10 @@ describe('Invest tabs', () => {
     expect(tab('Holdings')).toHaveAttribute('aria-selected', 'true');
     expect(tab('Holdings')).toHaveAttribute('tabindex', '0');
     expect(tab('News')).toHaveAttribute('tabindex', '-1');
+    // Each tab is at least 44px wide as well as tall, whatever its word.
+    for (const name of ['Holdings', 'Dividends', 'News']) {
+      expect(tab(name)).toHaveClass('min-h-11', 'min-w-11');
+    }
     cleanup();
     renderInvest(portfolioData(), '/invest?tab=nonsense');
     expect(tab('Holdings')).toHaveAttribute('aria-selected', 'true');
@@ -296,6 +300,36 @@ describe('Holdings tab', () => {
     );
     renderInvest(data);
     expect(screen.getByText('2 holdings have no exchange rate yet')).toBeInTheDocument();
+  });
+
+  it('counts only holdings that have a price but no rate in the exchange-rate note', () => {
+    const data = noHoldings();
+    data.tables.holding = [
+      held({ symbol: 'KO', name: 'Coca-Cola', quote: quote(60, 59) }),
+      // Just added: no quote yet, so no price at all. It says so on its row, not in the note.
+      held({ symbol: 'NEW', name: 'Just added', quote: null }),
+      // A price of the person's own in euros, and no rate to turn it into dollars.
+      held({ symbol: 'SAP', name: 'SAP SE', currency: 'EUR', manualPrice: 120, quote: null }),
+    ];
+    renderInvest(data);
+    expect(screen.getByText('1 holding has no exchange rate yet')).toBeInTheDocument();
+    expect(rowOf('NEW')).toHaveTextContent('Not priced yet');
+    expect(rowOf('SAP')).toHaveTextContent('Not priced yet');
+
+    // Without the one that has a price, nothing is said about rates.
+    cleanup();
+    data.tables.holding = data.tables.holding.slice(0, 2);
+    renderInvest(data);
+    expect(screen.queryByText(/no exchange rate yet/)).not.toBeInTheDocument();
+    expect(rowOf('NEW')).toHaveTextContent('Not priced yet');
+  });
+
+  it('says nothing about exchange rates for a freshly added holding without a quote', () => {
+    const data = noHoldings();
+    data.tables.holding = [held({ symbol: 'NEW', name: 'Just added', quote: null })];
+    renderInvest(data);
+    expect(screen.queryByText(/no exchange rate yet/)).not.toBeInTheDocument();
+    expect(rowOf('NEW')).toHaveTextContent('Not priced yet');
   });
 
   it('shows no note about rates when every holding is priced', () => {
@@ -516,6 +550,59 @@ describe('HoldingDialog adding', () => {
     });
   });
 
+  it('refuses shares that could be a thousand times out, and reads a clear thousand', async () => {
+    const { store } = renderInvest(noHoldings());
+    const dialog = await openNewHolding();
+    await enter(dialog, 'Symbol', 'KO');
+    await enter(dialog, 'Name', 'Coca-Cola');
+    await enter(dialog, 'Currency', 'USD');
+    await enter(dialog, 'What you paid in total', '100');
+
+    // "1,000" and "1.000" are a thousand or one: saved as neither, and the person is asked.
+    for (const text of ['1,000', '1.000']) {
+      await enter(dialog, 'Shares', text);
+      await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+      expect(dialog.textContent, text).toContain(
+        `Is ${text} a thousand or a fraction? Write 1000, or 1.0000 for the fraction`,
+      );
+      expect(within(dialog).getByLabelText('Shares'), text).toBeInvalid();
+    }
+    expect(store.getState().putMany).not.toHaveBeenCalled();
+
+    await enter(dialog, 'Shares', '1,234.5');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(store.getState().putMany).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(store.getState().putMany).mock.calls[0]![0][0]).toEqual({
+      table: 'holding',
+      record: expect.objectContaining({ shares: 1234.5 }),
+    });
+  });
+
+  it('refuses a withholding that could be a thousand times out', async () => {
+    const { store } = renderInvest(noHoldings());
+    const dialog = await openNewHolding();
+    await enter(dialog, 'Tax withheld on dividends (%)', '15,000');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+    expect(dialog.textContent).toContain('Is 15,000 a thousand or a fraction?');
+    expect(store.getState().putMany).not.toHaveBeenCalled();
+  });
+
+  it('reads a three-decimal fraction that starts with 0', async () => {
+    const { store } = renderInvest(noHoldings());
+    const dialog = await openNewHolding();
+    await enter(dialog, 'Symbol', 'BTC-USD');
+    await enter(dialog, 'Name', 'Bitcoin');
+    await enter(dialog, 'Currency', 'USD');
+    await enter(dialog, 'What you paid in total', '100');
+    await enter(dialog, 'Shares', '0.125');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(store.getState().putMany).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(store.getState().putMany).mock.calls[0]![0][0]).toEqual({
+      table: 'holding',
+      record: expect.objectContaining({ shares: 0.125 }),
+    });
+  });
+
   it('refuses to take nothing from cash or savings, and a date the schema would not read', async () => {
     const { store } = renderInvest(noHoldings());
     const dialog = await openNewHolding();
@@ -626,6 +713,28 @@ describe('HoldingDialog editing', () => {
     await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
     expect(dialog.textContent).toContain('Enter a price like 12.50, or leave it empty');
     expect(store.getState().put).not.toHaveBeenCalled();
+  });
+
+  it('refuses a manual price that could be a thousand times out, and reads a clear one', async () => {
+    const { store } = renderInvest(portfolioData());
+    await userEvent.click(rowOf('AAPL'));
+    const dialog = screen.getByRole('dialog', { name: 'Edit AAPL' });
+    for (const text of ['1,234', '1.234']) {
+      await enter(dialog, 'Manual price', text);
+      await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+      expect(dialog.textContent, text).toContain(
+        `Is ${text} a thousand or a fraction? Write 1234, or 1.2340 for the fraction`,
+      );
+    }
+    expect(store.getState().put).not.toHaveBeenCalled();
+
+    await enter(dialog, 'Manual price', '1,234.5');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(store.getState().put).toHaveBeenCalledTimes(1));
+    expect(store.getState().put).toHaveBeenCalledWith(
+      'holding',
+      expect.objectContaining({ id: 'aapl', manualPrice: 1234.5 }),
+    );
   });
 
   it('deletes a holding', async () => {

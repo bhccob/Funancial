@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Section } from '@/components/ui/Section';
 import type { Holding } from '@/domain/entities';
-import { allocation, type HoldingRow } from '@/domain/portfolio';
+import { allocation, holdingPrice, type HoldingRow } from '@/domain/portfolio';
 import { cn } from '@/lib/cn';
 import { formatPercent } from '@/lib/format';
 import { useMoney } from '@/store/useFinance';
@@ -71,11 +71,13 @@ export function HoldingsTab({ refresh }: { refresh(): Promise<void> }) {
   // undefined = dialog closed, null = adding a new holding.
   const [editing, setEditing] = useState<Holding | null | undefined>(undefined);
 
-  const { rows, value, dayChange, gainPct, unpriced, best, worst } = portfolio;
+  const { rows, value, dayChange, gainPct, best, worst } = portfolio;
   const slices = useMemo(() => allocation(rows, by), [rows, by]);
   const whole = (minor: number) => money(minor, { whole: true });
   // A day's move is only known for holdings with a quote that carries the previous close.
   const hasDay = rows.some((r) => r.dayChange !== null);
+  // A holding with no price at all says "Not priced yet" on its row; only one with a price but no rate is counted here.
+  const noRate = rows.filter((r) => r.value === null && holdingPrice(r.holding) !== null).length;
 
   const change = (n: number, text: string) => (
     <span className={tone(n)}>{`${arrow(n)} ${text}`}</span>
@@ -158,9 +160,9 @@ export function HoldingsTab({ refresh }: { refresh(): Promise<void> }) {
                 />
               ))}
             </ul>
-            {unpriced > 0 && (
+            {noRate > 0 && (
               <p className="text-muted mt-3 text-sm font-semibold">
-                {`${unpriced} holding${unpriced === 1 ? ' has' : 's have'} no exchange rate yet`}
+                {`${noRate} holding${noRate === 1 ? ' has' : 's have'} no exchange rate yet`}
               </p>
             )}
             {best && worst && (
