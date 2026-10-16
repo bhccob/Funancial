@@ -26,17 +26,15 @@ async function setup(
   }),
 ) {
   const t = await freshRealStore();
-  await t.store
-    .getState()
-    .put(
-      'profile',
-      makeProfile({
-        salary: null,
-        openingDate: '2026-10-01',
-        openingCash: 1_000_00,
-        openingSavings: 0,
-      }),
-    );
+  await t.store.getState().put(
+    'profile',
+    makeProfile({
+      salary: null,
+      openingDate: '2026-10-01',
+      openingCash: 1_000_00,
+      openingSavings: 0,
+    }),
+  );
   const market: Market = { ...realMarket, fetchExtract: vi.fn(extract) };
   const actions = createBuyActions(t.store, market);
   const table = () => t.store.getState().data.tables;
@@ -113,6 +111,32 @@ describe('ask', () => {
     expect(decision(after).notes).toEqual([
       `You said you tend to overspend on ${categoryLabel('entertainment')}.`,
     ]);
+  });
+
+  it('reads the About you that is being saved, not the one before it', async () => {
+    const { actions, decision } = await setup();
+    const saving = actions.saveAbout({ overspend: ['entertainment'] });
+    const id = await actions.ask(concert());
+    await saving;
+    expect(decision(id).meter).toBe(40);
+  });
+
+  it('waits for a save made through other actions on the same store', async () => {
+    const { store, market, decision } = await setup();
+    const screen = createBuyActions(store, market);
+    const other = createBuyActions(store, market);
+    const saving = screen.saveAbout({ overspend: ['entertainment'] });
+    const id = await other.ask(concert());
+    await saving;
+    expect(decision(id).meter).toBe(40);
+  });
+
+  it('still answers when the save it waited for was refused', async () => {
+    const { actions, decision } = await setup();
+    const refused = actions.saveAbout({ matters: 'x'.repeat(501) });
+    const id = await actions.ask(concert());
+    await expect(refused).rejects.toThrow('Keep it to 500 characters or fewer');
+    expect(decision(id).meter).toBe(50);
   });
 
   it('weighs it against the earlier decisions, never against itself', async () => {
@@ -209,6 +233,54 @@ describe('extract', () => {
     await expect(unset.actions.extract('https://shop.test/shoes')).resolves.toBeNull();
     expect(unset.market.fetchExtract).not.toHaveBeenCalled();
   });
+
+  it('is nothing for a page the reader found nothing on, and something for a name or a price alone', async () => {
+    vi.stubEnv('VITE_FUNANCIAL_API_TOKEN', 'secret');
+    const found = (name: string | null, price: number | null, currency: string | null) =>
+      setup(async () => ({ name, price, currency }));
+    // The route answers 200 with nothing in it for a page with nothing to read.
+    const empty = await found(null, null, null);
+    await expect(empty.actions.extract('https://shop.test/blank')).resolves.toBeNull();
+    const currencyOnly = await found(null, null, 'USD');
+    await expect(currencyOnly.actions.extract('https://shop.test/blank')).resolves.toBeNull();
+    const nameOnly = await found('Trail shoes', null, null);
+    await expect(nameOnly.actions.extract('https://shop.test/p')).resolves.toEqual({
+      name: 'Trail shoes',
+      price: null,
+      currency: null,
+    });
+    const priceOnly = await found(null, 79.9, 'USD');
+    await expect(priceOnly.actions.extract('https://shop.test/p')).resolves.toMatchObject({
+      price: 79.9,
+    });
+  });
+
+  it('is nothing for an answer that is not the shape of one', async () => {
+    vi.stubEnv('VITE_FUNANCIAL_API_TOKEN', 'secret');
+    const odd = await setup(async () => ({}) as never);
+    await expect(odd.actions.extract('https://shop.test/p')).resolves.toBeNull();
+  });
+
+  it('sends the link without the spaces around it, and asks nothing for a blank one', async () => {
+    vi.stubEnv('VITE_FUNANCIAL_API_TOKEN', 'secret');
+    const { actions, market } = await setup();
+    await actions.extract('  https://shop.test/shoes ');
+    expect(market.fetchExtract).toHaveBeenCalledWith('https://shop.test/shoes');
+    vi.mocked(market.fetchExtract).mockClear();
+    await expect(actions.extract('   ')).resolves.toBeNull();
+    expect(market.fetchExtract).not.toHaveBeenCalled();
+  });
+
+  it('is nothing through the real price client when the network is down', async () => {
+    vi.stubEnv('VITE_FUNANCIAL_API_TOKEN', 'secret');
+    const offline = vi.fn(() => Promise.reject(new TypeError('Failed to fetch')));
+    vi.stubGlobal('fetch', offline);
+    const { store } = await setup();
+    const actions = createBuyActions(store, realMarket);
+    await expect(actions.extract('https://shop.test/shoes')).resolves.toBeNull();
+    expect(offline).toHaveBeenCalledOnce();
+    expect((offline.mock.calls[0] as unknown as [string])[0]).toContain('/api/extract?url=');
+  });
 });
 
 describe('wait', () => {
@@ -252,6 +324,17 @@ describe('bought, skip, rate and delete', () => {
     expect(decision(id)).toMatchObject({ status: 'bought', boughtOn: TODAY, remindOn: null });
   });
 
+  it('keeps the first day when it is said again that it was bought', async () => {
+    const { store, actions, decision } = await setup();
+    const id = await actions.ask(concert());
+    await actions.bought(id);
+    const first = decision(id);
+    await store.getState().put('buyDecision', { ...first, boughtOn: '2026-10-01' });
+    const prefill = await actions.bought(id);
+    expect(prefill).toMatchObject({ item: 'Concert ticket', amount: 40_00 });
+    expect(decision(id)).toMatchObject({ status: 'bought', boughtOn: '2026-10-01' });
+  });
+
   it('records a skip and clears a reminder', async () => {
     const { actions, decision } = await setup();
     const id = await actions.ask(concert());
@@ -273,9 +356,26 @@ describe('bought, skip, rate and delete', () => {
   it.each([0, 6, 2.5, -1, Number.NaN])('refuses a rating of %s', async (usage) => {
     const { actions, decision } = await setup();
     const id = await actions.ask(concert());
+    await actions.bought(id);
     await actions.rate(id, 3);
     await expect(actions.rate(id, usage)).rejects.toThrow(RATE_RANGE);
     expect(decision(id).usage).toBe(3);
+  });
+
+  it('rates only what was bought, so a rating never moves the meter of something skipped', async () => {
+    const { actions, decision } = await setup();
+    const open = await actions.ask(concert());
+    const waiting = await actions.ask(concert());
+    await actions.wait(waiting);
+    const skipped = await actions.ask(concert());
+    await actions.skip(skipped);
+    for (const id of [open, waiting, skipped]) {
+      await expect(actions.rate(id, 1)).rejects.toThrow("You can rate it once you've bought it.");
+      expect(decision(id).usage).toBeNull();
+    }
+    // The next ask reads no rating from any of them.
+    const next = await actions.ask(concert());
+    expect(decision(next).meter).toBe(50);
   });
 
   it('deletes one decision and leaves the others', async () => {
@@ -349,6 +449,14 @@ describe('saveAbout', () => {
       overspend: ['food'],
       situation: 'Renting',
     });
+  });
+
+  it('keeps every change when they are made through different actions on one store', async () => {
+    const { store, market, table } = await setup();
+    const a = createBuyActions(store, market);
+    const b = createBuyActions(store, market);
+    await Promise.all([a.saveAbout({ matters: 'A bike' }), b.saveAbout({ overspend: ['food'] })]);
+    expect(table().aboutYou[0]).toMatchObject({ matters: 'A bike', overspend: ['food'] });
   });
 
   it('takes 500 characters in a line, and refuses more with a message', async () => {

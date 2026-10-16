@@ -27,6 +27,8 @@ export const BUY_MESSAGES = {
 };
 /** What `rate` says to anything but 1 to 5. */
 export const RATE_RANGE = 'Rate it from 1 (not at all) to 5 (a lot).';
+/** What `rate` says to a decision that was not bought: a rating there would move later answers. */
+export const RATE_AFTER_BUYING = "You can rate it once you've bought it.";
 const NOT_FOUND = 'That item no longer exists.';
 const RATINGS = [1, 2, 3, 4, 5] as const;
 /** The day to ask again when no limit starts afresh sooner. */
@@ -44,6 +46,11 @@ export interface BuyPrefill {
 }
 
 export type BuyActions = ReturnType<typeof createBuyActions>;
+
+// One About-you save at a time per store, whichever actions made it: a change made before the last
+// one is stored would otherwise start from the old record and undo it, and an ask would read it
+// before it landed. Every entry settles, so waiting on one never throws.
+const aboutSaves = new WeakMap<StoreApi<AppState>, Promise<unknown>>();
 
 /**
  * Asks, decides and remembers, all on the phone: an ask is answered by the rules from the data
@@ -85,14 +92,11 @@ export function createBuyActions(store: StoreApi<AppState>, market: Market) {
     throw new Error(messages[String(issue.path[0])] ?? BUY_MESSAGES.other);
   }
 
-  // One About-you save at a time: a change made before the last one is stored would otherwise
-  // start from the old record and undo it.
-  let saving: Promise<unknown> = Promise.resolve();
-
   return {
     /** Answers an ask from the rules and About you, and keeps the answer. Returns its id. */
     async ask(input: BuyAsk): Promise<string> {
       const ask = checked(input);
+      await aboutSaves.get(store);
       const { today, data } = state();
       // The decision being made is not saved yet, so it can never count among the earlier ones.
       const snapshot = buildSnapshot(data, today, ask, decisions());
@@ -125,11 +129,14 @@ export function createBuyActions(store: StoreApi<AppState>, market: Market) {
 
     /**
      * What a product link gives (name, price, currency), or null when it cannot be read: offline,
-     * no price service set up, or a page with nothing to read. It never throws.
+     * no price service set up, or a page with neither a name nor a price (the route answers 200
+     * with nulls for one). It never throws.
      */
     async extract(url: string): Promise<ExtractResponse | null> {
-      if (!marketConfigured()) return null;
-      return market.fetchExtract(url).catch(() => null);
+      const link = url.trim();
+      if (!link || !marketConfigured()) return null;
+      const found = await market.fetchExtract(link).catch(() => null);
+      return typeof found?.name === 'string' || typeof found?.price === 'number' ? found : null;
     },
 
     /** Ask again on the day the limit it went over starts afresh, else in two days. */
@@ -143,17 +150,23 @@ export function createBuyActions(store: StoreApi<AppState>, market: Market) {
     },
 
     async bought(id: string): Promise<BuyPrefill> {
-      const { ask } = find(id);
-      await update(id, { status: 'bought', boughtOn: state().today, remindOn: null });
+      const { ask, status, boughtOn } = find(id);
+      // Said again, it was still bought on the first day: the "was it worth it?" reminder counts from it.
+      await update(id, {
+        status: 'bought',
+        boughtOn: status === 'bought' && boughtOn ? boughtOn : state().today,
+        remindOn: null,
+      });
       return { item: ask.item, amount: ask.price * ask.quantity, category: ask.category };
     },
 
     skip: (id: string) => update(id, { status: 'skipped', remindOn: null }),
 
-    /** How much the thing was used, 1 (not at all) to 5 (a lot). */
+    /** How much the thing was used, 1 (not at all) to 5 (a lot); only what was bought can be rated. */
     async rate(id: string, usage: number) {
       const rating = RATINGS.find((r) => r === usage);
       if (rating === undefined) throw new Error(RATE_RANGE);
+      if (find(id).status !== 'bought') throw new Error(RATE_AFTER_BUYING);
       await update(id, { usage: rating });
     },
 
@@ -161,7 +174,7 @@ export function createBuyActions(store: StoreApi<AppState>, market: Market) {
 
     /** Changes the one About-you record, making it on the first save. Nothing is saved if a limit is broken. */
     saveAbout(patch: AboutPatch): Promise<void> {
-      const run = saving.then(async () => {
+      const run = (aboutSaves.get(store) ?? Promise.resolve()).then(async () => {
         const blank: AboutYou = {
           id: 'about',
           ...stamp(),
@@ -175,7 +188,10 @@ export function createBuyActions(store: StoreApi<AppState>, market: Market) {
         if (!next.success) throw new Error(next.error.issues[0]!.message);
         await state().put('aboutYou', next.data);
       });
-      saving = run.catch(() => {});
+      aboutSaves.set(
+        store,
+        run.catch(() => {}),
+      );
       return run;
     },
   };
