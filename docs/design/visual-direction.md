@@ -54,6 +54,8 @@ Contrast figures are text on the page background; all text pairs meet WCAG AA 4.
 | `--color-success` | `#007a55` | `#2ee6a6` | Gains, completed |
 | `--color-warning` | `#a35f00` | `#f2a93b` | Limit ≥ 80% (5.0:1 light) |
 | `--color-danger` | `#d1373d` | `#ff6b6f` | Limit ≥ 100%, destructive (4.8:1 light) |
+| `--color-danger-soft` | `#f5d9da` | `#3d2326` | Fill for the losing side of a bar (below break-even); never text |
+| `--color-success-soft` | `#d2eadf` | `#143a2e` | Fill for the winning side of a bar (above break-even); never text |
 | `--color-focus` | `#7c5cff` | `#9d85ff` | Focus ring (2px + 2px offset) |
 | `--color-chart-1..6` | `#2a78d6 #eb6834 #1baf7a #eda100 #e87ba4 #008300` | `#3987e5 #d95926 #199e70 #c98500 #d55181 #008300` | Categorical chart series, in this fixed order (validated incl. donut wrap-around); category slices use 1..5 |
 | `--color-chart-other` | `#868b96` | `#6b7080` | "Other" slices and segments, always (3:1 or better against its page) |

@@ -9,7 +9,7 @@ import { formatDate, formatPercent, formatShares } from '@/lib/format';
 import { toastStore } from '@/lib/toast';
 import { market, MarketError, type HistoryResponse, type Market } from '@/services/market';
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
-import { makeDividend, makeHolding, makeProfile } from '@/test/fixtures';
+import { makeChallenge, makeDividend, makeHolding, makeProfile } from '@/test/fixtures';
 import { clearHistoryCache } from './historyCache';
 import { HoldingPage } from './HoldingPage';
 import { InvestScreen } from './InvestScreen';
@@ -229,22 +229,136 @@ describe('Holding page', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
-  it('marks the holding as checked', async () => {
-    const { store } = renderPage();
-    await userEvent.click(screen.getByRole('button', { name: 'Mark as checked' }));
+  it('has Edit as an outline button and Sell as the primary one, at least 48px tall', () => {
+    renderPage();
+    for (const name of ['Edit', 'Sell']) {
+      expect(screen.getByRole('button', { name })).toHaveClass('h-12');
+    }
+    expect(screen.getByRole('button', { name: 'Edit' })).toHaveClass('border');
+    expect(screen.getByRole('button', { name: 'Edit' })).not.toHaveClass('bg-primary');
+    expect(screen.getByRole('button', { name: 'Sell' })).toHaveClass('bg-primary');
+  });
+
+  it('opens the Sell dialog from Sell', async () => {
+    renderPage();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Sell' }));
+    const dialog = screen.getByRole('dialog', { name: 'Sell VUSA.AS' });
+    expect(within(dialog).getByLabelText('Shares to sell · of 40')).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+});
+
+describe('Holding page break-even', () => {
+  const be = (n: number) => `${usd(n)} break-even`;
+  const left = (text: string) => parseFloat(screen.getByText(text).style.left);
+
+  it('puts break-even and the price now on a bar, and says how far above break-even it is', () => {
+    renderPage();
+    expect(screen.getByText('Break-even')).toBeInTheDocument();
+    // $210.50 a share was paid; the price now is $240.00.
+    expect(screen.getByText(be(210_50))).toBeInTheDocument();
+    expect(screen.getByText(`now ${usd(240_00)}`)).toHaveClass('text-success');
+    expect(
+      screen.getByRole('img', { name: `Break-even ${usd(210_50)}, now ${usd(240_00)}` }),
+    ).toBeInTheDocument();
+    // $96.20 of dividends over 40 shares is $2.405 a share: $208.095, which rounds to $208.10.
+    expect(
+      screen.getByText(
+        `${usd(29_50)} per share above break-even. Dividends so far bring it down to ${usd(208_10)}.`,
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it('puts the markers inside the bar, break-even before the price now when it is above', () => {
+    renderPage();
+    const [a, b] = [left(be(210_50)), left(`now ${usd(240_00)}`)];
+    expect(a).toBeGreaterThan(0);
+    expect(b).toBeLessThan(100);
+    expect(a).toBeLessThan(b);
+  });
+
+  it('leaves the dividends out of the sentence when the holding has had none', () => {
+    const data = dataOf();
+    data.tables.dividend = [
+      makeDividend({ holdingId: 'vusa', status: 'skipped', amount: 0, bucket: null }),
+    ];
+    renderPage(data);
+    expect(screen.getByText(`${usd(29_50)} per share above break-even.`)).toBeInTheDocument();
+    expect(screen.queryByText(/Dividends so far/)).not.toBeInTheDocument();
+  });
+
+  it('says below, with the price now in the danger colour and left of break-even, when it is under', () => {
+    // $250.00 a share was paid, so $240.00 is $10.00 below it.
+    renderPage(dataOf(vusa({ costBasis: 10_000_00 })));
+    expect(screen.getByText(be(250_00))).toBeInTheDocument();
+    expect(screen.getByText(`now ${usd(240_00)}`)).toHaveClass('text-danger');
+    expect(left(`now ${usd(240_00)}`)).toBeLessThan(left(be(250_00)));
+    // (1,000,000 - 9,620) / 40 = 247.595, which rounds to 247.60.
+    expect(
+      screen.getByText(
+        `${usd(10_00)} per share below break-even. Dividends so far bring it down to ${usd(247_60)}.`,
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it('shows only break-even per share for a holding with no price', () => {
+    renderPage(dataOf(vusa({ quote: null })));
+    expect(screen.getByText(`Break-even ${usd(210_50)} per share`)).toBeInTheDocument();
+    expect(screen.queryByRole('img', { name: /^Break-even/ })).not.toBeInTheDocument();
+    expect(screen.queryByText(/^now /)).not.toBeInTheDocument();
+    expect(screen.queryByText(/per share (above|below) break-even/)).not.toBeInTheDocument();
+  });
+
+  it('keeps the labels on the page when a marker sits at an end of the bar', () => {
+    // A free holding: break-even 0 is at the left end of the bar.
+    renderPage(dataOf(vusa({ costBasis: 0 })));
+    expect(screen.getByText(be(0))).toBeInTheDocument();
+    expect(left(be(0))).toBeLessThan(20);
+    expect(screen.getByText(be(0)).style.transform).not.toContain('-50%');
+  });
+});
+
+describe('Holding page Mark as reviewed', () => {
+  const checkUp = (overrides = {}) =>
+    makeChallenge({ kind: 'portfolio-checkup', start: TODAY, end: '2026-10-20', ...overrides });
+
+  it('is not there outside the Portfolio Check-Up, and neither is Mark as checked', () => {
+    renderPage();
+    expect(screen.queryByRole('button', { name: /^Mark as/ })).not.toBeInTheDocument();
+    expect(screen.queryByText('Counts toward your Portfolio Check-Up.')).not.toBeInTheDocument();
+  });
+
+  it('is not there for another challenge, or for a check-up that is over', () => {
+    const other = dataOf();
+    other.tables.challenge = [makeChallenge({ kind: 'subscription-audit', start: TODAY })];
+    renderPage(other);
+    expect(screen.queryByRole('button', { name: /^Mark as/ })).not.toBeInTheDocument();
+    cleanup();
+
+    const over = dataOf();
+    over.tables.challenge = [checkUp({ status: 'abandoned' })];
+    renderPage(over);
+    expect(screen.queryByRole('button', { name: /^Mark as/ })).not.toBeInTheDocument();
+  });
+
+  it('shows during the Portfolio Check-Up, with a line saying what it is for, and marks the holding', async () => {
+    const data = dataOf();
+    data.tables.challenge = [checkUp()];
+    const { store } = renderPage(data);
+    const button = screen.getByRole('button', { name: 'Mark as reviewed' });
+    expect(button).toHaveClass('h-12');
+    expect(button.parentElement).toHaveTextContent('Counts toward your Portfolio Check-Up.');
+    expect(screen.queryByRole('button', { name: 'Mark as checked' })).not.toBeInTheDocument();
+
+    await userEvent.click(button);
     await waitFor(() => expect(store.getState().put).toHaveBeenCalledTimes(1));
     expect(store.getState().put).toHaveBeenCalledWith(
       'holding',
       expect.objectContaining({ id: 'vusa', checkedAt: expect.any(String) }),
     );
-    expect(toastStore.getState().toasts.at(-1)?.message).toBe('Marked as checked.');
-  });
-
-  it('has buttons at least 48px tall', () => {
-    renderPage();
-    for (const name of ['Edit', 'Mark as checked']) {
-      expect(screen.getByRole('button', { name })).toHaveClass('h-12');
-    }
+    expect(toastStore.getState().toasts.at(-1)?.message).toBe('Marked as reviewed.');
   });
 });
 

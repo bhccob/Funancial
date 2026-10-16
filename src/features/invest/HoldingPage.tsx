@@ -4,12 +4,14 @@ import { Button } from '@/components/ui/Button';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Section } from '@/components/ui/Section';
 import { minorDigits } from '@/domain/money';
-import { holdingPrice, holdingRate } from '@/domain/portfolio';
+import { breakEven, holdingPrice, holdingRate } from '@/domain/portfolio';
 import { formatDate, formatPercent, formatShares, relativeDays } from '@/lib/format';
 import { useAction } from '@/lib/useAction';
 import { useApp } from '@/store/AppStoreProvider';
 import { useCurrency, useToday } from '@/store/useFinance';
+import { useGameView } from '@/store/useGame';
 import { useInvestActions, useInvestMoney, useInvestPortfolio } from '@/store/useInvest';
+import { BreakEven } from './BreakEven';
 import { HoldingChart } from './HoldingChart';
 import { HoldingDialog } from './HoldingDialog';
 import { SellDialog } from './SellDialog';
@@ -28,16 +30,16 @@ function Fact({ label, note, children }: { label: string; note?: string; childre
 }
 
 /**
- * One holding: what it is worth and how far it has moved since it was bought, its price chart, the
- * facts of the purchase, and Edit. A holding that is not there (deleted from here, or a bad link)
- * sends the person back to Invest.
+ * One holding: what it is worth and how far it has moved since it was bought, its price chart, where
+ * its break-even stands against the price, the facts of the purchase, and Edit and Sell. A holding
+ * that is not there (deleted or sold in full from here, or a bad link) sends the person back to Invest.
  */
 export function HoldingPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
-  const holding = useApp((s) => s.data.tables.holding.find((h) => h.id === id));
-  const dividends = useApp((s) => s.data.tables.dividend);
+  const data = useApp((s) => s.data);
+  const holding = data.tables.holding.find((h) => h.id === id);
   const row = useInvestPortfolio().rows.find((r) => r.holding.id === id);
   // `formatConverted` writes what the portfolio row already converted, so the value and the gain add
   // up with the amount paid below; `format` converts a figure from its unrounded profile amount.
@@ -46,6 +48,9 @@ export function HoldingPage() {
   const today = useToday();
   const { markChecked } = useInvestActions();
   const run = useAction();
+  const checkUp = useGameView().challenges.some(
+    (v) => v.challenge.kind === 'portfolio-checkup' && v.outcome === 'active',
+  );
   const [editing, setEditing] = useState(false);
   const [selling, setSelling] = useState(false);
 
@@ -54,9 +59,12 @@ export function HoldingPage() {
   const { value, gain, gainPct } = row;
   const price = holdingPrice(holding);
   const rate = holdingRate(holding, currency);
-  const received = dividends
+  // A share's price now in minor units of the profile currency, unrounded; null without a price or a rate.
+  const now = price === null || rate === null ? null : price * rate * 10 ** minorDigits(currency);
+  const received = data.tables.dividend
     .filter((d) => d.holdingId === holding.id && d.status === 'confirmed')
     .reduce((sum, d) => sum + d.amount, 0);
+  const even = breakEven(data, holding);
 
   return (
     <div>
@@ -104,6 +112,11 @@ export function HoldingPage() {
           )}
         </p>
         <HoldingChart holding={holding} rate={rate} today={today} />
+        <BreakEven
+          perShare={even.perShare}
+          now={now}
+          afterDividends={received > 0 ? even.afterDividends : null}
+        />
       </Section>
 
       <Section>
@@ -113,11 +126,7 @@ export function HoldingPage() {
           </Fact>
           <Fact label="Shares">{formatShares(holding.shares)}</Fact>
           <Fact label="You paid per share">{format(holding.costBasis / holding.shares)}</Fact>
-          <Fact label="Price now">
-            {price === null || rate === null
-              ? '—'
-              : format(price * rate * 10 ** minorDigits(currency))}
-          </Fact>
+          <Fact label="Price now">{now === null ? '—' : format(now)}</Fact>
           <Fact label="You paid in total">{format(holding.costBasis)}</Fact>
           <Fact label="Dividends received">{format(received)}</Fact>
         </dl>
@@ -129,13 +138,22 @@ export function HoldingPage() {
             Sell
           </Button>
         </div>
-        <Button
-          variant="secondary"
-          className="mt-2 w-full"
-          onClick={() => void run(() => markChecked(holding.id), { success: 'Marked as checked.' })}
-        >
-          Mark as checked
-        </Button>
+        {checkUp && (
+          <div className="mt-4 flex flex-col items-center gap-1.5">
+            <Button
+              variant="secondary"
+              className="w-full"
+              onClick={() =>
+                void run(() => markChecked(holding.id), { success: 'Marked as reviewed.' })
+              }
+            >
+              Mark as reviewed
+            </Button>
+            <p className="text-muted text-[13px] font-semibold">
+              Counts toward your Portfolio Check-Up.
+            </p>
+          </div>
+        )}
       </Section>
       <p className="text-muted pt-1 text-[12.5px] font-bold">
         Prices delayed · not financial advice

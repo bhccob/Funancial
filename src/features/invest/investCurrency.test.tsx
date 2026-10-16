@@ -293,6 +293,20 @@ describe('Invest shown in another currency: a holding', () => {
     expect(fact('You paid per share')).toHaveTextContent(usd(375_04));
     expect(fact('Price now')).toHaveTextContent(usd(50));
   });
+
+  it('shows break-even, the price now and the gap in that currency, each rounded once', () => {
+    // The same holding: 375.04 (37503.75) a share to break even, 0.50 (50.25) now, and 37453.5 less
+    // between them, which is 374.54.
+    const h = ko({ shares: 2, costBasis: 500_05, quote: quote(0.335, 0.335) });
+    renderInvest(
+      dataOf([h], { investCurrency: 'USD', investFx: { ...dollars, rate: 1.5 } }),
+      '/invest/holding/ko',
+    );
+    expect(screen.getByText(`${usd(375_04)} break-even`)).toBeInTheDocument();
+    expect(screen.getByText(`now ${usd(50)}`)).toBeInTheDocument();
+    expect(screen.getByText(`${usd(374_54)} per share below break-even.`)).toBeInTheDocument();
+    expect(screen.queryByText(/€/)).not.toBeInTheDocument();
+  });
 });
 
 /**
