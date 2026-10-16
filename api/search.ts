@@ -13,11 +13,14 @@ export async function GET(req: Request): Promise<Response> {
   if (!QUERY.test(q)) return badRequest(req);
 
   try {
+    // Yahoo can list one symbol twice; the first, being its best match, is the one kept.
+    const seen = new Set<string>();
     const results = (await search(q))
       .flatMap((r) => {
         const type = assetType(r.quoteType);
         const symbol = parseSymbol(r.symbol ?? null);
-        if (type === 'other' || !symbol) return [];
+        if (type === 'other' || !symbol || seen.has(symbol)) return [];
+        seen.add(symbol);
         return [
           {
             symbol,

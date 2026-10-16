@@ -387,6 +387,29 @@ describe('price service', () => {
       });
     });
 
+    it('drops a repeated symbol, keeping the first, before it takes the 8', async () => {
+      vi.mocked(yahoo.search).mockResolvedValue([
+        hit('VUSA.AS', 'ETF'),
+        hit('VUSA.AS', 'EQUITY', { exchDisp: 'Again' }),
+        ...Array.from({ length: 8 }, (_, i) => hit(`S${i}`, 'EQUITY')),
+      ]);
+      const res = await searchGET(request('/api/search?q=vusa'));
+      const { results } = (await res.json()) as {
+        results: Array<{ symbol: string; exchange: string; type: string }>;
+      };
+      expect(results.map((r) => r.symbol)).toEqual([
+        'VUSA.AS',
+        'S0',
+        'S1',
+        'S2',
+        'S3',
+        'S4',
+        'S5',
+        'S6',
+      ]);
+      expect(results[0]).toMatchObject({ exchange: 'Amsterdam', type: 'etf' });
+    });
+
     it('returns at most 8', async () => {
       vi.mocked(yahoo.search).mockResolvedValue(
         Array.from({ length: 10 }, (_, i) => hit(`S${i}`, 'EQUITY')),

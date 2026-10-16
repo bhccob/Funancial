@@ -116,9 +116,17 @@ export function SymbolSearchField({
           </li>
         ))}
       </ul>
-      {open && results?.length === 0 && (
-        <p className="text-muted mt-1.5 text-sm">No matches. You can still type the symbol.</p>
-      )}
+      {/* Always in the page: a live region only speaks what changes after it is there. */}
+      <div role="status">
+        {open && results?.length === 0 && (
+          <p className="text-muted mt-1.5 text-sm">No matches. You can still type the symbol.</p>
+        )}
+        {shown && (
+          <span className="sr-only">
+            {results.length === 1 ? '1 match' : `${results.length} matches`}
+          </span>
+        )}
+      </div>
     </div>
   );
 }

@@ -179,7 +179,6 @@ function HoldingForm({
     autoCapitalize: 'characters',
     autoComplete: 'off',
     spellCheck: false,
-    maxLength: 15,
   };
 
   return (
@@ -187,12 +186,14 @@ function HoldingForm({
       {editing || !marketConfigured() ? (
         <TextField
           {...symbolField}
+          maxLength={15}
           disabled={editing}
           className={editing ? 'opacity-45' : undefined}
           onChange={(e) => set('symbol', e.target.value)}
         />
       ) : (
-        // With the price service, the symbol is searched for and picked from a list.
+        // With the price service, the symbol is searched for and picked from a list. A name is
+        // searched as typed, so the field has no length cap; Save still checks the symbol.
         <SymbolSearchField {...symbolField} onChange={(symbol) => set('symbol', symbol)} />
       )}
       {details && (

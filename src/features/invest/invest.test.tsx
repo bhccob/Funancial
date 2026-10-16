@@ -797,6 +797,59 @@ describe('HoldingDialog symbol search', () => {
     expect(fetchProfile).toHaveBeenCalledWith('MSFT');
   });
 
+  it('announces that nothing matches in a polite live region', async () => {
+    fetchSearch.mockResolvedValue({ results: [] });
+    const { dialog, symbol } = await openSearch();
+    // The region is in the page before the words arrive, or a screen reader would not speak them.
+    const status = within(dialog).getByRole('status');
+    expect(status).toBeEmptyDOMElement();
+    await userEvent.type(symbol, 'msft');
+    await waitFor(() =>
+      expect(status).toHaveTextContent('No matches. You can still type the symbol.'),
+    );
+  });
+
+  it('announces how many matches there are while the list is open', async () => {
+    fetchSearch.mockResolvedValue(VUSA);
+    const { dialog, symbol } = await openSearch();
+    const status = within(dialog).getByRole('status');
+    await userEvent.type(symbol, 'vusa');
+    await within(dialog).findByRole('listbox');
+    expect(status).toHaveTextContent('3 matches');
+    expect(status).toHaveTextContent(/^3 matches$/);
+
+    await userEvent.keyboard('{Escape}');
+    expect(status).toBeEmptyDOMElement();
+  });
+
+  it('says "1 match" for a single one', async () => {
+    fetchSearch.mockResolvedValue({ results: [VUSA.results[0]!] });
+    const { dialog, symbol } = await openSearch();
+    await userEvent.type(symbol, 'vusa');
+    await within(dialog).findByRole('listbox');
+    expect(within(dialog).getByRole('status')).toHaveTextContent(/^1 match$/);
+  });
+
+  it('sends a name longer than a symbol in full, and still checks the symbol at Save', async () => {
+    const { store, dialog, symbol } = await openSearch();
+    await userEvent.type(symbol, 'Vanguard S&P 500');
+    expect(symbol).toHaveValue('Vanguard S&P 500');
+    await waitFor(() => expect(fetchSearch.mock.calls).toEqual([['Vanguard S&P 500']]));
+
+    await enter(dialog, 'Shares', '3');
+    await enter(dialog, 'What you paid in total', '300');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+    expect(
+      within(dialog).getByText('Use letters and numbers only, like KO or VWRL.L'),
+    ).toBeInTheDocument();
+    expect(store.getState().putMany).not.toHaveBeenCalled();
+  });
+
+  it('still caps a symbol typed without the price service at 15 characters', async () => {
+    const { dialog } = await openNewHoldingWithoutService();
+    expect(within(dialog).getByLabelText('Symbol')).toHaveAttribute('maxlength', '15');
+  });
+
   it('shows no list and no message when the search fails, and the symbol can still be typed', async () => {
     fetchSearch.mockRejectedValue(new MarketError());
     fetchProfile.mockResolvedValue(MICROSOFT);
