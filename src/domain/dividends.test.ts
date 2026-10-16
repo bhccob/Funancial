@@ -163,6 +163,78 @@ describe('expectedPayouts', () => {
     expect(due('2026-10-17')).toEqual([]); // not paid yet
   });
 
+  it('does not bring a confirmed payout back when its real date replaces the inferred one', () => {
+    const history = [
+      { date: '2025-09-12', amount: 0.485 },
+      { date: '2025-12-12', amount: 0.485 },
+      { date: '2026-03-12', amount: 0.485 },
+      { date: '2026-06-12', amount: 0.485 },
+    ];
+    const ko = payer({ history });
+    const data = dataOf([ko]);
+    // Nothing is announced, so the next payout is inferred a quarter after the last one.
+    expect(duePayouts(data, 'USD', '2026-09-14').map((p) => p.payDate)).toEqual(['2026-09-12']);
+
+    data.tables.dividend = [makeDividend({ holdingId: ko.id, expectedPayDate: '2026-09-12' })];
+    expect(duePayouts(data, 'USD', '2026-09-14')).toEqual([]);
+
+    // The real ex-date lands in the history six days later and becomes the anchor.
+    const real = { date: '2026-09-18', amount: 0.485 };
+    data.tables.holding = [{ ...ko, dividendInfo: info({ history: [...history, real] }) }];
+    expect(duePayouts(data, 'USD', '2026-09-20')).toEqual([]);
+    expect(expectedPayouts(data, 'USD', '2026-09-01', '2026-11-30')).toEqual([]);
+    // The next quarter's payout is still expected.
+    const next = expectedPayouts(data, 'USD', '2026-09-01', '2027-01-31');
+    expect(dates(next)).toEqual([['2026-12-18', '2026-12-18']]);
+  });
+
+  it('settles a payout by a record within half a step of it, and not by a farther one', () => {
+    // [days between payouts, the first distance in days that no longer settles]
+    const cases = [
+      [30, 15],
+      [91, 45],
+      [182, 90],
+      [365, 180],
+    ] as const;
+    const skipped = { status: 'skipped', amount: 0, bucket: null } as const;
+    const shown = (ko: Holding, daysAway: number) => {
+      const data = dataOf([ko]);
+      data.tables.dividend = [
+        makeDividend({
+          ...skipped,
+          holdingId: ko.id,
+          expectedPayDate: addDays('2026-09-12', -daysAway),
+        }),
+      ];
+      return expectedPayouts(data, 'USD', '2026-09-01', '2026-09-30').length;
+    };
+    for (const [step, within] of cases) {
+      const history = [-2 * step, -step, 0].map((d) => ({
+        date: addDays('2026-01-01', d),
+        amount: 1,
+      }));
+      const ko = payer({ history, nextExDate: '2026-09-12', nextAmount: 1 });
+      expect([step, shown(ko, within - 1), shown(ko, within)]).toEqual([step, 0, 1]);
+      expect([step, shown(ko, -(within - 1)), shown(ko, -within)]).toEqual([step, 0, 1]);
+    }
+    // With no frequency to go by, half a quarter.
+    const unknown = payer({ history: [], nextExDate: '2026-09-12', nextAmount: 1 });
+    expect([shown(unknown, 44), shown(unknown, 45)]).toEqual([0, 1]);
+  });
+
+  it('ignores a stale Yahoo pay date from before the ex-date', () => {
+    // Yahoo can keep last cycle's pay date next to a newer ex-date, which would be a negative lag.
+    const ko = payer({ nextExDate: '2026-10-20', nextPayDate: '2026-07-30', nextAmount: 0.5 });
+    const out = expectedPayouts(dataOf([ko]), 'USD', '2026-10-16', '2027-02-28');
+    expect(dates(out)).toEqual([
+      ['2026-10-20', '2026-10-20'],
+      ['2027-01-20', '2027-01-20'],
+    ]);
+    // A pay date on the ex-date itself is not stale.
+    const same = payer({ nextExDate: '2026-10-20', nextPayDate: '2026-10-20', nextAmount: 0.5 });
+    expect(expectedPayouts(dataOf([same]), 'USD', '2026-10-16', '2026-10-31')).toHaveLength(1);
+  });
+
   it('falls back to the ex-date when Yahoo has no pay date', () => {
     const ko = payer({ nextExDate: '2026-10-30', nextPayDate: null, nextAmount: 0.5 });
     const out = expectedPayouts(dataOf([ko]), 'USD', '2026-10-16', '2027-02-28');

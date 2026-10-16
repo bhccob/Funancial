@@ -12,6 +12,18 @@ const STEP_MONTHS: Record<Frequency, number> = {
   semiannual: 6,
   annual: 12,
 };
+/**
+ * How near (in days, exclusive) a confirmed or skipped record must lie to a payout to settle it:
+ * half a step. The real pay date often differs from the inferred one, and a payout that moved a
+ * few days must not come back as due after it was confirmed. Without a frequency, a quarter's half.
+ */
+const SETTLE_WITHIN: Record<Frequency, number> = {
+  monthly: 15,
+  quarterly: 45,
+  semiannual: 90,
+  annual: 180,
+};
+const SETTLE_WITHIN_UNKNOWN = 45;
 const DAY_MS = 86_400_000;
 const pad = (n: number) => String(n).padStart(2, '0');
 const daysApart = (a: LocalDate, b: LocalDate) =>
@@ -58,6 +70,8 @@ export type ExpectedPayout = {
  * ex- or pay date (it is the latest announced payout, so it is often already past), else the last
  * history entry. Later payouts step forward from the anchor by the inferred frequency. A payout
  * whose ex-date (its pay date, without one) is before the purchase is not earned, so it is left out.
+ * A payout is settled by a record for the same holding whose `expectedPayDate` is its pay date or
+ * within half a step of it (see `SETTLE_WITHIN`).
  */
 export function expectedPayouts(
   data: DataSnapshot,
@@ -65,7 +79,10 @@ export function expectedPayouts(
   from: LocalDate,
   to: LocalDate,
 ): ExpectedPayout[] {
-  const settled = new Set(data.tables.dividend.map((d) => `${d.holdingId}|${d.expectedPayDate}`));
+  const recorded = new Map<string, LocalDate[]>();
+  for (const d of data.tables.dividend) {
+    recorded.set(d.holdingId, [...(recorded.get(d.holdingId) ?? []), d.expectedPayDate]);
+  }
   const out: ExpectedPayout[] = [];
 
   for (const holding of data.tables.holding) {
@@ -76,18 +93,23 @@ export function expectedPayouts(
       undefined,
     );
     const perShare = info.nextAmount ?? last?.amount;
-    const base = info.nextExDate ?? info.nextPayDate ?? last?.date;
+    // A pay date before its ex-date is the previous cycle's, left behind by Yahoo: no pay date.
+    const nextPay =
+      info.nextPayDate !== null && info.nextExDate !== null && info.nextPayDate < info.nextExDate
+        ? null
+        : info.nextPayDate;
+    const base = info.nextExDate ?? nextPay ?? last?.date;
     if (perShare === undefined || base === undefined) continue;
     // The base is an ex-date unless Yahoo gave only a pay date.
-    const baseIsEx = info.nextExDate !== null || info.nextPayDate === null;
+    const baseIsEx = info.nextExDate !== null || nextPay === null;
     // shortcut: later payouts reuse the announced payout's ex-to-pay gap, and it is 0 when Yahoo
     // has no pay date; upgrade when pay dates are stored per payout.
     const lag =
-      info.nextExDate !== null && info.nextPayDate !== null
-        ? daysApart(info.nextExDate, info.nextPayDate)
-        : 0;
+      info.nextExDate !== null && nextPay !== null ? daysApart(info.nextExDate, nextPay) : 0;
     const frequency = inferFrequency(info.history);
     const months = frequency ? STEP_MONTHS[frequency] : 0;
+    const settleWithin = frequency ? SETTLE_WITHIN[frequency] : SETTLE_WITHIN_UNKNOWN;
+    const records = recorded.get(holding.id) ?? [];
     const rate = holdingRate(holding, profileCurrency);
     const net =
       rate === null
@@ -107,7 +129,7 @@ export function expectedPayouts(
       if (
         payDate < from ||
         (exDate ?? payDate) < holding.purchaseDate ||
-        settled.has(`${holding.id}|${payDate}`)
+        records.some((d) => Math.abs(daysApart(d, payDate)) < settleWithin)
       ) {
         continue;
       }
