@@ -6,7 +6,7 @@ import { formatMoney } from '@/domain/money';
 import { market as realMarket, MarketError, type Market } from '@/services/market';
 import { makeAboutYou, makeBuyAsk, makeBuyDecision, makeLimit, makeProfile } from '@/test/fixtures';
 import { freshRealStore } from '@/test/realStore';
-import { BUY_MESSAGES, createBuyActions, RATE_RANGE } from './buyActions';
+import { BUY_MESSAGES, createBuyActions, RATE_RANGE, remindDay } from './buyActions';
 
 // The advisor module is the real one; the spy only lets a test see what the ask handed it.
 vi.mock('@/domain/advisor', async (importOriginal) => {
@@ -280,6 +280,16 @@ describe('extract', () => {
     await expect(actions.extract('https://shop.test/shoes')).resolves.toBeNull();
     expect(offline).toHaveBeenCalledOnce();
     expect((offline.mock.calls[0] as unknown as [string])[0]).toContain('/api/extract?url=');
+  });
+});
+
+describe('remindDay', () => {
+  it('is the day the limit starts afresh, else two days on', () => {
+    expect(remindDay('2026-11-01', '2026-10-14')).toBe('2026-11-01');
+    expect(remindDay(null, '2026-10-14')).toBe('2026-10-16');
+    // A reset that has come (or is today) is no day to wait for.
+    expect(remindDay('2026-10-14', '2026-10-14')).toBe('2026-10-16');
+    expect(remindDay('2026-10-01', '2026-10-31')).toBe('2026-11-02');
   });
 });
 

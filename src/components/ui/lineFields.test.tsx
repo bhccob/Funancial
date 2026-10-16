@@ -177,6 +177,13 @@ describe('ShareStepper', () => {
     }
   });
 
+  it('names its buttons after what it counts, when told', () => {
+    render(<ShareStepper label="Quantity" unit="items" value="1" onChange={() => {}} />);
+    expect(screen.getByRole('button', { name: 'Fewer items' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'More items' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /shares/ })).not.toBeInTheDocument();
+  });
+
   it('steps by 1 with + and −', async () => {
     render(<Stepper start="40" />);
     await userEvent.click(screen.getByRole('button', { name: 'More shares' }));

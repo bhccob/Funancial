@@ -1,6 +1,6 @@
 import type { StoreApi } from 'zustand/vanilla';
 import { analyse, buildSnapshot } from '@/domain/advisor';
-import { addDays } from '@/domain/dates';
+import { addDays, type LocalDate } from '@/domain/dates';
 import {
   AboutYouSchema,
   BuyAskSchema,
@@ -33,6 +33,11 @@ const NOT_FOUND = 'That item no longer exists.';
 const RATINGS = [1, 2, 3, 4, 5] as const;
 /** The day to ask again when no limit starts afresh sooner. */
 const WAIT_DAYS = 2;
+
+/** The day "Remind me" asks again: when the limit it went over starts afresh, else two days on. */
+export function remindDay(resetsOn: LocalDate | null, today: LocalDate): LocalDate {
+  return resetsOn !== null && resetsOn > today ? resetsOn : addDays(today, WAIT_DAYS);
+}
 
 export type AboutPatch = Partial<
   Pick<AboutYou, 'situation' | 'matters' | 'overspend' | 'protectGoalId'>
@@ -139,14 +144,10 @@ export function createBuyActions(store: StoreApi<AppState>, market: Market) {
       return typeof found?.name === 'string' || typeof found?.price === 'number' ? found : null;
     },
 
-    /** Ask again on the day the limit it went over starts afresh, else in two days. */
+    /** Ask again on `remindDay`. */
     async wait(id: string) {
-      const { resetsOn } = find(id).facts;
       const { today } = state();
-      await update(id, {
-        status: 'waiting',
-        remindOn: resetsOn !== null && resetsOn > today ? resetsOn : addDays(today, WAIT_DAYS),
-      });
+      await update(id, { status: 'waiting', remindOn: remindDay(find(id).facts.resetsOn, today) });
     },
 
     async bought(id: string): Promise<BuyPrefill> {

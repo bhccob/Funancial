@@ -9,6 +9,8 @@ export interface ShareStepperProps {
   value: string;
   onChange(text: string): void;
   error?: string;
+  /** What the − and + buttons count, in their names: "Fewer shares", "More shares". */
+  unit?: string;
 }
 
 /** A round − or +, 30px to look at inside a 44px hit area. */
@@ -45,7 +47,13 @@ function StepButton({
  * The number of shares, typable (a fraction works) with a − and a + that step it by 1. − is off
  * when a step down would reach 0 or less.
  */
-export function ShareStepper({ label, value, onChange, error }: ShareStepperProps) {
+export function ShareStepper({
+  label,
+  value,
+  onChange,
+  error,
+  unit = 'shares',
+}: ShareStepperProps) {
   const id = useId();
   const errorId = error ? `${id}-error` : undefined;
   // What is not a number steps from 0, as an empty field does.
@@ -77,10 +85,10 @@ export function ShareStepper({ label, value, onChange, error }: ShareStepperProp
             className="text-text h-8 w-full min-w-0 bg-transparent text-[20px] font-extrabold tabular-nums focus:outline-none"
           />
         </div>
-        <StepButton name="Fewer shares" disabled={shares - 1 <= 0} onClick={() => step(-1)}>
+        <StepButton name={`Fewer ${unit}`} disabled={shares - 1 <= 0} onClick={() => step(-1)}>
           −
         </StepButton>
-        <StepButton name="More shares" onClick={() => step(1)}>
+        <StepButton name={`More ${unit}`} onClick={() => step(1)}>
           +
         </StepButton>
       </div>
