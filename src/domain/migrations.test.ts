@@ -76,16 +76,18 @@ describe('v3 settings', () => {
   };
 
   const cosmetics = { theme: 'theme-violet', avatar: 'avatar-sprout', frame: 'frame-none' };
+  // Migrating all the way up also runs step 5, which adds the dividend reminder.
+  const upgraded = { ...reminders, dividends: true };
 
   it('v3 adds reminder settings to old settings records', () => {
     expect(migrateRecord('settings', v2Settings, 2)).toEqual({
       ...v2Settings,
-      reminders,
+      reminders: upgraded,
       cosmetics,
     });
     expect(migrateRecord('settings', v2Settings, 1)).toEqual({
       ...v2Settings,
-      reminders,
+      reminders: upgraded,
       cosmetics,
     });
   });
@@ -94,7 +96,7 @@ describe('v3 settings', () => {
     const chosen = { ...reminders, enabled: true, dailyTime: '07:30' };
     expect(migrateRecord('settings', { ...v2Settings, reminders: chosen }, 2)).toEqual({
       ...v2Settings,
-      reminders: chosen,
+      reminders: { ...chosen, dividends: true },
       cosmetics,
     });
   });
@@ -132,6 +134,7 @@ describe('v4 game data', () => {
   it('gives v3 settings the default cosmetics and keeps everything else', () => {
     expect(migrateRecord('settings', v3Settings, 3)).toEqual({
       ...v3Settings,
+      reminders: { ...v3Settings.reminders, dividends: true },
       cosmetics: defaultCosmetics,
     });
   });
@@ -140,6 +143,7 @@ describe('v4 game data', () => {
     const chosen = { theme: 'theme-forest', avatar: 'avatar-fox', frame: 'frame-gold' };
     expect(migrateRecord('settings', { ...v3Settings, cosmetics: chosen }, 3)).toEqual({
       ...v3Settings,
+      reminders: { ...v3Settings.reminders, dividends: true },
       cosmetics: chosen,
     });
   });
@@ -165,5 +169,53 @@ describe('v4 game data', () => {
     expect(migrateRecord('checkIn', entry, 3)).toEqual(entry);
     expect(migrateRecord('challenge', entry, 3)).toEqual(entry);
     expect(migrateRecord('streakFreeze', entry, 3)).toEqual(entry);
+  });
+});
+
+describe('v5 investments', () => {
+  const v4Settings = {
+    id: 'settings',
+    createdAt: '2026-10-01T09:00:00.000Z',
+    updatedAt: '2026-10-01T09:00:00.000Z',
+    weekStartsOn: 1,
+    warningTone: 'motivational',
+    autoLockMinutes: 5,
+    lastBackupAt: null,
+    reminders: {
+      enabled: true,
+      dailyLog: true,
+      dailyTime: '07:30',
+      bills: true,
+      freeze: true,
+      reviews: true,
+      backup: true,
+      prompted: true,
+    },
+    cosmetics: { theme: 'theme-forest', avatar: 'avatar-fox', frame: 'frame-gold' },
+  };
+
+  it('turns the dividend reminder on in v4 settings and keeps everything else', () => {
+    expect(migrateRecord('settings', v4Settings, 4)).toEqual({
+      ...v4Settings,
+      reminders: { ...v4Settings.reminders, dividends: true },
+    });
+  });
+
+  it('keeps a dividend reminder choice that is already there', () => {
+    const chosen = { ...v4Settings, reminders: { ...v4Settings.reminders, dividends: false } };
+    expect(migrateRecord('settings', chosen, 4)).toEqual(chosen);
+  });
+
+  it('gives every settings record its own reminders object', () => {
+    const a = migrateRecord('settings', v4Settings, 4) as { reminders: object };
+    const b = migrateRecord('settings', v4Settings, 4) as { reminders: object };
+    expect(a.reminders).not.toBe(b.reminders);
+    expect(a.reminders).not.toBe(v4Settings.reminders);
+  });
+
+  it('leaves the new holding and dividend tables alone', () => {
+    const row = { id: 'h1', symbol: 'KO' };
+    expect(migrateRecord('holding', row, 4)).toEqual(row);
+    expect(migrateRecord('dividend', row, 4)).toEqual(row);
   });
 });

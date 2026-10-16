@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { makeExpense, makeProfile, makeSettings, makeSubscription } from '@/test/fixtures';
+import {
+  makeDividend,
+  makeExpense,
+  makeHolding,
+  makeProfile,
+  makeSettings,
+  makeSubscription,
+} from '@/test/fixtures';
 import {
   CURRENT_SCHEMA_VERSION,
   emptySnapshot,
@@ -101,7 +108,9 @@ describe('migrateSnapshot from older versions', () => {
       },
     };
     const s = migrateSnapshot(v3);
-    expect(s.schemaVersion).toBe(4);
+    expect(s.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+    expect(s.tables.holding).toEqual([]);
+    expect(s.tables.dividend).toEqual([]);
     expect(s.tables.ledger).toEqual([]);
     expect(s.tables.checkIn).toEqual([]);
     expect(s.tables.challenge).toEqual([]);
@@ -112,5 +121,42 @@ describe('migrateSnapshot from older versions', () => {
       frame: 'frame-none',
     });
     expect(s.tables.subscription[0]!.auditedAt).toBeNull();
+    expect(s.tables.settings[0]!.reminders.dividends).toBe(true);
+  });
+
+  it('migrates v4 settings with reminders.dividends true and empty holding tables', () => {
+    const v4Reminders: Record<string, unknown> = { ...makeSettings().reminders };
+    delete v4Reminders.dividends;
+    const v4 = {
+      schemaVersion: 4,
+      tables: {
+        profile: [],
+        settings: [{ ...makeSettings(), reminders: v4Reminders }],
+        income: [],
+        expense: [],
+        subscription: [],
+        budgetLimit: [],
+        salaryFreeze: [],
+        transaction: [],
+        goal: [],
+        debt: [],
+        ledger: [],
+        checkIn: [],
+        challenge: [],
+        streakFreeze: [],
+      },
+    };
+    const s = migrateSnapshot(v4);
+    expect(s.schemaVersion).toBe(5);
+    expect(s.tables.settings[0]!.reminders).toEqual({ ...v4Reminders, dividends: true });
+    expect(s.tables.holding).toEqual([]);
+    expect(s.tables.dividend).toEqual([]);
+  });
+
+  it('keeps holdings and dividends through a round trip', () => {
+    const s = emptySnapshot();
+    s.tables.holding = [makeHolding({ id: 'h1' })];
+    s.tables.dividend = [makeDividend({ id: 'd1', holdingId: 'h1' })];
+    expect(migrateSnapshot(JSON.parse(JSON.stringify(s)))).toEqual(s);
   });
 });

@@ -11,6 +11,7 @@ import {
 import type { LocalDate } from './dates';
 import type { Debt, Income, SalaryFreeze } from './entities';
 import { monthKey } from './periods';
+import { portfolio } from './portfolio';
 import { monthlyEquivalent } from './recurrence';
 import { expectedSalary } from './salary';
 import type { DataSnapshot } from './snapshot';
@@ -19,6 +20,8 @@ export type FinanceView = {
   buckets: Buckets;
   debts: Array<{ debt: Debt; balance: number }>;
   debtTotal: number;
+  /** The priced holdings, in minor units of the profile currency; part of `netWorth`. */
+  investments: number;
   netWorth: number;
   bills: Bill[];
   billsTotal: number;
@@ -44,12 +47,14 @@ export function computeFinanceView(
   const bills = upcomingBills(data, today);
   const reserved = reservedTotal(data, today, weekStartsOn);
   const profile = data.tables.profile[0];
+  const investments = profile ? portfolio(data, profile.currency).value : 0;
 
   return {
     buckets,
     debts,
     debtTotal,
-    netWorth: netWorth(buckets, debtTotal),
+    investments,
+    netWorth: netWorth(buckets, debtTotal, investments),
     bills,
     billsTotal: bills.reduce((s, b) => s + b.amount, 0),
     reserved,

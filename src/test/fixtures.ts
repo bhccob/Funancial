@@ -5,8 +5,10 @@ import {
   type Challenge,
   type CheckIn,
   type Debt,
+  type Dividend,
   type Expense,
   type Goal,
+  type Holding,
   type Income,
   type LedgerEntry,
   type Profile,
@@ -210,6 +212,44 @@ export function makeStreakFreeze(overrides: Partial<StreakFreeze> = {}): StreakF
     ...stamp(),
     streak: 'logging',
     date: today(),
+    ...overrides,
+  };
+}
+
+export function makeHolding(overrides: Partial<Holding> = {}): Holding {
+  return {
+    id: newId(),
+    ...stamp(),
+    symbol: 'KO',
+    name: 'Coca-Cola',
+    type: 'stock',
+    exchange: 'NYQ',
+    sector: 'Consumer Defensive',
+    currency: 'USD',
+    shares: 10,
+    costBasis: 500_00,
+    purchaseDate: today(),
+    withholdingPct: 15,
+    manualPrice: null,
+    quote: null,
+    dividendInfo: null,
+    checkedAt: null,
+    ...overrides,
+  };
+}
+
+export function makeDividend(overrides: Partial<Dividend> = {}): Dividend {
+  return {
+    id: newId(),
+    ...stamp(),
+    holdingId: 'holding-1',
+    symbol: 'KO',
+    expectedPayDate: today(),
+    paidOn: today(),
+    status: 'confirmed',
+    amount: 11_20,
+    bucket: 'cash',
+    sharesAdded: null,
     ...overrides,
   };
 }

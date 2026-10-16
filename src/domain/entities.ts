@@ -74,6 +74,7 @@ export const ReminderSettingsSchema = z.object({
   freeze: z.boolean(),
   reviews: z.boolean(),
   backup: z.boolean(),
+  dividends: z.boolean(),
   /** Set once the person has been asked about reminders, so the ask is not repeated. */
   prompted: z.boolean(),
 });
@@ -123,6 +124,7 @@ export function defaultSettings(now: string): Settings {
       freeze: true,
       reviews: true,
       backup: true,
+      dividends: true,
       prompted: false,
     },
     cosmetics: { theme: 'theme-violet', avatar: 'avatar-sprout', frame: 'frame-none' },
@@ -215,7 +217,7 @@ export type SalaryFreeze = z.infer<typeof SalaryFreezeSchema>;
 export const TransactionSchema = z
   .object({
     ...base,
-    type: z.enum(['transfer', 'adjustment', 'card_payment', 'debt_payment']),
+    type: z.enum(['transfer', 'adjustment', 'card_payment', 'debt_payment', 'investment']),
     amount: Money,
     date: LocalDateSchema,
     from: BucketSchema.nullable(),
@@ -238,6 +240,9 @@ export const TransactionSchema = z
     if (v.type === 'card_payment' || v.type === 'debt_payment') {
       if (v.debtId === null) issue('A payment must name the card or debt', 'debtId');
       if (v.from === null) issue('A payment must come from a bucket', 'from');
+    }
+    if (v.type === 'investment' && v.from === null) {
+      issue('An investment must come from a bucket', 'from');
     }
   });
 export type Transaction = z.infer<typeof TransactionSchema>;
@@ -317,3 +322,74 @@ export const StreakFreezeSchema = z.object({
   date: LocalDateSchema,
 });
 export type StreakFreeze = z.infer<typeof StreakFreezeSchema>;
+
+/**
+ * A stock, ETF or other holding. `costBasis` is money in the profile currency; shares, prices and
+ * rates are plain numbers. `quote` and `dividendInfo` are the last copy fetched from the price
+ * service, kept so the screens work offline; `manualPrice` wins over the quote.
+ */
+export const HoldingSchema = z.object({
+  ...base,
+  symbol: z.string().regex(/^[A-Z0-9.^=-]{1,15}$/, 'Use an upper-case symbol'),
+  name: z.string().min(1),
+  type: z.enum(['stock', 'etf', 'other']),
+  exchange: z.string().nullable(),
+  sector: z.string().nullable(),
+  /** What the holding trades in. */
+  currency: z.string().regex(/^[A-Z]{3}$/, 'Use a 3-letter currency code'),
+  shares: z.number().positive(),
+  costBasis: NonNegativeMoney,
+  purchaseDate: LocalDateSchema,
+  /** Percent of each dividend withheld as tax, 0 to 100. */
+  withholdingPct: z.number().min(0).max(100),
+  manualPrice: z.number().nonnegative().nullable(),
+  quote: z
+    .object({
+      price: z.number().nonnegative(),
+      previousClose: z.number().nonnegative().nullable(),
+      /** Profile currency per unit of the holding's currency; null when unknown. */
+      fxRate: z.number().positive().nullable(),
+      asOf: IsoTimestampSchema,
+    })
+    .nullable(),
+  dividendInfo: z
+    .object({
+      /** Ex-dates and per-share amounts in the holding's currency, oldest first. */
+      history: z.array(z.object({ date: LocalDateSchema, amount: z.number().nonnegative() })),
+      nextExDate: LocalDateSchema.nullable(),
+      nextPayDate: LocalDateSchema.nullable(),
+      nextAmount: z.number().nonnegative().nullable(),
+      fetchedAt: IsoTimestampSchema,
+    })
+    .nullable(),
+  checkedAt: IsoTimestampSchema.nullable(),
+});
+export type Holding = z.infer<typeof HoldingSchema>;
+
+/** A dividend payout the person confirmed or skipped. `(holdingId, expectedPayDate)` names the payout it settles. */
+export const DividendSchema = z
+  .object({
+    ...base,
+    holdingId: z.string().min(1),
+    symbol: z.string().min(1),
+    expectedPayDate: LocalDateSchema,
+    paidOn: LocalDateSchema,
+    status: z.enum(['confirmed', 'skipped']),
+    /** What arrived, after tax; 0 when skipped. */
+    amount: NonNegativeMoney,
+    /** Where it went; `reinvest` bought more shares. Null when skipped. */
+    bucket: z.enum(['cash', 'savings', 'passive', 'reinvest']).nullable(),
+    sharesAdded: z.number().nonnegative().nullable(),
+  })
+  .superRefine((v, ctx) => {
+    const issue = (message: string, path: string) =>
+      ctx.addIssue({ code: 'custom', message, path: [path] });
+    if (v.status === 'skipped') {
+      if (v.amount !== 0) issue('A skipped payout received nothing', 'amount');
+      if (v.bucket !== null) issue('A skipped payout went nowhere', 'bucket');
+      if (v.sharesAdded !== null) issue('A skipped payout added no shares', 'sharesAdded');
+    } else if (v.bucket === null) {
+      issue('A confirmed payout names where it went', 'bucket');
+    }
+  });
+export type Dividend = z.infer<typeof DividendSchema>;

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   makeDebt,
   makeExpense,
+  makeHolding,
   makeLimit,
   makeProfile,
   makeSubscription,
@@ -185,6 +186,30 @@ describe('net worth over time', () => {
     data.tables.expense = [makeExpense({ date: '2026-10-01', amount: 30_00 })];
     expect(netWorthChangeThisMonth(data, '2026-10-01')).toBe(-30_00);
     expect(netWorthChangeThisMonth(data, '2026-11-01')).toBe(0);
+  });
+
+  it('adds investments to net worth and to the trend from each purchase date', () => {
+    const data = worth();
+    const quote = {
+      price: 60,
+      previousClose: null,
+      fxRate: null,
+      asOf: '2026-10-15T10:00:00.000Z',
+    };
+    data.tables.holding = [
+      makeHolding({ shares: 10, purchaseDate: '2026-10-08', quote }), // 600.00 at today's price
+      makeHolding({ shares: 1, purchaseDate: '2026-10-12', manualPrice: 25 }), // 25.00
+      makeHolding({ shares: 5, purchaseDate: '2026-10-01', quote: null }), // unpriced: adds nothing
+    ];
+    expect(netWorthOn(data, '2026-10-07')).toBe(800_00);
+    expect(netWorthOn(data, '2026-10-08')).toBe(800_00 + 600_00);
+    expect(netWorthOn(data, '2026-10-11')).toBe(800_00 + 600_00);
+    expect(netWorthOn(data, TODAY)).toBe(800_00 + 600_00 + 25_00);
+    const series = netWorthSeries(data, TODAY, 10);
+    expect(series.map((p) => p.value)).toEqual([
+      800_00, 800_00, 1_400_00, 1_400_00, 1_400_00, 1_400_00, 1_425_00, 1_425_00, 1_425_00,
+      1_425_00,
+    ]);
   });
 
   it('gives a 30-point series ending today', () => {

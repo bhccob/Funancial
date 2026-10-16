@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import { makeHolding, makeProfile } from '@/test/fixtures';
 import { EXAMPLES } from './examples';
+import { emptySnapshot } from './snapshot';
 import { computeFinanceView } from './view';
 
 const avl = EXAMPLES.find((e) => e.id === 'AVL-1')!;
@@ -11,6 +13,7 @@ describe('computeFinanceView', () => {
     expect(v).toMatchObject({
       buckets: { cash: 1_100_00, savings: 3_000_00, passive: 0 },
       debtTotal: 230_00,
+      investments: 0,
       netWorth: 3_870_00,
       billsTotal: 245_99,
       reserved: 1_200_00,
@@ -25,6 +28,23 @@ describe('computeFinanceView', () => {
       ['rent', 0],
     ]);
     expect(v.debts.map((d) => [d.debt.id, d.balance])).toEqual([['card-1', 230_00]]);
+  });
+
+  it('counts the priced portfolio as investments in net worth', () => {
+    const data = emptySnapshot();
+    data.tables.profile = [
+      makeProfile({ openingDate: '2026-10-01', openingCash: 1_000_00, openingSavings: 0 }),
+    ];
+    const quote = {
+      price: 60,
+      previousClose: null,
+      fxRate: null,
+      asOf: '2026-10-14T08:00:00.000Z',
+    };
+    data.tables.holding = [makeHolding({ shares: 10, quote }), makeHolding({ quote: null })];
+    const v = computeFinanceView(data, '2026-10-14', 1);
+    expect(v.investments).toBe(600_00);
+    expect(v.netWorth).toBe(1_600_00);
   });
 
   it('finds the active freeze on its first and last day only', () => {

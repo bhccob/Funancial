@@ -44,6 +44,11 @@ describe('sliceColor', () => {
     expect(sliceColor('food', 1)).toBe('var(--color-chart-2)');
     expect(sliceColor('health', 4)).toBe('var(--color-chart-5)');
   });
+
+  it('colours keys that are not categories, such as a holding or a sector, by position too', () => {
+    expect(sliceColor('Technology', 2)).toBe('var(--color-chart-3)');
+    expect(sliceColor('a3f9-holding-id', 5)).toBe('var(--color-chart-1)');
+  });
 });
 
 describe('Donut', () => {

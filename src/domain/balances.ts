@@ -7,6 +7,8 @@ export type Buckets = { cash: number; savings: number; passive: number };
 /**
  * Cash, savings and passive-income balances as of a day: the opening amounts plus every event
  * dated from the opening date through `asOf`. Card expenses don't touch cash (they raise the card).
+ * An investment takes money out of its bucket, and a confirmed dividend puts it into the bucket it
+ * went to (a reinvested one went into shares, so no bucket).
  */
 export function bucketBalances(data: DataSnapshot, asOf: LocalDate): Buckets {
   const profile = data.tables.profile[0];
@@ -36,8 +38,14 @@ export function bucketBalances(data: DataSnapshot, asOf: LocalDate): Buckets {
         break;
       case 'card_payment':
       case 'debt_payment':
+      case 'investment':
         if (t.from) b[t.from] -= t.amount;
         break;
+    }
+  }
+  for (const d of data.tables.dividend) {
+    if (d.status === 'confirmed' && d.bucket && d.bucket !== 'reinvest' && counts(d.paidOn)) {
+      b[d.bucket] += d.amount;
     }
   }
   return b;

@@ -47,6 +47,14 @@ const STEPS: Record<number, Step> = {
           },
     subscription: (r) => (r.auditedAt !== undefined ? r : { ...r, auditedAt: null }),
   },
+  5: {
+    // The holding and dividend tables are new, so a snapshot without them gets empty ones from
+    // the schema. Spelled out like step 3: the dividend reminder starts on.
+    settings: (r) =>
+      typeof r.reminders === 'object' && r.reminders !== null && !('dividends' in r.reminders)
+        ? { ...r, reminders: { ...r.reminders, dividends: true } }
+        : r,
+  },
 };
 
 export const LATEST_VERSION = Math.max(1, ...Object.keys(STEPS).map(Number));

@@ -1,8 +1,9 @@
 import { bucketBalances, debtBalance, netWorth } from './balances';
 import { categoryBreakdown, categoryLabel } from './budget';
 import { addDays, type LocalDate } from './dates';
-import type { Category, Expense } from './entities';
+import type { Expense } from './entities';
 import { monthRange, periodRange, type Range } from './periods';
+import { holdingValue } from './portfolio';
 import type { DataSnapshot } from './snapshot';
 import type { FinanceView } from './view';
 
@@ -22,7 +23,8 @@ export function spendingByDay(
   return out;
 }
 
-export type Slice = { key: Category | 'other'; label: string; amount: number };
+/** One slice of a donut. `key` is unique within the chart; `'other'` always means the folded Other. */
+export type Slice = { key: string; label: string; amount: number };
 
 /**
  * The categories with spending in the range, highest first. The `top` biggest are kept; the rest,
@@ -42,10 +44,21 @@ export function categorySlices(expenses: Expense[], range: Range, top = 5): Slic
   return slices;
 }
 
-/** Cash, savings and passive income less everything owed, as of the end of `day`. */
+/**
+ * Cash, savings and passive income plus the holdings bought by then, less everything owed, as of
+ * the end of `day`.
+ */
 export function netWorthOn(data: DataSnapshot, day: LocalDate): number {
   const debtTotal = data.tables.debt.reduce((sum, d) => sum + debtBalance(d, data, day), 0);
-  return netWorth(bucketBalances(data, day), debtTotal);
+  // shortcut: no price history, uses today's prices; upgrade when prices are stored by day
+  const currency = data.tables.profile[0]?.currency;
+  const investments = currency
+    ? data.tables.holding.reduce(
+        (sum, h) => (h.purchaseDate <= day ? sum + (holdingValue(h, currency) ?? 0) : sum),
+        0,
+      )
+    : 0;
+  return netWorth(bucketBalances(data, day), debtTotal, investments);
 }
 
 /** Net worth on each of the `days` days ending `endDay`, oldest first. */

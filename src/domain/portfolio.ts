@@ -1,0 +1,135 @@
+import type { Slice } from './charts';
+import type { Holding } from './entities';
+import { minorDigits } from './money';
+import type { DataSnapshot } from './snapshot';
+
+/** The price to value a holding at: the person's own, else the last quote. */
+export function holdingPrice(h: Holding): number | null {
+  return h.manualPrice ?? h.quote?.price ?? null;
+}
+
+/** What one unit of the holding's currency is worth in the profile currency; null when unknown. */
+export function holdingRate(h: Holding, profileCurrency: string): number | null {
+  return h.currency === profileCurrency ? 1 : (h.quote?.fxRate ?? null);
+}
+
+/**
+ * `amount` of the holding's currency as whole minor units of the profile currency, rounded once.
+ * The `+ 0` turns a rounded -0 into 0, which would otherwise print as "-$0.00".
+ */
+export function toMinor(amount: number, rate: number, profileCurrency: string): number {
+  return Math.round(amount * rate * 10 ** minorDigits(profileCurrency)) + 0;
+}
+
+/** What the holding is worth in minor units of the profile currency; null when no price or rate. */
+export function holdingValue(h: Holding, profileCurrency: string): number | null {
+  const price = holdingPrice(h);
+  const rate = holdingRate(h, profileCurrency);
+  return price === null || rate === null ? null : toMinor(h.shares * price, rate, profileCurrency);
+}
+
+/** Today's move from the quote alone: a manual price is the person's, so it has no day change. */
+function holdingDayChange(h: Holding, profileCurrency: string): number | null {
+  const rate = holdingRate(h, profileCurrency);
+  const quote = h.quote;
+  if (h.manualPrice !== null || !quote || quote.previousClose === null || rate === null) {
+    return null;
+  }
+  return toMinor(h.shares * (quote.price - quote.previousClose), rate, profileCurrency);
+}
+
+export type HoldingRow = {
+  holding: Holding;
+  value: number | null;
+  gain: number | null;
+  /** Percent of the cost; null without a value or without a cost. */
+  gainPct: number | null;
+  dayChange: number | null;
+};
+
+export type Portfolio = {
+  rows: HoldingRow[];
+  value: number;
+  cost: number;
+  gain: number;
+  gainPct: number | null;
+  dayChange: number;
+  /** Holdings left out of the totals for want of a price or an exchange rate. */
+  unpriced: number;
+  best: HoldingRow | null;
+  worst: HoldingRow | null;
+};
+
+/**
+ * Every holding as a row, and the totals of the rows that have a value. Each row is rounded once,
+ * so a total is always the sum of the rows shown.
+ */
+export function portfolio(data: DataSnapshot, profileCurrency: string): Portfolio {
+  const rows = data.tables.holding.map((holding): HoldingRow => {
+    const value = holdingValue(holding, profileCurrency);
+    const gain = value === null ? null : value - holding.costBasis;
+    return {
+      holding,
+      value,
+      gain,
+      gainPct: gain === null || holding.costBasis === 0 ? null : (gain * 100) / holding.costBasis,
+      dayChange: holdingDayChange(holding, profileCurrency),
+    };
+  });
+
+  const priced = rows.filter((r) => r.value !== null);
+  const value = rows.reduce((sum, r) => sum + (r.value ?? 0), 0);
+  const cost = priced.reduce((sum, r) => sum + r.holding.costBasis, 0);
+  const ranked = rows
+    .filter((r): r is HoldingRow & { gainPct: number } => r.gainPct !== null)
+    .sort((a, b) => b.gainPct - a.gainPct);
+
+  return {
+    rows,
+    value,
+    cost,
+    gain: value - cost,
+    gainPct: cost === 0 ? null : ((value - cost) * 100) / cost,
+    dayChange: rows.reduce((sum, r) => sum + (r.dayChange ?? 0), 0),
+    unpriced: rows.length - priced.length,
+    best: ranked.length >= 2 ? ranked[0]! : null,
+    worst: ranked.length >= 2 ? ranked[ranked.length - 1]! : null,
+  };
+}
+
+const TYPE_LABELS: Record<Holding['type'], string> = {
+  stock: 'Stocks',
+  etf: 'ETFs',
+  other: 'Other',
+};
+
+function group(h: Holding, by: 'holding' | 'type' | 'sector'): { key: string; label: string } {
+  if (by === 'holding') return { key: h.id, label: h.symbol };
+  if (by === 'type') return { key: h.type, label: TYPE_LABELS[h.type] };
+  const label = h.type === 'etf' ? 'ETF (diversified)' : h.sector || 'Unknown';
+  return { key: label, label };
+}
+
+/**
+ * What the priced holdings add up to, grouped and highest first. The `top` biggest groups are
+ * kept; the rest fold into one "Other" slice (key `other`) at the end.
+ */
+export function allocation(
+  rows: HoldingRow[],
+  by: 'holding' | 'type' | 'sector',
+  top = 5,
+): Slice[] {
+  const groups = new Map<string, Slice>();
+  for (const r of rows) {
+    if (r.value === null) continue;
+    const g = group(r.holding, by);
+    const slice = groups.get(g.key) ?? { ...g, amount: 0 };
+    slice.amount += r.value;
+    groups.set(g.key, slice);
+  }
+  const sorted = [...groups.values()].sort((a, b) => b.amount - a.amount);
+  const slices = sorted.slice(0, top);
+  const folded = sorted.slice(top).reduce((sum, s) => sum + s.amount, 0);
+  if (folded > 0) slices.push({ key: 'other', label: 'Other', amount: folded });
+  return slices;
+}
