@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Holding, Settings } from '@/domain/entities';
+import { COMMON_CURRENCIES, currencyOptions } from '@/features/shared/currencies';
 import { currencySymbol, formatMoney, formatMoneyPlain } from '@/domain/money';
 import { emptySnapshot, type DataSnapshot } from '@/domain/snapshot';
 import { formatDate, formatDay, formatMonthShort, formatPercent } from '@/lib/format';
@@ -413,7 +414,7 @@ describe('The currency sheet', () => {
   };
   const labels = (sheet: HTMLElement) =>
     within(sheet)
-      .getAllByRole('button')
+      .getAllByRole('radio')
       .map((b) => b.textContent);
 
   it('is a chip beside the title, at least 44px tall, that opens the sheet', async () => {
@@ -439,14 +440,16 @@ describe('The currency sheet', () => {
       expect.stringMatching(/^INR · /),
       expect.stringMatching(/^SGD · /),
       expect.stringMatching(/^ZAR · /),
-      'All currencies…',
     ]);
+    const all = within(sheet).getByRole('button', { name: 'All currencies…' });
     // A check marks the current choice, which is the profile currency until another is picked.
     const on = within(sheet)
-      .getAllByRole('button', { pressed: true })
+      .getAllByRole('radio', { checked: true })
       .map((b) => b.textContent);
     expect(on).toEqual(['EUR · Euro (your app currency)']);
-    for (const b of within(sheet).getAllByRole('button')) expect(b).toHaveClass('min-h-14');
+    for (const row of [...within(sheet).getAllByRole('radio'), all]) {
+      expect(row).toHaveClass('min-h-14');
+    }
     expect(
       within(sheet).getByText(
         "Only Invest changes. Home, Budget and your balances stay in EUR. Invest converts at today's rate, so your gain % stays the same.",
@@ -456,13 +459,15 @@ describe('The currency sheet', () => {
 
   it('shows every currency from All currencies, common ones first', async () => {
     const { sheet } = await open();
-    expect(within(sheet).queryByRole('button', { name: /^THB · / })).not.toBeInTheDocument();
+    expect(within(sheet).queryByRole('radio', { name: /^THB · / })).not.toBeInTheDocument();
     await userEvent.click(within(sheet).getByRole('button', { name: 'All currencies…' }));
     const all = labels(sheet);
     expect(all.length).toBeGreaterThan(100);
     expect(all[0]).toMatch(/^USD · /);
     expect(all).toContainEqual(expect.stringMatching(/^THB · /));
-    expect(all).not.toContain('All currencies…');
+    expect(
+      within(sheet).queryByRole('button', { name: 'All currencies…' }),
+    ).not.toBeInTheDocument();
     expect(all.filter((l) => l?.startsWith('EUR · '))).toEqual(['EUR · Euro (your app currency)']);
   });
 
@@ -472,8 +477,50 @@ describe('The currency sheet', () => {
     const sheet = screen.getByRole('dialog', { name: 'Show Invest in' });
     const names = labels(sheet);
     expect(names).toContainEqual(expect.stringMatching(/^THB · /));
-    expect(names.at(-1)).toBe('All currencies…');
-    expect(within(sheet).getByRole('button', { pressed: true })).toHaveTextContent(/^THB · /);
+    expect(within(sheet).getByRole('button', { name: 'All currencies…' })).toBeInTheDocument();
+    expect(within(sheet).getByRole('radio', { checked: true })).toHaveTextContent(/^THB · /);
+  });
+
+  it('is one radio group of currencies, with the choice as the only tab stop', async () => {
+    const { sheet } = await open();
+    const group = within(sheet).getByRole('radiogroup', { name: 'Invest currency' });
+    const radios = within(group).getAllByRole('radio');
+    expect(radios).toHaveLength(COMMON_CURRENCIES.length);
+    expect(within(group).queryByRole('button')).not.toBeInTheDocument();
+    for (const radio of radios) {
+      expect(radio).toHaveAttribute('aria-checked', radio === radios[1] ? 'true' : 'false');
+      expect(radio).not.toHaveAttribute('aria-pressed');
+      expect(radio).toHaveAttribute('tabindex', radio === radios[1] ? '0' : '-1');
+    }
+  });
+
+  it('moves between the currencies with the arrow keys, and chooses only on Enter', async () => {
+    const { store, sheet } = await open();
+    const radios = within(sheet).getAllByRole('radio');
+    radios[1]!.focus();
+    await userEvent.keyboard('{ArrowDown}');
+    expect(radios[2]).toHaveFocus();
+    await userEvent.keyboard('{ArrowUp}{ArrowUp}');
+    expect(radios[0]).toHaveFocus();
+    await userEvent.keyboard('{ArrowUp}');
+    expect(radios.at(-1)).toHaveFocus();
+    expect(store.getState().put).not.toHaveBeenCalled();
+
+    await userEvent.keyboard('{ArrowDown}{Enter}');
+    expect(store.getState().put).toHaveBeenCalledWith(
+      'settings',
+      expect.objectContaining({ investCurrency: 'USD' }),
+    );
+  });
+
+  it('puts focus on the first new currency when All currencies opens the rest', async () => {
+    const { sheet } = await open();
+    await userEvent.click(within(sheet).getByRole('button', { name: 'All currencies…' }));
+    // The first currency after the common ones is where the person was in the list.
+    const first = currencyOptions().find((o) => !COMMON_CURRENCIES.includes(o.value))!;
+    expect(document.activeElement).toBe(
+      within(sheet).getByRole('radio', { name: new RegExp(`^${first.value} · `) }),
+    );
   });
 
   it('closes on Escape without choosing', async () => {
@@ -538,7 +585,7 @@ describe('Picking the currency', () => {
 
     await userEvent.click(chip('EUR'));
     const sheet = screen.getByRole('dialog', { name: 'Show Invest in' });
-    await userEvent.click(within(sheet).getByRole('button', { name: /^USD · / }));
+    await userEvent.click(within(sheet).getByRole('radio', { name: /^USD · / }));
 
     // The sheet closes and the rate arrives straight away.
     await waitFor(() => expect(chip('USD')).toBeInTheDocument());
@@ -556,7 +603,7 @@ describe('Picking the currency', () => {
 
     await userEvent.click(chip('EUR'));
     await userEvent.click(
-      within(screen.getByRole('dialog', { name: 'Show Invest in' })).getByRole('button', {
+      within(screen.getByRole('dialog', { name: 'Show Invest in' })).getByRole('radio', {
         name: /^USD · /,
       }),
     );
@@ -574,9 +621,9 @@ describe('Picking the currency', () => {
 
     await userEvent.click(chip('USD'));
     const sheet = screen.getByRole('dialog', { name: 'Show Invest in' });
-    expect(within(sheet).getByRole('button', { pressed: true })).toHaveTextContent(/^USD · /);
+    expect(within(sheet).getByRole('radio', { checked: true })).toHaveTextContent(/^USD · /);
     await userEvent.click(
-      within(sheet).getByRole('button', { name: 'EUR · Euro (your app currency)' }),
+      within(sheet).getByRole('radio', { name: 'EUR · Euro (your app currency)' }),
     );
 
     await waitFor(() => expect(chip('EUR')).toBeInTheDocument());
@@ -591,7 +638,7 @@ describe('Picking the currency', () => {
     const profile = store.getState().data.tables.profile[0]!;
     await userEvent.click(chip('EUR'));
     await userEvent.click(
-      within(screen.getByRole('dialog', { name: 'Show Invest in' })).getByRole('button', {
+      within(screen.getByRole('dialog', { name: 'Show Invest in' })).getByRole('radio', {
         name: /^USD · /,
       }),
     );

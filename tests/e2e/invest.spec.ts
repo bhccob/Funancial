@@ -213,14 +213,14 @@ test('Invest can be shown in another currency while the rest of the app keeps th
   await page.getByRole('button', { name: 'Shown in USD' }).click();
   const sheet = page.getByRole('dialog', { name: 'Show Invest in' });
   await expect(
-    sheet.getByRole('button', { name: /^USD · .* \(your app currency\)$/ }),
-  ).toHaveAttribute('aria-pressed', 'true');
+    sheet.getByRole('radio', { name: /^USD · .* \(your app currency\)$/ }),
+  ).toHaveAttribute('aria-checked', 'true');
   await expect(
     sheet.getByText(
       "Only Invest changes. Home, Budget and your balances stay in USD. Invest converts at today's rate, so your gain % stays the same.",
     ),
   ).toBeVisible();
-  await sheet.getByRole('button', { name: /^EUR · / }).click();
+  await sheet.getByRole('radio', { name: /^EUR · / }).click();
 
   // The rate arrives straight away: $1,000.00 is €500.00, and the gain keeps its percentage.
   await expect(page.getByRole('button', { name: 'Shown in EUR' })).toBeVisible();
@@ -257,7 +257,7 @@ test('Invest can be shown in another currency while the rest of the app keeps th
   await page.getByRole('button', { name: 'Shown in EUR' }).click();
   await page
     .getByRole('dialog', { name: 'Show Invest in' })
-    .getByRole('button', { name: /\(your app currency\)$/ })
+    .getByRole('radio', { name: /\(your app currency\)$/ })
     .click();
   await expect(page.getByRole('button', { name: 'Shown in USD' })).toBeVisible();
   await expect(page.getByRole('link', { name: /^AAPL · Apple/ })).toContainText('$1,000.00');
