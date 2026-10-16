@@ -116,6 +116,16 @@ export function parseDecimal(input: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+/**
+ * A plain number as text `parseDecimal` reads back to the same number, for filling a field: no
+ * exponent ("1e-7" is "0.0000001") and no grouping, and a zero added where the text would be
+ * ambiguous ("1.125" is "1.1250", as the person would have to write it).
+ */
+export function formatDecimal(n: number): string {
+  const text = n.toLocaleString('en-US', { useGrouping: false, maximumFractionDigits: 20 });
+  return isAmbiguousDecimal(text) ? `${text}0` : text;
+}
+
 export type MoneyFormatOptions = {
   signDisplay?: 'auto' | 'always' | 'exceptZero';
   /** Drop the minor units ("$1,884"), for compact labels. */

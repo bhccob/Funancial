@@ -715,6 +715,39 @@ describe('HoldingDialog editing', () => {
     expect(store.getState().put).not.toHaveBeenCalled();
   });
 
+  it('saves a holding whose stored numbers have three decimals after changing only another field', async () => {
+    const data = portfolioData();
+    data.tables.holding[0] = {
+      ...data.tables.holding[0]!,
+      shares: 1.125,
+      manualPrice: 12.345,
+      withholdingPct: 12.125,
+    };
+    const { store } = renderInvest(data);
+    await userEvent.click(rowOf('KO'));
+    const dialog = screen.getByRole('dialog', { name: 'Edit KO' });
+    // Filled in the way the person would have to write them.
+    expect(within(dialog).getByLabelText('Shares')).toHaveValue('1.1250');
+    expect(within(dialog).getByLabelText('Manual price')).toHaveValue('12.3450');
+    expect(within(dialog).getByLabelText('Tax withheld on dividends (%)')).toHaveValue('12.1250');
+
+    fireEvent.change(within(dialog).getByLabelText('Purchase date'), {
+      target: { value: '2026-09-02' },
+    });
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(store.getState().put).toHaveBeenCalledTimes(1));
+    expect(store.getState().put).toHaveBeenCalledWith(
+      'holding',
+      expect.objectContaining({
+        id: 'ko',
+        shares: 1.125,
+        manualPrice: 12.345,
+        withholdingPct: 12.125,
+        purchaseDate: '2026-09-02',
+      }),
+    );
+  });
+
   it('refuses a manual price that could be a thousand times out, and reads a clear one', async () => {
     const { store } = renderInvest(portfolioData());
     await userEvent.click(rowOf('AAPL'));

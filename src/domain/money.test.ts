@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { formatMoney, isAmbiguousDecimal, minorDigits, parseDecimal, parseMoney } from './money';
+import {
+  formatDecimal,
+  formatMoney,
+  isAmbiguousDecimal,
+  minorDigits,
+  parseDecimal,
+  parseMoney,
+} from './money';
 
 describe('minorDigits', () => {
   it('knows how many decimals a currency uses', () => {
@@ -88,6 +95,27 @@ describe('parseDecimal', () => {
     for (const input of ['0.125', '1,234.5', '2.5', '1234.567', '12,5', '1,2345']) {
       expect(isAmbiguousDecimal(input), input).toBe(false);
     }
+  });
+});
+
+describe('formatDecimal', () => {
+  it.each([1.125, 12.345, 1.234, 0.0000001, 1000, 4.567, 0.5, 15, 0.1 + 0.2, 1234.567, 100])(
+    'gives text that parseDecimal reads back as %d',
+    (n) => {
+      expect(parseDecimal(formatDecimal(n))).toBe(n);
+    },
+  );
+
+  it('writes plain digits, with a zero where three decimals would be ambiguous', () => {
+    expect(formatDecimal(1.125)).toBe('1.1250');
+    expect(formatDecimal(12.345)).toBe('12.3450');
+    expect(formatDecimal(1.234)).toBe('1.2340');
+    // No exponent, no grouping, and nothing added where the text is already clear.
+    expect(formatDecimal(0.0000001)).toBe('0.0000001');
+    expect(formatDecimal(1000)).toBe('1000');
+    expect(formatDecimal(1234.567)).toBe('1234.567');
+    expect(formatDecimal(0.125)).toBe('0.125');
+    expect(formatDecimal(15)).toBe('15');
   });
 });
 

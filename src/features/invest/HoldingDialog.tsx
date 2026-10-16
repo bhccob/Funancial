@@ -6,7 +6,7 @@ import { RadioGroup } from '@/components/ui/RadioGroup';
 import { Select } from '@/components/ui/Select';
 import { TextField } from '@/components/ui/TextField';
 import type { Holding } from '@/domain/entities';
-import { isAmbiguousDecimal, parseDecimal } from '@/domain/money';
+import { formatDecimal, isAmbiguousDecimal, parseDecimal } from '@/domain/money';
 import { marketConfigured } from '@/services/market';
 import { useAction } from '@/lib/useAction';
 import { FUTURE } from '@/store/financeActions';
@@ -94,12 +94,12 @@ function HoldingForm({
 
   const [form, setForm] = useState<Form>({
     symbol: holding?.symbol ?? '',
-    shares: holding ? String(holding.shares) : '',
+    shares: holding ? formatDecimal(holding.shares) : '',
     cost: holding?.costBasis ?? null,
     date: holding?.purchaseDate ?? today,
     paidFrom: 'owned',
-    withholding: String(holding?.withholdingPct ?? 15),
-    price: holding?.manualPrice != null ? String(holding.manualPrice) : '',
+    withholding: formatDecimal(holding?.withholdingPct ?? 15),
+    price: holding?.manualPrice != null ? formatDecimal(holding.manualPrice) : '',
     name: holding?.name ?? '',
     type: holding?.type ?? 'stock',
     currency: holding?.currency ?? '',
