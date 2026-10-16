@@ -306,6 +306,21 @@ describe('v7 sales', () => {
     expect(migrateRecord('settings', v6Settings, 6)).toEqual(v6Settings);
   });
 
+  it('runs the holding steps on the holding a sale keeps to restore', () => {
+    // A later holding step, as one would be added.
+    const steps = { [LATEST_VERSION]: { holding: (r: object) => ({ ...r, upgraded: true }) } };
+    const restore = { id: 'h1', symbol: 'KO' };
+    const sale = { id: 's1', symbol: 'KO', restore };
+    expect(migrateRecord('sale', sale, LATEST_VERSION - 1, steps)).toEqual({
+      ...sale,
+      restore: { ...restore, upgraded: true },
+    });
+    // Nothing to restore, or a sale already past the step: nothing changes.
+    const partial = { ...sale, restore: null };
+    expect(migrateRecord('sale', partial, LATEST_VERSION - 1, steps)).toEqual(partial);
+    expect(migrateRecord('sale', sale, LATEST_VERSION, steps)).toEqual(sale);
+  });
+
   it('leaves a sale alone', () => {
     const sale = { id: 's1', symbol: 'KO', restore: null };
     expect(migrateRecord('sale', sale, 1)).toEqual(sale);

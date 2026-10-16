@@ -70,12 +70,22 @@ const STEPS: Record<number, Step> = {
 
 export const LATEST_VERSION = Math.max(1, ...Object.keys(STEPS).map(Number));
 
-export function migrateRecord(table: TableName, raw: unknown, fromVersion: number): unknown {
+/** `steps` is for tests, to try a step that does not exist yet. */
+export function migrateRecord(
+  table: TableName,
+  raw: unknown,
+  fromVersion: number,
+  steps: Record<number, Step> = STEPS,
+): unknown {
   if (typeof raw !== 'object' || raw === null) return raw;
   let record = raw as Record<string, unknown>;
   for (let v = fromVersion + 1; v <= LATEST_VERSION; v++) {
-    const step = STEPS[v]?.[table];
+    const step = steps[v]?.[table];
     if (step) record = step(record);
+  }
+  // A sale stores the holding it removed as it was then, so the holding steps upgrade it too.
+  if (table === 'sale' && typeof record.restore === 'object' && record.restore !== null) {
+    record = { ...record, restore: migrateRecord('holding', record.restore, fromVersion, steps) };
   }
   return record;
 }
