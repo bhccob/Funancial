@@ -1061,6 +1061,25 @@ describe('selling a holding', () => {
       expect(tables().holding).toEqual([]);
     });
 
+    it('asks for a later full sale to be undone first, then undoes both', async () => {
+      const { actions, tables, holding, h } = await withHolding();
+      await actions.sellHolding(h.id, sell);
+      await actions.sellHolding(h.id, { ...sell, shares: 6 });
+      const [partial, full] = tables().sale;
+      expect(full!.restore).not.toBeNull();
+
+      await expect(actions.undoSale(partial!.id)).rejects.toThrow(
+        'Undo the later sale of KO first.',
+      );
+      expect(tables().sale).toEqual([partial, full]);
+      expect(tables().holding).toEqual([]);
+
+      await actions.undoSale(full!.id);
+      await actions.undoSale(partial!.id);
+      expect(tables().sale).toEqual([]);
+      expect(holding(h.id)).toMatchObject({ shares: 10, costBasis: 500_00 });
+    });
+
     it('refuses a sale that is not there', async () => {
       const { actions } = await withHolding();
       await expect(actions.undoSale('nope')).rejects.toThrow('That item no longer exists.');

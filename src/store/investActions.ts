@@ -229,7 +229,8 @@ export function createInvestActions(store: StoreApi<AppState>, market: Market) {
     /**
      * Takes a sale back, in one write: its shares and cost go back to the holding if it is still held,
      * else the holding a full sale removed comes back as it was. A sale whose holding was deleted
-     * since, with nothing stored to restore, cannot be undone.
+     * since, with nothing stored to restore, cannot be undone; one made before a later full sale
+     * waits for that sale to be undone first.
      */
     async undoSale(id: string) {
       const sale = state().data.tables.sale.find((s) => s.id === id);
@@ -245,6 +246,10 @@ export function createInvestActions(store: StoreApi<AppState>, market: Market) {
         };
       } else if (sale.restore) {
         back = sale.restore;
+      } else if (
+        state().data.tables.sale.some((s) => s.holdingId === sale.holdingId && s.restore)
+      ) {
+        throw new Error(`Undo the later sale of ${sale.symbol} first.`);
       } else {
         throw new Error("This sale can't be undone because its holding is gone.");
       }
