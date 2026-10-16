@@ -7,7 +7,8 @@ import { minorDigits } from '@/domain/money';
 import { cn } from '@/lib/cn';
 import { formatDate } from '@/lib/format';
 import { marketConfigured, type HistoryResponse } from '@/services/market';
-import { useCurrency, useMoney } from '@/store/useFinance';
+import { useCurrency } from '@/store/useFinance';
+import { useInvestMoney } from '@/store/useInvest';
 import { loadHistory } from './historyCache';
 
 const RANGES = [
@@ -34,7 +35,7 @@ export function HoldingChart({
   rate: number | null;
   today: LocalDate;
 }) {
-  const money = useMoney();
+  const { format: money } = useInvestMoney();
   const currency = useCurrency();
   const configured = marketConfigured();
   const [range, setRange] = useState(0);
@@ -83,7 +84,8 @@ export function HoldingChart({
     const scale = rate * 10 ** minorDigits(currency);
     const points = history.points.map((p) => ({ date: p.date, value: p.close * scale }));
     const [first, last] = [points[0]!, points.at(-1)!];
-    const price = (value: number) => money(Math.round(value));
+    // Not rounded here: the formatter rounds once, after converting to the currency Invest shows.
+    const price = (value: number) => money(value);
     body = (
       <PriceLine
         points={points}

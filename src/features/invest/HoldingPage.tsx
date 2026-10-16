@@ -7,8 +7,8 @@ import { holdingPrice, holdingRate, toMinor } from '@/domain/portfolio';
 import { formatDate, formatPercent, formatShares, relativeDays } from '@/lib/format';
 import { useAction } from '@/lib/useAction';
 import { useApp } from '@/store/AppStoreProvider';
-import { useCurrency, useMoney, useToday } from '@/store/useFinance';
-import { useInvestActions, usePortfolio } from '@/store/useInvest';
+import { useCurrency, useToday } from '@/store/useFinance';
+import { useInvestActions, useInvestMoney, usePortfolio } from '@/store/useInvest';
 import { HoldingChart } from './HoldingChart';
 import { HoldingDialog } from './HoldingDialog';
 
@@ -35,7 +35,7 @@ export function HoldingPage() {
   const holding = useApp((s) => s.data.tables.holding.find((h) => h.id === id));
   const dividends = useApp((s) => s.data.tables.dividend);
   const row = usePortfolio().rows.find((r) => r.holding.id === id);
-  const money = useMoney();
+  const { format: money } = useInvestMoney();
   const currency = useCurrency();
   const today = useToday();
   const { markChecked } = useInvestActions();

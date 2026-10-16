@@ -196,3 +196,69 @@ test('a holding opens on its own page with a price chart, and Edit saves back to
   await expect(page).toHaveURL(/\/invest\?tab=holdings$/);
   await expect(page.getByRole('link', { name: /^AAPL · Apple/ })).toContainText('$1,200.00');
 });
+
+test('Invest can be shown in another currency while the rest of the app keeps the profile currency', async ({
+  page,
+}) => {
+  await mockPriceService(page, {
+    ...usStock('AAPL', 'Apple', 200),
+    // One euro is worth two dollars, so a dollar is half a euro.
+    fx: { from: 'USD', to: 'EUR', rate: 0.5, asOf: new Date().toISOString() },
+  });
+  await startFresh(page, '/invest');
+  await addHolding(page, 'AAPL', '5', '900', { search: 'appl', bought: day(-60) });
+  await expect(page.getByRole('link', { name: /^AAPL · Apple/ })).toContainText('$1,000.00');
+
+  // The chip opens a sheet: the app's own currency is named, and is the one that is ticked.
+  await page.getByRole('button', { name: 'Shown in USD' }).click();
+  const sheet = page.getByRole('dialog', { name: 'Show Invest in' });
+  await expect(
+    sheet.getByRole('button', { name: /^USD · .* \(your app currency\)$/ }),
+  ).toHaveAttribute('aria-pressed', 'true');
+  await expect(
+    sheet.getByText(
+      "Only Invest changes. Home, Budget and your balances stay in USD. Invest converts at today's rate, so your gain % stays the same.",
+    ),
+  ).toBeVisible();
+  await sheet.getByRole('button', { name: /^EUR · / }).click();
+
+  // The rate arrives straight away: $1,000.00 is €500.00, and the gain keeps its percentage.
+  await expect(page.getByRole('button', { name: 'Shown in EUR' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Portfolio value' })).toContainText('€500.00');
+  await expect(page.getByRole('link', { name: /^AAPL · Apple/ })).toContainText('€500.00');
+  await expect(page.getByRole('link', { name: /^AAPL · Apple/ })).toContainText('▲ 11.1%');
+  await expect(page.getByText(/until a EUR rate loads/)).toHaveCount(0);
+
+  // A holding's page and its chart follow, and the form still takes what was paid in dollars.
+  await page.getByRole('link', { name: /^AAPL · Apple/ }).click();
+  await expect(page.getByText('€500.00').first()).toBeVisible();
+  await expect(page.getByText('€450.00').first()).toBeVisible();
+  await expect(
+    page.getByRole('img', { name: /^From €95\.00 on .* to €100\.00 today$/ }),
+  ).toBeVisible();
+  await page.getByRole('button', { name: 'Edit' }).click();
+  await expect(
+    page.getByRole('dialog', { name: 'Edit AAPL' }).getByLabel('What you paid in total'),
+  ).toHaveValue('900.00');
+  await page
+    .getByRole('dialog', { name: 'Edit AAPL' })
+    .getByRole('button', { name: 'Cancel' })
+    .click();
+
+  // The choice is kept, and nothing outside Invest turned into euros.
+  await page.goto('/invest');
+  await expect(page.getByRole('button', { name: 'Shown in EUR' })).toBeVisible();
+  await page.goto('/');
+  await expect(page.getByRole('heading', { level: 1, name: 'Home' })).toBeVisible();
+  await expect(page.getByText('€')).toHaveCount(0);
+
+  // And back: picking the app's own currency is picking nothing at all.
+  await page.goto('/invest');
+  await page.getByRole('button', { name: 'Shown in EUR' }).click();
+  await page
+    .getByRole('dialog', { name: 'Show Invest in' })
+    .getByRole('button', { name: /\(your app currency\)$/ })
+    .click();
+  await expect(page.getByRole('button', { name: 'Shown in USD' })).toBeVisible();
+  await expect(page.getByRole('link', { name: /^AAPL · Apple/ })).toContainText('$1,000.00');
+});

@@ -1,5 +1,5 @@
 import { RefreshCw } from 'lucide-react';
-import { useId, type KeyboardEvent } from 'react';
+import { useId, useState, type KeyboardEvent } from 'react';
 import { useSearchParams } from 'react-router';
 import { Button } from '@/components/ui/Button';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -7,9 +7,11 @@ import { cn } from '@/lib/cn';
 import { formatDateTime } from '@/lib/format';
 import { marketConfigured } from '@/services/market';
 import { useApp } from '@/store/AppStoreProvider';
-import { useMarketRefresh } from '@/store/useInvest';
+import { useCurrency } from '@/store/useFinance';
+import { useInvestMoney, useMarketRefresh } from '@/store/useInvest';
 import { DividendsTab } from './DividendsTab';
 import { HoldingsTab } from './HoldingsTab';
+import { InvestCurrencySheet } from './InvestCurrencySheet';
 import { NewsTab } from './NewsTab';
 
 const TABS = [
@@ -28,6 +30,10 @@ export function InvestScreen() {
   const tab: TabId = TABS.find((t) => t.id === params.get('tab'))?.id ?? 'holdings';
   const { status, refresh } = useMarketRefresh();
   const holdings = useApp((s) => s.data.tables.holding);
+  const profile = useCurrency();
+  const chosen = useApp((s) => s.data.tables.settings[0]?.investCurrency) ?? profile;
+  const { currency } = useInvestMoney();
+  const [picking, setPicking] = useState(false);
   const ids = useId();
 
   const newest = Math.max(0, ...holdings.map((h) => (h.quote ? Date.parse(h.quote.asOf) : 0)));
@@ -43,6 +49,8 @@ export function InvestScreen() {
   const lines = [
     newest > 0 && `as of ${formatDateTime(new Date(newest).toISOString())}`,
     note,
+    // A currency was chosen but there is no rate to convert at yet.
+    chosen !== currency && `Showing ${profile} until a ${chosen} rate loads.`,
   ].filter((line): line is string => Boolean(line));
 
   function choose(id: TabId) {
@@ -65,19 +73,37 @@ export function InvestScreen() {
           <Button
             size="sm"
             variant="secondary"
-            disabled={status === 'refreshing'}
-            onClick={() => void refresh()}
+            aria-haspopup="dialog"
+            onClick={() => setPicking(true)}
           >
-            <RefreshCw
-              aria-hidden
-              className={cn('size-4', status === 'refreshing' && 'motion-safe:animate-spin')}
-            />
-            Refresh
+            <span>
+              {`Shown in ${currency} `}
+              <span aria-hidden>▾</span>
+            </span>
           </Button>
         }
-      >
-        {lines.length > 0 && lines.map((line) => <p key={line}>{line}</p>)}
-      </PageHeader>
+      />
+      {/* Under the header, not in it, so a long line never pushes the currency off the title's row. */}
+      <div className="text-muted -mt-1 text-sm font-semibold">
+        {lines.map((line) => (
+          <p key={line}>{line}</p>
+        ))}
+        <Button
+          size="sm"
+          variant="secondary"
+          className="mt-1"
+          disabled={status === 'refreshing'}
+          onClick={() => void refresh()}
+        >
+          <RefreshCw
+            aria-hidden
+            className={cn('size-4', status === 'refreshing' && 'motion-safe:animate-spin')}
+          />
+          Refresh
+        </Button>
+      </div>
+
+      <InvestCurrencySheet open={picking} onClose={() => setPicking(false)} />
 
       <div
         role="tablist"

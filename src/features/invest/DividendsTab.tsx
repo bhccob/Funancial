@@ -18,9 +18,9 @@ import { cn } from '@/lib/cn';
 import { formatDay, formatMonthShort, formatMonthYear, formatPercent } from '@/lib/format';
 import { useAction } from '@/lib/useAction';
 import { useApp } from '@/store/AppStoreProvider';
-import { useCurrency, useMoney, useToday } from '@/store/useFinance';
+import { useCurrency, useToday } from '@/store/useFinance';
 import { useGameContext } from '@/store/useGame';
-import { useInvestActions, usePortfolio } from '@/store/useInvest';
+import { useInvestActions, useInvestMoney, usePortfolio } from '@/store/useInvest';
 import { ConfirmDividendDialog } from './ConfirmDividendDialog';
 
 type Dir = 'next' | 'past';
@@ -84,7 +84,7 @@ function DueRow({
   onConfirm(): void;
   onSkip(): void;
 }) {
-  const money = useMoney();
+  const { format: money } = useInvestMoney();
   const titleId = useId();
   return (
     <Row
@@ -111,7 +111,7 @@ function DueRow({
  * months with a dividend.
  */
 export function DividendsTab() {
-  const money = useMoney();
+  const { format: money } = useInvestMoney();
   const data = useApp((s) => s.data);
   const currency = useCurrency();
   const today = useToday();

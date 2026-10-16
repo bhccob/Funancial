@@ -1,4 +1,15 @@
-const COMMON_CURRENCIES = ['USD', 'EUR', 'GBP', 'CAD', 'AUD', 'JPY', 'CHF', 'INR', 'SGD', 'ZAR'];
+export const COMMON_CURRENCIES = [
+  'USD',
+  'EUR',
+  'GBP',
+  'CAD',
+  'AUD',
+  'JPY',
+  'CHF',
+  'INR',
+  'SGD',
+  'ZAR',
+];
 
 /** Select options for a currency: the common ones first, then every other ISO code. */
 export function currencyOptions(
