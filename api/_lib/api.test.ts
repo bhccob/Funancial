@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { GET as dividendsGET } from '../dividends.js';
 import { GET as fxGET } from '../fx.js';
+import { GET as historyGET } from '../history.js';
 import { GET as newsGET } from '../news.js';
 import { GET as profileGET } from '../profile.js';
 import { GET as quoteGET, OPTIONS as quoteOPTIONS } from '../quote.js';
@@ -16,6 +17,7 @@ vi.mock('./yahoo.js', async (orig) => ({
   getNews: vi.fn(),
   getFxRate: vi.fn(),
   search: vi.fn(),
+  history: vi.fn(),
 }));
 
 const TOKEN = 'test-token';
@@ -451,6 +453,162 @@ describe('price service', () => {
       const log = vi.spyOn(console, 'error').mockImplementation(() => {});
       vi.mocked(yahoo.search).mockRejectedValue(new Error('crumb exploded at /secret/path'));
       const res = await searchGET(request('/api/search?q=vusa'));
+      expect(res.status).toBe(502);
+      expect(res.headers.get('Cache-Control')).toBe('no-store');
+      expect(await res.text()).toBe('{"error":"upstream"}');
+      log.mockRestore();
+    });
+  });
+
+  describe('price history', () => {
+    const NOW = new Date('2026-10-16T12:00:00.000Z');
+    const quotes = (...rows: Array<[string, number | null]>) =>
+      rows.map(([date, close]) => ({ date: new Date(`${date}T08:00:00.000Z`), close }));
+
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(NOW);
+    });
+    afterEach(() => vi.useRealTimers());
+
+    it('wants the token', async () => {
+      const res = await historyGET(request('/api/history?symbol=AAPL&from=2026-01-05', {}));
+      expect(res.status).toBe(401);
+      expect(res.headers.get('Cache-Control')).toBe('no-store');
+      expect(yahoo.history).not.toHaveBeenCalled();
+    });
+
+    it('refuses a bad symbol, and a missing, malformed, impossible, early or future date', async () => {
+      const bad = [
+        '/api/history?from=2026-01-05',
+        '/api/history?symbol=AAPL,KO&from=2026-01-05',
+        '/api/history?symbol=a%20b&from=2026-01-05',
+        '/api/history?symbol=AAPL',
+        '/api/history?symbol=AAPL&from=',
+        '/api/history?symbol=AAPL&from=2026-1-5',
+        '/api/history?symbol=AAPL&from=05-01-2026',
+        '/api/history?symbol=AAPL&from=2026-02-30',
+        '/api/history?symbol=AAPL&from=2026-13-01',
+        '/api/history?symbol=AAPL&from=1969-12-31',
+        '/api/history?symbol=AAPL&from=0001-01-01',
+        '/api/history?symbol=AAPL&from=2026-10-17',
+        '/api/history?symbol=AAPL&from=2099-01-01',
+      ];
+      for (const path of bad) {
+        const res = await historyGET(request(path));
+        expect(res.status, path).toBe(400);
+        expect(res.headers.get('Cache-Control')).toBe('no-store');
+        expect(await res.json()).toEqual({ error: 'bad request' });
+      }
+      expect(yahoo.history).not.toHaveBeenCalled();
+
+      // Today and the first day of 1970 are allowed.
+      vi.mocked(yahoo.history).mockResolvedValue({
+        currency: 'USD',
+        timeZone: 'America/New_York',
+        quotes: [],
+      });
+      for (const from of ['2026-10-16', '1970-01-01']) {
+        expect((await historyGET(request(`/api/history?symbol=AAPL&from=${from}`))).status).toBe(
+          200,
+        );
+      }
+    });
+
+    it('asks daily up to 92 days back, weekly up to 2 years, then monthly', async () => {
+      vi.mocked(yahoo.history).mockResolvedValue({
+        currency: 'USD',
+        timeZone: 'America/New_York',
+        quotes: [],
+      });
+      const interval = async (from: string) => {
+        vi.mocked(yahoo.history).mockClear();
+        await historyGET(request(`/api/history?symbol=AAPL&from=${from}`));
+        return vi.mocked(yahoo.history).mock.calls[0]![2];
+      };
+      expect(await interval('2026-10-16')).toBe('1d');
+      expect(await interval('2026-07-16')).toBe('1d'); // 92 days ago
+      expect(await interval('2026-07-15')).toBe('1wk'); // 93 days ago
+      expect(await interval('2024-10-16')).toBe('1wk'); // 2 years ago
+      expect(await interval('2024-10-15')).toBe('1mo');
+      expect(await interval('1970-01-01')).toBe('1mo');
+
+      // From the start of the day it was asked for, as Yahoo reads a date.
+      expect(yahoo.history).toHaveBeenCalledWith(
+        'AAPL',
+        new Date('1970-01-01T00:00:00.000Z'),
+        '1mo',
+      );
+    });
+
+    it('serves closes as days, oldest first, skipping a null close, with an hour of cache', async () => {
+      vi.mocked(yahoo.history).mockResolvedValue({
+        currency: 'EUR',
+        timeZone: 'Europe/Amsterdam',
+        quotes: quotes(['2026-03-05', 101.5], ['2026-03-03', 100], ['2026-03-04', null]),
+      });
+      const res = await historyGET(
+        request('/api/history?symbol=VUSA.AS&from=2026-03-03', {
+          'X-Funancial-Token': TOKEN,
+          Origin: ORIGIN,
+        }),
+      );
+      expect(res.status).toBe(200);
+      expect(res.headers.get('Cache-Control')).toBe('s-maxage=3600');
+      expect(res.headers.get('Access-Control-Allow-Origin')).toBe(ORIGIN);
+      expect(await res.json()).toEqual({
+        symbol: 'VUSA.AS',
+        currency: 'EUR',
+        points: [
+          { date: '2026-03-03', close: 100 },
+          { date: '2026-03-05', close: 101.5 },
+        ],
+      });
+    });
+
+    it('turns pence into pounds, as the quote route does', async () => {
+      vi.mocked(yahoo.history).mockResolvedValue({
+        currency: 'GBp',
+        timeZone: 'Europe/London',
+        quotes: quotes(['2026-03-03', 10585]),
+      });
+      const res = await historyGET(request('/api/history?symbol=LLOY.L&from=2026-03-03'));
+      expect(await res.json()).toEqual({
+        symbol: 'LLOY.L',
+        currency: 'GBP',
+        points: [{ date: '2026-03-03', close: 105.85 }],
+      });
+    });
+
+    it('dates a bar by the clock of its exchange, so a weekly bar keeps its Monday', async () => {
+      vi.mocked(yahoo.history).mockResolvedValue({
+        currency: 'EUR',
+        timeZone: 'Europe/Amsterdam',
+        quotes: [
+          // Amsterdam midnight on Monday Mar 3 (winter) and on Monday Jun 2 (summer), in UTC.
+          { date: new Date('2025-03-02T23:00:00.000Z'), close: 1 },
+          { date: new Date('2025-06-01T22:00:00.000Z'), close: 2 },
+        ],
+      });
+      const res = await historyGET(request('/api/history?symbol=VUSA.AS&from=2025-03-03'));
+      const { points } = (await res.json()) as { points: Array<{ date: string }> };
+      expect(points.map((p) => p.date)).toEqual(['2025-03-03', '2025-06-02']);
+    });
+
+    it('answers a history with no closes as no points', async () => {
+      vi.mocked(yahoo.history).mockResolvedValue({
+        currency: 'USD',
+        timeZone: 'America/New_York',
+        quotes: [],
+      });
+      const res = await historyGET(request('/api/history?symbol=AAPL&from=2026-10-16'));
+      expect(await res.json()).toEqual({ symbol: 'AAPL', currency: 'USD', points: [] });
+    });
+
+    it('returns 502 without details when Yahoo throws', async () => {
+      const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+      vi.mocked(yahoo.history).mockRejectedValue(new Error('crumb exploded at /secret/path'));
+      const res = await historyGET(request('/api/history?symbol=AAPL&from=2026-03-03'));
       expect(res.status).toBe(502);
       expect(res.headers.get('Cache-Control')).toBe('no-store');
       expect(await res.text()).toBe('{"error":"upstream"}');

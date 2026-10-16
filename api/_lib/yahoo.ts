@@ -127,6 +127,23 @@ export async function search(q: string): Promise<RawSearchQuote[]> {
   return quotes;
 }
 
+export interface RawHistory {
+  currency: string;
+  /** The exchange's, such as Europe/Amsterdam: a bar is stamped at its local midnight or open. */
+  timeZone: string;
+  quotes: Array<{ date: Date; close: number | null }>;
+}
+
+/** The closes from `period1` on, one per `interval`; Yahoo's own, not yet turned into days or pounds. */
+export async function history(
+  symbol: string,
+  period1: Date,
+  interval: '1d' | '1wk' | '1mo',
+): Promise<RawHistory> {
+  const { meta, quotes } = await retried(() => yahoo.chart(symbol, { period1, interval }));
+  return { currency: meta.currency ?? '', timeZone: meta.exchangeTimezoneName, quotes };
+}
+
 export async function getFxRate(from: string, to: string): Promise<RawFxRate> {
   const [pair] = await retried(() => yahoo.quote([`${from}${to}=X`]));
   if (!pair?.regularMarketPrice || !pair.regularMarketTime) throw new Error('no rate for pair');
