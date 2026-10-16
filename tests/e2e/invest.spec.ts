@@ -274,7 +274,7 @@ test('Invest can be shown in another currency while the rest of the app keeps th
   await expect(page.getByRole('link', { name: /^AAPL · Apple/ })).toContainText('$1,000.00');
 });
 
-test('selling part of a holding shows in History; profit & loss stays hidden after a reload; the pie switches to ETFs', async ({
+test('selling part of a holding shows in History, and deleting it there gives the shares back; profit & loss stays hidden after a reload; the pie switches to ETFs', async ({
   page,
 }) => {
   // The demo: 40 VWRL shares (an ETF), and AAPL and KO, with an earlier sale of 5 AAPL.
@@ -303,6 +303,16 @@ test('selling part of a holding shows in History; profit & loss stays hidden aft
   // History has the sale, dated today.
   await page.goto('/history');
   await expect(page.getByText('Sold 10 VWRL')).toBeVisible();
+
+  // Deleting it there undoes it: the 10 shares go back to the holding.
+  await page.getByRole('button', { name: 'Delete Sold 10 VWRL' }).click();
+  await page
+    .getByRole('dialog', { name: 'Delete this entry?' })
+    .getByRole('button', { name: 'Delete' })
+    .click();
+  await expect(page.getByText('Sold 10 VWRL')).toBeHidden();
+  await page.goto('/invest');
+  await expect(page.getByRole('link', { name: /^VWRL · / })).toContainText('40 shares');
 
   // Hide profit & loss: only its header is left, and it is still hidden after a reload.
   await page.goto('/invest');
