@@ -75,7 +75,7 @@ function PieBlock({
   const { formatConverted: money } = useInvestMoney();
   const headingId = useId();
   const [selected, setSelected] = useState<number | null>(null);
-  const slices = useMemo(() => allocation(rows, 'holding'), [rows]);
+  const slices = useMemo(() => allocation(rows), [rows]);
   const whole = (minor: number) => money(minor, { whole: true });
   const total = slices.reduce((sum, s) => sum + s.amount, 0);
 

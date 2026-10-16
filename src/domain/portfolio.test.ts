@@ -189,7 +189,7 @@ describe('allocation', () => {
       ),
       held('NOPRICE', 'stock', null, 0, { quote: null }),
     ];
-    expect(allocation(rowsOf(holdings), 'holding')).toEqual([
+    expect(allocation(rowsOf(holdings))).toEqual([
       { key: 'id-A', label: 'A', amount: 700 },
       { key: 'id-B', label: 'B', amount: 600 },
       { key: 'id-C', label: 'C', amount: 500 },
@@ -199,29 +199,8 @@ describe('allocation', () => {
     ]);
   });
 
-  it('allocates by type and by sector, with ETFs as "ETF (diversified)"', () => {
-    const rows = rowsOf([
-      held('VWRL', 'etf', 'Whatever', 40),
-      held('AAPL', 'stock', 'Technology', 30),
-      held('MSFT', 'stock', 'Technology', 20),
-      held('KO', 'stock', 'Consumer Defensive', 10),
-      held('XYZ', 'other', null, 5),
-    ]);
-    expect(allocation(rows, 'type').map((s) => [s.key, s.label, s.amount])).toEqual([
-      ['stock', 'Stocks', 6000],
-      ['etf', 'ETFs', 4000],
-      ['other', 'Other', 500],
-    ]);
-    expect(allocation(rows, 'sector').map((s) => [s.label, s.amount])).toEqual([
-      ['Technology', 5000],
-      ['ETF (diversified)', 4000],
-      ['Consumer Defensive', 1000],
-      ['Unknown', 500],
-    ]);
-  });
-
   it('is empty when nothing is priced', () => {
-    expect(allocation(rowsOf([held('X', 'stock', null, 0, { quote: null })]), 'type')).toEqual([]);
+    expect(allocation(rowsOf([held('X', 'stock', null, 0, { quote: null })]))).toEqual([]);
   });
 });
 

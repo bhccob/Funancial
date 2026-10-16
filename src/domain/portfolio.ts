@@ -150,31 +150,16 @@ export const TYPE_LABELS: Record<Holding['type'], string> = {
   other: 'Other',
 };
 
-function group(h: Holding, by: 'holding' | 'type' | 'sector'): { key: string; label: string } {
-  if (by === 'holding') return { key: h.id, label: h.symbol };
-  if (by === 'type') return { key: h.type, label: TYPE_LABELS[h.type] };
-  const label = h.type === 'etf' ? 'ETF (diversified)' : h.sector || 'Unknown';
-  return { key: label, label };
-}
-
 /**
- * What the priced holdings add up to, grouped and highest first. The `top` biggest groups are
+ * What the priced holdings are worth, one slice each and highest first. The `top` biggest are
  * kept; the rest fold into one "Other" slice (key `other`) at the end.
  */
-export function allocation(
-  rows: HoldingRow[],
-  by: 'holding' | 'type' | 'sector',
-  top = 5,
-): Slice[] {
-  const groups = new Map<string, Slice>();
-  for (const r of rows) {
-    if (r.value === null) continue;
-    const g = group(r.holding, by);
-    const slice = groups.get(g.key) ?? { ...g, amount: 0 };
-    slice.amount += r.value;
-    groups.set(g.key, slice);
-  }
-  const sorted = [...groups.values()].sort((a, b) => b.amount - a.amount);
+export function allocation(rows: HoldingRow[], top = 5): Slice[] {
+  const sorted: Slice[] = rows
+    .flatMap((r) =>
+      r.value === null ? [] : [{ key: r.holding.id, label: r.holding.symbol, amount: r.value }],
+    )
+    .sort((a, b) => b.amount - a.amount);
   const slices = sorted.slice(0, top);
   const folded = sorted.slice(top).reduce((sum, s) => sum + s.amount, 0);
   if (folded > 0) slices.push({ key: 'other', label: 'Other', amount: folded });
