@@ -435,9 +435,19 @@ describe('when reminders will not come', () => {
     expect(screen.queryByRole('link', { name: 'Settings' })).not.toBeInTheDocument();
   });
 
-  it('says so where the device cannot schedule reminders at all', async () => {
+  it('says they only come on the phone where the device cannot schedule them, with no Settings link', async () => {
     await renderWaiting({ enabled: true, buyIt: true }, null);
-    expect(await screen.findByText(OFF)).toBeInTheDocument();
+    expect(await screen.findByText('Reminders only come on the phone.')).toBeInTheDocument();
+    expect(screen.queryByText(OFF)).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Settings' })).not.toBeInTheDocument();
+  });
+
+  it("says they don't come on demo money, with no Settings link", async () => {
+    const { store } = await renderWaiting({ enabled: true, buyIt: true });
+    store.setState({ namespace: 'demo' });
+    expect(await screen.findByText("Reminders don't come on demo money.")).toBeInTheDocument();
+    expect(screen.queryByText(OFF)).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Settings' })).not.toBeInTheDocument();
   });
 
   it('says nothing on a decision that is not waiting', async () => {

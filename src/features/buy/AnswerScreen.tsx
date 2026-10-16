@@ -13,6 +13,7 @@ import { useAction } from '@/lib/useAction';
 import { usePlatform } from '@/platform/PlatformProvider';
 import { useReminderSettings } from '@/features/shared/reminders';
 import { RATE_RANGE, remindDay, type BuyPrefill } from '@/store/buyActions';
+import { useApp } from '@/store/AppStoreProvider';
 import { useBuyActions, useDecision } from '@/store/useBuy';
 import { useMoney, useToday } from '@/store/useFinance';
 import { BuyMeter } from './BuyMeter';
@@ -67,6 +68,7 @@ export function AnswerScreen() {
   const run = useAction();
   const reminders = useReminderSettings();
   const { notifier } = usePlatform();
+  const demo = useApp((s) => s.namespace === 'demo');
   const [busy, setBusy] = useState(false);
   // The decision a re-check is replacing: once it is gone the screen waits for the new one, not the list.
   const [replacing, setReplacing] = useState<string | null>(null);
@@ -75,9 +77,11 @@ export function AnswerScreen() {
 
   const { ask, facts, guards, notes, status } = decision;
   const decided = statusLine(decision);
-  // The phone only shows what it was told to schedule: no notifier (the web), the master switch off,
-  // or this rule off, and the promised reminder never comes.
-  const wontRemind = status === 'waiting' && (!notifier || !reminders.enabled || !reminders.buyIt);
+  // The promised reminder never comes on demo money or the web, nor with the master switch or this
+  // rule off. Only in that last case does Settings have a switch to point to.
+  const switchable = !!notifier && !demo;
+  const wontRemind =
+    status === 'waiting' && (!switchable || !reminders.enabled || !reminders.buyIt);
 
   async function decide(fn: () => Promise<unknown>) {
     setBusy(true);
@@ -164,14 +168,22 @@ export function AnswerScreen() {
           {decided && <p className="text-[17px] font-extrabold">{decided}</p>}
           {wontRemind && (
             <p className="text-muted text-sm font-semibold">
-              Reminders are off. Turn them on in{' '}
-              <Link
-                to="/settings"
-                className="text-accent-text -my-1 inline-flex min-h-11 items-center font-bold underline underline-offset-4"
-              >
-                Settings
-              </Link>
-              .
+              {demo ? (
+                "Reminders don't come on demo money."
+              ) : !notifier ? (
+                'Reminders only come on the phone.'
+              ) : (
+                <>
+                  Reminders are off. Turn them on in{' '}
+                  <Link
+                    to="/settings"
+                    className="text-accent-text -my-1 inline-flex min-h-11 items-center font-bold underline underline-offset-4"
+                  >
+                    Settings
+                  </Link>
+                  .
+                </>
+              )}
             </p>
           )}
         </div>
