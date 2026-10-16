@@ -9,8 +9,11 @@ import { HELP_GROUPS, HELP_PAGES } from '@/content/help';
 /** Help: a search line, then every page under its group. */
 export function HelpScreen() {
   const [query, setQuery] = useState('');
-  const text = query.trim().toLowerCase();
-  const found = HELP_PAGES.filter((p) => `${p.title} ${p.summary}`.toLowerCase().includes(text));
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+  const found = HELP_PAGES.filter((p) => {
+    const text = `${p.title} ${p.summary}`.toLowerCase();
+    return words.every((word) => text.includes(word));
+  });
 
   return (
     <div className="max-w-xl">

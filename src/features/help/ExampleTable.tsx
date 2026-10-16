@@ -39,22 +39,24 @@ export function ExampleTable({ example }: { example: WorkedExample }) {
           <li key={i}>{step}</li>
         ))}
       </ol>
-      <dl aria-label="Result" className="mt-5">
-        {Object.entries(example.result).map(([key, value]) => {
-          const { label, kind } = RESULT_ROWS[key] ?? { label: key, kind: 'count' as const };
-          return (
-            <div
-              key={key}
-              className="border-border flex min-h-11 items-center justify-between gap-3 border-t py-2.5 first:border-t-0"
-            >
-              <dt className="text-muted text-sm font-semibold">{label}</dt>
-              <dd className="text-[15px] font-extrabold tabular-nums">
-                {format(value, kind, currency)}
-              </dd>
-            </div>
-          );
-        })}
-      </dl>
+      <div role="group" aria-label="Result" className="mt-5">
+        <dl>
+          {Object.entries(example.result).map(([key, value]) => {
+            const { label, kind } = RESULT_ROWS[key] ?? { label: key, kind: 'count' as const };
+            return (
+              <div
+                key={key}
+                className="border-border flex min-h-11 items-center justify-between gap-3 border-t py-2.5 first:border-t-0"
+              >
+                <dt className="text-muted text-sm font-semibold">{label}</dt>
+                <dd className="text-[15px] font-extrabold tabular-nums">
+                  {format(value, kind, currency)}
+                </dd>
+              </div>
+            );
+          })}
+        </dl>
+      </div>
     </Section>
   );
 }

@@ -4,7 +4,7 @@ import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
 import { FAQ, GLOSSARY, HELP_PAGES, LEGAL, RESULT_ROWS } from '@/content/help';
 import { BUY_FROM, GUARD_CAP, WAIT_FROM } from '@/domain/advisor';
-import { EXAMPLES } from '@/domain/examples';
+import { EXAMPLES, ex, type WorkedExample } from '@/domain/examples';
 import { formatMoney } from '@/domain/money';
 import { ExampleTable } from './ExampleTable';
 import { HelpPage } from './HelpPage';
@@ -63,6 +63,23 @@ describe('Help index', () => {
     expect(screen.queryByRole('link', { name: /^Available to spend/ })).not.toBeInTheDocument();
   });
 
+  it('matches every word, each in the title or the summary', async () => {
+    renderHelp();
+    const search = screen.getByRole('searchbox', { name: 'Search help' });
+    const hrefs = () => screen.queryAllByRole('link').map((a) => a.getAttribute('href'));
+
+    await userEvent.type(search, 'salary freeze');
+    expect(hrefs()).toEqual(['/help/salary-freeze']);
+
+    await userEvent.clear(search);
+    await userEvent.type(search, 'glossary');
+    expect(hrefs()).toEqual(['/help/glossary']);
+
+    await userEvent.clear(search);
+    await userEvent.type(search, 'salary dividends');
+    expect(hrefs()).toEqual([]);
+  });
+
   it('says so when nothing matches, and comes back when the search is cleared', async () => {
     renderHelp();
     const search = screen.getByRole('searchbox', { name: 'Search help' });
@@ -112,6 +129,26 @@ describe('a help page', () => {
   it('ends the pages about numbers and rules with the not-financial-advice note', () => {
     renderHelp('/help/available');
     expect(screen.getByText(LEGAL.disclaimers[0]!.text)).toBeInTheDocument();
+  });
+
+  it('adds the market and headline disclaimers to the Investments page', () => {
+    renderHelp('/help/investments');
+    for (const { text } of LEGAL.disclaimers) expect(screen.getByText(text)).toBeInTheDocument();
+  });
+
+  it('keeps the other pages to the one note', () => {
+    renderHelp('/help/dividends');
+    expect(screen.getByText(LEGAL.disclaimers[0]!.text)).toBeInTheDocument();
+    expect(screen.queryByText(LEGAL.disclaimers[1]!.text)).not.toBeInTheDocument();
+    expect(screen.queryByText(LEGAL.disclaimers[2]!.text)).not.toBeInTheDocument();
+  });
+
+  it('links Net worth to the page with the worked example', () => {
+    renderHelp('/help/net-worth');
+    expect(screen.getByRole('link', { name: 'Cards and balances' })).toHaveAttribute(
+      'href',
+      '/help/cards',
+    );
   });
 
   it('leaves the note off the pages about the app itself', () => {
@@ -172,7 +209,7 @@ describe('ExampleTable', () => {
       const steps = within(screen.getByRole('list', { name: 'Steps' })).getAllByRole('listitem');
       expect(steps.map((s) => s.textContent)).toEqual(example.steps);
 
-      const rows = screen.getByLabelText('Result');
+      const rows = screen.getByRole('group', { name: 'Result' });
       for (const [key, value] of Object.entries(example.result)) {
         const row = within(rows).getByText(RESULT_ROWS[key]!.label).parentElement!;
         const text = expected(key, value);
@@ -187,6 +224,22 @@ describe('ExampleTable', () => {
     const row = (label: string) => screen.getByText(label).parentElement!;
     expect(row(RESULT_ROWS.available!.label)).toHaveTextContent('$2,654.01');
     expect(row(RESULT_ROWS.foodPct!.label)).toHaveTextContent('83%');
+  });
+
+  it('shows money in the currency of the example, not a fixed one', () => {
+    const euro: WorkedExample = {
+      id: 'EUR-1',
+      rule: 'Currency',
+      title: 'An example in euros',
+      today: '2026-10-14',
+      data: ex.snapshot({ profile: [ex.profile({ openingDate: '2026-10-01', currency: 'EUR' })] }),
+      steps: ['Step'],
+      result: { available: 2_654_01 },
+    };
+    render(<ExampleTable example={euro} />);
+    const result = screen.getByRole('group', { name: 'Result' });
+    expect(result).toHaveTextContent(formatMoney(2_654_01, 'EUR'));
+    expect(result).not.toHaveTextContent('$');
   });
 
   it('puts the limit levels in words', () => {

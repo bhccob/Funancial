@@ -2,6 +2,17 @@ import { describe, expect, it } from 'vitest';
 import { EXAMPLES } from '@/domain/examples';
 import { FAQ, GLOSSARY, HELP_PAGES, LEGAL, RESULT_ROWS, helpPage } from '.';
 
+/** Every line of help prose, the game and buy-it pages included. */
+const allProse = () => [
+  ...HELP_PAGES.flatMap((p) => [p.summary, ...p.body]),
+  ...GLOSSARY.flatMap((g) => [g.term, g.meaning]),
+  ...FAQ.flatMap((f) => [f.q, f.a]),
+  ...LEGAL.privacy,
+  ...LEGAL.terms,
+  ...LEGAL.disclaimers.flatMap((d) => [d.title, d.text]),
+];
+const page = (id: string) => helpPage(id)!.body.join(' ');
+
 /** The ids the "?" tips link to; changing one breaks those links. */
 const PAGE_IDS = [
   'available',
@@ -103,8 +114,70 @@ describe('glossary, FAQ and legal text', () => {
     expect(privacy).toMatch(/no account/i);
     expect(privacy).toMatch(/no analytics/i);
     expect(privacy).toMatch(/price service/i);
-    expect(privacy).toMatch(/never your money data/i);
     expect(privacy).toMatch(/passphrase/i);
+  });
+});
+
+describe('help copy says what the code does', () => {
+  it('names the card payment wherever it names the bills still to come', () => {
+    const mentions = allProse().filter((line) => /bills still to come/.test(line));
+    expect(mentions.length).toBeGreaterThanOrEqual(3);
+    for (const line of mentions) {
+      expect(line).toMatch(
+        /bills still to come this month, plus the next payment due on each credit card/,
+      );
+    }
+    expect(allProse().filter((line) => /due this month/.test(line))).toEqual([]);
+    expect(GLOSSARY.find((g) => g.term === 'Upcoming bill')!.meaning).toMatch(
+      /renewal still to come this month, or the next payment due on a credit card/,
+    );
+  });
+
+  it('says a subscription is an upcoming bill once its renewal is in the current month', () => {
+    expect(page('subscriptions')).toMatch(/renewal falls in the current month/);
+  });
+
+  it('lists what a lookup carries on the Privacy page, and the FAQ points there', () => {
+    const privacy = LEGAL.privacy.join(' ');
+    const carried = [
+      'a symbol',
+      'the text you type in search',
+      'a currency pair',
+      'a start date',
+      'a pasted link',
+    ];
+    for (const item of carried) expect(privacy).toContain(item);
+    expect(privacy).toMatch(/never your amounts, balances or notes/i);
+    expect(privacy).not.toMatch(/money data/i);
+
+    const answer = FAQ.find((f) => /sent anywhere/.test(f.q))!.a;
+    expect(answer).toContain('Privacy page');
+    expect(answer).not.toMatch(/exchange rates|symbol/);
+  });
+
+  it("says the app doesn't keep the passphrase, not that it keeps no copy of the backup", () => {
+    const privacy = LEGAL.privacy.join(' ');
+    expect(privacy).toContain("Funancial doesn't keep your passphrase");
+    expect(privacy).not.toMatch(/keeps no copy/);
+  });
+
+  it('counts streaks in days, weeks or months', () => {
+    expect(GLOSSARY.find((g) => g.term === 'Streak')!.meaning).toContain('days, weeks or months');
+    expect(page('game')).toContain('days, weeks or months');
+  });
+
+  it('says what each streak freeze covers: a day, or a week', () => {
+    expect(page('game')).toMatch(/logging freeze covers one missed day/);
+    expect(page('game')).toMatch(/check-in freeze covers one missed week/);
+  });
+
+  it('compares available to spend with cash plus savings, not cash', () => {
+    expect(FAQ[0]!.q).toContain('cash plus savings');
+    expect(page('available')).toContain('lower than your cash plus savings');
+  });
+
+  it('names the glossary in the summary of Words, so a search for it finds the page', () => {
+    expect(helpPage('glossary')!.summary.toLowerCase()).toContain('glossary');
   });
 });
 

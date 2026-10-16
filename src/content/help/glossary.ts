@@ -3,7 +3,7 @@ export const GLOSSARY: Array<{ term: string; meaning: string }> = [
   {
     term: 'Available to spend',
     meaning:
-      'Cash and savings, minus the bills still to come this month and the money you reserved for limits.',
+      'What is left of your cash and savings after the bills still to come this month, plus the next payment due on each credit card, and the money you reserved for limits.',
   },
   {
     term: 'Badge',
@@ -72,14 +72,15 @@ export const GLOSSARY: Array<{ term: string; meaning: string }> = [
     term: 'Salary freeze',
     meaning: 'Days when you are not paid. Funancial lowers your expected pay for them.',
   },
-  { term: 'Streak', meaning: 'How many days or weeks in a row you keep a habit.' },
+  { term: 'Streak', meaning: 'How many days, weeks or months in a row you keep a habit.' },
   {
     term: 'Subscription',
     meaning: 'A bill that repeats on its own, like a streaming service.',
   },
   {
     term: 'Upcoming bill',
-    meaning: 'A subscription renewal or a card payment that is still due this month.',
+    meaning:
+      'A subscription renewal still to come this month, or the next payment due on a credit card.',
   },
   { term: 'XP', meaning: 'Experience points. They raise your level.' },
 ];

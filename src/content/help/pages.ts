@@ -75,9 +75,9 @@ export const HELP_PAGES: HelpPage[] = [
     group: 'numbers',
     body: [
       'Available to spend is the money you can use now without touching money that is already spoken for.',
-      'It starts with your cash and savings. Then it takes away the bills still to come this month: subscription renewals and what is due on your credit cards. It also takes away the unspent part of any limit you chose to reserve.',
+      'It starts with your cash and savings. Then it takes away the bills still to come this month, plus the next payment due on each credit card. It also takes away the unspent part of any limit you chose to reserve.',
       'Investments, passive income and pay that is only expected are not part of it.',
-      'If it is lower than your cash, those bills and reserved limits are the reason.',
+      'If it is lower than your cash plus savings, those bills and reserved limits are the reason.',
     ],
     exampleIds: ['AVL-1'],
   },
@@ -125,7 +125,7 @@ export const HELP_PAGES: HelpPage[] = [
     summary: 'Bills that come back on their own',
     group: 'numbers',
     body: [
-      'A subscription is a bill that repeats. Until it renews it is an upcoming bill: it lowers Available to spend, and your cash stays where it is.',
+      'A subscription is a bill that repeats. Once its renewal falls in the current month it is an upcoming bill: it lowers Available to spend, and your cash stays where it is.',
       'On the renewal day Funancial records the charge as an expense, and your cash drops. The next renewal moves forward by one cycle.',
       'Renewals count toward your limits like any other expense.',
     ],
@@ -140,7 +140,6 @@ export const HELP_PAGES: HelpPage[] = [
       'Net worth is everything you have, minus everything you owe.',
       'What you have is your cash, your savings, the passive income you have received, and your investments at their latest price. What you owe is your card balances and your loans.',
       'Spending lowers it, and saving, earning and paying down what you owe raise it. Moving money between cash and savings does not change it.',
-      'Cards and balances has a worked example.',
     ],
   },
   {
@@ -189,15 +188,15 @@ export const HELP_PAGES: HelpPage[] = [
     body: [
       `Using the app earns XP. Logging an expense, income or a dividend earns ${LOG_XP} XP, up to ${LOG_CAP_PER_DAY} a day.`,
       `XP raises your level. There are ${MAX_LEVEL} levels in ${TIERS.length} tiers: ${list(TIERS.map((t) => t.name))}. Each level takes a little more XP than the one before.`,
-      "Quests are small jobs for the day, week and month, like logging today's spending or doing your weekly check-in. Streaks count how many days or weeks in a row you keep a habit. Badges mark firsts and milestones. Challenges are longer goals you take on yourself.",
-      'Quests, streaks, badges and challenges also pay coins. You spend coins in the Shop, on looks and on streak freezes that protect a streak on a day you miss.',
+      "Quests are small jobs for the day, week and month, like logging today's spending or doing your weekly check-in. Streaks count how many days, weeks or months in a row you keep a habit. Badges mark firsts and milestones. Challenges are longer goals you take on yourself.",
+      'Quests, streaks, badges and challenges also pay coins. You spend coins in the Shop, on looks and on streak freezes: a logging freeze covers one missed day, and a check-in freeze covers one missed week.',
       'The Quests screen lists everything that earns XP and coins, with the exact amounts.',
     ],
   },
   {
     id: 'glossary',
     title: 'Words',
-    summary: 'What the terms mean',
+    summary: 'Glossary: what the terms mean',
     group: 'more',
     body: ['The words Funancial uses, in plain language.'],
   },

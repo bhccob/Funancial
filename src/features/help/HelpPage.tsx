@@ -64,6 +64,16 @@ const EXTRA: Record<string, () => ReactNode> = {
       <Definitions items={FAQ.map(({ q, a }) => ({ term: q, meaning: a }))} />
     </Section>
   ),
+  'net-worth': () => (
+    <Section>
+      <p className="text-[15.5px] leading-relaxed font-semibold">
+        <Link to="/help/cards" className="font-extrabold underline underline-offset-4">
+          {helpPage('cards')!.title}
+        </Link>{' '}
+        has a worked example.
+      </p>
+    </Section>
+  ),
   terms: () => (
     <Section title="Disclaimers">
       <Definitions
@@ -102,7 +112,14 @@ export function HelpPage() {
         return example && <ExampleTable key={exampleId} example={example} />;
       })}
       {page.group !== 'more' && (
-        <p className="text-muted pt-2 text-[13px] font-semibold">{LEGAL.disclaimers[0]!.text}</p>
+        <div className="text-muted flex flex-col gap-1.5 pt-2 text-[13px] font-semibold">
+          {/* Prices and headlines are what the Investments page shows; every other page needs only the first. */}
+          {(page.id === 'investments' ? LEGAL.disclaimers : LEGAL.disclaimers.slice(0, 1)).map(
+            (d) => (
+              <p key={d.title}>{d.text}</p>
+            ),
+          )}
+        </div>
       )}
     </div>
   );

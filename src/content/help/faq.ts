@@ -1,7 +1,7 @@
 export const FAQ: Array<{ q: string; a: string }> = [
   {
-    q: 'Why is my available lower than my cash?',
-    a: 'Available to spend also takes away the bills still to come this month and the money you reserved for limits.',
+    q: 'Why is my available lower than my cash plus savings?',
+    a: 'Available to spend also takes away the bills still to come this month, plus the next payment due on each credit card, and the money you reserved for limits.',
   },
   {
     q: "Why didn't my cash drop when I paid by card?",
@@ -25,7 +25,7 @@ export const FAQ: Array<{ q: string; a: string }> = [
   },
   {
     q: 'Is my data sent anywhere?',
-    a: 'No. It stays on your phone, encrypted. Only prices, exchange rates, dividends, news and symbol searches go to the price service, and they carry the symbol, never your money data.',
+    a: 'Your data stays on your phone, encrypted. The few lookups that do leave it are listed on the Privacy page.',
   },
   {
     q: 'Is demo money mixed with my real data?',
