@@ -22,6 +22,7 @@
     "android:dev": "node scripts/android-dev.mjs"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "0.135.0",
     "@capacitor-community/sqlite": "8.1.1",
     "@capacitor/android": "8.5.3",
     "@capacitor/app": "8.1.2",

@@ -1,6 +1,6 @@
 import { lookup } from 'node:dns/promises';
-import { request as httpRequest, type IncomingMessage } from 'node:http';
-import { request as httpsRequest } from 'node:https';
+import { Agent as HttpAgent, request as httpRequest, type IncomingMessage } from 'node:http';
+import { Agent as HttpsAgent, request as httpsRequest } from 'node:https';
 import { BlockList, isIP, type LookupFunction } from 'node:net';
 
 const TIMEOUT_MS = 5000;
@@ -14,7 +14,6 @@ const HTML = /^(?:text\/html|application\/xhtml\+xml)\s*(?:;|$)/i;
 export class BlockedUrlError extends Error {}
 
 // Where a product page is never served from: this host's own network and what shares it.
-// An IPv4-mapped IPv6 address (::ffff:10.0.0.1) is judged by its IPv4 address.
 const PRIVATE = new BlockList();
 for (const [net, bits] of [
   ['0.0.0.0', 8], // "this network"
@@ -34,6 +33,8 @@ for (const [net, bits] of [
   ['::', 96], // unspecified, loopback and the old IPv4-compatible range
   ['64:ff9b::', 96], // NAT64, which carries an IPv4 address in its last 32 bits
   ['64:ff9b:1::', 48], // local-use NAT64
+  ['100::', 64], // discard-only
+  ['2001::', 32], // Teredo, which carries an IPv4 address in its last 32 bits
   ['2002::', 16], // 6to4, which carries an IPv4 address after the prefix
   ['fc00::', 7], // unique local
   ['fe80::', 10], // link-local
@@ -43,10 +44,18 @@ for (const [net, bits] of [
   PRIVATE.addSubnet(net, bits, 'ipv6');
 }
 
+// An IPv4-mapped IPv6 address (::ffff:10.0.0.1) is refused whole, public ones too: nothing legitimate
+// is served from one, and it is a spelling of an IPv4 address. It has its own list because a
+// BlockList reads every IPv4 address as a mapped one, so this rule in PRIVATE would block them all.
+const MAPPED = new BlockList();
+MAPPED.addSubnet('::ffff:0:0', 96, 'ipv6');
+
 function isPrivate(address: string): boolean {
   const family = isIP(address);
   // Anything that is not an address cannot be shown safe.
-  return family === 0 || PRIVATE.check(address, family === 6 ? 'ipv6' : 'ipv4');
+  if (family === 0) return true;
+  if (family === 4) return PRIVATE.check(address, 'ipv4');
+  return MAPPED.check(address, 'ipv6') || PRIVATE.check(address, 'ipv6');
 }
 
 /**
@@ -71,6 +80,11 @@ export const checkedLookup: LookupFunction = (host, options, callback) => {
   );
 };
 
+// An Agent of their own, not the global ones: those share a socket pool, and under
+// NODE_USE_ENV_PROXY they send the request through a proxy, which would resolve the name itself
+// instead of asking checkedLookup. A new Agent does neither, and keeps no socket after a request.
+const AGENTS = { 'http:': new HttpAgent(), 'https:': new HttpsAgent() };
+
 // What can be judged before connecting. A literal address never reaches the lookup, so it is
 // judged here; a name is judged by checkedLookup, in the one lookup that connects.
 function assertAllowed(url: URL): void {
@@ -88,10 +102,12 @@ function assertAllowed(url: URL): void {
 // lookup, the connection, the headers and the body.
 function send(url: URL, signal: AbortSignal): Promise<IncomingMessage> {
   return new Promise((resolve, reject) => {
-    const request = url.protocol === 'https:' ? httpsRequest : httpRequest;
+    const https = url.protocol === 'https:';
+    const request = https ? httpsRequest : httpRequest;
     request(
       url,
       {
+        agent: https ? AGENTS['https:'] : AGENTS['http:'],
         lookup: checkedLookup,
         signal,
         headers: {

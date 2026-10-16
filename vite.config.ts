@@ -16,7 +16,7 @@ function priceServiceDev(): Plugin {
     configResolved(config) {
       // The routes read process.env, as they do on Vercel; .env.local only fills it in here.
       for (const [key, value] of Object.entries(loadEnv(config.mode, config.root, ''))) {
-        if (key.startsWith('FUNANCIAL_')) process.env[key] = value;
+        if (key.startsWith('FUNANCIAL_') || key.startsWith('ANTHROPIC_')) process.env[key] = value;
       }
     },
     configureServer(server) {
@@ -27,7 +27,7 @@ function priceServiceDev(): Plugin {
         try {
           const method = incoming.method ?? 'GET';
           const handler: Handler | undefined =
-            method === 'GET' || method === 'OPTIONS'
+            method === 'GET' || method === 'POST' || method === 'OPTIONS'
               ? (await server.ssrLoadModule(`/api/${name}.ts`))[method]
               : undefined;
           if (!handler) {
@@ -39,7 +39,14 @@ function priceServiceDev(): Plugin {
             if (value !== undefined)
               headers.set(key, Array.isArray(value) ? value.join(', ') : value);
           }
-          const response = await handler(new Request(url, { method, headers }));
+          // Only a POST has a body; the routes check its size themselves.
+          let body: Uint8Array<ArrayBuffer> | undefined;
+          if (method === 'POST') {
+            const chunks: Buffer[] = [];
+            for await (const chunk of incoming) chunks.push(chunk as Buffer);
+            body = Buffer.concat(chunks);
+          }
+          const response = await handler(new Request(url, { method, headers, body }));
           res.statusCode = response.status;
           response.headers.forEach((value, key) => res.setHeader(key, value));
           res.end(Buffer.from(await response.arrayBuffer()));
