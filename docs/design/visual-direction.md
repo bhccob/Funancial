@@ -97,18 +97,20 @@ Numbers are tabular. Money always goes through `useMoney()` / `formatMoney`, dat
 
 ## Navigation
 
-- **Phone:** a flat bottom bar across the bottom edge with a hairline on top: **Home · Budget · + ·
-  Quests · Menu**. It is 76px tall plus the safe area, every item has a label, and the + is a 48px
-  round ink button that opens Add Expense. There is no floating quick-add button. Toasts float just
-  above the bar.
+- **Phone:** a flat bottom bar across the bottom edge with a hairline on top: **Home · Budget ·
+  Invest · Menu**. It is 64px tall plus the safe area and every item has a label. Adding an expense
+  lives on Home (and in the sidebar), so the bar has no + and there is no floating quick-add button.
+  Toasts float just above the bar.
+- **Invest:** Holdings, Dividends and News are tabs inside Invest, not separate pages or Menu rows.
 - **Menu:** a tall sheet that slides up from the bottom (280ms ease-out, only under `motion-safe:`)
   with a grab handle and rounded top corners. It is a plain list in three groups (section titles at
   21px); each row is at least 48px tall with a coloured round icon, the name, a line saying what is
   inside right now, and an arrow. Escape and the Android back gesture close it.
   - **Your money:** Subscriptions, Goals, History, Salary freeze.
-  - **Coming next:** Invest, Buy it?, Dividends, News, each marked "Soon".
-  - **You:** Shop, Inbox ("Soon"), Help ("Soon"), Settings.
-- **Desktop:** the sidebar lists the same groups under an "Add expense" button.
+  - **Coming next:** Buy it?, marked "Soon".
+  - **You:** Quests, Shop, Inbox ("Soon"), Help ("Soon"), Settings.
+- **Desktop:** the sidebar lists Home, Budget and Invest, then the same groups, under an "Add
+  expense" button.
 
 ### Icon-chip colours
 
@@ -116,11 +118,10 @@ Fixed in both themes (`src/app/menu.ts`); each holds at least 3:1 against the wh
 
 | Item | Colour | Item | Colour |
 | --- | --- | --- | --- |
-| Subscriptions | `#2a78d6` | Dividends | `#0b7f8a` |
-| Goals | `#128a60` | News | `#5b6270` |
-| History | `#d9541e` | Shop | `#6b46f5` |
-| Salary freeze | `#4458d6` | Inbox | `#3b82c4` |
-| Invest | `#b86e00` | Help | `#128a60` |
+| Subscriptions | `#2a78d6` | Quests | `#b86e00` |
+| Goals | `#128a60` | Shop | `#6b46f5` |
+| History | `#d9541e` | Inbox | `#3b82c4` |
+| Salary freeze | `#4458d6` | Help | `#128a60` |
 | Buy it? | `#c43b6a` | Settings | `#5b6270` |
 
 ## Charts
