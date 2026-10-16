@@ -1,6 +1,13 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { CURRENT_SCHEMA_VERSION, emptySnapshot } from '@/domain/snapshot';
-import { makeExpense, makeGoal, makeSettings, makeSubscription } from '@/test/fixtures';
+import {
+  makeAboutYou,
+  makeBuyDecision,
+  makeExpense,
+  makeGoal,
+  makeSettings,
+  makeSubscription,
+} from '@/test/fixtures';
 import { memoryStorage } from '@/test/memoryStorage';
 import { decryptRecord, encryptRecord, generateDataKey } from './crypto';
 import { dexieStorage, type Namespace } from './db';
@@ -37,6 +44,21 @@ describe('repository over IndexedDB', () => {
     const row = await storedRow(backend, 'expense', 'e1');
     expect(new TextDecoder().decode(row!.ciphertext)).not.toContain('secret coffee');
     expect((await repo.loadAll()).snapshot.tables.expense[0]?.note).toBe('secret coffee');
+  });
+
+  it('stores buy decisions and the About you record like any other table', async () => {
+    const backend = await testBackend();
+    const repo = createRepository(backend, await generateDataKey());
+    const decision = makeBuyDecision({ id: 'b1', status: 'waiting' });
+    const about = makeAboutYou({ situation: 'private' });
+    await repo.put('buyDecision', decision);
+    await repo.put('aboutYou', about);
+
+    const row = await storedRow(backend, 'aboutYou', 'about');
+    expect(new TextDecoder().decode(row!.ciphertext)).not.toContain('private');
+    const { tables } = (await repo.loadAll()).snapshot;
+    expect(tables.buyDecision).toEqual([decision]);
+    expect(tables.aboutYou).toEqual([about]);
   });
 
   it('refuses to store an invalid record', async () => {

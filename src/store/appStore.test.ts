@@ -81,6 +81,7 @@ describe('first run', () => {
           reviews: true,
           backup: true,
           dividends: true,
+          buyIt: true,
           prompted: false,
         },
         cosmetics: { theme: 'theme-violet', avatar: 'avatar-sprout', frame: 'frame-none' },

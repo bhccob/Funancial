@@ -75,6 +75,7 @@ export const ReminderSettingsSchema = z.object({
   reviews: z.boolean(),
   backup: z.boolean(),
   dividends: z.boolean(),
+  buyIt: z.boolean(),
   /** Set once the person has been asked about reminders, so the ask is not repeated. */
   prompted: z.boolean(),
 });
@@ -139,6 +140,7 @@ export function defaultSettings(now: string): Settings {
       reviews: true,
       backup: true,
       dividends: true,
+      buyIt: true,
       prompted: false,
     },
     cosmetics: { theme: 'theme-violet', avatar: 'avatar-sprout', frame: 'frame-none' },
@@ -450,7 +452,7 @@ export const BuyAskSchema = z.object({
   howSoon: z.enum(['today', 'month', 'norush']),
   payWith: PaymentMethodSchema,
   cardId: z.string().min(1).nullable(),
-  link: z.string().nullable(),
+  link: z.string().max(2048).nullable(),
   /** Optional reason, sent to the advisor only. */
   why: z.string().max(200).nullable(),
 });
@@ -480,3 +482,69 @@ export const FactsSchema = z.object({
   resetsOn: LocalDateSchema.nullable(),
 });
 export type Facts = z.infer<typeof FactsSchema>;
+
+export const ConfidenceSchema = z.enum(['low', 'medium', 'high']);
+export type Confidence = z.infer<typeof ConfidenceSchema>;
+
+/** A meter reading: a whole number from 0 (skip it) to 100 (buy it). */
+const MeterSchema = z.number().int().min(0).max(100);
+
+/** The most turns a debate keeps, the person's and the advisor's together. */
+export const MAX_DEBATE_TURNS = 40;
+
+/**
+ * One ask and what came of it. `rulesMeter` and `rulesVerdict` are what the rules engine said from
+ * the totals alone; `meter`, `verdict` and `confidence` are the answer shown, which the advisor may
+ * have moved within its guards. `ai` is null for a Basic check, made without the advisor.
+ */
+export const BuyDecisionSchema = z.object({
+  ...base,
+  ask: BuyAskSchema,
+  facts: FactsSchema,
+  rulesMeter: MeterSchema,
+  rulesVerdict: VerdictSchema,
+  meter: MeterSchema,
+  verdict: VerdictSchema,
+  confidence: ConfidenceSchema,
+  ai: z
+    .object({
+      summary: z.string(),
+      pros: z.array(z.string()),
+      cons: z.array(z.string()),
+      alternatives: z.array(z.string()),
+      /** How long the advisor suggests waiting before deciding; null when it gave no time. */
+      coolingOffHours: z.number().nonnegative().nullable(),
+    })
+    .nullable(),
+  debate: z
+    .array(
+      z.object({
+        role: z.enum(['advisor', 'you']),
+        text: z.string(),
+        /** The meter the advisor moved to with this turn; null for the person's turns. */
+        meter: MeterSchema.nullable(),
+        at: IsoTimestampSchema,
+      }),
+    )
+    .max(MAX_DEBATE_TURNS),
+  status: z.enum(['open', 'waiting', 'bought', 'skipped']),
+  /** The day to ask again, for a decision to wait. */
+  remindOn: LocalDateSchema.nullable(),
+  boughtOn: LocalDateSchema.nullable(),
+  /** How much the thing was used, 1 (not at all) to 5 (a lot), once the person has said. */
+  usage: z.literal([1, 2, 3, 4, 5]).nullable(),
+});
+export type BuyDecision = z.infer<typeof BuyDecisionSchema>;
+
+/** What the person chose to tell the advisor about themselves: the one record, `id: 'about'`. */
+export const AboutYouSchema = z.object({
+  ...base,
+  id: z.literal('about'),
+  situation: z.string().max(500),
+  matters: z.string().max(500),
+  overspend: z.string().max(500),
+  facts: z.array(
+    z.object({ id: z.string().min(1), text: z.string().max(200), addedOn: LocalDateSchema }),
+  ),
+});
+export type AboutYou = z.infer<typeof AboutYouSchema>;

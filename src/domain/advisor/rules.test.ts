@@ -8,10 +8,10 @@ import {
   makeLimit,
   makeSubscription,
 } from '@/test/fixtures';
+import { history, TODAY, world } from '@/test/testWorld';
 import { FactsSchema, type BuyAsk } from '../entities';
 import { analyse } from './rules';
 import { buildSnapshot, type PastDecision } from './snapshot';
-import { history, TODAY, world } from './testWorld';
 
 type Options = Parameters<typeof world>[0];
 

@@ -10,10 +10,10 @@ import {
   makeSubscription,
   makeTransaction,
 } from '@/test/fixtures';
+import { history, TODAY, world } from '@/test/testWorld';
 import { projectedAnnual } from '../dividends';
 import type { Holding } from '../entities';
 import { buildSnapshot, type PastDecision } from './snapshot';
-import { history, TODAY, world } from './testWorld';
 
 const ask = makeBuyAsk();
 const snap = (data = world(), a = ask, past: PastDecision[] = []) =>

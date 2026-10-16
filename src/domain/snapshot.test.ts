@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  makeAboutYou,
+  makeBuyDecision,
   makeDividend,
   makeExpense,
   makeHolding,
@@ -200,6 +202,48 @@ describe('sales (v7)', () => {
 
   it('names the new table', () => {
     expect(TABLES).toContain('sale');
-    expect(CURRENT_SCHEMA_VERSION).toBe(7);
+  });
+});
+
+describe('buy decisions and About you (v8)', () => {
+  it('gives a v7 snapshot empty decision and About you tables and the Buy it? reminder', () => {
+    const { buyDecision, aboutYou, ...tables } = emptySnapshot().tables;
+    expect([buyDecision, aboutYou]).toEqual([[], []]);
+    const old: Record<string, unknown> = { ...makeSettings() };
+    const { buyIt, ...reminders } = makeSettings().reminders;
+    expect(buyIt).toBe(true);
+    old.reminders = reminders;
+    const v7 = {
+      schemaVersion: 7,
+      tables: { ...tables, settings: [old], holding: [makeHolding({ id: 'h1' })] },
+    };
+    const s = migrateSnapshot(v7);
+    expect(s.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+    expect(s.tables.buyDecision).toEqual([]);
+    expect(s.tables.aboutYou).toEqual([]);
+    expect(s.tables.settings[0]!.reminders).toEqual(makeSettings().reminders);
+    expect(s.tables.holding).toEqual(v7.tables.holding);
+  });
+
+  it('keeps decisions and the About you record through a round trip', () => {
+    const s = emptySnapshot();
+    s.tables.buyDecision = [makeBuyDecision({ id: 'b1' }), makeBuyDecision({ id: 'b2', usage: 4 })];
+    s.tables.aboutYou = [makeAboutYou({ situation: 'Renting.' })];
+    expect(migrateSnapshot(JSON.parse(JSON.stringify(s)))).toEqual(s);
+  });
+
+  it('holds at most one About you record, and no duplicate decision ids', () => {
+    const two = emptySnapshot();
+    two.tables.aboutYou = [makeAboutYou(), makeAboutYou()];
+    expect(SnapshotSchema.safeParse(two).success).toBe(false);
+    const dup = emptySnapshot();
+    dup.tables.buyDecision = [makeBuyDecision({ id: 'b1' }), makeBuyDecision({ id: 'b1' })];
+    expect(SnapshotSchema.safeParse(dup).success).toBe(false);
+  });
+
+  it('names the new tables and the version', () => {
+    expect(TABLES).toContain('buyDecision');
+    expect(TABLES).toContain('aboutYou');
+    expect(CURRENT_SCHEMA_VERSION).toBe(8);
   });
 });

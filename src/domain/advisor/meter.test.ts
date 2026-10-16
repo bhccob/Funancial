@@ -16,6 +16,12 @@ describe('zone', () => {
   });
 });
 
+describe('zone with no number', () => {
+  it('never lands a NaN in Buy', () => {
+    expect(zone(Number.NaN)).toBe('skip');
+  });
+});
+
 describe('confidenceOf', () => {
   it('is high 30 points from the middle, medium 15, and low nearer', () => {
     expect([0, 20, 80, 100].map(confidenceOf)).toEqual(['high', 'high', 'high', 'high']);

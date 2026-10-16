@@ -1,6 +1,14 @@
-import { makeExpense, makeProfile, makeSettings } from '@/test/fixtures';
-import type { BudgetLimit, Debt, Expense, Goal, Holding, Income, Subscription } from '../entities';
-import { emptySnapshot, type DataSnapshot } from '../snapshot';
+import { makeExpense, makeProfile, makeSettings } from './fixtures';
+import type {
+  BudgetLimit,
+  Debt,
+  Expense,
+  Goal,
+  Holding,
+  Income,
+  Subscription,
+} from '@/domain/entities';
+import { emptySnapshot, type DataSnapshot } from '@/domain/snapshot';
 
 /** A Wednesday: this week is Oct 12 to 18 (Monday start), this month Oct 1 to 31. */
 export const TODAY = '2026-10-14';

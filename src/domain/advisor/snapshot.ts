@@ -1,7 +1,13 @@
 import { categoryBreakdown } from '../budget';
 import { addDays, type LocalDate } from '../dates';
 import { addMonths, projectedAnnual } from '../dividends';
-import { CategorySchema, type BuyAsk, type Category, type Verdict } from '../entities';
+import {
+  CategorySchema,
+  type BuyAsk,
+  type BuyDecision,
+  type Category,
+  type Verdict,
+} from '../entities';
 import { inRange, monthKey, monthRange } from '../periods';
 import { portfolio } from '../portfolio';
 import type { DataSnapshot } from '../snapshot';
@@ -53,7 +59,7 @@ export type AdvisorSnapshot = {
     /** What the whole purchase came to: price times quantity. */
     price: number;
     verdict: Verdict;
-    status: string;
+    status: BuyDecision['status'];
     usage: number | null;
   }>;
 };
@@ -62,7 +68,7 @@ export type AdvisorSnapshot = {
 export type PastDecision = {
   ask: BuyAsk;
   verdict: Verdict;
-  status: string;
+  status: BuyDecision['status'];
   usage: number | null;
   createdAt: string;
 };

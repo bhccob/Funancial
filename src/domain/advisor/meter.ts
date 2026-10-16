@@ -1,13 +1,14 @@
-import type { BuyAsk, Facts } from '../entities';
+import type { BuyAsk, Confidence, Facts } from '../entities';
 import type { AdvisorSnapshot } from './snapshot';
 
 export type Zone = 'skip' | 'wait' | 'buy';
-export type Confidence = 'low' | 'medium' | 'high';
+export type { Confidence };
 
 /** Skip 0–33, wait 34–66, buy 67–100. */
 export function zone(meter: number): Zone {
   const m = Math.round(meter);
-  return m <= 33 ? 'skip' : m <= 66 ? 'wait' : 'buy';
+  // Compared upwards, so a NaN falls through to skip and never lands in Buy.
+  return m >= 67 ? 'buy' : m >= 34 ? 'wait' : 'skip';
 }
 
 /** How sure the meter is: far from the middle, sure. */
