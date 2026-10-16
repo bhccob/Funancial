@@ -634,6 +634,7 @@ describe('Reminders', () => {
     ['Weekly and monthly reviews', 'reviews'],
     ['Backup reminder', 'backup'],
     ['Dividends', 'dividends'],
+    ['Buy it?', 'buyIt'],
   ] as const;
 
   /** What a fresh install holds: reminders off, the rest at their defaults, nobody asked yet. */

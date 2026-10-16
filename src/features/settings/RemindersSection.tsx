@@ -18,7 +18,7 @@ const HOURS = Array.from({ length: 17 }, (_, i) => `${String(i + 7).padStart(2, 
 
 /** The rules after the daily nudge, which has its time beside it. */
 const RULES: Array<{
-  key: 'bills' | 'freeze' | 'reviews' | 'backup' | 'dividends';
+  key: 'bills' | 'freeze' | 'reviews' | 'backup' | 'dividends' | 'buyIt';
   label: string;
 }> = [
   { key: 'bills', label: 'Bills and renewals' },
@@ -26,6 +26,7 @@ const RULES: Array<{
   { key: 'reviews', label: 'Weekly and monthly reviews' },
   { key: 'backup', label: 'Backup reminder' },
   { key: 'dividends', label: 'Dividends' },
+  { key: 'buyIt', label: 'Buy it?' },
 ];
 
 /** Only offered where the phone can schedule reminders (`Platform.notifier`). */

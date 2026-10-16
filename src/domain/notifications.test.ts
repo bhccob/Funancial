@@ -1,5 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
+  makeBuyAsk,
+  makeBuyDecision,
   makeDebt,
   makeDividend,
   makeExpense,
@@ -11,6 +13,7 @@ import {
 } from '@/test/fixtures';
 import { localDateTime } from './dates';
 import type {
+  BuyDecision,
   Debt,
   Dividend,
   Expense,
@@ -40,6 +43,7 @@ const ONLY: Partial<ReminderSettings> = {
   reviews: false,
   backup: false,
   dividends: false,
+  buyIt: false,
 };
 
 type Setup = {
@@ -56,6 +60,7 @@ type Setup = {
   freezes?: SalaryFreeze[];
   holdings?: Holding[];
   dividends?: Dividend[];
+  decisions?: BuyDecision[];
 };
 
 function build(setup: Setup = {}): DataSnapshot {
@@ -80,6 +85,7 @@ function build(setup: Setup = {}): DataSnapshot {
   data.tables.salaryFreeze = setup.freezes ?? [];
   data.tables.holding = setup.holdings ?? [];
   data.tables.dividend = setup.dividends ?? [];
+  data.tables.buyDecision = setup.decisions ?? [];
   return data;
 }
 
@@ -555,9 +561,74 @@ describe('upcomingReminders', () => {
     expect(upcomingReminders(data, NOW)[0]?.body).toBe('Confirm it when it arrives.');
   });
 
+  describe('Buy it? decisions', () => {
+    const waiting = makeBuyDecision({
+      id: 'dec-wait',
+      status: 'waiting',
+      remindOn: '2026-10-20',
+      ask: makeBuyAsk({ item: 'Kettle' }),
+    });
+    const bought = makeBuyDecision({
+      id: 'dec-bought',
+      status: 'bought',
+      boughtOn: '2026-10-10',
+      ask: makeBuyAsk({ item: 'Headphones' }),
+    });
+    const on = (...decisions: BuyDecision[]) =>
+      upcomingReminders(build({ reminders: { buyIt: true }, decisions }), NOW);
+
+    it('brings a waiting decision back on its remind day at 09:00', () => {
+      expect(on(waiting)).toEqual([
+        {
+          key: 'buy-wait:dec-wait:2026-10-20',
+          kind: 'buy-wait',
+          at: '2026-10-20T09:00',
+          title: 'Still want it? Kettle',
+          body: 'You chose to wait. See your check again.',
+          route: '/buy/dec-wait',
+        },
+      ]);
+    });
+
+    it('asks 14 days after buying whether it was worth it, until it is rated', () => {
+      expect(on(bought)).toEqual([
+        {
+          key: 'buy-usage:dec-bought',
+          kind: 'buy-usage',
+          at: '2026-10-24T09:00',
+          title: 'Was Headphones worth it?',
+          body: 'Rate it, and your next check takes it into account.',
+          route: '/buy/dec-bought',
+        },
+      ]);
+      expect(on({ ...bought, usage: 4 })).toEqual([]);
+    });
+
+    it('stays quiet with the switch off', () => {
+      const data = build({ reminders: { buyIt: false }, decisions: [waiting, bought] });
+      expect(upcomingReminders(data, NOW)).toEqual([]);
+    });
+
+    it('reminds only for a waiting decision with a day, and a bought one with a date', () => {
+      const others = [
+        makeBuyDecision({ status: 'open', remindOn: '2026-10-20', boughtOn: '2026-10-10' }),
+        makeBuyDecision({ status: 'skipped', remindOn: '2026-10-20', boughtOn: '2026-10-10' }),
+        makeBuyDecision({ status: 'bought', remindOn: '2026-10-20', boughtOn: null }),
+        makeBuyDecision({ status: 'waiting', remindOn: null, boughtOn: '2026-10-10' }),
+        // Bought after waiting: only the question about use is left.
+        { ...bought, id: 'dec-after', remindOn: '2026-10-20' },
+      ];
+      expect(keys(on(...others))).toEqual(['buy-usage:dec-after']);
+    });
+  });
+
   it('honours each switch', () => {
     const setup = {
       all: true,
+      decisions: [
+        makeBuyDecision({ id: 'dec-wait', status: 'waiting', remindOn: '2026-10-20' }),
+        makeBuyDecision({ id: 'dec-bought', status: 'bought', boughtOn: '2026-10-10' }),
+      ],
       lastBackupAt: noon('2026-10-07'),
       subscriptions: [makeSubscription({ id: 'sub-tv', nextRenewal: '2026-10-20' })],
       freezes: [freeze()],
@@ -567,6 +638,8 @@ describe('upcomingReminders', () => {
     const everything = upcomingReminders(build(setup), NOW);
     expect(kinds(everything)).toEqual([
       'backup',
+      'buy-usage',
+      'buy-wait',
       'card-due',
       'daily-log',
       'dividend-ex',
@@ -589,6 +662,7 @@ describe('upcomingReminders', () => {
     expect(dropped({ reviews: false })).toEqual(['monthly-review', 'weekly-review']);
     expect(dropped({ backup: false })).toEqual(['backup']);
     expect(dropped({ dividends: false })).toEqual(['dividend-ex', 'dividend-pay']);
+    expect(dropped({ buyIt: false })).toEqual(['buy-usage', 'buy-wait']);
   });
 
   it('keeps the nearest 60 within 30 days, all after now', () => {

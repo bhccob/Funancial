@@ -327,6 +327,9 @@ describe('computeGameView', () => {
       'first-dividend',
       'dividend-collector',
       'passive-income-pro',
+      'smart-shopper',
+      'impulse-controller',
+      'budget-defender',
     ]);
     expect(view.quests.map((q) => q.id)).toEqual(['log-today', 'week-checkin']);
     expect(view.challenges.map((c) => c.challenge.id)).toEqual(['c1']);

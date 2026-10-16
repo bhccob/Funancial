@@ -2,11 +2,14 @@ import {
   Briefcase,
   ChartPie,
   Coins,
+  Hand,
   HandCoins,
   Lock,
   PiggyBank,
   Receipt,
   Scissors,
+  ShieldCheck,
+  ShoppingBag,
   Snowflake,
   Target,
   type LucideIcon,
@@ -29,6 +32,9 @@ const ICONS: Record<BadgeId, LucideIcon> = {
   'first-dividend': Coins,
   'dividend-collector': HandCoins,
   'passive-income-pro': PiggyBank,
+  'smart-shopper': ShoppingBag,
+  'impulse-controller': Hand,
+  'budget-defender': ShieldCheck,
 };
 
 function BadgeTile({ badge, frame }: { badge: BadgeView; frame: string }) {
