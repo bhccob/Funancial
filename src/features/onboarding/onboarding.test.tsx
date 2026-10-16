@@ -1,6 +1,6 @@
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Toaster } from '@/components/ui/Toaster';
 import { toastStore } from '@/lib/toast';
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
@@ -9,10 +9,25 @@ import { OnboardingWizard } from './OnboardingWizard';
 const actions = vi.hoisted(() => ({ completeOnboarding: vi.fn(async () => {}) }));
 vi.mock('@/store/useFinance', () => ({ useFinanceActions: () => actions }));
 
+const realResolvedOptions = Intl.DateTimeFormat.prototype.resolvedOptions;
+
+/** The phone is in `timeZone`, with its language set to `language`. */
+function phoneIn(timeZone: string, language = 'en-US') {
+  vi.spyOn(Intl.DateTimeFormat.prototype, 'resolvedOptions').mockImplementation(function (
+    this: Intl.DateTimeFormat,
+  ) {
+    return { ...realResolvedOptions.call(this), timeZone };
+  });
+  vi.spyOn(navigator, 'language', 'get').mockReturnValue(language);
+}
+
 beforeEach(() => {
   actions.completeOnboarding.mockClear();
   toastStore.setState({ toasts: [] });
+  // Setup starts on the phone's currency, so the machine running the tests must not decide it.
+  phoneIn('America/New_York');
 });
+afterEach(() => vi.restoreAllMocks());
 
 const next = () => userEvent.click(screen.getByRole('button', { name: 'Next' }));
 
@@ -35,6 +50,23 @@ describe('OnboardingWizard', () => {
     expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled();
     await userEvent.click(screen.getByRole('checkbox', { name: 'I understand' }));
     expect(screen.getByRole('button', { name: 'Next' })).toBeEnabled();
+  });
+
+  it("starts on the currency of the phone's region, and the person can still pick another", async () => {
+    phoneIn('Europe/Amsterdam');
+    renderWithStore(<OnboardingWizard />);
+    await passIntro();
+    expect(screen.getByLabelText('Currency')).toHaveValue('EUR');
+
+    await userEvent.selectOptions(screen.getByLabelText('Currency'), 'GBP');
+    expect(screen.getByLabelText('Currency')).toHaveValue('GBP');
+  });
+
+  it('starts on the language region when the time zone is not one it knows', async () => {
+    phoneIn('Mars/Olympus', 'nl-NL');
+    renderWithStore(<OnboardingWizard />);
+    await passIntro();
+    expect(screen.getByLabelText('Currency')).toHaveValue('EUR');
   });
 
   it('collects everything and finishes with a PIN', async () => {
