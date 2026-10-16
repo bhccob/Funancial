@@ -13,7 +13,13 @@ import {
   formatMonthYear,
   formatPercent,
 } from '@/lib/format';
-import { market, MarketError, type Market, type NewsItem } from '@/services/market';
+import {
+  market,
+  MarketError,
+  type Market,
+  type NewsItem,
+  type SearchResponse,
+} from '@/services/market';
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
 import { makeDividend, makeHolding, makeProfile } from '@/test/fixtures';
 import { FUTURE } from '@/store/financeActions';
@@ -33,6 +39,7 @@ const UNREACHABLE = "Couldn't reach the price service. Showing your last prices.
 let fetchQuotes: MockInstance<Market['fetchQuotes']>;
 let fetchProfile: MockInstance<Market['fetchProfile']>;
 let fetchNews: MockInstance<Market['fetchNews']>;
+let fetchSearch: MockInstance<Market['fetchSearch']>;
 
 beforeEach(() => {
   // No token unless a test sets one: the screen then never asks the network for anything.
@@ -41,6 +48,7 @@ beforeEach(() => {
   fetchProfile = vi.spyOn(market, 'fetchProfile').mockRejectedValue(new MarketError());
   vi.spyOn(market, 'fetchDividends').mockRejectedValue(new MarketError());
   fetchNews = vi.spyOn(market, 'fetchNews').mockResolvedValue({ items: [] });
+  fetchSearch = vi.spyOn(market, 'fetchSearch').mockResolvedValue({ results: [] });
   clearNewsCache();
   toastStore.setState({ toasts: [] });
 });
@@ -404,7 +412,10 @@ describe('HoldingDialog adding', () => {
 
     // The service is configured, so the name is looked up and not asked for yet.
     expect(within(dialog).queryByLabelText('Name')).not.toBeInTheDocument();
-    expect(within(dialog).getByLabelText('Tax withheld on dividends (%)')).toHaveValue('15');
+    // New holdings start with no tax withheld, and the form does not ask.
+    expect(
+      within(dialog).queryByLabelText('Tax withheld on dividends (%)'),
+    ).not.toBeInTheDocument();
     expect(within(dialog).getByLabelText('Purchase date')).toHaveValue(TODAY);
     expect(within(dialog).getByRole('radio', { name: 'Already owned' })).toBeChecked();
     expect(within(dialog).queryByLabelText('Manual price')).not.toBeInTheDocument();
@@ -441,7 +452,7 @@ describe('HoldingDialog adding', () => {
         shares: 2.5,
         costBasis: 400_00,
         purchaseDate: TODAY,
-        withholdingPct: 15,
+        withholdingPct: 0,
       }),
     });
     expect(items[1]).toEqual({
@@ -527,7 +538,6 @@ describe('HoldingDialog adding', () => {
     await enter(dialog, 'Currency', 'US');
     await enter(dialog, 'Shares', '0');
     await enter(dialog, 'What you paid in total', '10');
-    await enter(dialog, 'Tax withheld on dividends (%)', '101');
     fireEvent.change(within(dialog).getByLabelText('Purchase date'), {
       target: { value: '2026-10-15' },
     });
@@ -535,7 +545,6 @@ describe('HoldingDialog adding', () => {
     expect(dialog.textContent).toContain('Use letters and numbers only, like KO or VWRL.L');
     expect(dialog.textContent).toContain('Use a 3-letter code, like USD');
     expect(dialog.textContent).toContain('Enter how many shares, like 2 or 0.5');
-    expect(dialog.textContent).toContain('Enter a percentage from 0 to 100');
     expect(dialog.textContent).toContain('Use today or an earlier date.');
     expect(store.getState().putMany).not.toHaveBeenCalled();
     expect(toastStore.getState().toasts).toEqual([]);
@@ -549,7 +558,7 @@ describe('HoldingDialog adding', () => {
     expect(store.getState().putMany).not.toHaveBeenCalled();
   });
 
-  it('takes fractional shares, a free holding and no withholding', async () => {
+  it('takes fractional shares and a free holding, with no tax withheld', async () => {
     const { store } = renderInvest(noHoldings());
     const dialog = await openNewHolding();
     await enter(dialog, 'Symbol', 'BTC-USD');
@@ -557,7 +566,6 @@ describe('HoldingDialog adding', () => {
     await enter(dialog, 'Currency', 'USD');
     await enter(dialog, 'Shares', '0,25');
     await enter(dialog, 'What you paid in total', '0');
-    await enter(dialog, 'Tax withheld on dividends (%)', '0');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
 
     await waitFor(() => expect(store.getState().putMany).toHaveBeenCalledTimes(1));
@@ -593,15 +601,6 @@ describe('HoldingDialog adding', () => {
       table: 'holding',
       record: expect.objectContaining({ shares: 1234.5 }),
     });
-  });
-
-  it('refuses a withholding that could be a thousand times out', async () => {
-    const { store } = renderInvest(noHoldings());
-    const dialog = await openNewHolding();
-    await enter(dialog, 'Tax withheld on dividends (%)', '15,000');
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
-    expect(dialog.textContent).toContain('Is 15,000 a thousand or a fraction?');
-    expect(store.getState().putMany).not.toHaveBeenCalled();
   });
 
   it('reads a three-decimal fraction that starts with 0', async () => {
@@ -644,6 +643,205 @@ describe('HoldingDialog adding', () => {
     await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(store.getState().putMany).not.toHaveBeenCalled();
+  });
+});
+
+const VUSA: SearchResponse = {
+  results: [
+    { symbol: 'VUSA.AS', name: 'Vanguard S&P 500 UCITS ETF', exchange: 'Amsterdam', type: 'etf' },
+    { symbol: 'VUSA.L', name: 'Vanguard S&P 500 UCITS ETF', exchange: 'London', type: 'etf' },
+    { symbol: 'VUSA.AQ', name: 'VUSA.AQ', exchange: null, type: 'etf' },
+  ],
+};
+
+/** Longer than the 300ms the field waits after the last key. */
+const pastDebounce = () => new Promise((resolve) => setTimeout(resolve, 400));
+
+async function openNewHoldingWithoutService() {
+  const { store } = renderInvest(noHoldings());
+  return { store, dialog: await openNewHolding() };
+}
+
+async function openSearch() {
+  configured();
+  const { store } = renderInvest(noHoldings());
+  const dialog = await openNewHolding();
+  return { store, dialog, symbol: within(dialog).getByLabelText('Symbol') };
+}
+
+describe('HoldingDialog symbol search', () => {
+  it('lists matches as you type, and picking one fills the symbol and closes the list', async () => {
+    fetchSearch.mockResolvedValue(VUSA);
+    fetchProfile.mockResolvedValue({
+      symbol: 'VUSA.AS',
+      name: 'Vanguard S&P 500 UCITS ETF',
+      type: 'etf',
+      exchange: 'Amsterdam',
+      currency: 'EUR',
+      sector: null,
+    });
+    const { store, dialog, symbol } = await openSearch();
+    expect(symbol).toHaveAttribute('role', 'combobox');
+    expect(symbol).toHaveAttribute('aria-autocomplete', 'list');
+    expect(symbol).toHaveAttribute('aria-expanded', 'false');
+
+    await userEvent.type(symbol, 'vusa');
+    const list = await within(dialog).findByRole('listbox');
+    // One request for the whole word, not one per key.
+    expect(fetchSearch.mock.calls).toEqual([['vusa']]);
+    expect(symbol).toHaveAttribute('aria-expanded', 'true');
+    expect(symbol).toHaveAttribute('aria-controls', list.id);
+    const options = within(list).getAllByRole('option');
+    // The symbol over the name and exchange, with no dot for a missing exchange.
+    expect(options.map((o) => o.textContent)).toEqual([
+      'VUSA.ASVanguard S&P 500 UCITS ETF · Amsterdam',
+      'VUSA.LVanguard S&P 500 UCITS ETF · London',
+      'VUSA.AQVUSA.AQ',
+    ]);
+
+    await userEvent.click(within(list).getByRole('option', { name: /^VUSA\.AS/ }));
+    expect(symbol).toHaveValue('VUSA.AS');
+    expect(within(dialog).queryByRole('listbox')).not.toBeInTheDocument();
+    expect(symbol).toHaveAttribute('aria-expanded', 'false');
+    await pastDebounce();
+    // Picking is not typing: the symbol is not searched for again.
+    expect(fetchSearch).toHaveBeenCalledTimes(1);
+    expect(within(dialog).queryByRole('listbox')).not.toBeInTheDocument();
+
+    await enter(dialog, 'Shares', '3');
+    await enter(dialog, 'What you paid in total', '300');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(store.getState().putMany).toHaveBeenCalledTimes(1));
+    expect(fetchProfile).toHaveBeenCalledWith('VUSA.AS');
+    expect(vi.mocked(store.getState().putMany).mock.calls[0]![0][0]).toEqual({
+      table: 'holding',
+      record: expect.objectContaining({ symbol: 'VUSA.AS', currency: 'EUR', withholdingPct: 0 }),
+    });
+  });
+
+  it('shows only the answer to the latest query', async () => {
+    const answers = new Map<string, (r: SearchResponse) => void>();
+    fetchSearch.mockImplementation((q) => new Promise((resolve) => answers.set(q, resolve)));
+    const { dialog, symbol } = await openSearch();
+
+    await userEvent.type(symbol, 'vus');
+    await waitFor(() => expect(answers.has('vus')).toBe(true));
+    await userEvent.type(symbol, 'a');
+    await waitFor(() => expect(answers.has('vusa')).toBe(true));
+    answers.get('vusa')!({ results: [VUSA.results[0]!] });
+    expect(await within(dialog).findByRole('option', { name: /^VUSA\.AS/ })).toBeInTheDocument();
+
+    // The older query answers last, and its answer is dropped.
+    answers.get('vus')!({
+      results: [{ symbol: 'VUS.OLD', name: 'Old', exchange: null, type: 'stock' }],
+    });
+    await pastDebounce();
+    expect(within(dialog).getAllByRole('option')).toHaveLength(1);
+    expect(within(dialog).queryByText('VUS.OLD')).not.toBeInTheDocument();
+  });
+
+  it('moves through the list with the arrow keys and picks with Enter, without saving the form', async () => {
+    fetchSearch.mockResolvedValue(VUSA);
+    const { store, dialog, symbol } = await openSearch();
+    await userEvent.type(symbol, 'vusa');
+    await within(dialog).findByRole('listbox');
+    const options = within(dialog).getAllByRole('option');
+    expect(symbol).not.toHaveAttribute('aria-activedescendant');
+
+    await userEvent.keyboard('{ArrowDown}{ArrowDown}');
+    expect(options[1]).toHaveAttribute('aria-selected', 'true');
+    expect(symbol).toHaveAttribute('aria-activedescendant', options[1]!.id);
+    await userEvent.keyboard('{ArrowUp}');
+    expect(options[0]).toHaveAttribute('aria-selected', 'true');
+    expect(options[1]).toHaveAttribute('aria-selected', 'false');
+
+    await userEvent.keyboard('{ArrowDown}{Enter}');
+    expect(symbol).toHaveValue('VUSA.L');
+    expect(within(dialog).queryByRole('listbox')).not.toBeInTheDocument();
+    // Enter picked an option; it did not submit the form.
+    expect(screen.getByRole('dialog', { name: 'Add a holding' })).toBeInTheDocument();
+    expect(dialog.textContent).not.toContain('Enter how many shares');
+    expect(store.getState().putMany).not.toHaveBeenCalled();
+  });
+
+  it('closes the list on Escape and the dialog on the next one', async () => {
+    fetchSearch.mockResolvedValue(VUSA);
+    const { dialog, symbol } = await openSearch();
+    await userEvent.type(symbol, 'vusa');
+    await within(dialog).findByRole('listbox');
+
+    await userEvent.keyboard('{Escape}');
+    expect(within(dialog).queryByRole('listbox')).not.toBeInTheDocument();
+    expect(symbol).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.getByRole('dialog', { name: 'Add a holding' })).toBeInTheDocument();
+    expect(symbol).toHaveValue('vusa');
+
+    await userEvent.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('says so when nothing matches, and the symbol can still be typed', async () => {
+    fetchSearch.mockResolvedValue({ results: [] });
+    fetchProfile.mockResolvedValue(MICROSOFT);
+    const { store, dialog, symbol } = await openSearch();
+    await userEvent.type(symbol, 'msft');
+    expect(
+      await within(dialog).findByText('No matches. You can still type the symbol.'),
+    ).toBeInTheDocument();
+    expect(within(dialog).queryByRole('listbox')).not.toBeInTheDocument();
+
+    await enter(dialog, 'Shares', '3');
+    await enter(dialog, 'What you paid in total', '900');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(store.getState().putMany).toHaveBeenCalledTimes(1));
+    expect(fetchProfile).toHaveBeenCalledWith('MSFT');
+  });
+
+  it('shows no list and no message when the search fails, and the symbol can still be typed', async () => {
+    fetchSearch.mockRejectedValue(new MarketError());
+    fetchProfile.mockResolvedValue(MICROSOFT);
+    const { store, dialog, symbol } = await openSearch();
+    await userEvent.type(symbol, 'msft');
+    await waitFor(() => expect(fetchSearch).toHaveBeenCalledTimes(1));
+    await pastDebounce();
+    expect(within(dialog).queryByRole('listbox')).not.toBeInTheDocument();
+    expect(within(dialog).queryByText(/No matches/)).not.toBeInTheDocument();
+
+    await enter(dialog, 'Shares', '3');
+    await enter(dialog, 'What you paid in total', '900');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(store.getState().putMany).toHaveBeenCalledTimes(1));
+  });
+
+  it('searches from two characters, and not for a shorter one', async () => {
+    const { symbol } = await openSearch();
+    await userEvent.type(symbol, 'v');
+    await pastDebounce();
+    expect(fetchSearch).not.toHaveBeenCalled();
+    await userEvent.type(symbol, 'u');
+    await waitFor(() => expect(fetchSearch.mock.calls).toEqual([['vu']]));
+  });
+
+  it('makes no search request without the price service', async () => {
+    const { dialog } = await openNewHoldingWithoutService();
+    const symbol = within(dialog).getByLabelText('Symbol');
+    expect(symbol).not.toHaveAttribute('role', 'combobox');
+    await userEvent.type(symbol, 'vusa');
+    await pastDebounce();
+    expect(fetchSearch).not.toHaveBeenCalled();
+    expect(within(dialog).queryByRole('listbox')).not.toBeInTheDocument();
+  });
+
+  it('is not there when editing', async () => {
+    configured();
+    const { store } = renderInvest(portfolioData());
+    await settled(store);
+    await userEvent.click(rowOf('KO'));
+    const dialog = screen.getByRole('dialog', { name: 'Edit KO' });
+    expect(within(dialog).queryByRole('combobox')).not.toBeInTheDocument();
+    expect(within(dialog).getByLabelText('Symbol')).toBeDisabled();
+    await pastDebounce();
+    expect(fetchSearch).not.toHaveBeenCalled();
   });
 });
 
@@ -700,6 +898,19 @@ describe('HoldingDialog editing', () => {
       expect.objectContaining({ id: 'ko', checkedAt: expect.any(String), manualPrice: null }),
     );
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('refuses a withholding that could be a thousand times out, or over 100', async () => {
+    const { store } = renderInvest(portfolioData());
+    await userEvent.click(rowOf('KO'));
+    const dialog = screen.getByRole('dialog', { name: 'Edit KO' });
+    await enter(dialog, 'Tax withheld on dividends (%)', '15,000');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+    expect(dialog.textContent).toContain('Is 15,000 a thousand or a fraction?');
+    await enter(dialog, 'Tax withheld on dividends (%)', '101');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+    expect(dialog.textContent).toContain('Enter a percentage from 0 to 100');
+    expect(store.getState().put).not.toHaveBeenCalled();
   });
 
   it('shows an existing manual price, and an empty field puts the holding back on live prices', async () => {
@@ -1087,6 +1298,28 @@ describe('Dividends tab', () => {
     expect(rows.map((r) => r.textContent)).toEqual([
       `KO · pays ${formatDay('2026-10-28')}ex-date ${formatDay('2026-10-18')} · after 15% tax${usd(11_22)}`,
       `SAP · pays ${formatDay('2026-11-12')}ex-date ${formatDay('2026-11-05')} · after 15% tax—`,
+    ]);
+  });
+
+  it('says before tax for a holding with nothing withheld', () => {
+    const data = dividendData();
+    data.tables.holding.push(
+      held({
+        id: 'zero',
+        symbol: 'ZERO',
+        name: 'No Tax Inc',
+        shares: 10,
+        purchaseDate: '2025-01-01',
+        withholdingPct: 0,
+        quote: quote(60, 60),
+        dividendInfo: info({ nextExDate: '2026-11-02', nextPayDate: '2026-11-10', nextAmount: 1 }),
+      }),
+    );
+    renderDividends(data);
+    const rows = within(region('Coming up')).getAllByRole('listitem');
+    expect(rows.map((r) => r.textContent)).toEqual([
+      expect.stringContaining('after 15% tax'),
+      `ZERO · pays ${formatDay('2026-11-10')}ex-date ${formatDay('2026-11-02')} · before tax${usd(10_00)}`,
     ]);
   });
 

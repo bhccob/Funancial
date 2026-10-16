@@ -14,6 +14,7 @@ function day(offset: number): string {
 /**
  * Answers the price service by the route in `/api/<route>`, as long as the app sends its token.
  * A route with no reply, such as `fx` for a holding in the profile currency, reads as not found.
+ * Symbol search finds nothing unless a test gives it a reply.
  */
 async function mockPriceService(page: Page, replies: Record<string, unknown>) {
   await page.route('**/api/**', (route) => {
@@ -22,15 +23,17 @@ async function mockPriceService(page: Page, replies: Record<string, unknown>) {
       return route.fulfill({ status: 401, json: { error: 'unauthorized' } });
     }
     const name = new URL(request.url()).pathname.split('/').pop() ?? '';
-    return name in replies
-      ? route.fulfill({ json: replies[name] })
+    const answers: Record<string, unknown> = { search: { results: [] }, ...replies };
+    return name in answers
+      ? route.fulfill({ json: answers[name] })
       : route.fulfill({ status: 404, json: { error: 'not found' } });
   });
 }
 
-/** What the service says about a US stock: its profile, a quote at `price`, and no dividends. */
+/** What the service says about a US stock: a search hit, its profile, a quote at `price`, and no dividends. */
 function usStock(symbol: string, name: string, price: number) {
   return {
+    search: { results: [{ symbol, name, exchange: 'NASDAQ', type: 'stock' }] },
     profile: { symbol, name, type: 'stock', exchange: 'NYQ', currency: 'USD', sector: null },
     quote: {
       quotes: [
@@ -56,17 +59,27 @@ function usStock(symbol: string, name: string, price: number) {
   };
 }
 
-/** Opens the add dialog on the empty Holdings tab and saves a holding the person already owns. */
+/**
+ * Opens the add dialog on the empty Holdings tab and saves a holding the person already owns. With
+ * `search`, it types that and picks `symbol` from the list instead of typing the whole symbol.
+ */
 async function addHolding(
   page: Page,
   symbol: string,
   shares: string,
   paid: string,
-  bought?: string,
+  { bought, search }: { bought?: string; search?: string } = {},
 ) {
   await page.getByRole('button', { name: 'Add your first holding' }).click();
   const dialog = page.getByRole('dialog', { name: 'Add a holding' });
-  await dialog.getByLabel('Symbol').fill(symbol);
+  if (search) {
+    await dialog.getByRole('combobox', { name: 'Symbol' }).fill(search);
+    await dialog.getByRole('option', { name: new RegExp(`^${symbol}`) }).click();
+    await expect(dialog.getByLabel('Symbol')).toHaveValue(symbol);
+    await expect(dialog.getByRole('listbox')).toBeHidden();
+  } else {
+    await dialog.getByLabel('Symbol').fill(symbol);
+  }
   await dialog.getByLabel('Shares').fill(shares);
   await dialog.getByLabel('What you paid in total').fill(paid);
   if (bought) await dialog.getByLabel('Purchase date').fill(bought);
@@ -78,7 +91,7 @@ test('a new holding shows its value and a slice of the allocation', async ({ pag
   await mockPriceService(page, usStock('AAPL', 'Apple', 200));
   await startFresh(page, '/invest');
 
-  await addHolding(page, 'aapl', '5', '900');
+  await addHolding(page, 'AAPL', '5', '900', { search: 'appl' });
 
   await expect(page.getByRole('button', { name: /^AAPL · Apple/ })).toContainText('$1,000.00');
   await expect(page.getByRole('button', { name: 'AAPL, $1,000.00, 100%' })).toHaveCount(1);
@@ -96,7 +109,7 @@ test('confirming a due dividend shows the reward and earns First Dividend', asyn
     },
   });
   await startFresh(page, '/invest');
-  await addHolding(page, 'ko', '10', '500', day(-30));
+  await addHolding(page, 'ko', '10', '500', { bought: day(-30) });
 
   await page.getByRole('tab', { name: 'Dividends' }).click();
   await page.getByRole('region', { name: 'Due' }).getByRole('button', { name: 'Confirm' }).click();

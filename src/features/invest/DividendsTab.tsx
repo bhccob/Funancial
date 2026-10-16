@@ -238,7 +238,10 @@ export function DividendsTab() {
         <Section title="Coming up">
           <ul>
             {coming.map((p) => {
-              const tax = `after ${p.holding.withholdingPct}% tax`;
+              const tax =
+                p.holding.withholdingPct > 0
+                  ? `after ${p.holding.withholdingPct}% tax`
+                  : 'before tax';
               return (
                 <Row
                   key={`${p.holding.id}:${p.payDate}`}

@@ -13,6 +13,7 @@ import { FUTURE } from '@/store/financeActions';
 import { UNKNOWN_SYMBOL, type HoldingInput, type HoldingPatch } from '@/store/investActions';
 import { useCurrency, useToday } from '@/store/useFinance';
 import { useInvestActions } from '@/store/useInvest';
+import { SymbolSearchField } from './SymbolSearchField';
 
 type PaidFrom = HoldingInput['paidFrom'];
 
@@ -50,7 +51,6 @@ type Errors = Partial<Record<keyof Form, string>>;
 function validate(f: Form, ctx: { today: string; editing: boolean; details: boolean }): Errors {
   const errors: Errors = {};
   const shares = parseDecimal(f.shares);
-  const tax = parseDecimal(f.withholding);
   if (!ctx.editing && !SYMBOL.test(f.symbol.trim())) {
     errors.symbol = 'Use letters and numbers only, like KO or VWRL.L';
   }
@@ -64,7 +64,9 @@ function validate(f: Form, ctx: { today: string; editing: boolean; details: bool
   }
   if (!/^\d{4}-\d{2}-\d{2}$/.test(f.date)) errors.date = 'Choose the day you bought it';
   else if (f.date > ctx.today) errors.date = FUTURE;
-  if (tax === null || tax > 100) {
+  // Adding asks nothing about tax: a new holding starts at 0%, and Edit is where it is set.
+  const tax = parseDecimal(f.withholding);
+  if (ctx.editing && (tax === null || tax > 100)) {
     errors.withholding = unreadable(f.withholding, 'Enter a percentage from 0 to 100');
   }
   if (f.price.trim() !== '' && parseDecimal(f.price) === null) {
@@ -98,7 +100,7 @@ function HoldingForm({
     cost: holding?.costBasis ?? null,
     date: holding?.purchaseDate ?? today,
     paidFrom: 'owned',
-    withholding: formatDecimal(holding?.withholdingPct ?? 15),
+    withholding: formatDecimal(holding?.withholdingPct ?? 0),
     price: holding?.manualPrice != null ? formatDecimal(holding.manualPrice) : '',
     name: holding?.name ?? '',
     type: holding?.type ?? 'stock',
@@ -132,7 +134,6 @@ function HoldingForm({
     if (Object.keys(found).length > 0) return;
 
     const shares = parseDecimal(form.shares)!;
-    const withholdingPct = parseDecimal(form.withholding)!;
     const named = details
       ? { name: form.name.trim(), type: form.type, currency: form.currency.trim().toUpperCase() }
       : {};
@@ -143,7 +144,7 @@ function HoldingForm({
         shares,
         costBasis: form.cost!,
         purchaseDate: form.date,
-        withholdingPct,
+        withholdingPct: parseDecimal(form.withholding)!,
         manualPrice: form.price.trim() === '' ? null : parseDecimal(form.price),
       };
       await perform(() => updateHolding(holding.id, patch), 'Holding updated.');
@@ -156,7 +157,7 @@ function HoldingForm({
       costBasis: form.cost!,
       purchaseDate: form.date,
       paidFrom: form.paidFrom,
-      withholdingPct,
+      withholdingPct: 0,
     };
     const added = await perform(async () => {
       try {
@@ -171,20 +172,29 @@ function HoldingForm({
     if (added) onAdded();
   }
 
+  const symbolField = {
+    label: 'Symbol',
+    value: form.symbol,
+    error: errors.symbol,
+    autoCapitalize: 'characters',
+    autoComplete: 'off',
+    spellCheck: false,
+    maxLength: 15,
+  };
+
   return (
     <form className="flex flex-col gap-5" onSubmit={submit} noValidate>
-      <TextField
-        label="Symbol"
-        value={form.symbol}
-        error={errors.symbol}
-        disabled={editing}
-        className={editing ? 'opacity-45' : undefined}
-        autoCapitalize="characters"
-        autoComplete="off"
-        spellCheck={false}
-        maxLength={15}
-        onChange={(e) => set('symbol', e.target.value)}
-      />
+      {editing || !marketConfigured() ? (
+        <TextField
+          {...symbolField}
+          disabled={editing}
+          className={editing ? 'opacity-45' : undefined}
+          onChange={(e) => set('symbol', e.target.value)}
+        />
+      ) : (
+        // With the price service, the symbol is searched for and picked from a list.
+        <SymbolSearchField {...symbolField} onChange={(symbol) => set('symbol', symbol)} />
+      )}
       {details && (
         <>
           <TextField
@@ -258,14 +268,16 @@ function HoldingForm({
           onChange={(e) => set('price', e.target.value)}
         />
       )}
-      <TextField
-        label="Tax withheld on dividends (%)"
-        value={form.withholding}
-        error={errors.withholding}
-        inputMode="decimal"
-        autoComplete="off"
-        onChange={(e) => set('withholding', e.target.value)}
-      />
+      {editing && (
+        <TextField
+          label="Tax withheld on dividends (%)"
+          value={form.withholding}
+          error={errors.withholding}
+          inputMode="decimal"
+          autoComplete="off"
+          onChange={(e) => set('withholding', e.target.value)}
+        />
+      )}
       {holding && (
         <Button
           variant="secondary"
