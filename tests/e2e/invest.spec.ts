@@ -30,7 +30,10 @@ async function mockPriceService(page: Page, replies: Record<string, unknown>) {
   });
 }
 
-/** What the service says about a US stock: a search hit, its profile, a quote at `price`, and no dividends. */
+/**
+ * What the service says about a US stock: a search hit, its profile, a quote at `price`, no
+ * dividends, and closes that rise to `price` by today from 5% below it, a month apart.
+ */
 function usStock(symbol: string, name: string, price: number) {
   return {
     search: { results: [{ symbol, name, exchange: 'NASDAQ', type: 'stock' }] },
@@ -55,6 +58,14 @@ function usStock(symbol: string, name: string, price: number) {
       currency: 'USD',
       history: [],
       next: { exDate: null, payDate: null, amount: null },
+    },
+    history: {
+      symbol,
+      currency: 'USD',
+      points: [-60, -30, 0].map((offset, i) => ({
+        date: day(offset),
+        close: price * (0.95 + i * 0.025),
+      })),
     },
   };
 }
@@ -93,7 +104,7 @@ test('a new holding shows its value and a slice of the allocation', async ({ pag
 
   await addHolding(page, 'AAPL', '5', '900', { search: 'appl' });
 
-  await expect(page.getByRole('button', { name: /^AAPL · Apple/ })).toContainText('$1,000.00');
+  await expect(page.getByRole('link', { name: /^AAPL · Apple/ })).toContainText('$1,000.00');
   await expect(page.getByRole('button', { name: 'AAPL, $1,000.00, 100%' })).toHaveCount(1);
 });
 
@@ -141,6 +152,47 @@ test('with the price service down, Invest shows the last prices and says so', as
   ).toBeVisible();
   await expect(page.getByText('Live prices need the price service.')).toHaveCount(0);
   // 40 VWRL at €118.40, in dollars at the stored 1.08.
-  await expect(page.getByRole('button', { name: /^VWRL · / })).toContainText('$5,114.88');
+  await expect(page.getByRole('link', { name: /^VWRL · / })).toContainText('$5,114.88');
   await expect(page.getByRole('region', { name: 'Portfolio value' })).toContainText('$15,995.31');
+});
+
+test('a holding opens on its own page with a price chart, and Edit saves back to it', async ({
+  page,
+}) => {
+  await mockPriceService(page, usStock('AAPL', 'Apple', 200));
+  await startFresh(page, '/invest');
+  await addHolding(page, 'AAPL', '5', '900', { search: 'appl', bought: day(-60) });
+
+  // Tapping the row opens the page, which asks for the closes since the purchase.
+  const asked = page.waitForRequest(
+    (r) => r.url().includes('/api/history') && r.url().includes(`from=${day(-60)}`),
+  );
+  await page.getByRole('link', { name: /^AAPL · Apple/ }).click();
+  await asked;
+  await expect(page).toHaveURL(/\/invest\/holding\/[\w-]+$/);
+  await expect(page.getByRole('heading', { level: 1, name: 'AAPL' })).toBeVisible();
+  await expect(page.getByText('Apple · NYQ')).toBeVisible();
+  await expect(page.getByText('$1,000.00').first()).toBeVisible();
+  const chart = page.getByRole('img', { name: /^From \$190\.00 on .* to \$200\.00 today$/ });
+  await expect(chart).toBeVisible();
+  await expect(chart.getByText('You bought · $180.00')).toBeVisible();
+
+  // Touching the chart reads out a close.
+  await chart.hover({ position: { x: 1, y: 40 } });
+  await expect(page.getByText(/^[A-Z][a-z]{2} \d{1,2}, \d{4} · \$190\.00$/)).toBeVisible();
+  await expect(page.getByText('Bought on')).toBeVisible();
+
+  // Edit opens the form; saving it leaves the person on the page, with the new figures.
+  await page.getByRole('button', { name: 'Edit' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Edit AAPL' });
+  await dialog.getByLabel('Shares').fill('6');
+  await dialog.getByRole('button', { name: 'Save' }).click();
+  await expect(page.getByText('Holding updated.')).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'AAPL' })).toBeVisible();
+  await expect(page.getByText('$1,200.00').first()).toBeVisible();
+
+  // And back to the list.
+  await page.getByRole('link', { name: 'Back to Invest' }).click();
+  await expect(page).toHaveURL(/\/invest\?tab=holdings$/);
+  await expect(page.getByRole('link', { name: /^AAPL · Apple/ })).toContainText('$1,200.00');
 });
