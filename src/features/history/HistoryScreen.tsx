@@ -14,12 +14,13 @@ import {
   type Dividend,
   type Expense,
   type Income,
+  type Sale,
   type Transaction,
 } from '@/domain/entities';
 import { monthKey } from '@/domain/periods';
 import { ExpenseForm } from '@/features/add/ExpenseForm';
 import { paidWithLabel } from '@/features/shared/paidWith';
-import { formatDate, formatMonthYear } from '@/lib/format';
+import { formatDate, formatMonthYear, formatShares } from '@/lib/format';
 import { useAction } from '@/lib/useAction';
 import { useApp } from '@/store/AppStoreProvider';
 import { useFinanceActions, useMoney, useToday } from '@/store/useFinance';
@@ -32,9 +33,11 @@ type Entry =
   | { kind: 'expense'; item: Expense }
   | { kind: 'income'; item: Income }
   | { kind: 'transaction'; item: Transaction }
-  | { kind: 'dividend'; item: Dividend };
+  | { kind: 'dividend'; item: Dividend }
+  | { kind: 'sale'; item: Sale };
 
-const dateOf = (e: Entry) => (e.kind === 'dividend' ? e.item.paidOn : e.item.date);
+const dateOf = (e: Entry) =>
+  e.kind === 'dividend' ? e.item.paidOn : e.kind === 'sale' ? e.item.soldOn : e.item.date;
 
 const BUCKET: Record<Bucket, string> = {
   cash: 'Cash',
@@ -50,7 +53,7 @@ const CATEGORY_OPTIONS = [
 const SHOWS: Record<Show, Array<Entry['kind']> | null> = {
   all: null,
   spending: ['expense'],
-  income: ['income', 'dividend'],
+  income: ['income', 'dividend', 'sale'],
   transfers: ['transaction'],
 };
 
@@ -72,7 +75,7 @@ function Row({
   onDelete,
 }: {
   title: string;
-  detail: string;
+  detail: ReactNode;
   amount: ReactNode;
   chip?: string;
   onDelete(): void;
@@ -108,26 +111,30 @@ export function HistoryScreen() {
   const today = useToday();
   const money = useMoney();
   const { deleteIncome, deleteTransaction } = useFinanceActions();
-  const { deleteDividend } = useInvestActions();
+  const { deleteDividend, undoSale } = useInvestActions();
   const run = useAction();
 
   const [month, setMonth] = useState(() => monthKey(today));
   const [show, setShow] = useState<Show>('all');
   const [category, setCategory] = useState<'all' | Category>('all');
   const [editing, setEditing] = useState<Expense | null>(null);
-  const [deleting, setDeleting] = useState<{ title: string; remove(): Promise<unknown> } | null>(
-    null,
-  );
+  const [deleting, setDeleting] = useState<{
+    title: string;
+    /** Said in place of the usual "removed from your history", when deleting does more. */
+    description?: string;
+    remove(): Promise<unknown>;
+  } | null>(null);
   const [correcting, setCorrecting] = useState(false);
 
-  const { expense, income, transaction, dividend, debt } = data.tables;
+  const { expense, income, transaction, dividend, sale, debt } = data.tables;
 
   const months = useMemo(() => {
     const keys = new Set([monthKey(today)]);
     for (const r of [...expense, ...income, ...transaction]) keys.add(monthKey(r.date));
     for (const d of dividend) keys.add(monthKey(d.paidOn));
+    for (const s of sale) keys.add(monthKey(s.soldOn));
     return [...keys].sort().reverse();
-  }, [expense, income, transaction, dividend, today]);
+  }, [expense, income, transaction, dividend, sale, today]);
 
   const days = useMemo(() => {
     const entries: Entry[] = [
@@ -135,6 +142,7 @@ export function HistoryScreen() {
       ...income.map((item) => ({ kind: 'income' as const, item })),
       ...transaction.map((item) => ({ kind: 'transaction' as const, item })),
       ...dividend.map((item) => ({ kind: 'dividend' as const, item })),
+      ...sale.map((item) => ({ kind: 'sale' as const, item })),
     ].filter(
       (e) =>
         monthKey(dateOf(e)) === month &&
@@ -150,7 +158,7 @@ export function HistoryScreen() {
     const grouped = new Map<string, Entry[]>();
     for (const e of entries) grouped.set(dateOf(e), [...(grouped.get(dateOf(e)) ?? []), e]);
     return [...grouped];
-  }, [expense, income, transaction, dividend, month, show, category]);
+  }, [expense, income, transaction, dividend, sale, month, show, category]);
 
   const debtName = (id: string | null) => debt.find((d) => d.id === id)?.name ?? 'a card or loan';
 
@@ -223,6 +231,33 @@ export function HistoryScreen() {
             )
           }
           onDelete={() => setDeleting({ title, remove: () => deleteDividend(d.id) })}
+        />
+      );
+    }
+    if (entry.kind === 'sale') {
+      const s = entry.item;
+      const title = `Sold ${formatShares(s.shares)} ${s.symbol}`;
+      const profit = s.proceeds - s.cost;
+      return (
+        <Row
+          key={s.id}
+          title={title}
+          detail={
+            <>
+              {`To ${BUCKET[s.to].toLowerCase()} · profit `}
+              <span className={profit < 0 ? 'text-danger' : 'text-success'}>
+                {`${profit < 0 ? '▼' : '▲'} ${money(Math.abs(profit))}`}
+              </span>
+            </>
+          }
+          amount={<Amount tone="in">{`+${money(s.proceeds)}`}</Amount>}
+          onDelete={() =>
+            setDeleting({
+              title,
+              description: `${title} will be removed from your history, and its shares go back to your ${s.symbol} holding.`,
+              remove: () => undoSale(s.id),
+            })
+          }
         />
       );
     }
@@ -319,7 +354,11 @@ export function HistoryScreen() {
       <Dialog
         open={deleting !== null}
         title="Delete this entry?"
-        description={deleting ? `${deleting.title} will be removed from your history.` : undefined}
+        description={
+          deleting
+            ? (deleting.description ?? `${deleting.title} will be removed from your history.`)
+            : undefined
+        }
         onClose={() => setDeleting(null)}
         actions={
           <>
