@@ -7,6 +7,8 @@ import { BuyScreen } from '@/features/buy/BuyScreen';
 import { DashboardScreen } from '@/features/dashboard/DashboardScreen';
 import { FreezeScreen } from '@/features/freeze/FreezeScreen';
 import { GoalsScreen } from '@/features/goals/GoalsScreen';
+import { HelpPage } from '@/features/help/HelpPage';
+import { HelpScreen } from '@/features/help/HelpScreen';
 import { HistoryScreen } from '@/features/history/HistoryScreen';
 import { HoldingPage } from '@/features/invest/HoldingPage';
 import { InvestScreen } from '@/features/invest/InvestScreen';
@@ -44,7 +46,8 @@ export const APP_ROUTES: AppRoute[] = [
   { path: '/history', element: <HistoryScreen /> },
   { path: '/shop', element: <ShopScreen /> },
   placeholder('/inbox', 'Inbox'),
-  placeholder('/help', 'Help'),
+  { path: '/help', element: <HelpScreen /> },
+  { path: '/help/:id', element: <HelpPage /> },
   { path: '/settings', element: <SettingsScreen /> },
   { path: '/add', element: <AddScreen /> },
 ];

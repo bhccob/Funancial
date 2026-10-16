@@ -214,6 +214,7 @@ describe('Menu sheet', () => {
     const sheet = await openMenu();
     expect(row(sheet, 'Buy it\\?')).not.toHaveTextContent('Soon');
     expect(row(sheet, 'Inbox')).toHaveTextContent('Soon');
+    expect(row(sheet, 'Help')).not.toHaveTextContent('Soon');
     expect(row(sheet, 'Quests')).not.toHaveTextContent('Soon');
     expect(row(sheet, 'Subscriptions')).not.toHaveTextContent('Soon');
     expect(row(sheet, 'Settings')).not.toHaveTextContent('Soon');
@@ -227,6 +228,19 @@ describe('Menu sheet', () => {
     const sheet = await openMenu();
     await userEvent.click(row(sheet, 'Settings'));
     expect(screen.getByRole('heading', { level: 1, name: 'Settings' })).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Menu' })).not.toBeInTheDocument();
+  });
+
+  it('opens Help from the Menu, with its pages listed', async () => {
+    renderAt('/');
+    const sheet = await openMenu();
+    await userEvent.click(row(sheet, 'Help'));
+    expect(screen.getByRole('heading', { level: 1, name: 'Help' })).toBeInTheDocument();
+    expect(screen.getByRole('searchbox', { name: 'Search help' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /^Available to spend/ })).toHaveAttribute(
+      'href',
+      '/help/available',
+    );
     expect(screen.queryByRole('dialog', { name: 'Menu' })).not.toBeInTheDocument();
   });
 
@@ -327,7 +341,8 @@ describe('sidebar', () => {
     const sidebar = screen.getByRole('navigation', { name: 'All sections' });
     expect(within(sidebar).getByRole('link', { name: /^Buy it/ })).not.toHaveTextContent('Soon');
     expect(within(sidebar).getByRole('link', { name: /^Settings/ })).not.toHaveTextContent('Soon');
-    expect(within(sidebar).getAllByText('Soon')).toHaveLength(2);
+    expect(within(sidebar).getByRole('link', { name: /^Help/ })).not.toHaveTextContent('Soon');
+    expect(within(sidebar).getAllByText('Soon')).toHaveLength(1);
   });
 
   it('marks the current screen', () => {
