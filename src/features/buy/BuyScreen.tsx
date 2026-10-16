@@ -48,7 +48,7 @@ export function BuyScreen() {
                   type="button"
                   aria-label={`Delete ${d.ask.item}`}
                   onClick={() => setDeleting(d)}
-                  className="text-muted hover:text-danger hover:bg-surface-2 -mr-2 grid size-10 shrink-0 place-items-center rounded-full"
+                  className="text-muted hover:text-danger hover:bg-surface-2 -mr-2 grid size-11 shrink-0 place-items-center rounded-full"
                 >
                   <Trash2 aria-hidden className="size-4" />
                 </button>

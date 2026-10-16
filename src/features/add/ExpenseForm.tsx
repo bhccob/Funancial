@@ -6,14 +6,15 @@ import { RadioGroup } from '@/components/ui/RadioGroup';
 import { Select } from '@/components/ui/Select';
 import { TextField } from '@/components/ui/TextField';
 import { limitMessage } from '@/domain/alerts';
-import { categoryLabel, type LimitStatus } from '@/domain/budget';
-import { CategorySchema, type Category, type Cycle, type Expense } from '@/domain/entities';
+import type { LimitStatus } from '@/domain/budget';
+import type { Category, Cycle, Expense } from '@/domain/entities';
 import { toast } from '@/lib/toast';
 import { useAction } from '@/lib/useAction';
 import { useApp } from '@/store/AppStoreProvider';
 import type { BuyPrefill } from '@/store/buyActions';
 import type { ExpenseInput } from '@/store/financeActions';
 import { useCurrency, useFinanceActions, useToday } from '@/store/useFinance';
+import { CATEGORY_OPTIONS } from '@/features/shared/categories';
 import {
   isCardChoice,
   paidWithValue,
@@ -22,8 +23,6 @@ import {
 } from '@/features/shared/paidWith';
 import { DateField } from './DateField';
 import { pastDateProblem } from './pastDate';
-
-const CATEGORY_OPTIONS = CategorySchema.options.map((c) => ({ value: c, label: categoryLabel(c) }));
 
 const REPEAT_OPTIONS = [
   { value: 'none', label: "Doesn't repeat" },

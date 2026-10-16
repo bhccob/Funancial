@@ -6,15 +6,9 @@ import { RadioGroup } from '@/components/ui/RadioGroup';
 import { Select } from '@/components/ui/Select';
 import { ShareStepper } from '@/components/ui/ShareStepper';
 import { TextField } from '@/components/ui/TextField';
-import { categoryLabel } from '@/domain/budget';
-import {
-  BuyAskSchema,
-  CategorySchema,
-  MAX_ASK_PRICE,
-  type BuyAsk,
-  type Category,
-} from '@/domain/entities';
+import { BuyAskSchema, MAX_ASK_PRICE, type BuyAsk, type Category } from '@/domain/entities';
 import { minorDigits, parseDecimal } from '@/domain/money';
+import { CATEGORY_OPTIONS } from '@/features/shared/categories';
 import { parsePaidWith, usePaidWithOptions } from '@/features/shared/paidWith';
 import { useAction } from '@/lib/useAction';
 import type { ExtractResponse } from '@/services/market';
@@ -25,7 +19,6 @@ import { useCurrency } from '@/store/useFinance';
 const COULDNT_READ = "Couldn't read that link. Fill it in yourself.";
 const READING = 'Reading the link…';
 
-const CATEGORY_OPTIONS = CategorySchema.options.map((c) => ({ value: c, label: categoryLabel(c) }));
 const URGENCY_OPTIONS: Array<{ value: BuyAsk['urgency']; label: string }> = [
   { value: 'need', label: 'Need' },
   { value: 'want', label: 'Want' },

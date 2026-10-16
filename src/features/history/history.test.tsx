@@ -149,6 +149,11 @@ describe('HistoryScreen', () => {
     expect(actions.addExpense).not.toHaveBeenCalled();
   });
 
+  it('gives each delete button the 44px a touch target needs', () => {
+    renderHistory();
+    expect(row('Side gig').getByRole('button', { name: 'Delete Side gig' })).toHaveClass('size-11');
+  });
+
   it('deletes an income after asking', async () => {
     renderHistory();
     const gig = bal?.data.tables.income.find((i) => i.label === 'Side gig');

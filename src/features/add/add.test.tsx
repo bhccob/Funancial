@@ -176,6 +176,18 @@ describe('Add expense from a buy check', () => {
     });
   });
 
+  it('keeps what was bought when the type is switched to Income and back', async () => {
+    renderAdd(fromCheck(bought));
+    await userEvent.click(screen.getByRole('radio', { name: 'Income' }));
+    expect(screen.getByLabelText('Label')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('radio', { name: 'Expense' }));
+
+    expect(screen.getByLabelText('Amount')).toHaveValue('249.00');
+    expect(screen.getByRole('radio', { name: 'Fun' })).toBeChecked();
+    expect(screen.getByLabelText('Note')).toHaveValue('Noise-cancelling headphones');
+    expect(screen.queryByRole('link', { name: ASK_FIRST })).not.toBeInTheDocument();
+  });
+
   it('can still be changed before it is saved', async () => {
     renderAdd(fromCheck(bought));
     await userEvent.clear(screen.getByLabelText('Amount'));

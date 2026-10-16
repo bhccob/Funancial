@@ -404,9 +404,13 @@ describe('with no network', () => {
     // The one request carried the link alone: nothing else about the person went out, and
     // the ask itself made none.
     expect(fetch).toHaveBeenCalledTimes(1);
-    const [url] = fetch.mock.calls[0]!;
-    expect(String(url)).toContain('/api/extract?url=');
-    expect(String(url)).not.toMatch(/Trail%20shoes|89|hike/);
+    const [url, init] = fetch.mock.calls[0]!;
+    // Its query is the link and nothing else, and a GET has no body to carry more.
+    const sent = new URL(String(url), 'http://localhost');
+    expect(sent.pathname).toBe('/api/extract');
+    expect([...sent.searchParams.keys()]).toEqual(['url']);
+    expect(sent.searchParams.get('url')).toBe(SHOP);
+    expect(init?.body).toBeUndefined();
   });
 
   it('asks without a link at all, and makes no request', async () => {
@@ -507,6 +511,11 @@ describe('past asks', () => {
     const rows = within(screen.getByRole('list', { name: 'Past asks' })).getAllByRole('listitem');
     expect(rows).toHaveLength(2);
     expect(rows[0]).toHaveTextContent('Lamp');
+  });
+
+  it('gives each delete button the 44px a touch target needs', async () => {
+    await renderBuy([mug]);
+    expect(screen.getByRole('button', { name: 'Delete Mug' })).toHaveClass('size-11');
   });
 
   it('deletes one after asking first', async () => {

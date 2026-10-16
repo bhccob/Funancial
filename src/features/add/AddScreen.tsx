@@ -35,7 +35,13 @@ export function AddScreen() {
         <RadioGroup<Kind>
           legend="Type"
           value={kind}
-          onChange={(v) => setParams(v === 'income' ? { type: 'income' } : {}, { replace: true })}
+          // The state stays, or switching to Income and back would drop what "I bought it" handed over.
+          onChange={(v) =>
+            setParams(v === 'income' ? { type: 'income' } : {}, {
+              replace: true,
+              state: location.state,
+            })
+          }
           options={[
             { value: 'expense', label: 'Expense' },
             { value: 'income', label: 'Income' },
