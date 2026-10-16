@@ -1,14 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { GET as dividendsGET } from './dividends.js';
-import { GET as fxGET } from './fx.js';
-import { GET as newsGET } from './news.js';
-import { GET as profileGET } from './profile.js';
-import { GET as quoteGET, OPTIONS as quoteOPTIONS } from './quote.js';
-import { parseSymbols } from './_lib/http.js';
-import * as yahoo from './_lib/yahoo.js';
+import { GET as dividendsGET } from '../dividends.js';
+import { GET as fxGET } from '../fx.js';
+import { GET as newsGET } from '../news.js';
+import { GET as profileGET } from '../profile.js';
+import { GET as quoteGET, OPTIONS as quoteOPTIONS } from '../quote.js';
+import { parseSymbols } from './http.js';
+import * as yahoo from './yahoo.js';
 
-vi.mock('./_lib/yahoo.js', async (orig) => ({
-  ...(await orig<typeof import('./_lib/yahoo.js')>()),
+vi.mock('./yahoo.js', async (orig) => ({
+  ...(await orig<typeof import('./yahoo.js')>()),
   getQuotes: vi.fn(),
   getProfile: vi.fn(),
   getDividends: vi.fn(),
