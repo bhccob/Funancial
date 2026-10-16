@@ -453,7 +453,7 @@ export const BuyAskSchema = z.object({
   payWith: PaymentMethodSchema,
   cardId: z.string().min(1).nullable(),
   link: z.string().max(2048).nullable(),
-  /** Optional reason, sent to the advisor only. */
+  /** Optional reason, kept on the phone and echoed back in the notes. */
   why: z.string().max(200).nullable(),
 });
 export type BuyAsk = z.infer<typeof BuyAskSchema>;
@@ -489,13 +489,9 @@ export type Confidence = z.infer<typeof ConfidenceSchema>;
 /** A meter reading: a whole number from 0 (skip it) to 100 (buy it). */
 const MeterSchema = z.number().int().min(0).max(100);
 
-/** The most turns a debate keeps, the person's and the advisor's together. */
-export const MAX_DEBATE_TURNS = 40;
-
 /**
- * One ask and what came of it. `rulesMeter` and `rulesVerdict` are what the rules engine said from
- * the totals alone; `meter`, `verdict` and `confidence` are the answer shown, which the advisor may
- * have moved within its guards. `ai` is null for a Basic check, made without the advisor.
+ * One ask and what came of it. `rulesMeter` and `rulesVerdict` are what the rules said at ask time;
+ * `meter`, `verdict` and `confidence` are the answer shown, which always comes from the rules too.
  */
 export const BuyDecisionSchema = z.object({
   ...base,
@@ -506,27 +502,6 @@ export const BuyDecisionSchema = z.object({
   meter: MeterSchema,
   verdict: VerdictSchema,
   confidence: ConfidenceSchema,
-  ai: z
-    .object({
-      summary: z.string(),
-      pros: z.array(z.string()),
-      cons: z.array(z.string()),
-      alternatives: z.array(z.string()),
-      /** How long the advisor suggests waiting before deciding; null when it gave no time. */
-      coolingOffHours: z.number().nonnegative().nullable(),
-    })
-    .nullable(),
-  debate: z
-    .array(
-      z.object({
-        role: z.enum(['advisor', 'you']),
-        text: z.string(),
-        /** The meter the advisor moved to with this turn; null for the person's turns. */
-        meter: MeterSchema.nullable(),
-        at: IsoTimestampSchema,
-      }),
-    )
-    .max(MAX_DEBATE_TURNS),
   status: z.enum(['open', 'waiting', 'bought', 'skipped']),
   /** The day to ask again, for a decision to wait. */
   remindOn: LocalDateSchema.nullable(),

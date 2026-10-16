@@ -48,9 +48,8 @@ export function guard(req: Request): Response | null {
 
 export function preflight(req: Request): Response {
   const extra = {
-    // Content-Type is for the advisor, whose POST body is JSON.
-    'Access-Control-Allow-Headers': 'X-Funancial-Token, Content-Type',
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'X-Funancial-Token',
+    'Access-Control-Allow-Methods': 'GET, OPTIONS',
     // So a browser asks once a day, not before every request (it may cap the time lower).
     'Access-Control-Max-Age': '86400',
   };

@@ -46,7 +46,6 @@ import {
   SubscriptionSchema,
   TransactionSchema,
   VerdictSchema,
-  type BuyDecision,
 } from './entities';
 
 const ok = (schema: { safeParse(v: unknown): { success: boolean } }, v: unknown) =>
@@ -524,29 +523,14 @@ describe('Reminder settings: Buy it?', () => {
 });
 
 describe('BuyDecision', () => {
-  const turn = (over: object = {}): BuyDecision['debate'][number] => ({
-    role: 'you',
-    text: 'It is for work.',
-    meter: null,
-    at: '2026-10-16T09:00:00.000Z',
-    ...over,
-  });
-  const ai = {
-    summary: 'Affordable, but it dents the fun limit.',
-    pros: ['Within the month'],
-    cons: ['Fun limit at 90%'],
-    alternatives: ['A refurbished pair'],
-    coolingOffHours: 48,
-  };
-
-  it('takes a decision with the advisor, and a Basic check without it', () => {
-    expect(ok(BuyDecisionSchema, makeBuyDecision({ ai }))).toBe(true);
-    expect(ok(BuyDecisionSchema, makeBuyDecision({ ai: { ...ai, coolingOffHours: null } }))).toBe(
-      true,
-    );
-    expect(makeBuyDecision().ai).toBeNull();
-    expect(ok(BuyDecisionSchema, makeBuyDecision({ ai: null }))).toBe(true);
-    expect(ok(BuyDecisionSchema, { ...makeBuyDecision(), ai: undefined })).toBe(false);
+  it('holds no advisor answer and no debate: the rules give the answer', () => {
+    const d = makeBuyDecision();
+    const keys = Object.keys(BuyDecisionSchema.shape);
+    expect(keys).not.toContain('ai');
+    expect(keys).not.toContain('debate');
+    expect(d).not.toHaveProperty('ai');
+    expect(d).not.toHaveProperty('debate');
+    expect(BuyDecisionSchema.parse(d)).toEqual(d);
   });
   it('holds the ask as the ask schema reads it', () => {
     expect(ok(BuyDecisionSchema, makeBuyDecision({ ask: makeBuyAsk({ price: 0 }) }))).toBe(false);
@@ -590,25 +574,6 @@ describe('BuyDecision', () => {
     for (const usage of [0, 6, 2.5]) {
       expect(ok(BuyDecisionSchema, makeBuyDecision({ usage: usage as never }))).toBe(false);
     }
-  });
-  it('keeps the debate to 40 turns, each from the advisor or you', () => {
-    expect(
-      ok(
-        BuyDecisionSchema,
-        makeBuyDecision({ debate: [turn(), turn({ role: 'advisor', meter: 40 })] }),
-      ),
-    ).toBe(true);
-    expect(
-      ok(BuyDecisionSchema, makeBuyDecision({ debate: Array.from({ length: 40 }, () => turn()) })),
-    ).toBe(true);
-    expect(
-      ok(BuyDecisionSchema, makeBuyDecision({ debate: Array.from({ length: 41 }, () => turn()) })),
-    ).toBe(false);
-    expect(ok(BuyDecisionSchema, makeBuyDecision({ debate: [turn({ role: 'robot' })] }))).toBe(
-      false,
-    );
-    expect(ok(BuyDecisionSchema, makeBuyDecision({ debate: [turn({ meter: 101 })] }))).toBe(false);
-    expect(ok(BuyDecisionSchema, makeBuyDecision({ debate: [turn({ at: 'noon' })] }))).toBe(false);
   });
 });
 

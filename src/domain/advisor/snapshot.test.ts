@@ -27,7 +27,7 @@ const quote = (price: number): NonNullable<Holding['quote']> => ({
 });
 
 describe('buildSnapshot', () => {
-  it('sends totals only: no note text, ids or individual amounts', () => {
+  it('the snapshot holds totals, not transactions', () => {
     const data = world({
       savings: 500_01, // a transfer lands in a balance, so pick one that does not spell it out
       expenses: [
@@ -68,7 +68,7 @@ describe('buildSnapshot', () => {
     expect(snap(data).spentByCategory.food).toBe(38_05);
   });
 
-  it('adds up the totals the advisor is told', () => {
+  it('adds up the totals the rules weigh', () => {
     const card = makeDebt({
       openingBalance: 230_00,
       openingDate: '2026-06-01',

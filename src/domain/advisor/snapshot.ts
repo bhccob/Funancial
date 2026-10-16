@@ -14,7 +14,7 @@ import type { DataSnapshot } from '../snapshot';
 import { computeFinanceView } from '../view';
 
 /**
- * Everything about the person's money that the advisor is told, as totals. No individual expense,
+ * Everything about the person's money that the rules weigh, as totals. No individual expense,
  * income or transaction, no note, no id and no date of a past one: only sums, balances and limits.
  * Money is integer minor units of `currency`; `emergencyMonths` is a count of months.
  *
@@ -95,7 +95,7 @@ function similarTo(ask: BuyAsk, past: PastDecision[]): AdvisorSnapshot['similar'
 }
 
 /**
- * The totals of `data` as of `today` that the advisor weighs `ask` against. `past` is the person's
+ * The totals of `data` as of `today` that the rules weigh `ask` against. `past` is the person's
  * earlier decisions, for the similar ones.
  */
 export function buildSnapshot(
