@@ -111,8 +111,8 @@ function DueRow({
  * months with a dividend.
  */
 export function DividendsTab() {
-  // Each figure is converted from its own profile-currency amount, once. None is shown as the sum of
-  // others (the bars are each month, and the figures are about the month, the year and a projection).
+  // Each figure is converted on its own, from its profile-currency amount, and rounded once. So a
+  // figure and the ones it is made of (a year and its months, say) can differ by a cent.
   const { format: money } = useInvestMoney();
   const data = useApp((s) => s.data);
   const currency = useCurrency();

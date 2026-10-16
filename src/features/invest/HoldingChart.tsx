@@ -23,8 +23,9 @@ const FAILED = "Couldn't load the chart right now.";
 const NOT_ENOUGH = 'Not enough price history yet.';
 
 /**
- * A holding's price over a range, in the profile currency, with a dashed line at what was paid per
- * share. `rate` turns the holding's currency into the profile's; without one there is no chart.
+ * A holding's price over a range, in the currency Invest is shown in, with a dashed line at what
+ * was paid per share. `rate` turns the holding's currency into the profile's; without one there is
+ * no chart.
  */
 export function HoldingChart({
   holding,

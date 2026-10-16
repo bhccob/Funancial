@@ -64,7 +64,8 @@ export function Donut({
 
   const toggle = (i: number) => onSelect(i === selected ? null : i);
   const big = size >= 200;
-  // The hole of a small donut (92px at 120) is too narrow for an exact amount at 19px.
+  // The hole of a small donut (96px at 120, thickness 12) is too narrow for an exact amount at
+  // 19px.
   const small = size < 150;
   const focusedArc = focused !== null ? arcs[focused] : undefined;
 
