@@ -137,21 +137,51 @@ h1 { max-width: 1240px; margin: 0 auto 6px; font-size: 24px; font-weight: 800; }
       </div><div class="bar"><span>Home</span><span>Budget</span><span>Invest</span><span>Menu</span></div></div>
       <small>A short form: link, name, price, need/want, and how soon. Only totals (not your transactions) leave the phone.</small>
     </div>
-    <div class="col"><b class="cap">The answer</b>
+    <div class="col"><b class="cap">The answer, with the buy meter</b>
       <div class="phone"><span class="tag">new</span><div class="in">
-        <div class="verdict"><i>Our take</i><b>Wait a few days</b><i>Confidence: medium · Budget check agrees</i></div>
+        <div style="display:flex;flex-direction:column;align-items:center"><svg width="180" height="100" viewBox="0 0 180 100" aria-hidden="true"><path d="M14 92 A76 76 0 0 1 166 92" fill="none" stroke="#ececf0" stroke-width="16" stroke-linecap="round"/><path d="M14 92 A76 76 0 0 1 166 92" fill="none" stroke="#1d1d22" stroke-width="16" stroke-linecap="round" stroke-dasharray="238.8" stroke-dashoffset="148"/></svg>
+          <div style="margin-top:-46px;text-align:center"><b style="font-size:26px;font-weight:800">38%</b><div class="k">a buy</div></div></div>
+        <div style="display:flex;justify-content:space-between" class="k"><span>Skip</span><span>Wait</span><span>Buy</span></div>
+        <div class="verdict" style="margin-top:8px"><b>Wait a few days</b><i>Budget check agrees · confidence medium</i></div>
         <div class="kv"><div>Fun limit after<b>132% · over by $82</b></div><div>Available after<b>$3,233</b></div><div>Emergency fund<b>2.1 → 2.0 months</b></div><div>Bike goal<b>+9 days later</b></div></div>
-        <div class="line"></div>
-        <div class="k">Why</div><div class="box" style="height:58px">pros · cons · cheaper alternatives</div>
-        <div class="field" style="margin-top:8px">Argue back: "I use them every day…"</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px"><span class="btn o">Remind me in 3 days</span><span class="btn o">I bought it</span></div>
+        <div class="k">Before you decide, the advisor asks:</div>
+        <div class="box" style="height:46px;justify-items:start;text-align:left">“Your current headphones are 1 year old. What’s wrong with them?”</div>
+        <div class="field" style="margin-top:6px">Reply…</div>
         <div class="note">Not financial advice</div>
       </div><div class="bar"><span>Home</span><span>Budget</span><span>Invest</span><span>Menu</span></div></div>
-      <small>One clear verdict, the exact numbers behind it, then reasons. You can argue back (Debate), get a reminder to re-check, or log it if you bought it.</small>
+      <small>A meter shows how much of a buy it is (0% skip, 100% buy), with the verdict and the numbers. The advisor always ends with a question that challenges you.</small>
+    </div>
+    <div class="col"><b class="cap">The debate</b>
+      <div class="phone"><span class="tag">new</span><div class="in">
+        <div class="k" style="text-align:center">Buy meter: 38% → <b style="color:#1d1d22">52%</b></div>
+        <div class="line"></div>
+        <div class="item" style="align-items:flex-start"><span class="dot"></span><span class="w">You said you take 2 flights a month for work. Noise-cancelling matters there.<i>Advisor</i></span></div>
+        <div class="item" style="justify-content:flex-end;text-align:right"><span class="w">I also commute 1 h a day by train<i>You</i></span></div>
+        <div class="item" style="align-items:flex-start"><span class="dot"></span><span class="w">That’s a fair point. But your Fun limit is already at 99%. Could it wait until Nov 1, when it resets?<i>Advisor · meter 52%</i></span></div>
+        <div class="chips"><span class="chip">Remember: I commute by train</span><span class="chip">Not now</span></div>
+        <div class="field">Argue back…</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px"><span class="btn o">Remind me Nov 1</span><span class="btn o">I bought it</span></div>
+      </div><div class="bar"><span>Home</span><span>Budget</span><span>Invest</span><span>Menu</span></div></div>
+      <small>Each reply moves the meter. The advisor pushes back and uses what it knows about you. When you tell it something new, it offers to remember it, and you choose.</small>
+    </div>
+    <div class="col"><b class="cap">About you (Menu)</b>
+      <div class="phone"><span class="tag">new</span><div class="in">
+        <div class="t">About you</div>
+        <div class="k">The advisor reads this every time you ask. Only you can change it.</div>
+        <div class="line"></div>
+        <div class="k">Your situation</div><div class="field">Work in Amsterdam, rent a flat, no kids</div>
+        <div class="k">What matters to you</div><div class="field">Saving for a house deposit by 2028</div>
+        <div class="k">Where you tend to overspend</div><div class="field">Gadgets, eating out</div>
+        <div class="k">Remembered from your debates</div>
+        <div class="item"><span class="w">Commutes 1 h a day by train<i>Oct 16 · remove</i></span></div>
+        <div class="line"></div>
+        <div class="k">Also uses your app data: income, spending by category, limits, savings, goals, debts, investments and dividends (totals only).</div>
+      </div><div class="bar"><span>Home</span><span>Budget</span><span>Invest</span><span class="on">Menu</span></div></div>
+      <small>Your own notes and what you've chosen to remember, plus your app numbers as totals. Individual transactions stay on the phone.</small>
     </div>
   </div>
 </section>
 
-<p class="legend">Menu after M6: Subscriptions · Goals · History · Salary freeze · Quests · Shop · Inbox · Help · Settings. Desktop: the same items in the sidebar.</p>
+<p class="legend">Menu after M6: Subscriptions · Goals · History · Salary freeze · About you · Quests · Shop · Inbox · Help · Settings. Desktop: the same items in the sidebar.</p>
 </body>
 </html>

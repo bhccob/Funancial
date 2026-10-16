@@ -112,3 +112,25 @@ Every other screen keeps its content and adopts the Open styling:
   - **M5.** Invest takes a bar slot: **Home · Budget · Invest · Menu**. Quests moves into the Menu, and Home's level ring still opens it. Invest has three tabs: **Holdings · Dividends · News**. The owner asked for dividends to sit with the stocks.
   - **M6.** "Should I buy it?" becomes one of Home's round actions, replacing History, which stays in the Menu. The Add Expense screen gets a line, "Haven't bought it yet? Ask first →". It is also in the Menu.
 - **Wireframes first.** M5 and M6 each start with a wireframe for the owner, before any building.
+
+## M6 additions from the owner (2026-10-16, wireframe approved)
+
+- **Buy meter.** Every answer shows a 0–100% "how much of a buy" gauge with three zones: Skip, Wait, Buy.
+  - The rules engine sets a baseline.
+  - The AI moves it within the hard guards. When buying would need debt, or would leave the available balance negative, the meter can't reach the Buy zone.
+  - Each debate turn updates it.
+- **The advisor always debates.** Every answer ends with at least one pointed question or counterargument, and the person can reply. Each reply returns an updated verdict and meter.
+- **About you** (Menu). These are the person's own notes, sent with every ask:
+  - their situation;
+  - what matters to them;
+  - where they tend to overspend;
+  - facts remembered from debates. When the person says something new, the advisor offers "Remember: …" and saves it only if they accept.
+
+  Everything there is visible, editable and removable, and it is stored encrypted on the phone like the rest of the data.
+- **The financial picture** sent with an ask is totals only, never individual transactions:
+  - income;
+  - spending by category and against limits;
+  - available balance and bills;
+  - savings, emergency months, goals and debts;
+  - investments value and allocation, and dividend income (from M5);
+  - similar past decisions.
