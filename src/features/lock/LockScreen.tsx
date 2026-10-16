@@ -145,10 +145,12 @@ export function LockScreen() {
   );
 
   return (
-    <main className="grid min-h-dvh place-items-center px-4 py-10">
+    <main className="grid min-h-dvh place-items-center px-[22px] py-10">
       <Card className="flex w-full max-w-sm flex-col items-center gap-6 p-6">
         <div className="flex flex-col items-center gap-1 text-center">
-          <h1 className="text-3xl font-extrabold tracking-tight">Welcome back</h1>
+          <h1 className="text-[34px] leading-tight font-extrabold tracking-[-0.035em]">
+            Welcome back
+          </h1>
           <p className="text-muted">
             {lockMode === 'passphrase' ? 'Enter your passphrase.' : 'Enter your PIN.'}
           </p>

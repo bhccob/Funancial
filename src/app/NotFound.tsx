@@ -1,15 +1,22 @@
 import { Link } from 'react-router';
+import { PageHeader } from '@/components/ui/PageHeader';
+import { Section } from '@/components/ui/Section';
 
 export function NotFound() {
   return (
-    <div className="flex flex-col gap-4">
-      <h1 className="text-3xl font-extrabold tracking-tight">Page not found</h1>
-      <div className="flex flex-col items-start gap-3">
-        <p className="text-muted">This path leads nowhere. Let's head back to familiar ground.</p>
-        <Link to="/" className="text-accent-text font-bold underline underline-offset-4">
+    <div>
+      <PageHeader title="Page not found" />
+      <Section className="flex flex-col items-start gap-2">
+        <p className="text-muted font-semibold">
+          This path leads nowhere. Let's head back to familiar ground.
+        </p>
+        <Link
+          to="/"
+          className="text-accent-text -my-1 inline-flex min-h-11 items-center font-bold underline underline-offset-4"
+        >
           Go home
         </Link>
-      </div>
+      </Section>
     </div>
   );
 }

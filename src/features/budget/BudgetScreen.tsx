@@ -1,118 +1,159 @@
-import { useState } from 'react';
-import { Button } from '@/components/ui/Button';
-import { EmptyState } from '@/components/ui/EmptyState';
-import { PageHeader } from '@/components/ui/PageHeader';
-import { ProgressBar } from '@/components/ui/ProgressBar';
+import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
+import { useId, useMemo, useState } from 'react';
+import { Donut, DonutLegend } from '@/components/charts/Donut';
 import { Section } from '@/components/ui/Section';
-import { categoryBreakdown, categoryLabel, limitLabel, type LimitStatus } from '@/domain/budget';
 import type { BudgetLimit } from '@/domain/entities';
-import { monthRange } from '@/domain/periods';
-import { cn } from '@/lib/cn';
+import { categorySlices, periodProgress } from '@/domain/charts';
+import { addDays } from '@/domain/dates';
+import { monthKey, monthRange } from '@/domain/periods';
+import { formatMonth, formatMonthYear } from '@/lib/format';
 import { useApp } from '@/store/AppStoreProvider';
 import { useFinanceView, useMoney, useToday } from '@/store/useFinance';
 import { LimitDialog } from './LimitDialog';
+import { LimitPaceRow } from './LimitPaceRow';
 
-function LimitRow({ status, onEdit }: { status: LimitStatus; onEdit(): void }) {
-  const money = useMoney();
-  const { limit, spent, remaining, pct, level } = status;
-  const label = `${limitLabel(limit)} · ${limit.period}`;
-  const left = remaining >= 0 ? `${money(remaining)} left` : `${money(-remaining)} over`;
-  return (
-    <li className="py-4">
-      <div className="mb-2 flex items-center justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-2">
-          <span className="truncate font-bold">{label}</span>
-          {limit.reserve && (
-            <span className="bg-surface-2 text-muted shrink-0 rounded-full px-2 py-0.5 text-xs font-bold">
-              Reserved
-            </span>
-          )}
-        </div>
-        <Button variant="ghost" size="sm" aria-label={`Edit ${label}`} onClick={onEdit}>
-          Edit
-        </Button>
-      </div>
-      <ProgressBar label={label} value={pct} level={level} valueText={`${pct}% used`} />
-      <p
-        className={cn(
-          'mt-1.5 text-sm font-semibold tabular-nums',
-          level === 'ok' ? 'text-muted' : level === 'warn' ? 'text-warning' : 'text-danger',
-        )}
-      >
-        {`${money(spent)} of ${money(limit.amount)} · ${left}`}
-      </p>
-    </li>
-  );
+/** The month key a month before (-1) or after (1) `key`. */
+function shiftMonth(key: string, by: -1 | 1): string {
+  const { start, end } = monthRange(`${key}-01`);
+  return monthKey(addDays(by < 0 ? start : end, by));
 }
 
+const arrow =
+  'text-text hover:bg-surface-2 grid size-11 place-items-center rounded-full disabled:pointer-events-none disabled:opacity-45';
+
+/**
+ * Budget: the month's spending as a big donut with its legend, then the limits of the current
+ * week and month as bars with a pace mark. The month can go back, never past this one.
+ */
 export function BudgetScreen() {
   const view = useFinanceView();
   const money = useMoney();
   const today = useToday();
   const expenses = useApp((s) => s.data.tables.expense);
+  const weekStartsOn = useApp((s) => s.data.tables.settings[0]?.weekStartsOn ?? 1);
+  const spendingId = useId();
+
+  const current = monthKey(today);
+  const [month, setMonth] = useState(current);
+  const selected = month > current ? current : month;
+  const [slice, setSlice] = useState<number | null>(null);
   // undefined = dialog closed, null = adding a new limit.
   const [editing, setEditing] = useState<BudgetLimit | null | undefined>(undefined);
 
-  const byCategory = categoryBreakdown(expenses, monthRange(today));
-  const largest = byCategory[0]?.amount ?? 0;
+  const slices = useMemo(
+    () => categorySlices(expenses, monthRange(`${selected}-01`)),
+    [expenses, selected],
+  );
+  const total = slices.reduce((sum, s) => sum + s.amount, 0);
+  const overall = view.limits.find(
+    (l) => l.limit.scope === 'overall' && l.limit.period === 'monthly',
+  );
+  const monthName = formatMonth(selected);
+
+  function go(by: -1 | 1) {
+    setMonth(shiftMonth(selected, by));
+    setSlice(null);
+  }
+
+  let centre = monthName;
+  if (slices.length === 0) centre = `No spending in ${monthName}`;
+  else if (selected === current && overall) {
+    centre = `of ${money(overall.limit.amount)} · ${overall.pct}%`;
+  }
 
   return (
     <div>
-      <PageHeader
-        title="Budget"
-        action={
-          <Button size="sm" onClick={() => setEditing(null)}>
-            Add limit
-          </Button>
-        }
-      />
-      <div className="grid lg:grid-cols-[7fr_5fr]">
-        <Section title="Limits" className="lg:pr-6">
-          {view.limits.length > 0 ? (
-            <ul className="divide-border -my-4 divide-y">
-              {view.limits.map((s) => (
-                <LimitRow key={s.limit.id} status={s} onEdit={() => setEditing(s.limit)} />
-              ))}
-            </ul>
-          ) : (
-            <EmptyState
-              title="No limits yet"
-              action={
-                <Button size="sm" variant="secondary" onClick={() => setEditing(null)}>
-                  Set a limit
-                </Button>
-              }
-            >
-              Limits warn you at 80%, 100% and 120% so you can adjust before it hurts.
-            </EmptyState>
-          )}
-        </Section>
+      <header className="flex flex-wrap items-center justify-between gap-x-3">
+        <h1 className="text-[34px] leading-tight font-extrabold tracking-[-0.035em]">Budget</h1>
+        <div role="group" aria-label="Month" className="-mr-2.5 inline-flex items-center gap-0.5">
+          <button
+            type="button"
+            aria-label="Previous month"
+            onClick={() => go(-1)}
+            className={arrow}
+          >
+            <ChevronLeft aria-hidden="true" className="size-5" />
+          </button>
+          <span aria-live="polite" className="text-[15px] font-extrabold">
+            {formatMonthYear(selected)}
+          </span>
+          <button
+            type="button"
+            aria-label="Next month"
+            disabled={selected >= current}
+            onClick={() => go(1)}
+            className={arrow}
+          >
+            <ChevronRight aria-hidden="true" className="size-5" />
+          </button>
+        </div>
+      </header>
 
-        <Section title="This month by category" className="lg:border-border lg:border-l lg:pl-6">
-          {byCategory.length > 0 ? (
-            <ul className="flex flex-col gap-3">
-              {byCategory.map((c) => (
-                <li key={c.category}>
-                  <div className="mb-1 flex justify-between text-sm font-semibold">
-                    <span>{categoryLabel(c.category)}</span>
-                    <span className="tabular-nums">{money(c.amount)}</span>
-                  </div>
-                  <div aria-hidden className="bg-track h-1.5 overflow-hidden rounded-full">
-                    <div
-                      className="bg-chart-1 h-full rounded-full"
-                      style={{ width: `${Math.max(2, (c.amount / largest) * 100)}%` }}
-                    />
-                  </div>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <EmptyState title="No spending yet this month">
-              Expenses you add show up here by category.
-            </EmptyState>
+      <div className="lg:grid lg:grid-cols-2 lg:items-start lg:gap-x-14">
+        <section
+          aria-labelledby={spendingId}
+          className="border-border min-w-0 max-lg:border-b max-lg:pb-7"
+        >
+          <h2 id={spendingId} className="sr-only">
+            Spending
+          </h2>
+          <div className="mt-3.5 mb-[18px] flex justify-center">
+            <Donut
+              slices={slices}
+              size={240}
+              thickness={22}
+              formatAmount={(minor) => money(minor)}
+              caption="Spent"
+              idle={{ value: money(total), label: centre }}
+              selected={slice}
+              onSelect={setSlice}
+            />
+          </div>
+          {slices.length > 0 && (
+            <DonutLegend
+              slices={slices}
+              formatAmount={(minor) => money(minor, { whole: true })}
+              selected={slice}
+              onSelect={setSlice}
+            />
           )}
-        </Section>
+        </section>
+
+        <div className="min-w-0 lg:[&>section:first-child]:pt-0">
+          <Section
+            title="Limits"
+            action={
+              <span className="text-muted text-[12.5px] font-bold">
+                {"Line shows today's pace"}
+              </span>
+            }
+          >
+            {view.limits.length > 0 ? (
+              <ul>
+                {view.limits.map((status) => (
+                  <LimitPaceRow
+                    key={status.limit.id}
+                    status={status}
+                    progress={periodProgress(status.limit.period, today, weekStartsOn)}
+                    onEdit={() => setEditing(status.limit)}
+                  />
+                ))}
+              </ul>
+            ) : (
+              <p className="text-muted font-semibold">No limits yet. Add one to see your pace.</p>
+            )}
+            <button
+              type="button"
+              onClick={() => setEditing(null)}
+              className="mt-2 -mb-1 inline-flex min-h-11 items-center gap-2 text-[15px] font-extrabold"
+            >
+              <Plus aria-hidden="true" className="size-[18px]" />
+              Add a limit
+            </button>
+          </Section>
+        </div>
       </div>
+
       <LimitDialog limit={editing} onClose={() => setEditing(undefined)} />
     </div>
   );

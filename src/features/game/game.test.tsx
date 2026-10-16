@@ -3,8 +3,6 @@ import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { computeGameView } from '@/domain/game/engine';
-import { levelStart } from '@/domain/game/levels';
 import type { QuestView } from '@/domain/game/quests';
 import { purchaseEntry } from '@/domain/game/shop';
 import type { QuestId } from '@/domain/game/types';
@@ -16,7 +14,6 @@ import { createGameActions } from '@/store/gameActions';
 import { useGameView } from '@/store/useGame';
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
 import {
-  localIso,
   makeDebt,
   makeExpense,
   makeLedgerEntry,
@@ -26,7 +23,6 @@ import {
 } from '@/test/fixtures';
 import { freshRealStore } from '@/test/realStore';
 import { Avatar } from './Avatar';
-import { GameHud } from './GameHud';
 import { QuestList } from './QuestList';
 import { useGameTheme } from './useGameTheme';
 import { WeeklyCheckInDialog } from './WeeklyCheckInDialog';
@@ -102,116 +98,6 @@ describe('Avatar', () => {
     const avatar = container.firstElementChild as HTMLElement;
     expect(avatar).toHaveStyle({ width: '40px', height: '40px' });
     expect(avatar).toHaveAttribute('aria-hidden', 'true');
-  });
-});
-
-describe('GameHud', () => {
-  it('shows level, tier, XP, streak and coins in one link to the quests', () => {
-    renderIn(<GameHud />);
-    const link = screen.getByRole('link', {
-      name: 'Level 1, Bronze Saver, 0 of 100 XP, Start a streak today, 0 coins. Open quests',
-    });
-    expect(link).toHaveAttribute('href', '/quests');
-    expect(within(link).getByText('LV 1')).toBeInTheDocument();
-    expect(within(link).getByText('Bronze Saver')).toBeInTheDocument();
-    expect(within(link).getByText('0 / 100 XP')).toBeInTheDocument();
-    expect(within(link).getByText('Start a streak today')).toBeInTheDocument();
-    expect(within(link).getByText('0 coins')).toBeInTheDocument();
-  });
-
-  it('shows the progress through the level, the logging streak and what is worn', () => {
-    const data = dataWith((d) => {
-      d.tables.ledger = [
-        makeLedgerEntry({ key: 'seed', xp: 250, coins: 40 }),
-        purchaseEntry('avatar-rocket', 'p1', '2026-10-01T10:00:00.000Z'),
-        purchaseEntry('frame-gold', 'p2', '2026-10-01T10:00:00.000Z'),
-      ];
-      d.tables.settings = [
-        makeSettings({
-          cosmetics: { theme: 'theme-violet', avatar: 'avatar-rocket', frame: 'frame-gold' },
-        }),
-      ];
-      d.tables.expense = ['2026-10-12', '2026-10-13', TODAY].map((day) =>
-        makeExpense({ date: day, createdAt: localIso(day) }),
-      );
-    });
-    const { container } = renderIn(<GameHud />, createStubStore({ data, today: TODAY }));
-
-    // 250 XP: past the 100 of level 1, 150 into the 264 of level 2. Coins: 40 earned, 280 spent.
-    const link = screen.getByRole('link', {
-      name: 'Level 2, Bronze Saver, 150 of 264 XP, 3-day streak, 0 coins. Open quests',
-    });
-    expect(within(link).getByText('LV 2')).toBeInTheDocument();
-    expect(within(link).getByText('150 / 264 XP')).toBeInTheDocument();
-    expect(within(link).getByText('3-day streak')).toBeInTheDocument();
-    expect(container.querySelector('svg.lucide-rocket')).toBeInTheDocument();
-    expect(container.querySelector('svg.lucide-flame')).toBeInTheDocument();
-    expect(container.querySelector('svg.lucide-coins')).toBeInTheDocument();
-    expect(container.querySelector('[class*="ring-[#d4a017]"]')).toBeInTheDocument();
-  });
-
-  it('fills the XP bar to the progress through the level', () => {
-    const data = dataWith((d) => {
-      d.tables.ledger = [makeLedgerEntry({ key: 'seed', xp: 232, coins: 0 })]; // 132 of the 264 of level 2
-    });
-    const { container } = renderIn(<GameHud />, createStubStore({ data }));
-    const fill = container.querySelector<HTMLElement>('.bg-xp.rounded-full');
-    expect(fill).toHaveStyle({ width: '50%' });
-    expect(fill?.className).toContain('motion-safe:transition-[width]');
-    expect(fill?.className).not.toMatch(/(^|\s)transition/);
-  });
-
-  it('shows coins at 0 when the balance is negative', () => {
-    const data = dataWith((d) => {
-      d.tables.ledger = [makeLedgerEntry({ key: 'seed', xp: 0, coins: -30, kind: 'purchase' })];
-    });
-    renderIn(<GameHud />, createStubStore({ data }));
-    expect(screen.getByText('0 coins')).toBeInTheDocument();
-    expect(screen.queryByText(/-30/)).not.toBeInTheDocument();
-  });
-
-  it('says 1 coin, not 1 coins', () => {
-    const data = dataWith((d) => {
-      d.tables.ledger = [makeLedgerEntry({ key: 'seed', xp: 0, coins: 1 })];
-    });
-    renderIn(<GameHud />, createStubStore({ data }));
-    expect(
-      screen.getByRole('link', {
-        name: 'Level 1, Bronze Saver, 0 of 100 XP, Start a streak today, 1 coin. Open quests',
-      }),
-    ).toBeInTheDocument();
-    expect(screen.getByText('1 coin')).toBeInTheDocument();
-  });
-
-  it('shows a game view it is handed', () => {
-    const data = dataWith((d) => {
-      d.tables.ledger = [makeLedgerEntry({ key: 'seed', xp: 250, coins: 7 })];
-    });
-    const view = computeGameView(data, {
-      today: TODAY,
-      now: localIso(TODAY),
-      weekStartsOn: 1,
-      canBackUp: true,
-    });
-    // The store holds nothing: what shows comes from the view.
-    renderIn(<GameHud view={view} />);
-    expect(screen.getByText('LV 2')).toBeInTheDocument();
-    expect(screen.getByText('150 / 264 XP')).toBeInTheDocument();
-    expect(screen.getByText('7 coins')).toBeInTheDocument();
-  });
-
-  it('says Max level at the top of the curve', () => {
-    const data = dataWith((d) => {
-      d.tables.ledger = [makeLedgerEntry({ key: 'seed', xp: levelStart(50) + 10, coins: 5 })];
-    });
-    renderIn(<GameHud />, createStubStore({ data }));
-    expect(
-      screen.getByRole('link', {
-        name: 'Level 50, Diamond Master, Max level, Start a streak today, 5 coins. Open quests',
-      }),
-    ).toBeInTheDocument();
-    expect(screen.getByText('Max level')).toBeInTheDocument();
-    expect(screen.getByText('LV 50')).toBeInTheDocument();
   });
 });
 

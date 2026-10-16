@@ -30,3 +30,9 @@ it('formats amounts in the profile currency', () => {
   expect(result.current(1250)).toContain('12.50');
   expect(result.current(1250)).toContain('€');
 });
+
+it('drops the minor units when asked for whole amounts', () => {
+  const { result } = renderHook(() => useMoney(), { wrapper: withProfile('EUR') });
+  expect(result.current(1250, { whole: true })).toContain('13');
+  expect(result.current(1250, { whole: true })).not.toContain('50');
+});

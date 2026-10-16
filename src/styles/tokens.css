@@ -1,5 +1,5 @@
 /*
- * Design tokens — direction D "Pro Ledger". Values and usage rules: docs/design/visual-direction.md.
+ * Design tokens — direction E "Open". Values and usage rules: docs/design/visual-direction.md.
  * Light values live in @theme (they are the defaults and generate Tailwind utilities);
  * dark values override the same variables when <html data-theme="dark">.
  */
@@ -32,6 +32,8 @@
   --color-chart-4: #eda100;
   --color-chart-5: #e87ba4;
   --color-chart-6: #008300;
+  /* "Other" slices and segments always use this, whatever their position (3:1 or better on the page). */
+  --color-chart-other: #868b96;
 
   --radius-sm: 6px;
   --radius-md: 10px;
@@ -76,6 +78,7 @@
   --color-chart-4: #c98500;
   --color-chart-5: #d55181;
   --color-chart-6: #008300;
+  --color-chart-other: #6b7080;
 
   --shadow-overlay: 0 24px 60px rgb(0 0 0 / 0.55);
   --shadow-float: 0 10px 30px rgb(0 0 0 / 0.5);

@@ -12,6 +12,18 @@ export function formatDay(d: LocalDate, locale?: string): string {
   }).format(utc(d));
 }
 
+/** "Thu" */
+export function formatWeekday(d: LocalDate, locale?: string): string {
+  return new Intl.DateTimeFormat(locale, { weekday: 'short', timeZone: 'UTC' }).format(utc(d));
+}
+
+/** "OCT" */
+export function formatMonthShort(d: LocalDate, locale?: string): string {
+  return new Intl.DateTimeFormat(locale, { month: 'short', timeZone: 'UTC' })
+    .format(utc(d))
+    .toLocaleUpperCase(locale);
+}
+
 /** "Feb 14, 2027" */
 export function formatDate(d: LocalDate, locale?: string): string {
   return new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeZone: 'UTC' }).format(utc(d));

@@ -1,5 +1,5 @@
 import { useCallback, useMemo } from 'react';
-import { formatMoney } from '@/domain/money';
+import { formatMoney, type MoneyFormatOptions } from '@/domain/money';
 import { computeFinanceView, type FinanceView } from '@/domain/view';
 import { useApp, useAppStore } from './AppStoreProvider';
 import { createFinanceActions, type FinanceActions } from './financeActions';
@@ -13,10 +13,7 @@ export function useCurrency(): string {
 }
 
 /** Formatter for the profile currency in the reader's locale. */
-export function useMoney(): (
-  minor: number,
-  opts?: { signDisplay?: 'auto' | 'always' | 'exceptZero' },
-) => string {
+export function useMoney(): (minor: number, opts?: MoneyFormatOptions) => string {
   const currency = useCurrency();
   return useCallback((minor, opts) => formatMoney(minor, currency, undefined, opts), [currency]);
 }

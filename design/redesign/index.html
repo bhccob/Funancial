@@ -1,0 +1,532 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Funancial redesign</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet" />
+<script src="https://unpkg.com/lucide@0.469.0/dist/umd/lucide.min.js"></script>
+<style>
+:root {
+  --page: #eef0f3; --bg: #f5f6f8; --card: #ffffff; --chip: #f0f1f4; --track: #e8e9ee;
+  --text: #0d0d0f; --muted: #6f6f78; --line: #ebebef;
+  --ink: #0d0d0f; --on-ink: #ffffff;
+  --accent: #00b37e; --accent-text: #007a55; --accent-soft: #e3f7ef;
+  --xp: #7c5cff; --xp-text: #6b46f5; --xp-soft: #efeaff;
+  --warn: #a35f00; --warn-fill: #f2a93b; --warn-soft: #fff3e0;
+  --danger: #d1373d; --flame: #e8590c;
+  --c1: #2a78d6; --c2: #eb6834; --c3: #1baf7a; --c4: #eda100; --c5: #e87ba4; --c6: #9aa0ab;
+  --shadow: 0 1px 2px rgba(16,16,24,.04), 0 8px 24px rgba(16,16,24,.06);
+  --sheet: #ffffff;
+}
+[data-theme='dark'] {
+  --page: #050506; --bg: #0c0c0e; --card: #17171b; --chip: #222228; --track: #2a2a31;
+  --text: #f4f4f6; --muted: #9a9aa6; --line: #26262c;
+  --ink: #f4f4f6; --on-ink: #0c0c0e;
+  --accent: #2ee6a6; --accent-text: #2ee6a6; --accent-soft: #0f2a21;
+  --xp: #9d85ff; --xp-text: #9d85ff; --xp-soft: #221c3d;
+  --warn: #f2a93b; --warn-fill: #f2a93b; --warn-soft: #2e2212;
+  --danger: #ff6b6f; --flame: #ff8a4c;
+  --c1: #3987e5; --c2: #d95926; --c3: #199e70; --c4: #c98500; --c5: #d55181; --c6: #6b7080;
+  --shadow: 0 0 0 1px rgba(255,255,255,.04);
+  --sheet: #17171b;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: Manrope, system-ui, sans-serif; background: var(--page); color: var(--text); padding: 28px 16px 60px; transition: background .2s; }
+.num { font-variant-numeric: tabular-nums; }
+.switch { max-width: 1240px; margin: 0 auto 18px; display: flex; gap: 8px; flex-wrap: wrap; }
+.switch a { text-decoration: none; color: var(--muted); font-weight: 800; font-size: 14px; padding: 9px 14px; border-radius: 999px; background: var(--card); box-shadow: var(--shadow); }
+.switch a.on { background: var(--ink); color: var(--on-ink); }
+header.top { max-width: 1240px; margin: 0 auto 26px; display: flex; flex-wrap: wrap; gap: 14px; align-items: end; justify-content: space-between; }
+header.top h1 { font-size: 26px; font-weight: 800; letter-spacing: -.02em; }
+header.top p { color: var(--muted); font-weight: 600; margin-top: 4px; max-width: 640px; line-height: 1.5; }
+.toggle { display: inline-flex; background: var(--card); border-radius: 999px; padding: 4px; box-shadow: var(--shadow); }
+.toggle button { border: 0; background: transparent; color: var(--muted); font: 700 14px Manrope; padding: 9px 16px; border-radius: 999px; cursor: pointer; display: inline-flex; gap: 6px; align-items: center; }
+.toggle button[aria-pressed='true'] { background: var(--ink); color: var(--on-ink); }
+.phones { max-width: 1240px; margin: 0 auto; display: flex; flex-wrap: wrap; gap: 34px; justify-content: center; }
+.col { display: flex; flex-direction: column; gap: 12px; align-items: center; }
+.col h2 { font-size: 15px; font-weight: 800; }
+.col small { color: var(--muted); font-weight: 600; font-size: 13px; max-width: 360px; text-align: center; line-height: 1.45; }
+.phone { width: 375px; height: 812px; border-radius: 44px; background: var(--bg); position: relative; overflow: hidden; box-shadow: 0 30px 60px rgba(0,0,0,.18), 0 0 0 10px #101014; }
+.scroll { position: absolute; inset: 0; overflow-y: auto; padding: 54px 16px 124px; scrollbar-width: none; }
+.scroll::-webkit-scrollbar { display: none; }
+.status { position: absolute; top: 0; left: 0; right: 0; height: 44px; display: flex; justify-content: space-between; align-items: center; padding: 0 28px; font-weight: 700; font-size: 14px; z-index: 5; background: linear-gradient(var(--bg) 70%, transparent); }
+
+/* top bar */
+.hello { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }
+.hello .who { display: flex; gap: 12px; align-items: center; }
+.ring-avatar { position: relative; width: 52px; height: 52px; cursor: pointer; }
+.ring-avatar svg { position: absolute; inset: 0; transform: rotate(-90deg); }
+.ring-avatar .face { position: absolute; inset: 6px; border-radius: 50%; background: var(--xp-soft); display: grid; place-items: center; color: var(--xp-text); }
+.ring-avatar .lv { position: absolute; bottom: -4px; left: 50%; transform: translateX(-50%); background: var(--xp-text); color: #fff; font-size: 10px; font-weight: 800; padding: 1px 6px; border-radius: 999px; border: 2px solid var(--bg); }
+[data-theme='dark'] .ring-avatar .lv { color: #0c0c0e; }
+.hello .t1 { font-size: 13px; color: var(--muted); font-weight: 600; }
+.hello .t2 { font-size: 18px; font-weight: 800; letter-spacing: -.01em; }
+.pills { display: flex; gap: 8px; }
+.pill { display: inline-flex; align-items: center; gap: 5px; height: 36px; padding: 0 12px; border-radius: 999px; background: var(--card); box-shadow: var(--shadow); font-weight: 800; font-size: 13.5px; }
+.pill .i { width: 16px; height: 16px; }
+
+/* cards */
+.card { background: var(--card); border-radius: 26px; padding: 20px; box-shadow: var(--shadow); margin-bottom: 14px; }
+.card h3 { font-size: 15px; font-weight: 800; display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; letter-spacing: -.01em; }
+.card h3 a { font-size: 13px; font-weight: 700; color: var(--muted); text-decoration: none; display: inline-flex; align-items: center; gap: 2px; }
+.label { font-size: 13px; font-weight: 700; color: var(--muted); }
+.big { font-size: 40px; font-weight: 800; letter-spacing: -.035em; line-height: 1.1; margin-top: 4px; }
+.sub { font-size: 13px; font-weight: 600; color: var(--muted); margin-top: 6px; }
+
+/* hero month bar */
+.hero { background: var(--hero-bg); color: var(--hero-text); }
+.hero .label, .hero .sub { color: color-mix(in srgb, var(--hero-text) 65%, transparent); }
+:root { --hero-bg: #0d0d0f; --hero-text: #ffffff; }
+[data-theme='dark'] { --hero-bg: linear-gradient(145deg, #12392c, #17171b 72%); --hero-text: #f4f4f6; }
+.stack { display: flex; height: 14px; border-radius: 999px; overflow: hidden; gap: 3px; margin-top: 18px; }
+.stack button { border: 0; cursor: pointer; height: 100%; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 12px; font-size: 12.5px; font-weight: 700; }
+.legend span { display: inline-flex; gap: 6px; align-items: center; }
+.dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+.pace { margin-top: 14px; font-size: 12.5px; font-weight: 700; display: flex; justify-content: space-between; color: color-mix(in srgb, var(--hero-text) 70%, transparent); }
+
+/* quick actions */
+.actions { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin: 4px 0 18px; }
+.act { border: 0; background: none; color: var(--text); display: flex; flex-direction: column; align-items: center; gap: 7px; font: 700 12.5px Manrope; cursor: pointer; padding: 4px 0; }
+.act .c { width: 58px; height: 58px; border-radius: 20px; display: grid; place-items: center; background: var(--card); box-shadow: var(--shadow); transition: transform .12s; }
+.act:active .c { transform: scale(.94); }
+.act.primary .c { background: var(--accent); color: #fff; }
+[data-theme='dark'] .act.primary .c { color: #0c0c0e; }
+.act .c .i { width: 24px; height: 24px; }
+
+/* donut */
+.donut-wrap { display: flex; gap: 16px; align-items: center; }
+.donut { position: relative; width: 150px; height: 150px; flex: none; }
+.donut svg { transform: rotate(-90deg); }
+.donut .center { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; }
+.donut .center b { font-size: 19px; font-weight: 800; letter-spacing: -.02em; }
+.donut .center span { font-size: 11.5px; font-weight: 700; color: var(--muted); }
+.cats { flex: 1; display: grid; gap: 2px; min-width: 0; }
+.cat { border: 0; background: none; color: var(--text); display: flex; align-items: center; gap: 8px; font: 700 13px Manrope; padding: 6px 8px; border-radius: 10px; cursor: pointer; text-align: left; min-height: 32px; }
+.cat:hover, .cat.on { background: var(--chip); }
+.cat .n { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cat .v { color: var(--muted); font-weight: 700; }
+.seg { display: inline-flex; background: var(--chip); border-radius: 999px; padding: 3px; }
+.seg button { border: 0; background: none; font: 700 12.5px Manrope; color: var(--muted); padding: 6px 12px; border-radius: 999px; cursor: pointer; }
+.seg button[aria-pressed='true'] { background: var(--card); color: var(--text); box-shadow: var(--shadow); }
+
+/* bars */
+.bars { display: flex; align-items: end; gap: 10px; height: 120px; margin-top: 6px; }
+.bar { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; height: 100%; justify-content: end; border: 0; background: none; cursor: pointer; color: var(--muted); font: 700 11.5px Manrope; }
+.bar i { display: block; width: 100%; border-radius: 10px 10px 6px 6px; background: var(--track); min-height: 4px; transition: background .15s; }
+.bar.today i { background: var(--accent); }
+.bar.on i { background: var(--ink); }
+.bar.today { color: var(--text); }
+.tip { font-size: 13px; font-weight: 700; color: var(--muted); margin-top: 10px; min-height: 18px; }
+.tip b { color: var(--text); }
+
+/* rings */
+.rings { display: flex; gap: 10px; overflow-x: auto; scrollbar-width: none; margin: 0 -4px; padding: 0 4px; }
+.ringc { flex: none; width: 104px; display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; }
+.ringc .r { position: relative; width: 76px; height: 76px; }
+.ringc .r svg { transform: rotate(-90deg); }
+.ringc .r b { position: absolute; inset: 0; display: grid; place-items: center; font-size: 15px; font-weight: 800; }
+.ringc .nm { font-size: 13px; font-weight: 800; }
+.ringc .lf { font-size: 11.5px; font-weight: 700; color: var(--muted); }
+
+/* bills */
+.bill { display: flex; align-items: center; gap: 12px; padding: 10px 0; }
+.bill + .bill { border-top: 1px solid var(--line); }
+.cal { width: 46px; height: 50px; border-radius: 14px; background: var(--chip); display: flex; flex-direction: column; align-items: center; justify-content: center; flex: none; }
+.cal span { font-size: 10px; font-weight: 800; color: var(--danger); letter-spacing: .06em; }
+.cal b { font-size: 18px; font-weight: 800; line-height: 1; }
+.bill .w { flex: 1; }
+.bill .w b { font-size: 14.5px; font-weight: 800; display: block; }
+.bill .w span { font-size: 12.5px; font-weight: 600; color: var(--muted); }
+.bill .a { font-weight: 800; font-size: 14.5px; }
+
+/* net worth */
+.nw { display: flex; justify-content: space-between; align-items: end; }
+.nw .big { font-size: 30px; }
+.delta { font-size: 12.5px; font-weight: 800; color: var(--accent-text); background: var(--accent-soft); padding: 4px 8px; border-radius: 999px; }
+.split { display: flex; height: 10px; border-radius: 999px; overflow: hidden; gap: 3px; margin-top: 14px; }
+
+/* goals */
+.goals { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.goal { background: var(--chip); border-radius: 20px; padding: 14px; display: flex; gap: 10px; align-items: center; }
+.goal .r { position: relative; width: 50px; height: 50px; flex: none; }
+.goal .r svg { transform: rotate(-90deg); }
+.goal .r b { position: absolute; inset: 0; display: grid; place-items: center; font-size: 12px; font-weight: 800; }
+.goal .nm { font-size: 13.5px; font-weight: 800; }
+.goal .lf { font-size: 11.5px; font-weight: 700; color: var(--muted); }
+
+/* quests */
+.quest { display: flex; gap: 12px; align-items: center; padding: 10px 0; }
+.quest + .quest { border-top: 1px solid var(--line); }
+.qic { width: 40px; height: 40px; border-radius: 13px; background: var(--xp-soft); color: var(--xp-text); display: grid; place-items: center; flex: none; }
+.quest .w { flex: 1; min-width: 0; }
+.quest .w b { font-size: 14px; font-weight: 800; display: block; }
+.quest .w .bar2 { height: 6px; border-radius: 999px; background: var(--track); margin-top: 7px; overflow: hidden; }
+.quest .w .bar2 i { display: block; height: 100%; background: var(--xp); border-radius: 999px; }
+.xp { font-size: 12.5px; font-weight: 800; color: var(--xp-text); }
+
+/* nav */
+.nav { position: absolute; left: 12px; right: 12px; bottom: 18px; height: 72px; background: var(--card); border-radius: 26px; box-shadow: 0 10px 30px rgba(0,0,0,.12), 0 0 0 1px var(--line); display: grid; grid-template-columns: repeat(5, 1fr); align-items: center; z-index: 6; }
+.nav button { border: 0; background: none; color: var(--muted); font: 700 11.5px Manrope; display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer; height: 100%; justify-content: center; }
+.nav button.on { color: var(--text); }
+.nav button.on .ico { background: var(--chip); }
+.nav .ico { width: 46px; height: 30px; border-radius: 999px; display: grid; place-items: center; }
+.nav .add .ico { width: 54px; height: 54px; border-radius: 19px; background: var(--ink); color: var(--on-ink); margin-top: -2px; }
+.nav .add { color: var(--text); }
+.nav .i { width: 22px; height: 22px; }
+
+/* sheet */
+.backdrop { position: absolute; inset: 0; background: rgba(8,8,12,.38); opacity: 0; pointer-events: none; transition: opacity .25s; z-index: 7; }
+.sheet { position: absolute; left: 0; right: 0; bottom: 0; background: var(--sheet); border-radius: 30px 30px 0 0; padding: 10px 16px 30px; transform: translateY(102%); transition: transform .32s cubic-bezier(.2,.8,.2,1); z-index: 8; max-height: 88%; overflow-y: auto; scrollbar-width: none; }
+.open .backdrop { opacity: 1; pointer-events: auto; }
+.open .sheet { transform: none; }
+.grab { width: 40px; height: 5px; border-radius: 99px; background: var(--track); margin: 0 auto 14px; }
+.sheet h4 { font-size: 12px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); margin: 16px 4px 10px; }
+.tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.tile { border: 0; text-align: left; background: var(--chip); color: var(--text); border-radius: 20px; padding: 14px; display: flex; flex-direction: column; gap: 10px; cursor: pointer; min-height: 104px; font-family: Manrope; position: relative; }
+.tile .ti { width: 40px; height: 40px; border-radius: 13px; display: grid; place-items: center; color: #fff; }
+.tile b { font-size: 14.5px; font-weight: 800; }
+.tile span { font-size: 12px; font-weight: 700; color: var(--muted); margin-top: -6px; }
+.tile .soon { position: absolute; top: 12px; right: 12px; font-size: 10.5px; font-weight: 800; background: var(--card); color: var(--muted); padding: 3px 8px; border-radius: 99px; margin: 0; }
+.row-tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.mini { border: 0; background: none; color: var(--text); display: flex; flex-direction: column; align-items: center; gap: 7px; font: 700 12px Manrope; cursor: pointer; }
+.mini .c { width: 56px; height: 56px; border-radius: 18px; background: var(--chip); display: grid; place-items: center; }
+
+/* budget */
+.ptitle { font-size: 30px; font-weight: 800; letter-spacing: -.03em; display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+.month { display: inline-flex; align-items: center; gap: 4px; background: var(--card); box-shadow: var(--shadow); border-radius: 999px; padding: 4px; font-size: 13.5px; font-weight: 800; }
+.month button { border: 0; background: none; color: var(--text); width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; cursor: pointer; }
+.bigdonut { position: relative; width: 220px; height: 220px; margin: 4px auto 12px; }
+.bigdonut svg { transform: rotate(-90deg); }
+.bigdonut .center { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; }
+.bigdonut .center b { font-size: 26px; font-weight: 800; letter-spacing: -.03em; }
+.bigdonut .center span { font-size: 12.5px; font-weight: 700; color: var(--muted); }
+.limit { display: flex; gap: 14px; align-items: center; padding: 12px 0; }
+.limit + .limit { border-top: 1px solid var(--line); }
+.limit .w { flex: 1; }
+.limit .w b { font-size: 15px; font-weight: 800; display: flex; justify-content: space-between; }
+.limit .w b em { font-style: normal; font-size: 12.5px; color: var(--muted); }
+.limit .lb { height: 10px; border-radius: 999px; background: var(--track); margin-top: 8px; position: relative; overflow: hidden; }
+.limit .lb i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 999px; }
+.limit .lb .pace-mark { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--text); opacity: .5; }
+.limit .w small { display: block; font-size: 12.5px; font-weight: 600; color: var(--muted); margin-top: 6px; }
+.limit .ic { width: 44px; height: 44px; border-radius: 14px; display: grid; place-items: center; flex: none; }
+.addlimit { width: 100%; border: 2px dashed var(--track); background: none; color: var(--muted); border-radius: 18px; padding: 14px; font: 800 14px Manrope; cursor: pointer; display: flex; justify-content: center; gap: 8px; align-items: center; margin-top: 6px; }
+.notes { max-width: 1240px; margin: 36px auto 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+.note { background: var(--card); border-radius: 22px; padding: 18px; box-shadow: var(--shadow); }
+.note b { font-size: 14.5px; font-weight: 800; display: block; margin-bottom: 6px; }
+.note p { font-size: 13.5px; font-weight: 600; color: var(--muted); line-height: 1.5; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<nav class="switch" aria-label="Designs"><a href="index.html" class="on">#1 Soft cards</a><a href="2-open.html">#2 Open</a><a href="3-vivid.html">#3 Vivid</a></nav>
+<header class="top">
+  <div>
+    <h1>#1 · Soft cards</h1>
+    <p>Same data as your demo. Tap things: the donut, the bars, the month bar, the Menu button. Soft cards group each idea, big labelled buttons replace the small pills, and every key number gets a picture.</p>
+  </div>
+  <div class="toggle" role="group" aria-label="Theme">
+    <button data-theme-btn="light" aria-pressed="true"><i data-lucide="sun" class="i"></i>Light</button>
+    <button data-theme-btn="dark" aria-pressed="false"><i data-lucide="moon" class="i"></i>Dark</button>
+  </div>
+</header>
+
+<div class="phones">
+  <!-- HOME -->
+  <div class="col">
+    <h2>Home</h2>
+    <div class="phone" id="home">
+      <div class="status"><span>9:41</span><span>●●● 100%</span></div>
+      <div class="scroll">
+        <div class="hello">
+          <div class="who">
+            <div class="ring-avatar" title="Level 5 · 914 of 952 XP">
+              <svg width="52" height="52"><circle cx="26" cy="26" r="23" fill="none" stroke="var(--track)" stroke-width="4"/><circle cx="26" cy="26" r="23" fill="none" stroke="var(--xp)" stroke-width="4" stroke-linecap="round" stroke-dasharray="144.5" stroke-dashoffset="5.8"/></svg>
+              <div class="face"><i data-lucide="sprout" class="i" style="width:22px;height:22px"></i></div>
+              <span class="lv">LV 5</span>
+            </div>
+            <div><div class="t1">Good evening</div><div class="t2">Demo Player</div></div>
+          </div>
+          <div class="pills">
+            <span class="pill" title="61-day logging streak"><i data-lucide="flame" class="i" style="color:var(--flame)"></i>61</span>
+            <span class="pill" title="130 coins"><i data-lucide="coins" class="i" style="color:var(--warn-fill)"></i>130</span>
+          </div>
+        </div>
+
+        <div class="card hero">
+          <div class="label">Available to spend</div>
+          <div class="big num">$13,177.46</div>
+          <div class="stack" id="heroStack">
+            <button style="flex:1884;background:var(--warn-fill)" data-tip="Spent so far · $1,884.36"></button>
+            <button style="flex:548;background:var(--c5)" data-tip="Bills still to come · $547.81"></button>
+            <button style="flex:168;background:var(--accent)" data-tip="Left in your $2,600 monthly limit · $167.83"></button>
+          </div>
+          <div class="legend">
+            <span><i class="dot" style="background:var(--warn-fill)"></i>Spent $1,884</span>
+            <span><i class="dot" style="background:var(--c5)"></i>Bills $548</span>
+            <span><i class="dot" style="background:var(--accent)"></i>Left $168</span>
+          </div>
+          <div class="pace"><span id="heroTip">October · day 15 of 31</span><span>72% of limit</span></div>
+        </div>
+
+        <div class="actions">
+          <button class="act primary"><span class="c"><i data-lucide="plus" class="i"></i></span>Expense</button>
+          <button class="act"><span class="c"><i data-lucide="hand-coins" class="i"></i></span>Income</button>
+          <button class="act"><span class="c"><i data-lucide="shopping-bag" class="i"></i></span>Buy it?</button>
+          <button class="act"><span class="c"><i data-lucide="target" class="i"></i></span>Goals</button>
+        </div>
+
+        <div class="card">
+          <h3>Where it went <span class="seg" id="donutSeg"><button aria-pressed="false" data-r="week">Week</button><button aria-pressed="true" data-r="month">Month</button></span></h3>
+          <div class="donut-wrap">
+            <div class="donut"><svg width="150" height="150" id="donut"></svg><div class="center"><b class="num" id="dcVal">$1,884</b><span id="dcLbl">October</span></div></div>
+            <div class="cats" id="cats"></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>Last 7 days <a href="#">History <i data-lucide="chevron-right" class="i" style="width:16px;height:16px"></i></a></h3>
+          <div class="bars" id="bars"></div>
+          <div class="tip" id="barTip">Tap a day · this week <b class="num">$133.72</b></div>
+        </div>
+
+        <div class="card">
+          <h3>Limits <a href="#">Budget <i data-lucide="chevron-right" class="i" style="width:16px;height:16px"></i></a></h3>
+          <div class="rings" id="rings"></div>
+        </div>
+
+        <div class="card">
+          <h3>Coming up <a href="#">$547.81 <i data-lucide="chevron-right" class="i" style="width:16px;height:16px"></i></a></h3>
+          <div class="bill"><div class="cal"><span>OCT</span><b>20</b></div><div class="w"><b>CloudBox</b><span>Subscription · in 5 days</span></div><div class="a num">$2.99</div></div>
+          <div class="bill"><div class="cal"><span>OCT</span><b>21</b></div><div class="w"><b>Demo Visa</b><span>Card · full balance</span></div><div class="a num">$505.82</div></div>
+          <div class="bill"><div class="cal"><span>OCT</span><b>28</b></div><div class="w"><b>FitHub Gym</b><span>Subscription · in 13 days</span></div><div class="a num">$39.00</div></div>
+        </div>
+
+        <div class="card">
+          <div class="nw">
+            <div><div class="label">Net worth</div><div class="big num">$13,219.45</div></div>
+            <span class="delta">+$312 this month</span>
+          </div>
+          <svg width="100%" height="56" viewBox="0 0 300 56" preserveAspectRatio="none" style="margin-top:10px">
+            <defs><linearGradient id="g1" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="var(--accent)" stop-opacity=".25"/><stop offset="1" stop-color="var(--accent)" stop-opacity="0"/></linearGradient></defs>
+            <path id="spark-fill" fill="url(#g1)"/><path id="spark" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linecap="round"/>
+          </svg>
+          <div class="split"><i style="flex:5125;background:var(--c1)"></i><i style="flex:8600;background:var(--c3)"></i><i style="flex:506;background:var(--danger)"></i></div>
+          <div class="legend" style="color:var(--muted)"><span><i class="dot" style="background:var(--c1)"></i>Cash $5,125</span><span><i class="dot" style="background:var(--c3)"></i>Savings $8,600</span><span><i class="dot" style="background:var(--danger)"></i>Debts $506</span></div>
+        </div>
+
+        <div class="card">
+          <h3>Goals <a href="#">All <i data-lucide="chevron-right" class="i" style="width:16px;height:16px"></i></a></h3>
+          <div class="goals">
+            <div class="goal"><div class="r"><svg width="50" height="50"><circle cx="25" cy="25" r="21" fill="none" stroke="var(--track)" stroke-width="5"/><circle cx="25" cy="25" r="21" fill="none" stroke="var(--c1)" stroke-width="5" stroke-linecap="round" stroke-dasharray="131.9" stroke-dashoffset="82.4"/></svg><b>38%</b></div><div><div class="nm">New bike</div><div class="lf num">$750 to go</div></div></div>
+            <div class="goal"><div class="r"><svg width="50" height="50"><circle cx="25" cy="25" r="21" fill="none" stroke="var(--track)" stroke-width="5"/><circle cx="25" cy="25" r="21" fill="none" stroke="var(--c3)" stroke-width="5" stroke-linecap="round" stroke-dasharray="131.9" stroke-dashoffset="92.3"/></svg><b>30%</b></div><div><div class="nm">Emergency</div><div class="lf num">$7,000 to go</div></div></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>Quests <a href="#">All <i data-lucide="chevron-right" class="i" style="width:16px;height:16px"></i></a></h3>
+          <div class="quest"><div class="qic"><i data-lucide="target" class="i" style="width:20px;height:20px"></i></div><div class="w"><b>Stay within limits this week</b><div class="bar2"><i style="width:57%"></i></div></div><span class="xp">+60 XP</span></div>
+          <div class="quest"><div class="qic"><i data-lucide="calendar-check" class="i" style="width:20px;height:20px"></i></div><div class="w"><b>Weekly check-in</b><div class="bar2"><i style="width:0%"></i></div></div><span class="xp">+40 XP</span></div>
+        </div>
+      </div>
+      <nav class="nav">
+        <button class="on"><span class="ico"><i data-lucide="house" class="i"></i></span>Home</button>
+        <button><span class="ico"><i data-lucide="chart-pie" class="i"></i></span>Budget</button>
+        <button class="add"><span class="ico"><i data-lucide="plus" class="i"></i></span></button>
+        <button><span class="ico"><i data-lucide="trophy" class="i"></i></span>Quests</button>
+        <button data-open-menu><span class="ico"><i data-lucide="layout-grid" class="i"></i></span>Menu</button>
+      </nav>
+      <div class="backdrop" data-close-menu></div>
+      <div class="sheet" id="sheetHome"></div>
+    </div>
+    <small>Greeting with your level ring, streak and coins at the top. The month in one picture, four big labelled actions, then one card per idea. Scroll inside the phone.</small>
+  </div>
+
+  <!-- MENU -->
+  <div class="col">
+    <h2>Menu (was "More")</h2>
+    <div class="phone open" id="menuPhone">
+      <div class="status"><span>9:41</span><span>●●● 100%</span></div>
+      <div class="scroll" style="filter:saturate(.9)">
+        <div class="hello"><div class="who"><div class="ring-avatar"><div class="face"><i data-lucide="sprout" class="i"></i></div></div><div><div class="t1">Good evening</div><div class="t2">Demo Player</div></div></div></div>
+        <div class="card hero"><div class="label">Available to spend</div><div class="big num">$13,177.46</div></div>
+      </div>
+      <nav class="nav">
+        <button><span class="ico"><i data-lucide="house" class="i"></i></span>Home</button>
+        <button><span class="ico"><i data-lucide="chart-pie" class="i"></i></span>Budget</button>
+        <button class="add"><span class="ico"><i data-lucide="plus" class="i"></i></span></button>
+        <button><span class="ico"><i data-lucide="trophy" class="i"></i></span>Quests</button>
+        <button class="on"><span class="ico"><i data-lucide="layout-grid" class="i"></i></span>Menu</button>
+      </nav>
+      <div class="backdrop"></div>
+      <div class="sheet" id="sheetStatic"></div>
+    </div>
+    <small>A sheet that slides up from the bottom. Each tile says what's inside right now, so you know what it does before you tap. Features from later milestones say "Soon".</small>
+  </div>
+
+  <!-- BUDGET -->
+  <div class="col">
+    <h2>Budget</h2>
+    <div class="phone">
+      <div class="status"><span>9:41</span><span>●●● 100%</span></div>
+      <div class="scroll">
+        <div class="ptitle">Budget <span class="month"><button aria-label="Previous month"><i data-lucide="chevron-left" class="i" style="width:18px;height:18px"></i></button>October<button aria-label="Next month"><i data-lucide="chevron-right" class="i" style="width:18px;height:18px"></i></button></span></div>
+        <div class="card">
+          <div class="bigdonut"><svg width="220" height="220" id="bigDonut"></svg><div class="center"><span>Spent in October</span><b class="num" id="bdVal">$1,884.36</b><span id="bdLbl">of $2,600 · 72%</span></div></div>
+          <div class="cats" id="bigCats" style="grid-template-columns:1fr 1fr"></div>
+        </div>
+        <div class="card">
+          <h3>Limits <span class="label">Line = where you'd be on pace</span></h3>
+          <div class="limit"><div class="ic" style="background:var(--warn-soft);color:var(--warn)"><i data-lucide="wallet" class="i"></i></div><div class="w"><b>Overall <em class="num">$716 left</em></b><div class="lb"><i style="width:72%;background:var(--warn-fill)"></i><span class="pace-mark" style="left:48%"></span></div><small>Monthly · $1,884 of $2,600 · ahead of pace</small></div></div>
+          <div class="limit"><div class="ic" style="background:color-mix(in srgb,var(--c5) 18%,transparent);color:var(--c5)"><i data-lucide="party-popper" class="i"></i></div><div class="w"><b>Fun <em class="num">$33 left</em></b><div class="lb"><i style="width:67%;background:var(--c5)"></i><span class="pace-mark" style="left:48%"></span></div><small>Monthly · $67 of $100</small></div></div>
+          <div class="limit"><div class="ic" style="background:color-mix(in srgb,var(--c3) 18%,transparent);color:var(--c3)"><i data-lucide="utensils" class="i"></i></div><div class="w"><b>Food <em class="num">$73 left</em></b><div class="lb"><i style="width:39%;background:var(--c3)"></i><span class="pace-mark" style="left:57%"></span></div><small>Weekly · $47 of $120 · under pace</small></div></div>
+          <button class="addlimit"><i data-lucide="plus" class="i"></i>Add a limit</button>
+        </div>
+      </div>
+      <nav class="nav">
+        <button><span class="ico"><i data-lucide="house" class="i"></i></span>Home</button>
+        <button class="on"><span class="ico"><i data-lucide="chart-pie" class="i"></i></span>Budget</button>
+        <button class="add"><span class="ico"><i data-lucide="plus" class="i"></i></span></button>
+        <button><span class="ico"><i data-lucide="trophy" class="i"></i></span>Quests</button>
+        <button><span class="ico"><i data-lucide="layout-grid" class="i"></i></span>Menu</button>
+      </nav>
+    </div>
+    <small>One big donut for the month (tap a category), limits with a pace line so you can see if you're spending too fast, and a clear "Add a limit".</small>
+  </div>
+</div>
+
+<div class="notes">
+  <div class="note"><b>Where to look</b><p>The dark hero card is always first, and it shows how the month is going in one bar. Every section after it is its own soft card with a title, so the page reads top to bottom.</p></div>
+  <div class="note"><b>Buttons you can find</b><p>Actions are 58px tiles with a word under each icon. Nothing is icon-only, and every tap target is at least 48px for Android.</p></div>
+  <div class="note"><b>Pictures, not just numbers</b><p>A month bar, a category donut, daily bars, limit rings, a net-worth trend, goal rings and calendar tiles for bills. Every chart has a legend and shows exact numbers when you tap it.</p></div>
+  <div class="note"><b>Navigation</b><p>Five slots: Home, Budget, a big + to add, Quests and Menu. The floating + button goes away, and Invest and Buy it? live in the Menu until they're built.</p></div>
+</div>
+
+<script>
+const CATS = [
+  { n: 'Rent', v: 1200.00, c: 'var(--c1)', i: 'house' },
+  { n: 'Shopping', v: 220.90, c: 'var(--c2)', i: 'shopping-bag' },
+  { n: 'Food', v: 154.72, c: 'var(--c3)', i: 'utensils' },
+  { n: 'Utilities', v: 134.52, c: 'var(--c4)', i: 'zap' },
+  { n: 'Health', v: 68.69, c: 'var(--c5)', i: 'heart-pulse' },
+  { n: 'Other', v: 105.53, c: 'var(--c6)', i: 'ellipsis' },
+];
+const WEEK = [
+  { n: 'Food', v: 47.25, c: 'var(--c3)' }, { n: 'Fun', v: 32.40, c: 'var(--c5)' }, { n: 'Shopping', v: 29.99, c: 'var(--c2)' },
+  { n: 'Transport', v: 14.30, c: 'var(--c1)' }, { n: 'Other', v: 9.78, c: 'var(--c6)' },
+];
+const DAYS = [['Fri', 24.10], ['Sat', 88.45], ['Sun', 12.00], ['Mon', 31.20], ['Tue', 0], ['Wed', 54.03], ['Thu', 48.49]];
+const fmt = (v, d = 2) => '$' + v.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
+
+function donut(svg, data, size, stroke, onPick) {
+  const r = (size - stroke) / 2, C = 2 * Math.PI * r, total = data.reduce((s, d) => s + d.v, 0), gap = 3;
+  let off = 0;
+  svg.innerHTML = `<circle cx="${size/2}" cy="${size/2}" r="${r}" fill="none" stroke="var(--track)" stroke-width="${stroke}"/>`;
+  data.forEach((d, k) => {
+    const len = Math.max(0, (d.v / total) * C - gap);
+    const el = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    Object.entries({ cx: size/2, cy: size/2, r, fill: 'none', stroke: d.c, 'stroke-width': stroke, 'stroke-dasharray': `${len} ${C - len}`, 'stroke-dashoffset': -off, 'stroke-linecap': 'butt' })
+      .forEach(([a, b]) => el.setAttribute(a, b));
+    el.style.cursor = 'pointer'; el.style.transition = 'stroke-width .15s, opacity .15s';
+    el.addEventListener('click', () => onPick(k));
+    svg.appendChild(el); off += (d.v / total) * C;
+  });
+  return { total, pick(k) { [...svg.querySelectorAll('circle')].slice(1).forEach((c, j) => { c.style.opacity = k === null || k === j ? 1 : .3; c.setAttribute('stroke-width', k === j ? stroke + 6 : stroke); }); } };
+}
+function legend(box, data, onPick) {
+  box.innerHTML = data.map((d, k) => `<button class="cat" data-k="${k}"><i class="dot" style="background:${d.c}"></i><span class="n">${d.n}</span><span class="v num">${fmt(d.v, 0)}</span></button>`).join('');
+  box.querySelectorAll('.cat').forEach((b) => b.addEventListener('click', () => onPick(+b.dataset.k)));
+}
+function mountDonut(svgId, catsId, valId, lblId, size, stroke, getData, idle) {
+  const svg = document.getElementById(svgId), cats = document.getElementById(catsId);
+  let picked = null, data = getData(), d;
+  const render = () => {
+    data = getData();
+    d = donut(svg, data, size, stroke, pick);
+    legend(cats, data, pick); pick(null);
+  };
+  function pick(k) {
+    picked = picked === k ? null : k;
+    d.pick(picked);
+    cats.querySelectorAll('.cat').forEach((b, j) => b.classList.toggle('on', j === picked));
+    const [v, l] = picked === null ? idle(d.total) : [fmt(data[picked].v), `${data[picked].n} · ${Math.round(data[picked].v / d.total * 100)}%`];
+    document.getElementById(valId).textContent = v; document.getElementById(lblId).textContent = l;
+  }
+  render();
+  return render;
+}
+let range = 'month';
+const rerender = mountDonut('donut', 'cats', 'dcVal', 'dcLbl', 150, 20, () => (range === 'month' ? CATS : WEEK), (t) => [fmt(t, 0), range === 'month' ? 'October' : 'This week']);
+document.querySelectorAll('#donutSeg button').forEach((b) => b.addEventListener('click', () => {
+  range = b.dataset.r; document.querySelectorAll('#donutSeg button').forEach((x) => x.setAttribute('aria-pressed', x === b)); rerender();
+}));
+mountDonut('bigDonut', 'bigCats', 'bdVal', 'bdLbl', 220, 26, () => CATS, (t) => [fmt(t), 'of $2,600 · 72%']);
+
+const bars = document.getElementById('bars'), max = Math.max(...DAYS.map((d) => d[1]));
+bars.innerHTML = DAYS.map(([d, v], k) => `<button class="bar${k === 6 ? ' today' : ''}" data-k="${k}"><i style="height:${Math.max(4, (v / max) * 92)}px"></i>${k === 6 ? 'Today' : d}</button>`).join('');
+bars.querySelectorAll('.bar').forEach((b) => b.addEventListener('click', () => {
+  bars.querySelectorAll('.bar').forEach((x) => x.classList.toggle('on', x === b && !b.classList.contains('today')));
+  const [d, v] = DAYS[+b.dataset.k];
+  document.getElementById('barTip').innerHTML = v === 0 ? `<b>${d}</b> · nothing spent` : `<b>${d}</b> · spent <b class="num">${fmt(v)}</b>`;
+}));
+
+const RINGS = [['Overall', 72, '$716 left', 'var(--warn-fill)'], ['Fun', 67, '$33 left', 'var(--c5)'], ['Food · week', 39, '$73 left', 'var(--c3)']];
+document.getElementById('rings').innerHTML = RINGS.map(([n, p, l, c]) => {
+  const C = 2 * Math.PI * 32;
+  return `<div class="ringc"><div class="r"><svg width="76" height="76"><circle cx="38" cy="38" r="32" fill="none" stroke="var(--track)" stroke-width="8"/><circle cx="38" cy="38" r="32" fill="none" stroke="${c}" stroke-width="8" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${C * (1 - p / 100)}"/></svg><b>${p}%</b></div><div class="nm">${n}</div><div class="lf num">${l}</div></div>`;
+}).join('');
+
+const pts = [12907, 12950, 12920, 12988, 13012, 12995, 13040, 13080, 13060, 13110, 13090, 13130, 13150, 13120, 13180, 13219];
+const xs = pts.map((_, k) => (k / (pts.length - 1)) * 300), mn = Math.min(...pts), mx = Math.max(...pts);
+const ys = pts.map((p) => 50 - ((p - mn) / (mx - mn)) * 44);
+const line = xs.map((x, k) => `${k ? 'L' : 'M'}${x.toFixed(1)},${ys[k].toFixed(1)}`).join(' ');
+document.getElementById('spark').setAttribute('d', line);
+document.getElementById('spark-fill').setAttribute('d', `${line} L300,56 L0,56 Z`);
+
+document.querySelectorAll('#heroStack button').forEach((b) => b.addEventListener('click', () => { document.getElementById('heroTip').textContent = b.dataset.tip; }));
+
+const SHEET = `<div class="grab"></div>
+  <div class="row-tiles">
+    <button class="mini"><span class="c"><i data-lucide="hand-coins" class="i"></i></span>Income</button>
+    <button class="mini"><span class="c"><i data-lucide="credit-card" class="i"></i></span>Pay card</button>
+    <button class="mini"><span class="c"><i data-lucide="arrow-left-right" class="i"></i></span>Transfer</button>
+    <button class="mini"><span class="c"><i data-lucide="scale" class="i"></i></span>Fix balance</button>
+  </div>
+  <h4>Your money</h4>
+  <div class="tiles">
+    <button class="tile"><span class="ti" style="background:var(--c1)"><i data-lucide="repeat" class="i"></i></span><b>Subscriptions</b><span>3 active · $45/mo</span></button>
+    <button class="tile"><span class="ti" style="background:var(--c3)"><i data-lucide="target" class="i"></i></span><b>Goals</b><span>2 goals · 33% saved</span></button>
+    <button class="tile"><span class="ti" style="background:var(--c2)"><i data-lucide="clock" class="i"></i></span><b>History</b><span>Every entry, searchable</span></button>
+    <button class="tile"><span class="ti" style="background:#5b8def"><i data-lucide="snowflake" class="i"></i></span><b>Salary freeze</b><span>None right now</span></button>
+  </div>
+  <h4>Coming next</h4>
+  <div class="tiles">
+    <button class="tile"><span class="soon">Soon</span><span class="ti" style="background:var(--c4)"><i data-lucide="trending-up" class="i"></i></span><b>Invest</b><span>Stocks & ETFs</span></button>
+    <button class="tile"><span class="soon">Soon</span><span class="ti" style="background:var(--c5)"><i data-lucide="shopping-bag" class="i"></i></span><b>Buy it?</b><span>Ask before you spend</span></button>
+    <button class="tile"><span class="soon">Soon</span><span class="ti" style="background:#8a63d2"><i data-lucide="coins" class="i"></i></span><b>Dividends</b><span>Passive income</span></button>
+    <button class="tile"><span class="soon">Soon</span><span class="ti" style="background:#6b7080"><i data-lucide="newspaper" class="i"></i></span><b>News</b><span>For what you hold</span></button>
+  </div>
+  <h4>You</h4>
+  <div class="tiles">
+    <button class="tile"><span class="ti" style="background:var(--xp)"><i data-lucide="store" class="i"></i></span><b>Shop</b><span>130 coins to spend</span></button>
+    <button class="tile"><span class="ti" style="background:#6b7080"><i data-lucide="settings" class="i"></i></span><b>Settings</b><span>Lock, backups, reminders</span></button>
+    <button class="tile"><span class="ti" style="background:#0e9aa7"><i data-lucide="inbox" class="i"></i></span><b>Inbox</b><span>Nothing new</span></button>
+    <button class="tile"><span class="ti" style="background:#e0567a"><i data-lucide="circle-help" class="i"></i></span><b>Help</b><span>How everything works</span></button>
+  </div>`;
+document.getElementById('sheetHome').innerHTML = SHEET;
+document.getElementById('sheetStatic').innerHTML = SHEET;
+const home = document.getElementById('home');
+home.querySelector('[data-open-menu]').addEventListener('click', () => home.classList.add('open'));
+home.querySelector('[data-close-menu]').addEventListener('click', () => home.classList.remove('open'));
+
+document.querySelectorAll('[data-theme-btn]').forEach((b) => b.addEventListener('click', () => {
+  document.documentElement.dataset.theme = b.dataset.themeBtn;
+  document.querySelectorAll('[data-theme-btn]').forEach((x) => x.setAttribute('aria-pressed', x === b));
+}));
+lucide.createIcons();
+</script>
+</body>
+</html>

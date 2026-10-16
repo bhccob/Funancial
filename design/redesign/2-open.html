@@ -1,0 +1,397 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Funancial redesign #2 Open</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet" />
+<script src="https://unpkg.com/lucide@0.469.0/dist/umd/lucide.min.js"></script>
+<style>
+:root {
+  --page: #eef0f3; --bg: #ffffff; --chip: #f2f3f6; --track: #ececf1;
+  --text: #0d0d0f; --muted: #6f6f78; --line: #ececf0;
+  --ink: #0d0d0f; --on-ink: #ffffff;
+  --accent: #00b37e; --accent-text: #007a55;
+  --xp: #7c5cff; --xp-text: #6b46f5;
+  --warn: #a35f00; --warn-fill: #f2a93b; --danger: #d1373d; --flame: #e8590c;
+  --c1: #2a78d6; --c2: #eb6834; --c3: #1baf7a; --c4: #eda100; --c5: #e87ba4; --c6: #9aa0ab;
+}
+[data-theme='dark'] {
+  --page: #050506; --bg: #0c0c0e; --chip: #1c1c21; --track: #26262c;
+  --text: #f4f4f6; --muted: #9a9aa6; --line: #222228;
+  --ink: #f4f4f6; --on-ink: #0c0c0e;
+  --accent: #2ee6a6; --accent-text: #2ee6a6;
+  --xp: #9d85ff; --xp-text: #9d85ff;
+  --warn: #f2a93b; --warn-fill: #f2a93b; --danger: #ff6b6f; --flame: #ff8a4c;
+  --c1: #3987e5; --c2: #d95926; --c3: #199e70; --c4: #c98500; --c5: #d55181; --c6: #6b7080;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: Manrope, system-ui, sans-serif; background: var(--page); color: var(--text); padding: 28px 16px 60px; }
+.num { font-variant-numeric: tabular-nums; }
+.switch { max-width: 1240px; margin: 0 auto 18px; display: flex; gap: 8px; flex-wrap: wrap; }
+.switch a { text-decoration: none; color: var(--muted); font-weight: 800; font-size: 14px; padding: 9px 14px; border-radius: 999px; background: var(--bg); }
+.switch a.on { background: var(--ink); color: var(--on-ink); }
+header.top { max-width: 1240px; margin: 0 auto 26px; display: flex; flex-wrap: wrap; gap: 14px; align-items: end; justify-content: space-between; }
+header.top h1 { font-size: 26px; font-weight: 800; letter-spacing: -.02em; }
+header.top p { color: var(--muted); font-weight: 600; margin-top: 4px; max-width: 640px; line-height: 1.5; }
+.toggle { display: inline-flex; background: var(--bg); border-radius: 999px; padding: 4px; }
+.toggle button { border: 0; background: transparent; color: var(--muted); font: 700 14px Manrope; padding: 9px 16px; border-radius: 999px; cursor: pointer; display: inline-flex; gap: 6px; align-items: center; }
+.toggle button[aria-pressed='true'] { background: var(--ink); color: var(--on-ink); }
+.i { width: 20px; height: 20px; }
+.phones { max-width: 1240px; margin: 0 auto; display: flex; flex-wrap: wrap; gap: 34px; justify-content: center; }
+.col { display: flex; flex-direction: column; gap: 12px; align-items: center; }
+.col h2 { font-size: 15px; font-weight: 800; }
+.col small { color: var(--muted); font-weight: 600; font-size: 13px; max-width: 360px; text-align: center; line-height: 1.45; }
+.phone { width: 375px; height: 812px; border-radius: 44px; background: var(--bg); position: relative; overflow: hidden; box-shadow: 0 30px 60px rgba(0,0,0,.18), 0 0 0 10px #101014; }
+.scroll { position: absolute; inset: 0; overflow-y: auto; padding: 54px 22px 110px; scrollbar-width: none; }
+.scroll::-webkit-scrollbar { display: none; }
+.status { position: absolute; top: 0; left: 0; right: 0; height: 44px; display: flex; justify-content: space-between; align-items: center; padding: 0 28px; font-weight: 700; font-size: 14px; z-index: 5; background: linear-gradient(var(--bg) 70%, transparent); }
+
+.topline { display: flex; justify-content: space-between; align-items: center; margin-bottom: 26px; }
+.topline .m { font-size: 15px; font-weight: 800; }
+.topline .m span { color: var(--muted); font-weight: 700; }
+.me { display: flex; align-items: center; gap: 14px; font-size: 14px; font-weight: 800; }
+.me span { display: inline-flex; gap: 4px; align-items: center; }
+.me .i { width: 17px; height: 17px; }
+.lvring { position: relative; width: 40px; height: 40px; }
+.lvring svg { position: absolute; inset: 0; transform: rotate(-90deg); }
+.lvring b { position: absolute; inset: 0; display: grid; place-items: center; font-size: 12px; font-weight: 800; color: var(--xp-text); }
+
+.k { font-size: 14px; font-weight: 700; color: var(--muted); }
+.hero { font-size: 50px; font-weight: 800; letter-spacing: -.045em; line-height: 1.05; margin-top: 6px; }
+.monthline { display: flex; height: 6px; gap: 3px; margin-top: 22px; }
+.monthline i { border-radius: 99px; cursor: pointer; }
+.monthkeys { display: flex; justify-content: space-between; margin-top: 10px; font-size: 13px; font-weight: 700; color: var(--muted); }
+.monthkeys b { color: var(--text); font-weight: 800; display: block; font-size: 15px; }
+.monthkeys div:last-child { text-align: right; }
+
+.acts { display: grid; grid-template-columns: repeat(4, 1fr); margin: 30px -6px 6px; }
+.act { border: 0; background: none; color: var(--text); display: flex; flex-direction: column; align-items: center; gap: 8px; font: 700 13px Manrope; cursor: pointer; padding: 4px 0; }
+.act .c { width: 56px; height: 56px; border-radius: 50%; display: grid; place-items: center; background: var(--chip); }
+.act.primary .c { background: var(--ink); color: var(--on-ink); }
+.act .c .i { width: 24px; height: 24px; }
+
+section { padding: 30px 0 4px; }
+section + section { border-top: 1px solid var(--line); margin-top: 26px; }
+.sh { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 18px; }
+.sh h3 { font-size: 21px; font-weight: 800; letter-spacing: -.02em; }
+.sh a { font-size: 13.5px; font-weight: 700; color: var(--muted); text-decoration: none; display: inline-flex; gap: 2px; align-items: center; }
+.sh a .i { width: 16px; height: 16px; }
+.tabs { display: flex; gap: 18px; font-size: 14px; font-weight: 800; }
+.tabs button { border: 0; background: none; color: var(--muted); font: inherit; cursor: pointer; padding: 4px 0; border-bottom: 2px solid transparent; }
+.tabs button[aria-pressed='true'] { color: var(--text); border-color: var(--text); }
+
+.donut-wrap { display: flex; gap: 18px; align-items: center; }
+.donut { position: relative; width: 150px; height: 150px; flex: none; }
+.donut svg { transform: rotate(-90deg); }
+.donut .center { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; }
+.donut .center b { font-size: 19px; font-weight: 800; }
+.donut .center span { font-size: 11.5px; font-weight: 700; color: var(--muted); }
+.cats { flex: 1; display: grid; min-width: 0; }
+.cat { border: 0; background: none; color: var(--text); display: flex; align-items: center; gap: 9px; font: 700 13.5px Manrope; padding: 7px 0; cursor: pointer; text-align: left; border-bottom: 1px solid var(--line); }
+.cat:last-child { border-bottom: 0; }
+.cat .n { flex: 1; }
+.cat .v { color: var(--muted); }
+.cat.on .n, .cat.on .v { color: var(--text); font-weight: 800; }
+.dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; flex: none; }
+
+.bars { display: flex; align-items: end; gap: 14px; height: 130px; }
+.bar { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 8px; height: 100%; justify-content: end; border: 0; background: none; cursor: pointer; color: var(--muted); font: 700 12px Manrope; }
+.bar i { display: block; width: 10px; border-radius: 99px; background: var(--track); min-height: 6px; }
+.bar.today i, .bar.on i { background: var(--ink); }
+.bar.today { color: var(--text); }
+.tip { font-size: 14px; font-weight: 700; color: var(--muted); margin-top: 14px; }
+.tip b { color: var(--text); }
+
+.rings { display: flex; justify-content: space-between; }
+.ringc { display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; }
+.ringc .r { position: relative; width: 86px; height: 86px; }
+.ringc .r svg { transform: rotate(-90deg); }
+.ringc .r b { position: absolute; inset: 0; display: grid; place-items: center; font-size: 17px; font-weight: 800; }
+.ringc .nm { font-size: 13.5px; font-weight: 800; }
+.ringc .lf { font-size: 12px; font-weight: 700; color: var(--muted); margin-top: -4px; }
+
+.row { display: flex; align-items: center; gap: 14px; padding: 13px 0; }
+.row + .row { border-top: 1px solid var(--line); }
+.date { width: 40px; text-align: center; flex: none; }
+.date span { display: block; font-size: 11px; font-weight: 800; color: var(--muted); letter-spacing: .06em; }
+.date b { font-size: 22px; font-weight: 800; letter-spacing: -.02em; }
+.row .w { flex: 1; }
+.row .w b { font-size: 15px; font-weight: 800; display: block; }
+.row .w span { font-size: 13px; font-weight: 600; color: var(--muted); }
+.row .a { font-weight: 800; font-size: 15px; }
+
+.nwnum { font-size: 34px; font-weight: 800; letter-spacing: -.035em; }
+.up { color: var(--accent-text); font-weight: 800; font-size: 13.5px; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; font-weight: 700; color: var(--muted); margin-top: 10px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+
+.goal { padding: 12px 0; }
+.goal + .goal { border-top: 1px solid var(--line); }
+.goal .t { display: flex; justify-content: space-between; font-size: 15px; font-weight: 800; }
+.goal .t em { font-style: normal; font-weight: 700; color: var(--muted); font-size: 13.5px; }
+.goal .gl { height: 6px; border-radius: 99px; background: var(--track); margin-top: 10px; overflow: hidden; }
+.goal .gl i { display: block; height: 100%; border-radius: 99px; }
+
+.q { display: flex; gap: 14px; align-items: center; padding: 12px 0; }
+.q + .q { border-top: 1px solid var(--line); }
+.q .ic { color: var(--xp-text); flex: none; }
+.q .w { flex: 1; }
+.q .w b { font-size: 14.5px; font-weight: 800; display: block; }
+.q .w span { font-size: 12.5px; font-weight: 700; color: var(--muted); }
+.q .xp { font-size: 13px; font-weight: 800; color: var(--xp-text); }
+
+.nav { position: absolute; left: 0; right: 0; bottom: 0; height: 84px; padding-bottom: 14px; background: var(--bg); border-top: 1px solid var(--line); display: grid; grid-template-columns: repeat(5, 1fr); align-items: center; z-index: 6; }
+.nav button { border: 0; background: none; color: var(--muted); font: 700 11.5px Manrope; display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer; }
+.nav button.on { color: var(--text); }
+.nav .add .c { width: 48px; height: 48px; border-radius: 50%; background: var(--ink); color: var(--on-ink); display: grid; place-items: center; }
+.nav .i { width: 23px; height: 23px; }
+
+.backdrop { position: absolute; inset: 0; background: rgba(8,8,12,.38); opacity: 0; pointer-events: none; transition: opacity .25s; z-index: 7; }
+.sheet { position: absolute; left: 0; right: 0; bottom: 0; top: 64px; background: var(--bg); border-radius: 30px 30px 0 0; padding: 10px 22px 30px; transform: translateY(102%); transition: transform .32s cubic-bezier(.2,.8,.2,1); z-index: 8; overflow-y: auto; scrollbar-width: none; }
+.open .backdrop { opacity: 1; pointer-events: auto; }
+.open .sheet { transform: none; }
+.grab { width: 40px; height: 5px; border-radius: 99px; background: var(--track); margin: 0 auto 18px; }
+.sheet h4 { font-size: 21px; font-weight: 800; letter-spacing: -.02em; margin: 18px 0 6px; }
+.mrow { display: flex; align-items: center; gap: 14px; padding: 12px 0; border: 0; background: none; width: 100%; text-align: left; color: var(--text); font-family: Manrope; cursor: pointer; }
+.mrow + .mrow { border-top: 1px solid var(--line); }
+.mrow .ci { width: 42px; height: 42px; border-radius: 50%; display: grid; place-items: center; color: #fff; flex: none; }
+.mrow .w { flex: 1; }
+.mrow .w b { font-size: 15.5px; font-weight: 800; display: block; }
+.mrow .w span { font-size: 13px; font-weight: 600; color: var(--muted); }
+.mrow .soon { font-size: 12px; font-weight: 800; color: var(--muted); }
+.mrow .chev { color: var(--muted); width: 18px; height: 18px; }
+
+.ptitle { font-size: 34px; font-weight: 800; letter-spacing: -.035em; display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.mon { display: inline-flex; align-items: center; gap: 2px; font-size: 15px; font-weight: 800; }
+.mon button { border: 0; background: none; color: var(--text); width: 40px; height: 40px; display: grid; place-items: center; cursor: pointer; border-radius: 50%; }
+.bigdonut { position: relative; width: 240px; height: 240px; margin: 14px auto 18px; }
+.bigdonut svg { transform: rotate(-90deg); }
+.bigdonut .center { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; }
+.bigdonut .center b { font-size: 28px; font-weight: 800; letter-spacing: -.03em; }
+.bigdonut .center span { font-size: 13px; font-weight: 700; color: var(--muted); }
+.lim { padding: 14px 0; }
+.lim + .lim { border-top: 1px solid var(--line); }
+.lim .t { display: flex; justify-content: space-between; font-size: 15.5px; font-weight: 800; }
+.lim .t em { font-style: normal; font-size: 14px; }
+.lim .lb { height: 8px; border-radius: 99px; background: var(--track); margin-top: 10px; position: relative; }
+.lim .lb i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 99px; }
+.lim .lb .pm { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--text); opacity: .45; border-radius: 2px; }
+.lim small { display: block; font-size: 13px; font-weight: 600; color: var(--muted); margin-top: 8px; }
+.link { border: 0; background: none; color: var(--text); font: 800 15px Manrope; display: inline-flex; gap: 8px; align-items: center; margin-top: 14px; cursor: pointer; padding: 10px 0; }
+.notes { max-width: 1240px; margin: 36px auto 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+.note { background: var(--bg); border-radius: 22px; padding: 18px; }
+.note b { font-size: 14.5px; font-weight: 800; display: block; margin-bottom: 6px; }
+.note p { font-size: 13.5px; font-weight: 600; color: var(--muted); line-height: 1.5; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<nav class="switch" aria-label="Designs"><a href="index.html">#1 Soft cards</a><a href="2-open.html" class="on">#2 Open</a><a href="3-vivid.html">#3 Vivid</a></nav>
+<header class="top">
+  <div>
+    <h1>#2 · Open</h1>
+    <p>No boxes. Each idea is a section with a large title, separated by space and one hairline. Numbers and charts sit directly on the page, Apple-Stocks style. Tap the bars, the donut and the Menu button.</p>
+  </div>
+  <div class="toggle" role="group" aria-label="Theme">
+    <button data-theme-btn="light" aria-pressed="true"><i data-lucide="sun" class="i"></i>Light</button>
+    <button data-theme-btn="dark" aria-pressed="false"><i data-lucide="moon" class="i"></i>Dark</button>
+  </div>
+</header>
+
+<div class="phones">
+  <div class="col">
+    <h2>Home</h2>
+    <div class="phone" id="home">
+      <div class="status"><span>9:41</span><span>●●● 100%</span></div>
+      <div class="scroll">
+        <div class="topline">
+          <div class="m">Hi, Demo Player <span>· Oct 15</span></div>
+          <div class="me">
+            <span title="61-day streak"><i data-lucide="flame" class="i" style="color:var(--flame)"></i>61</span>
+            <span title="130 coins"><i data-lucide="coins" class="i" style="color:var(--warn-fill)"></i>130</span>
+            <div class="lvring" title="Level 5 · 914 of 952 XP"><svg width="40" height="40"><circle cx="20" cy="20" r="17" fill="none" stroke="var(--track)" stroke-width="3.5"/><circle cx="20" cy="20" r="17" fill="none" stroke="var(--xp)" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="106.8" stroke-dashoffset="4.3"/></svg><b>5</b></div>
+          </div>
+        </div>
+
+        <div class="k">Available to spend</div>
+        <div class="hero num">$13,177.46</div>
+        <div class="monthline" id="monthline">
+          <i style="flex:1884;background:var(--warn-fill)" data-t="Spent so far · $1,884.36"></i>
+          <i style="flex:548;background:var(--c5)" data-t="Bills still to come · $547.81"></i>
+          <i style="flex:168;background:var(--accent)" data-t="Left in your monthly limit · $167.83"></i>
+        </div>
+        <div class="monthkeys"><div><b class="num">$1,884</b>spent in October</div><div><b class="num">$716</b>left in limit</div></div>
+
+        <div class="acts">
+          <button class="act primary"><span class="c"><i data-lucide="plus" class="i"></i></span>Expense</button>
+          <button class="act"><span class="c"><i data-lucide="hand-coins" class="i"></i></span>Income</button>
+          <button class="act"><span class="c"><i data-lucide="shopping-bag" class="i"></i></span>Buy it?</button>
+          <button class="act"><span class="c"><i data-lucide="target" class="i"></i></span>Goals</button>
+        </div>
+
+        <section>
+          <div class="sh"><h3>Spending</h3><div class="tabs" id="rangeTabs"><button aria-pressed="false" data-r="week">Week</button><button aria-pressed="true" data-r="month">Month</button></div></div>
+          <div class="donut-wrap">
+            <div class="donut"><svg width="150" height="150" id="donut"></svg><div class="center"><b class="num" id="dcVal"></b><span id="dcLbl"></span></div></div>
+            <div class="cats" id="cats"></div>
+          </div>
+        </section>
+
+        <section>
+          <div class="sh"><h3>Last 7 days</h3><a href="#">History <i data-lucide="chevron-right" class="i"></i></a></div>
+          <div class="bars" id="bars"></div>
+          <div class="tip" id="barTip">This week so far <b class="num">$133.72</b> · tap a day</div>
+        </section>
+
+        <section>
+          <div class="sh"><h3>Limits</h3><a href="#">Budget <i data-lucide="chevron-right" class="i"></i></a></div>
+          <div class="rings" id="rings"></div>
+        </section>
+
+        <section>
+          <div class="sh"><h3>Coming up</h3><a href="#">$547.81 <i data-lucide="chevron-right" class="i"></i></a></div>
+          <div class="row"><div class="date"><span>OCT</span><b>20</b></div><div class="w"><b>CloudBox</b><span>Subscription · in 5 days</span></div><div class="a num">$2.99</div></div>
+          <div class="row"><div class="date"><span>OCT</span><b>21</b></div><div class="w"><b>Demo Visa</b><span>Card · full balance</span></div><div class="a num">$505.82</div></div>
+          <div class="row"><div class="date"><span>OCT</span><b>28</b></div><div class="w"><b>FitHub Gym</b><span>Subscription · in 13 days</span></div><div class="a num">$39.00</div></div>
+        </section>
+
+        <section>
+          <div class="sh"><h3>Net worth</h3><span class="up">▲ $312 this month</span></div>
+          <div class="nwnum num">$13,219.45</div>
+          <svg width="100%" height="70" viewBox="0 0 300 70" preserveAspectRatio="none" style="margin-top:12px"><path id="spark" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linecap="round"/></svg>
+          <div class="legend"><span><i class="dot" style="background:var(--c1)"></i>Cash $5,125</span><span><i class="dot" style="background:var(--c3)"></i>Savings $8,600</span><span><i class="dot" style="background:var(--danger)"></i>Debts $506</span></div>
+        </section>
+
+        <section>
+          <div class="sh"><h3>Goals</h3><a href="#">All <i data-lucide="chevron-right" class="i"></i></a></div>
+          <div class="goal"><div class="t">New bike <em class="num">$450 of $1,200 · 38%</em></div><div class="gl"><i style="width:38%;background:var(--c1)"></i></div></div>
+          <div class="goal"><div class="t">Emergency fund <em class="num">$3,000 of $10,000 · 30%</em></div><div class="gl"><i style="width:30%;background:var(--c3)"></i></div></div>
+        </section>
+
+        <section>
+          <div class="sh"><h3>Quests</h3><a href="#">All <i data-lucide="chevron-right" class="i"></i></a></div>
+          <div class="q"><i data-lucide="target" class="i ic"></i><div class="w"><b>Stay within limits this week</b><span>Day 4 of 7 · on track</span></div><span class="xp">+60 XP</span></div>
+          <div class="q"><i data-lucide="calendar-check" class="i ic"></i><div class="w"><b>Weekly check-in</b><span>Review your week in a minute</span></div><span class="xp">+40 XP</span></div>
+        </section>
+      </div>
+      <nav class="nav">
+        <button class="on"><i data-lucide="house" class="i"></i>Home</button>
+        <button><i data-lucide="chart-pie" class="i"></i>Budget</button>
+        <button class="add"><span class="c"><i data-lucide="plus" class="i"></i></span></button>
+        <button><i data-lucide="trophy" class="i"></i>Quests</button>
+        <button data-open-menu><i data-lucide="menu" class="i"></i>Menu</button>
+      </nav>
+      <div class="backdrop" data-close-menu></div>
+      <div class="sheet" id="sheetHome"></div>
+    </div>
+    <small>A huge balance, a thin month line under it, four round actions, then sections with large titles. No cards anywhere.</small>
+  </div>
+
+  <div class="col">
+    <h2>Menu</h2>
+    <div class="phone open">
+      <div class="status"><span>9:41</span><span>●●● 100%</span></div>
+      <div class="scroll"><div class="k">Available to spend</div><div class="hero num">$13,177.46</div></div>
+      <nav class="nav"><button><i data-lucide="house" class="i"></i>Home</button><button><i data-lucide="chart-pie" class="i"></i>Budget</button><button class="add"><span class="c"><i data-lucide="plus" class="i"></i></span></button><button><i data-lucide="trophy" class="i"></i>Quests</button><button class="on"><i data-lucide="menu" class="i"></i>Menu</button></nav>
+      <div class="backdrop"></div>
+      <div class="sheet" id="sheetStatic"></div>
+    </div>
+    <small>A tall sheet with a plain list: coloured icon, name, what's inside now, and an arrow. Grouped by headings, no tiles.</small>
+  </div>
+
+  <div class="col">
+    <h2>Budget</h2>
+    <div class="phone">
+      <div class="status"><span>9:41</span><span>●●● 100%</span></div>
+      <div class="scroll">
+        <div class="ptitle">Budget <span class="mon"><button aria-label="Previous month"><i data-lucide="chevron-left" class="i"></i></button>October<button aria-label="Next month"><i data-lucide="chevron-right" class="i"></i></button></span></div>
+        <div class="bigdonut"><svg width="240" height="240" id="bigDonut"></svg><div class="center"><span>Spent</span><b class="num" id="bdVal"></b><span id="bdLbl"></span></div></div>
+        <div class="cats" id="bigCats"></div>
+        <section>
+          <div class="sh"><h3>Limits</h3><span class="k" style="font-size:12.5px">| = on pace</span></div>
+          <div class="lim"><div class="t">Overall <em class="num">$716 left</em></div><div class="lb"><i style="width:72%;background:var(--warn-fill)"></i><span class="pm" style="left:48%"></span></div><small>Monthly · $1,884 of $2,600 · ahead of pace</small></div>
+          <div class="lim"><div class="t">Fun <em class="num">$33 left</em></div><div class="lb"><i style="width:67%;background:var(--c5)"></i><span class="pm" style="left:48%"></span></div><small>Monthly · $67 of $100</small></div>
+          <div class="lim"><div class="t">Food <em class="num">$73 left</em></div><div class="lb"><i style="width:39%;background:var(--c3)"></i><span class="pm" style="left:57%"></span></div><small>Weekly · $47 of $120 · under pace</small></div>
+          <button class="link"><i data-lucide="plus" class="i"></i>Add a limit</button>
+        </section>
+      </div>
+      <nav class="nav"><button><i data-lucide="house" class="i"></i>Home</button><button class="on"><i data-lucide="chart-pie" class="i"></i>Budget</button><button class="add"><span class="c"><i data-lucide="plus" class="i"></i></span></button><button><i data-lucide="trophy" class="i"></i>Quests</button><button><i data-lucide="menu" class="i"></i>Menu</button></nav>
+    </div>
+    <small>A big donut you can tap, the categories as a plain list, and limits as lines with a pace mark.</small>
+  </div>
+</div>
+
+<div class="notes">
+  <div class="note"><b>Calm, not compact</b><p>Big type and generous space between sections, so it isn't cramped. The section titles are the signposts.</p></div>
+  <div class="note"><b>Still easy to tap</b><p>The actions are 56px circles with words under them, and the bottom bar is flat with labels and a round +.</p></div>
+  <div class="note"><b>Trade-off</b><p>Without cards, sections lean on headings and space to separate them. It's the most minimal of the three, and a little less "app-like".</p></div>
+</div>
+
+<script>
+const CATS = [
+  { n: 'Rent', v: 1200.00, c: 'var(--c1)' }, { n: 'Shopping', v: 220.90, c: 'var(--c2)' }, { n: 'Food', v: 154.72, c: 'var(--c3)' },
+  { n: 'Utilities', v: 134.52, c: 'var(--c4)' }, { n: 'Health', v: 68.69, c: 'var(--c5)' }, { n: 'Other', v: 105.53, c: 'var(--c6)' },
+];
+const WEEK = [{ n: 'Food', v: 47.25, c: 'var(--c3)' }, { n: 'Fun', v: 32.40, c: 'var(--c5)' }, { n: 'Shopping', v: 29.99, c: 'var(--c2)' }, { n: 'Transport', v: 14.30, c: 'var(--c1)' }, { n: 'Other', v: 9.78, c: 'var(--c6)' }];
+const DAYS = [['Fri', 24.10], ['Sat', 88.45], ['Sun', 12.00], ['Mon', 31.20], ['Tue', 0], ['Wed', 54.03], ['Thu', 48.49]];
+const fmt = (v, d = 2) => '$' + v.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
+function donut(svg, data, size, stroke, onPick) {
+  const r = (size - stroke) / 2, C = 2 * Math.PI * r, total = data.reduce((s, d) => s + d.v, 0), gap = 3; let off = 0;
+  svg.innerHTML = `<circle cx="${size/2}" cy="${size/2}" r="${r}" fill="none" stroke="var(--track)" stroke-width="${stroke}"/>`;
+  data.forEach((d, k) => {
+    const len = Math.max(0, (d.v / total) * C - gap), el = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    Object.entries({ cx: size/2, cy: size/2, r, fill: 'none', stroke: d.c, 'stroke-width': stroke, 'stroke-dasharray': `${len} ${C - len}`, 'stroke-dashoffset': -off }).forEach(([a, b]) => el.setAttribute(a, b));
+    el.style.cursor = 'pointer'; el.style.transition = 'opacity .15s'; el.addEventListener('click', () => onPick(k)); svg.appendChild(el); off += (d.v / total) * C;
+  });
+  return { total, pick(k) { [...svg.querySelectorAll('circle')].slice(1).forEach((c, j) => { c.style.opacity = k === null || k === j ? 1 : .25; }); } };
+}
+function mount(svgId, catsId, valId, lblId, size, stroke, getData, idle) {
+  const svg = document.getElementById(svgId), cats = document.getElementById(catsId); let picked = null, d, data;
+  function pick(k) {
+    picked = picked === k ? null : k; d.pick(picked);
+    cats.querySelectorAll('.cat').forEach((b, j) => b.classList.toggle('on', j === picked));
+    const [v, l] = picked === null ? idle(d.total) : [fmt(data[picked].v), `${data[picked].n} · ${Math.round(data[picked].v / d.total * 100)}%`];
+    document.getElementById(valId).textContent = v; document.getElementById(lblId).textContent = l;
+  }
+  const render = () => {
+    data = getData(); picked = null; d = donut(svg, data, size, stroke, pick);
+    cats.innerHTML = data.map((c, k) => `<button class="cat" data-k="${k}"><i class="dot" style="background:${c.c}"></i><span class="n">${c.n}</span><span class="v num">${fmt(c.v, 0)}</span></button>`).join('');
+    cats.querySelectorAll('.cat').forEach((b) => b.addEventListener('click', () => pick(+b.dataset.k)));
+    picked = -1; pick(null);
+  };
+  render(); return render;
+}
+let range = 'month';
+const rr = mount('donut', 'cats', 'dcVal', 'dcLbl', 150, 18, () => (range === 'month' ? CATS : WEEK), (t) => [fmt(t, 0), range === 'month' ? 'October' : 'This week']);
+document.querySelectorAll('#rangeTabs button').forEach((b) => b.addEventListener('click', () => { range = b.dataset.r; document.querySelectorAll('#rangeTabs button').forEach((x) => x.setAttribute('aria-pressed', x === b)); rr(); }));
+mount('bigDonut', 'bigCats', 'bdVal', 'bdLbl', 240, 22, () => CATS, (t) => [fmt(t), 'of $2,600 · 72%']);
+const bars = document.getElementById('bars'), max = Math.max(...DAYS.map((d) => d[1]));
+bars.innerHTML = DAYS.map(([d, v], k) => `<button class="bar${k === 6 ? ' today' : ''}" data-k="${k}"><i style="height:${Math.max(6, (v / max) * 100)}px"></i>${k === 6 ? 'Today' : d}</button>`).join('');
+bars.querySelectorAll('.bar').forEach((b) => b.addEventListener('click', () => {
+  bars.querySelectorAll('.bar').forEach((x) => x.classList.toggle('on', x === b)); const [d, v] = DAYS[+b.dataset.k];
+  document.getElementById('barTip').innerHTML = v === 0 ? `<b>${d}</b> · nothing spent` : `<b>${d}</b> · spent <b class="num">${fmt(v)}</b>`;
+}));
+document.getElementById('rings').innerHTML = [['Overall', 72, '$716 left', 'var(--warn-fill)'], ['Fun', 67, '$33 left', 'var(--c5)'], ['Food', 39, '$73 left', 'var(--c3)']].map(([n, p, l, c]) => {
+  const C = 2 * Math.PI * 37;
+  return `<div class="ringc"><div class="r"><svg width="86" height="86"><circle cx="43" cy="43" r="37" fill="none" stroke="var(--track)" stroke-width="7"/><circle cx="43" cy="43" r="37" fill="none" stroke="${c}" stroke-width="7" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${C * (1 - p / 100)}"/></svg><b>${p}%</b></div><div class="nm">${n}</div><div class="lf num">${l}</div></div>`;
+}).join('');
+const pts = [12907, 12950, 12920, 12988, 13012, 12995, 13040, 13080, 13060, 13110, 13090, 13130, 13150, 13120, 13180, 13219];
+const mn = Math.min(...pts), mx = Math.max(...pts);
+document.getElementById('spark').setAttribute('d', pts.map((p, k) => `${k ? 'L' : 'M'}${((k / (pts.length - 1)) * 300).toFixed(1)},${(64 - ((p - mn) / (mx - mn)) * 58).toFixed(1)}`).join(' '));
+document.querySelectorAll('#monthline i').forEach((i) => i.addEventListener('click', () => { document.querySelector('.monthkeys div').innerHTML = `<b>${i.dataset.t.split(' · ')[1]}</b>${i.dataset.t.split(' · ')[0].toLowerCase()}`; }));
+const M = (ic, bg, t, s, soon) => `<button class="mrow"><span class="ci" style="background:${bg}"><i data-lucide="${ic}" class="i"></i></span><span class="w"><b>${t}</b><span>${s}</span></span>${soon ? '<span class="soon">Soon</span>' : '<i data-lucide="chevron-right" class="chev"></i>'}</button>`;
+const SHEET = `<div class="grab"></div>
+  <h4>Your money</h4>${M('repeat', 'var(--c1)', 'Subscriptions', '3 active · $45 a month')}${M('target', 'var(--c3)', 'Goals', '2 goals · 33% saved')}${M('clock', 'var(--c2)', 'History', 'Every entry, searchable')}${M('snowflake', '#5b8def', 'Salary freeze', 'None right now')}
+  <h4>Coming next</h4>${M('trending-up', 'var(--c4)', 'Invest', 'Stocks and ETFs', 1)}${M('shopping-bag', 'var(--c5)', 'Buy it?', 'Ask before you spend', 1)}${M('coins', '#8a63d2', 'Dividends', 'Passive income', 1)}${M('newspaper', '#6b7080', 'News', 'For what you hold', 1)}
+  <h4>You</h4>${M('store', 'var(--xp)', 'Shop', '130 coins to spend')}${M('inbox', '#0e9aa7', 'Inbox', 'Nothing new')}${M('circle-help', '#e0567a', 'Help', 'How everything works')}${M('settings', '#6b7080', 'Settings', 'Lock, backups, reminders')}`;
+document.getElementById('sheetHome').innerHTML = SHEET; document.getElementById('sheetStatic').innerHTML = SHEET;
+const home = document.getElementById('home');
+home.querySelector('[data-open-menu]').addEventListener('click', () => home.classList.add('open'));
+home.querySelector('[data-close-menu]').addEventListener('click', () => home.classList.remove('open'));
+document.querySelectorAll('[data-theme-btn]').forEach((b) => b.addEventListener('click', () => { document.documentElement.dataset.theme = b.dataset.themeBtn; document.querySelectorAll('[data-theme-btn]').forEach((x) => x.setAttribute('aria-pressed', x === b)); }));
+lucide.createIcons();
+</script>
+</body>
+</html>

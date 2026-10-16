@@ -4,7 +4,9 @@ import {
   formatDate,
   formatDay,
   formatMonth,
+  formatMonthShort,
   formatMonthYear,
+  formatWeekday,
   ordinal,
   relativeDays,
 } from './format';
@@ -16,6 +18,13 @@ describe('date display', () => {
     expect(formatMonth('2026-10', 'en-US')).toBe('October');
     expect(formatDate('2027-02-14', 'en-US')).toBe('Feb 14, 2027');
     expect(formatMonthYear('2026-10', 'en-US')).toBe('October 2026');
+  });
+
+  it('names the weekday and the month in capitals for chart labels', () => {
+    expect(formatWeekday('2026-10-15', 'en-US')).toBe('Thu');
+    expect(formatWeekday('2026-10-18', 'en-US')).toBe('Sun');
+    expect(formatMonthShort('2026-10-15', 'en-US')).toBe('OCT');
+    expect(formatMonthShort('2026-01-01', 'en-US')).toBe('JAN');
   });
 
   it('writes day numbers as ordinals', () => {

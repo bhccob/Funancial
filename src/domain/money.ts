@@ -68,16 +68,23 @@ export function parseMoney(input: string, currency: string): number | null {
   return Number.isSafeInteger(minor) && minor <= MAX_MINOR ? minor : null;
 }
 
+export type MoneyFormatOptions = {
+  signDisplay?: 'auto' | 'always' | 'exceptZero';
+  /** Drop the minor units ("$1,884"), for compact labels. */
+  whole?: boolean;
+};
+
 export function formatMoney(
   minor: number,
   currency: string,
   locale?: string,
-  opts: { signDisplay?: 'auto' | 'always' | 'exceptZero' } = {},
+  opts: MoneyFormatOptions = {},
 ): string {
   return new Intl.NumberFormat(locale, {
     style: 'currency',
     currency,
     signDisplay: opts.signDisplay ?? 'auto',
+    ...(opts.whole ? { minimumFractionDigits: 0, maximumFractionDigits: 0 } : {}),
   }).format(minor / 10 ** minorDigits(currency));
 }
 

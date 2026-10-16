@@ -372,7 +372,7 @@ export function OnboardingWizard() {
   }
 
   return (
-    <main className="mx-auto flex min-h-dvh w-full max-w-lg flex-col px-4 py-8 md:py-16">
+    <main className="mx-auto flex min-h-dvh w-full max-w-lg flex-col px-[22px] py-8 md:py-16">
       <div className="flex items-center justify-between gap-3">
         <p className="text-lg font-extrabold tracking-tight">
           Fun<span className="text-accent-text">ancial</span>
@@ -390,7 +390,7 @@ export function OnboardingWizard() {
         <h1
           ref={heading}
           tabIndex={-1}
-          className="text-[28px] font-extrabold tracking-tight outline-none"
+          className="text-[34px] leading-tight font-extrabold tracking-[-0.035em] outline-none"
         >
           {TITLES[step - 1]}
         </h1>

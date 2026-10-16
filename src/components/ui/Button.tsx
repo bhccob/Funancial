@@ -12,8 +12,7 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 const base =
   'inline-flex items-center justify-center gap-1.5 rounded-full font-bold whitespace-nowrap select-none ' +
-  'transition-[transform,background-color,opacity] duration-100 active:scale-[0.98] ' +
-  'motion-reduce:transition-none motion-reduce:active:scale-100 ' +
+  'motion-safe:transition-[transform,background-color,opacity] motion-safe:duration-100 motion-safe:active:scale-[0.98] ' +
   'disabled:pointer-events-none disabled:opacity-45';
 
 const variants: Record<ButtonVariant, string> = {
@@ -25,9 +24,9 @@ const variants: Record<ButtonVariant, string> = {
 };
 
 const sizes: Record<ButtonSize, string> = {
-  sm: 'h-9 px-3 text-sm',
-  md: 'h-11 px-5 text-[15px]',
-  lg: 'h-13 px-6 text-base',
+  sm: 'h-11 px-4 text-sm',
+  md: 'h-12 px-5 text-[15px]',
+  lg: 'h-14 px-6 text-base',
 };
 
 export function Button({

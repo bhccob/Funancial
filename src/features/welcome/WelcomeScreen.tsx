@@ -17,7 +17,7 @@ export function WelcomeScreen() {
   };
 
   return (
-    <main className="grid min-h-dvh place-items-center px-4 py-10">
+    <main className="grid min-h-dvh place-items-center px-[22px] py-10">
       <Card className="flex w-full max-w-md flex-col items-center gap-6 p-8 text-center">
         <div className="flex flex-col gap-2">
           <h1 className="text-5xl font-extrabold tracking-tight">

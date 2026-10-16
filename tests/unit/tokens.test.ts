@@ -8,6 +8,11 @@ it('defines the Pro Ledger tokens', () => {
   expect(css).toContain('--color-overlay: #ffffff');
 });
 
+it('defines the Other chart colour', () => {
+  expect(css).toContain('--color-chart-other: #868b96');
+  expect(css).toContain('--color-chart-other: #6b7080');
+});
+
 it('no longer ships the pixel look', () => {
   expect(css).not.toMatch(/pixelify/i);
   expect(css).not.toContain('--color-texture');
@@ -82,4 +87,11 @@ it('keeps every game theme readable on the page, on its chip and on the progress
       expect(contrast(xp, base['--color-track']!)).toBeGreaterThanOrEqual(4.6);
     }
   }
+});
+
+it('keeps the Other chart colour at 3:1 or better against the page, light and dark', () => {
+  const light = declarations('@theme static');
+  const dark = declarations(":root[data-theme='dark']");
+  expect(contrast(light['--color-chart-other']!, light['--color-bg']!)).toBeGreaterThanOrEqual(3);
+  expect(contrast(dark['--color-chart-other']!, dark['--color-bg']!)).toBeGreaterThanOrEqual(3);
 });
