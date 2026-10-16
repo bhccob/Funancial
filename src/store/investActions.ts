@@ -1,10 +1,17 @@
 import type { StoreApi } from 'zustand/vanilla';
 import type { LocalDate } from '@/domain/dates';
 import type { ExpectedPayout } from '@/domain/dividends';
-import { defaultSettings, type Dividend, type Holding, type Transaction } from '@/domain/entities';
+import {
+  defaultSettings,
+  type Dividend,
+  type Holding,
+  type Sale,
+  type Transaction,
+} from '@/domain/entities';
 import { newId, nowIso } from '@/domain/ids';
 import { minorDigits } from '@/domain/money';
 import { holdingPrice, holdingRate } from '@/domain/portfolio';
+import { planSale, type SalePlan } from '@/domain/sales';
 import type { TableRecord } from '@/domain/snapshot';
 import { marketConfigured, type Market } from '@/services/market';
 import type { AppState } from './appStore';
@@ -58,6 +65,15 @@ export interface DividendInput {
   amount: number;
   paidOn: LocalDate;
   bucket: NonNullable<Dividend['bucket']>;
+}
+
+export interface SaleInput {
+  shares: number;
+  /** What one share sold for, in minor units of the profile currency; the proceeds round it once. */
+  pricePerShareMinor: number;
+  soldOn: LocalDate;
+  /** Where the money goes. */
+  to: Sale['to'];
 }
 
 export type InvestActions = ReturnType<typeof createInvestActions>;
@@ -160,6 +176,71 @@ export function createInvestActions(store: StoreApi<AppState>, market: Market) {
 
     /** Its dividend records and the transaction that paid for it stay: they are money that moved. */
     deleteHolding: (id: string) => state().remove('holding', id),
+
+    /**
+     * Sells shares of a holding, in one write. A partial sale leaves the holding with the shares and
+     * cost basis the sold ones did not carry. Selling every share removes the holding, and the sale
+     * keeps it as it was, so `undoSale` can bring it back. The proceeds count in the bucket they went
+     * to from the sale date (`bucketBalances`). Returns what the sale came to.
+     */
+    async sellHolding(id: string, input: SaleInput): Promise<SalePlan> {
+      notFuture(input.soldOn);
+      const holding = find(id);
+      const plan = planSale(holding, input.shares, input.pricePerShareMinor);
+      const sale: Sale = {
+        id: newId(),
+        ...stamp(),
+        holdingId: holding.id,
+        symbol: holding.symbol,
+        name: holding.name,
+        type: holding.type,
+        shares: plan.shares,
+        proceeds: plan.proceeds,
+        cost: plan.cost,
+        soldOn: input.soldOn,
+        to: input.to,
+        restore: plan.all ? holding : null,
+      };
+      const items: TableRecord[] = [{ table: 'sale', record: sale }];
+      if (!plan.all) {
+        items.push({
+          table: 'holding',
+          record: {
+            ...holding,
+            shares: holding.shares - plan.shares,
+            costBasis: holding.costBasis - plan.cost,
+            updatedAt: nowIso(),
+          },
+        });
+      }
+      await state().putMany(items, plan.all ? [{ table: 'holding', id }] : []);
+      return plan;
+    },
+
+    /**
+     * Takes a sale back, in one write: its shares and cost go back to the holding if it is still held,
+     * else the holding a full sale removed comes back as it was. A sale whose holding was deleted
+     * since, with nothing stored to restore, cannot be undone.
+     */
+    async undoSale(id: string) {
+      const sale = state().data.tables.sale.find((s) => s.id === id);
+      if (!sale) throw new Error('That item no longer exists.');
+      const holding = holdings().find((h) => h.id === sale.holdingId);
+      let back: Holding;
+      if (holding) {
+        back = {
+          ...holding,
+          shares: holding.shares + sale.shares,
+          costBasis: holding.costBasis + sale.cost,
+          updatedAt: nowIso(),
+        };
+      } else if (sale.restore) {
+        back = sale.restore;
+      } else {
+        throw new Error("This sale can't be undone because its holding is gone.");
+      }
+      await state().putMany([{ table: 'holding', record: back }], [{ table: 'sale', id }]);
+    },
 
     /**
      * Fetches quotes, exchange rates and stale dividend info, and saves them in one write, with the

@@ -825,3 +825,154 @@ describe('dividend payouts', () => {
     expect(balances()).toEqual(before);
   });
 });
+
+describe('selling a holding', () => {
+  const sell = { shares: 4, pricePerShareMinor: 60_00, soldOn: '2026-10-10', to: 'cash' as const };
+
+  /** Ten KO shares that cost 500.00, priced at the last quote. */
+  async function withHolding(over: Partial<Holding> = {}) {
+    const t = await setup();
+    const h = makeHolding({
+      shares: 10,
+      costBasis: 500_00,
+      purchaseDate: '2026-10-01',
+      quote: { price: 60, previousClose: 59, fxRate: 1, asOf: ASOF },
+      ...over,
+    });
+    await t.store.getState().put('holding', h);
+    return { ...t, h };
+  }
+
+  it('a partial sale lowers the shares and the cost, and writes one sale, in one write', async () => {
+    const { actions, store, tables, holding, balances, h } = await withHolding();
+    const before = balances();
+    const putMany = vi.spyOn(store.getState(), 'putMany');
+
+    const plan = await actions.sellHolding(h.id, sell);
+
+    expect(putMany).toHaveBeenCalledOnce();
+    expect(plan).toEqual({ shares: 4, proceeds: 240_00, cost: 200_00, profit: 40_00, all: false });
+    expect(holding(h.id)).toMatchObject({ shares: 6, costBasis: 300_00 });
+    expect(tables().sale).toMatchObject([
+      {
+        holdingId: h.id,
+        symbol: 'KO',
+        name: 'Coca-Cola',
+        type: 'stock',
+        shares: 4,
+        proceeds: 240_00,
+        cost: 200_00,
+        soldOn: '2026-10-10',
+        to: 'cash',
+        restore: null,
+      },
+    ]);
+    expect(balances()).toEqual({ ...before, cash: before.cash + 240_00 });
+  });
+
+  it('puts the proceeds into savings when asked', async () => {
+    const { actions, balances, h } = await withHolding();
+    const before = balances();
+    await actions.sellHolding(h.id, { ...sell, to: 'savings' });
+    expect(balances()).toEqual({ ...before, savings: before.savings + 240_00 });
+  });
+
+  it('a full sale removes the holding and keeps it on the sale as it was', async () => {
+    const { actions, store, tables, h } = await withHolding();
+    const was = tables().holding[0]!;
+    const putMany = vi.spyOn(store.getState(), 'putMany');
+
+    const plan = await actions.sellHolding(h.id, { ...sell, shares: 10 });
+
+    expect(putMany).toHaveBeenCalledOnce();
+    expect(plan).toEqual({ shares: 10, proceeds: 600_00, cost: 500_00, profit: 100_00, all: true });
+    expect(tables().holding).toEqual([]);
+    expect(tables().sale).toHaveLength(1);
+    expect(tables().sale[0]).toMatchObject({ shares: 10, cost: 500_00, restore: was });
+  });
+
+  it('keeps the dividends and the purchase of a holding that was sold', async () => {
+    const { actions, store, tables, h } = await withHolding();
+    await store.getState().putMany([
+      { table: 'dividend', record: makeDividend({ holdingId: h.id }) },
+      { table: 'transaction', record: makeTransaction({ type: 'investment', to: null }) },
+    ]);
+    await actions.sellHolding(h.id, { ...sell, shares: 10 });
+    expect(tables().dividend).toHaveLength(1);
+    expect(tables().transaction).toHaveLength(1);
+  });
+
+  it('refuses a future date, too many shares and a holding that is gone, writing nothing', async () => {
+    const { actions, tables, holding, h } = await withHolding();
+    const kept = holding(h.id);
+    await expect(actions.sellHolding(h.id, { ...sell, soldOn: '2026-10-15' })).rejects.toThrow(
+      'Use today or an earlier date.',
+    );
+    await expect(actions.sellHolding(h.id, { ...sell, shares: 11 })).rejects.toThrow(
+      'You only have 10 shares.',
+    );
+    await expect(actions.sellHolding(h.id, { ...sell, shares: 0 })).rejects.toThrow(
+      'Sell at least a part of a share.',
+    );
+    await expect(actions.sellHolding('nope', sell)).rejects.toThrow('That item no longer exists.');
+    expect(tables().sale).toEqual([]);
+    expect(holding(h.id)).toEqual(kept);
+  });
+
+  describe('undoing a sale', () => {
+    it('gives a partial sale its shares and cost back, and removes the record, in one write', async () => {
+      const { actions, store, tables, holding, balances, h } = await withHolding();
+      const before = balances();
+      await actions.sellHolding(h.id, sell);
+      const putMany = vi.spyOn(store.getState(), 'putMany');
+
+      await actions.undoSale(tables().sale[0]!.id);
+
+      expect(putMany).toHaveBeenCalledOnce();
+      expect(tables().sale).toEqual([]);
+      expect(holding(h.id)).toMatchObject({ shares: 10, costBasis: 500_00 });
+      expect(balances()).toEqual(before);
+    });
+
+    it('adds to the holding as it is now, not as it was', async () => {
+      const { actions, tables, holding, h } = await withHolding();
+      await actions.sellHolding(h.id, sell);
+      await actions.updateHolding(h.id, { shares: 8, costBasis: 400_00 });
+      await actions.undoSale(tables().sale[0]!.id);
+      expect(holding(h.id)).toMatchObject({ shares: 12, costBasis: 600_00 });
+    });
+
+    it('puts a fully sold holding back exactly as it was', async () => {
+      const { actions, store, tables, holding, balances, h } = await withHolding();
+      const before = balances();
+      const was = holding(h.id);
+      await actions.sellHolding(h.id, { ...sell, shares: 10 });
+      const putMany = vi.spyOn(store.getState(), 'putMany');
+
+      await actions.undoSale(tables().sale[0]!.id);
+
+      expect(putMany).toHaveBeenCalledOnce();
+      expect(tables().sale).toEqual([]);
+      expect(tables().holding).toEqual([was]);
+      expect(balances()).toEqual(before);
+    });
+
+    it('refuses when the holding is gone and the sale has nothing to restore', async () => {
+      const { actions, tables, h } = await withHolding();
+      await actions.sellHolding(h.id, sell);
+      await actions.deleteHolding(h.id);
+      const [sale] = tables().sale;
+
+      await expect(actions.undoSale(sale!.id)).rejects.toThrow(
+        "This sale can't be undone because its holding is gone.",
+      );
+      expect(tables().sale).toEqual([sale]);
+      expect(tables().holding).toEqual([]);
+    });
+
+    it('refuses a sale that is not there', async () => {
+      const { actions } = await withHolding();
+      await expect(actions.undoSale('nope')).rejects.toThrow('That item no longer exists.');
+    });
+  });
+});
