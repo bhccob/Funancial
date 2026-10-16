@@ -159,6 +159,29 @@ describe('Donut', () => {
   });
 });
 
+describe('Donut centre figure', () => {
+  const figure = () => screen.getByText('$1,875');
+
+  it('is 15px on a donut under 150px, where the hole is too narrow for an exact amount', () => {
+    donut({ size: 120, thickness: 14 });
+    expect(figure()).toHaveClass('text-[15px]');
+    expect(figure()).not.toHaveClass('text-[19px]');
+  });
+
+  it('keeps 19px at 150px (Home) and 28px from 200px (Budget)', () => {
+    const { unmount } = donut({ size: 150 });
+    expect(figure()).toHaveClass('text-[19px]');
+    unmount();
+    donut({ size: 240, thickness: 22 });
+    expect(figure()).toHaveClass('text-[28px]');
+  });
+
+  it('shows a chosen slice at the same size, with its exact amount', () => {
+    donut({ size: 120, thickness: 14, selected: 0 });
+    expect(screen.getByText('$1,200.00')).toHaveClass('text-[15px]');
+  });
+});
+
 describe('Donut percentages', () => {
   const shown = () => screen.queryAllByText(/^[0-9]+%$/).map((el) => el.textContent);
 
@@ -514,6 +537,51 @@ describe('PriceLine', () => {
     const paidY = Number(container.querySelector('line[stroke-dasharray]')!.getAttribute('y1'));
     expect(paidY).toBeGreaterThan(Math.max(...ys(container)));
     expect(paidY).toBeLessThanOrEqual(100);
+  });
+
+  describe('without scaling to the price paid', () => {
+    const dashed = (container: HTMLElement) => container.querySelector('line[stroke-dasharray]');
+
+    it('fits the chart to the closes alone, and keeps a paid line that falls among them', () => {
+      const { container } = line({ scaleToPaid: false, paid: 22000 });
+      // The lowest close is on the bottom of the drawing area and the highest on the top.
+      expect(Math.max(...ys(container))).toBe(88);
+      expect(Math.min(...ys(container))).toBe(18);
+      expect(dashed(container)).toBeInTheDocument();
+      expect(screen.getByText('You bought · $220.00')).toBeInTheDocument();
+    });
+
+    it('draws no line for a price paid below the closes, and says so at the bottom edge', () => {
+      const { container } = line({ scaleToPaid: false, paid: 10000 });
+      expect(Math.max(...ys(container))).toBe(88);
+      expect(dashed(container)).not.toBeInTheDocument();
+      const edge = screen.getByText('You bought · $100.00 ↓');
+      expect(edge).toHaveClass('bottom-0');
+      expect(edge.style.top).toBe('');
+    });
+
+    it('draws no line for a price paid above the closes, and says so at the top edge', () => {
+      const { container } = line({ scaleToPaid: false, paid: 30000 });
+      expect(Math.min(...ys(container))).toBe(18);
+      expect(dashed(container)).not.toBeInTheDocument();
+      expect(screen.getByText('You bought · $300.00 ↑')).toHaveClass('top-0');
+    });
+
+    it('keeps a price paid at the highest close on the line', () => {
+      const { container } = line({ scaleToPaid: false, paid: 24076 });
+      expect(dashed(container)).toBeInTheDocument();
+      expect(screen.getByText('You bought · $240.76')).toBeInTheDocument();
+    });
+
+    it('draws a flat series without NaN, with the paid line at the edge it differs on', () => {
+      const { container } = line({
+        scaleToPaid: false,
+        points: points.map((p) => ({ ...p, value: 100 })),
+        paid: 50,
+      });
+      expect(container.innerHTML).not.toContain('NaN');
+      expect(screen.getByText('You bought · $0.50 ↓')).toBeInTheDocument();
+    });
   });
 
   it('draws a flat line without NaN when nothing moved', () => {

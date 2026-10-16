@@ -64,6 +64,8 @@ export function Donut({
 
   const toggle = (i: number) => onSelect(i === selected ? null : i);
   const big = size >= 200;
+  // The hole of a small donut (92px at 120) is too narrow for an exact amount at 19px.
+  const small = size < 150;
   const focusedArc = focused !== null ? arcs[focused] : undefined;
 
   return (
@@ -147,7 +149,12 @@ export function Donut({
             {caption}
           </span>
         )}
-        <b className={cn('font-extrabold', big ? 'text-[28px]' : 'text-[19px]')}>
+        <b
+          className={cn(
+            'font-extrabold',
+            big ? 'text-[28px]' : small ? 'text-[15px]' : 'text-[19px]',
+          )}
+        >
           {chosen ? formatAmount(chosen.amount) : idle.value}
         </b>
         <span className={cn('text-muted font-bold', big ? 'text-[13px]' : 'text-xs')}>

@@ -12,6 +12,11 @@ export interface PriceLineProps {
   points: PricePoint[];
   /** What was paid for one share, in the same unit as the points; drawn as a dashed line. */
   paid: number;
+  /**
+   * Whether the chart's scale takes in `paid` (the default). Without it the scale fits the points
+   * alone, and a `paid` outside them is not drawn as a line but named at the edge it lies beyond.
+   */
+  scaleToPaid?: boolean;
   formatValue(value: number): string;
   formatDate(date: string): string;
   /** Read out by screen readers in place of the chart. */
@@ -27,12 +32,21 @@ const BOTTOM = 12;
  * hovering the chart reads out a close's day and price; a keyboard walks the closes with the arrows.
  * The drawing stretches to its box, so only the text (labels, read-out) is outside the SVG.
  */
-export function PriceLine({ points, paid, formatValue, formatDate, label }: PriceLineProps) {
+export function PriceLine({
+  points,
+  paid,
+  scaleToPaid = true,
+  formatValue,
+  formatDate,
+  label,
+}: PriceLineProps) {
   const [active, setActive] = useState<number | null>(null);
   const last = points.length - 1;
   const values = points.map((p) => p.value);
-  const low = Math.min(...values, paid);
-  const span = Math.max(...values, paid) - low;
+  const scale = scaleToPaid ? [...values, paid] : values;
+  const [low, high] = [Math.min(...scale), Math.max(...scale)];
+  const span = high - low;
+  const paidInView = paid >= low && paid <= high;
   const round = (n: number) => Math.round(n * 100) / 100;
   // Percent of the box from the top; a flat series sits in the middle.
   const yOf = (value: number) =>
@@ -78,16 +92,18 @@ export function PriceLine({ points, paid, formatValue, formatDate, label }: Pric
           preserveAspectRatio="none"
           className="overflow-visible"
         >
-          <line
-            x1={0}
-            x2={100}
-            y1={paidY}
-            y2={paidY}
-            stroke="var(--color-text-muted)"
-            strokeWidth={1.5}
-            strokeDasharray="4 4"
-            vectorEffect="non-scaling-stroke"
-          />
+          {paidInView && (
+            <line
+              x1={0}
+              x2={100}
+              y1={paidY}
+              y2={paidY}
+              stroke="var(--color-text-muted)"
+              strokeWidth={1.5}
+              strokeDasharray="4 4"
+              vectorEffect="non-scaling-stroke"
+            />
+          )}
           <path
             d={path}
             fill="none"
@@ -128,11 +144,14 @@ export function PriceLine({ points, paid, formatValue, formatDate, label }: Pric
           className={cn(
             'text-muted absolute left-0 text-xs font-bold',
             // On the side of the dashed line the chart does not start on, so it stays off the line.
-            values[0]! >= paid ? 'translate-y-1.5' : '-translate-y-[calc(100%+6px)]',
+            paidInView &&
+              (values[0]! >= paid ? 'translate-y-1.5' : '-translate-y-[calc(100%+6px)]'),
+            // Out of view, the arrow points to where the line would be: past the top or the bottom.
+            !paidInView && (paid < low ? 'bottom-0' : 'top-0'),
           )}
-          style={{ top: `${paidY}%` }}
+          style={paidInView ? { top: `${paidY}%` } : undefined}
         >
-          {`You bought · ${formatValue(paid)}`}
+          {`You bought · ${formatValue(paid)}${paidInView ? '' : paid < low ? ' ↓' : ' ↑'}`}
         </span>
         <span
           aria-hidden="true"

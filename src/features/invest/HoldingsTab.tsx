@@ -99,7 +99,7 @@ function PieBlock({
         <Donut
           slices={slices}
           size={120}
-          thickness={14}
+          thickness={12}
           showPercent
           formatAmount={(minor) => money(minor)}
           idle={{ value: whole(total), label }}
