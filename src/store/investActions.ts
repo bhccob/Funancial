@@ -1,7 +1,7 @@
 import type { StoreApi } from 'zustand/vanilla';
 import type { LocalDate } from '@/domain/dates';
 import type { ExpectedPayout } from '@/domain/dividends';
-import type { Dividend, Holding, Transaction } from '@/domain/entities';
+import { defaultSettings, type Dividend, type Holding, type Transaction } from '@/domain/entities';
 import { newId, nowIso } from '@/domain/ids';
 import { minorDigits } from '@/domain/money';
 import { holdingPrice, holdingRate } from '@/domain/portfolio';
@@ -98,7 +98,7 @@ export function createInvestActions(store: StoreApi<AppState>, market: Market) {
     ...outcome,
   });
 
-  return {
+  const actions = {
     async addHolding(input: HoldingInput): Promise<Holding> {
       notFuture(input.purchaseDate);
       const symbol = input.symbol.trim().toUpperCase();
@@ -162,8 +162,9 @@ export function createInvestActions(store: StoreApi<AppState>, market: Market) {
     deleteHolding: (id: string) => state().remove('holding', id),
 
     /**
-     * Fetches quotes, exchange rates and stale dividend info, and saves them in one write. A holding
-     * the service has nothing new for keeps its last values. It never throws: `failed` is the
+     * Fetches quotes, exchange rates and stale dividend info, and saves them in one write, with the
+     * rate Invest is shown at when a currency is chosen for it. A holding the service has nothing
+     * new for keeps its last values, and so does the Invest rate. It never throws: `failed` is the
      * quotes not arriving (or not saving), or the profile currency changing meanwhile, and then
      * nothing is written.
      */
@@ -172,7 +173,10 @@ export function createInvestActions(store: StoreApi<AppState>, market: Market) {
       try {
         const home = profileCurrency();
         const asked = holdings();
-        if (asked.length === 0) return 'ok';
+        // The currency Invest is shown in, when it is not the profile's: its rate is fetched too.
+        const chosen = state().data.tables.settings[0]?.investCurrency;
+        const shownIn = chosen && chosen !== home ? chosen : null;
+        if (asked.length === 0 && !shownIn) return 'ok';
         const symbols = [...new Set(asked.map((h) => h.symbol))];
         const stale = asked.filter(
           (h) =>
@@ -182,14 +186,16 @@ export function createInvestActions(store: StoreApi<AppState>, market: Market) {
         // A rate or a dividend history the service cannot give only goes missing; quotes are the check.
         const orNull = <T>(call: Promise<T>) => call.catch(() => null);
         const asking = Promise.all(stale.map((h) => orNull(market.fetchDividends(h.symbol))));
-        const quotes = await market.fetchQuotes(symbols);
+        const investAsk = shownIn ? orNull(market.fetchFx(home, shownIn)) : null;
+        const quotes = symbols.length > 0 ? await market.fetchQuotes(symbols) : { quotes: [] };
         // Yahoo is authoritative for a listed symbol's currency, so the rates follow the quotes'.
         const currencies = [...new Set(quotes.quotes.map((q) => q.currency))].filter(
           (c) => c !== home && CURRENCY.test(c),
         );
-        const [rates, dividends] = await Promise.all([
+        const [rates, dividends, investFx] = await Promise.all([
           Promise.all(currencies.map((c) => orNull(market.fetchFx(c, home)))),
           asking,
+          investAsk,
         ]);
         const quoteOf = new Map(quotes.quotes.map((q) => [q.symbol.toUpperCase(), q]));
         const rateOf = new Map(currencies.map((c, i) => [c, rates[i]?.rate]));
@@ -228,6 +234,15 @@ export function createInvestActions(store: StoreApi<AppState>, market: Market) {
             updatedAt: at,
           };
           updated.push({ table: 'holding', record });
+        }
+        // Only while Invest is still shown in the currency the rate was asked for.
+        const settings = state().data.tables.settings[0];
+        if (investFx && shownIn && settings?.investCurrency === shownIn) {
+          const next = { currency: shownIn, rate: investFx.rate, asOf: investFx.asOf };
+          updated.push({
+            table: 'settings',
+            record: { ...settings, investFx: next, updatedAt: at },
+          });
         }
         // The rates are for `home`; a currency switched meanwhile would store them for the wrong one.
         if (profileCurrency() !== home) return 'failed';
@@ -319,5 +334,23 @@ export function createInvestActions(store: StoreApi<AppState>, market: Market) {
       const at = nowIso();
       await state().put('holding', { ...find(id), checkedAt: at, updatedAt: at });
     },
+
+    /**
+     * Chooses the currency Invest is shown in; the profile currency, or null, is the way back. A
+     * rate for another currency is dropped, and the new one is fetched straight away.
+     */
+    async setInvestCurrency(code: string | null): Promise<void> {
+      const settings = state().data.tables.settings[0] ?? defaultSettings(nowIso());
+      const investCurrency = code === profileCurrency() ? null : code;
+      const keep = investCurrency !== null && settings.investFx?.currency === investCurrency;
+      await state().put('settings', {
+        ...settings,
+        investCurrency,
+        investFx: keep ? settings.investFx : null,
+        updatedAt: nowIso(),
+      });
+      if (investCurrency !== null && !keep) await actions.refreshMarket();
+    },
   };
+  return actions;
 }

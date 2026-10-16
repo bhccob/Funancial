@@ -1,23 +1,29 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
+import type { Settings } from '@/domain/entities';
+import { formatMoney } from '@/domain/money';
 import { emptySnapshot } from '@/domain/snapshot';
 import { PlatformProvider } from '@/platform/PlatformProvider';
 import { market, MarketError, type Market } from '@/services/market';
 import { createStubStore } from '@/test/appStoreStub';
 import { fakeAppLifecycle } from '@/test/fakeAppLifecycle';
-import { makeHolding, makeProfile } from '@/test/fixtures';
+import { makeHolding, makeProfile, makeSettings } from '@/test/fixtures';
 import { AppStoreProvider } from './AppStoreProvider';
-import { useInvestActions, useMarketRefresh, usePortfolio } from './useInvest';
+import { useInvestActions, useInvestMoney, useMarketRefresh, usePortfolio } from './useInvest';
 
 const NOW = new Date('2026-10-14T12:00:00.000Z');
 const minutesAgo = (m: number) => new Date(NOW.getTime() - m * 60_000).toISOString();
 const quote = (asOf: string) => ({ price: 100, previousClose: 98, fxRate: 1, asOf });
 
-function setup(holdings = [makeHolding({ currency: 'EUR', quote: quote(minutesAgo(20)) })]) {
+function setup(
+  holdings = [makeHolding({ currency: 'EUR', quote: quote(minutesAgo(20)) })],
+  settings: Partial<Settings> | null = null,
+) {
   const data = emptySnapshot();
   data.tables.profile = [makeProfile({ currency: 'EUR' })];
   data.tables.holding = holdings;
+  if (settings) data.tables.settings = [makeSettings(settings)];
   const store = createStubStore({ data });
   const native = fakeAppLifecycle();
   const wrapper = ({ children }: { children: ReactNode }) => (
@@ -73,6 +79,68 @@ describe('usePortfolio', () => {
   });
 });
 
+const dollars = { currency: 'USD', rate: 1.1, asOf: minutesAgo(5) };
+
+describe('useInvestMoney', () => {
+  const render = (settings: Partial<Settings> | null) => {
+    const { wrapper } = setup(undefined, settings);
+    return renderHook(() => useInvestMoney(), { wrapper });
+  };
+
+  it('writes profile-currency minor units in the currency chosen, converted at its rate', () => {
+    const { result } = render({ investCurrency: 'USD', investFx: dollars });
+    expect(result.current.currency).toBe('USD');
+    expect(result.current.format(100_00)).toBe(formatMoney(110_00, 'USD'));
+    expect(result.current.format(-100_00)).toBe(formatMoney(-110_00, 'USD'));
+    expect(result.current.format(1_234_00, { whole: true })).toBe(
+      formatMoney(1_357_40, 'USD', undefined, { whole: true }),
+    );
+    expect(result.current.format(10_00, { signDisplay: 'always' })).toBe(
+      formatMoney(11_00, 'USD', undefined, { signDisplay: 'always' }),
+    );
+  });
+
+  it('follows the decimals of the currency chosen', () => {
+    const { result } = render({
+      investCurrency: 'JPY',
+      investFx: { currency: 'JPY', rate: 160, asOf: dollars.asOf },
+    });
+    expect(result.current.currency).toBe('JPY');
+    expect(result.current.format(12_34)).toBe(formatMoney(1974, 'JPY'));
+  });
+
+  it('writes the profile currency, and says so, until the chosen currency has a rate', () => {
+    for (const investFx of [null, { ...dollars, currency: 'GBP' }]) {
+      const { result } = render({ investCurrency: 'USD', investFx });
+      expect(result.current.currency).toBe('EUR');
+      expect(result.current.format(100_00)).toBe(formatMoney(100_00, 'EUR'));
+    }
+  });
+
+  it('writes the profile currency when none was chosen, or the profile currency itself', () => {
+    for (const settings of [null, {}, { investCurrency: 'EUR' }, { investFx: dollars }]) {
+      const { result } = render(settings);
+      expect(result.current.currency).toBe('EUR');
+      expect(result.current.format(100_00)).toBe(formatMoney(100_00, 'EUR'));
+    }
+  });
+
+  it('rounds a fractional amount once, as a chart hands it over', () => {
+    const { result } = render(null);
+    expect(result.current.format(10_00.6)).toBe(formatMoney(10_01, 'EUR'));
+    const dollar = render({ investCurrency: 'USD', investFx: dollars });
+    expect(dollar.result.current.format(10_00.5)).toBe(formatMoney(11_01, 'USD'));
+  });
+
+  it('keeps its value until what it depends on changes', () => {
+    const { wrapper } = setup(undefined, { investCurrency: 'USD', investFx: dollars });
+    const { result, rerender } = renderHook(() => useInvestMoney(), { wrapper });
+    const first = result.current;
+    rerender();
+    expect(result.current).toBe(first);
+  });
+});
+
 describe('useInvestActions', () => {
   it('stays the same object across renders', () => {
     const { wrapper } = setup();
@@ -119,6 +187,27 @@ describe('useMarketRefresh', () => {
     await waitFor(() => expect(result.current.status).toBe('ok'));
     expect(fetchQuotes).toHaveBeenCalledOnce();
     expect(store.getState().putMany).toHaveBeenCalledOnce();
+  });
+
+  it('asks again when a currency is chosen for Invest but has no rate, whatever the age of the prices', async () => {
+    const fetchFx = vi
+      .spyOn(market, 'fetchFx')
+      .mockResolvedValue({ from: 'EUR', to: 'USD', rate: 1.1, asOf: NOW.toISOString() });
+    const { wrapper } = setup([makeHolding({ quote: quote(minutesAgo(1)) })], {
+      investCurrency: 'USD',
+    });
+    const { result } = renderHook(() => useMarketRefresh(), { wrapper });
+    await waitFor(() => expect(result.current.status).toBe('ok'));
+    expect(fetchFx).toHaveBeenCalledWith('EUR', 'USD');
+  });
+
+  it('leaves fresh prices alone when the rate for the chosen currency is there', () => {
+    const { wrapper } = setup([makeHolding({ quote: quote(minutesAgo(1)) })], {
+      investCurrency: 'USD',
+      investFx: dollars,
+    });
+    renderHook(() => useMarketRefresh(), { wrapper });
+    expect(fetchQuotes).not.toHaveBeenCalled();
   });
 
   it('stops listening for the app coming back when it unmounts', () => {

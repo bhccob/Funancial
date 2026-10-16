@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { bucketBalances } from '@/domain/balances';
 import { duePayouts, type ExpectedPayout } from '@/domain/dividends';
-import type { Holding } from '@/domain/entities';
+import type { Holding, Settings } from '@/domain/entities';
 import { MarketError, type Market } from '@/services/market';
 import { makeDividend, makeHolding, makeProfile, makeTransaction } from '@/test/fixtures';
 import { freshRealStore } from '@/test/realStore';
@@ -419,6 +419,166 @@ describe('refreshing the market', () => {
     await store.getState().put('holding', makeHolding());
     await expect(actions.refreshMarket()).resolves.toBe('not configured');
     for (const route of Object.values(market)) expect(route).not.toHaveBeenCalled();
+  });
+});
+
+/** Quotes in euros, the profile currency, so the only rate asked for is the one Invest is shown at. */
+const inEuros: Partial<Market> = {
+  fetchQuotes: async (symbols) => ({
+    quotes: symbols.map((symbol) => ({
+      symbol,
+      name: symbol,
+      price: 100,
+      previousClose: 98,
+      currency: 'EUR',
+      type: 'stock' as const,
+      exchange: 'AMS',
+      asOf: ASOF,
+    })),
+    missing: [],
+  }),
+};
+const dollars = { currency: 'USD', rate: 1.1, asOf: ASOF };
+
+/** A euro profile with Invest shown in `investCurrency`, and `investFx` as the rate stored for it. */
+async function shownIn(
+  investCurrency: string | null,
+  investFx: Settings['investFx'] = null,
+  over: Partial<Market> = {},
+) {
+  const ctx = await setup({
+    ...inEuros,
+    fetchFx: async (from, to) => ({ from, to, rate: 1.1, asOf: ASOF }),
+    ...over,
+  });
+  const settings = () => ctx.tables().settings[0]!;
+  await ctx.store.getState().put('settings', { ...settings(), investCurrency, investFx });
+  const putMany = vi.fn(ctx.store.getState().putMany);
+  ctx.store.setState({ putMany });
+  return { ...ctx, settings, putMany };
+}
+
+describe('refreshing the rate Invest is shown at', () => {
+  it('fetches it from the profile currency and stores it in the same write as the holdings', async () => {
+    const { actions, store, market, settings, putMany } = await shownIn('USD');
+    await store.getState().put('holding', makeHolding({ currency: 'EUR' }));
+    putMany.mockClear();
+
+    await expect(actions.refreshMarket()).resolves.toBe('ok');
+
+    expect(market.fetchFx.mock.calls).toEqual([['EUR', 'USD']]);
+    expect(putMany).toHaveBeenCalledTimes(1);
+    expect(putMany.mock.calls[0]![0].map((i) => i.table)).toEqual(['holding', 'settings']);
+    expect(settings().investFx).toEqual(dollars);
+    expect(settings().investCurrency).toBe('USD');
+  });
+
+  it('keeps the last rate when only that call fails', async () => {
+    const old = { currency: 'USD', rate: 1.05, asOf: '2026-10-13T09:00:00.000Z' };
+    const { actions, store, settings, putMany } = await shownIn('USD', old, { fetchFx: down });
+    await store.getState().put('holding', makeHolding({ currency: 'EUR' }));
+    putMany.mockClear();
+
+    await expect(actions.refreshMarket()).resolves.toBe('ok');
+
+    expect(settings().investFx).toEqual(old);
+    expect(putMany.mock.calls[0]![0].map((i) => i.table)).toEqual(['holding']);
+  });
+
+  it('asks for none when Invest is shown in the profile currency', async () => {
+    for (const choice of [null, 'EUR']) {
+      const { actions, store, market, settings } = await shownIn(choice);
+      await store.getState().put('holding', makeHolding({ currency: 'EUR' }));
+      await actions.refreshMarket();
+      expect(market.fetchFx, String(choice)).not.toHaveBeenCalled();
+      expect(settings().investFx).toBeNull();
+    }
+  });
+
+  it('stores no rate for a currency Invest is no longer shown in', async () => {
+    let choose = async () => {};
+    const { actions, store, settings } = await shownIn('USD', null, {
+      fetchFx: async (from, to) => {
+        await choose(); // the person picks another currency while the rate is out
+        return { from, to, rate: 1.1, asOf: ASOF };
+      },
+    });
+    await store.getState().put('holding', makeHolding({ currency: 'EUR' }));
+    choose = () => store.getState().put('settings', { ...settings(), investCurrency: 'GBP' });
+
+    await expect(actions.refreshMarket()).resolves.toBe('ok');
+
+    expect(settings()).toMatchObject({ investCurrency: 'GBP', investFx: null });
+  });
+
+  it('fetches the rate with no holdings, and no quotes', async () => {
+    const { actions, market, settings } = await shownIn('USD');
+    await expect(actions.refreshMarket()).resolves.toBe('ok');
+    expect(market.fetchQuotes).not.toHaveBeenCalled();
+    expect(market.fetchFx.mock.calls).toEqual([['EUR', 'USD']]);
+    expect(settings().investFx).toEqual(dollars);
+  });
+
+  it('requests nothing with no holdings and no currency chosen', async () => {
+    const { actions, market } = await shownIn(null);
+    await expect(actions.refreshMarket()).resolves.toBe('ok');
+    for (const route of Object.values(market)) expect(route).not.toHaveBeenCalled();
+  });
+});
+
+describe('choosing the Invest currency', () => {
+  it('writes the choice with the old rate dropped, then fetches the new rate straight away', async () => {
+    const gbp = { currency: 'GBP', rate: 0.86, asOf: '2026-10-13T09:00:00.000Z' };
+    const { actions, market, settings, putMany } = await shownIn('GBP', gbp);
+    putMany.mockClear();
+
+    await actions.setInvestCurrency('USD');
+
+    const written = putMany.mock.calls.map(([items]) =>
+      items.flatMap((i) => (i.table === 'settings' ? [i.record] : [])),
+    );
+    // First the choice alone, with no rate, then the rate once it has come.
+    expect(written[0]![0]).toMatchObject({ investCurrency: 'USD', investFx: null });
+    expect(market.fetchFx.mock.calls).toEqual([['EUR', 'USD']]);
+    expect(settings()).toMatchObject({ investCurrency: 'USD', investFx: dollars });
+  });
+
+  it('stores null for the profile currency, drops the rate and fetches nothing', async () => {
+    const { actions, market, settings } = await shownIn('USD', dollars);
+    await actions.setInvestCurrency('EUR');
+    expect(settings()).toMatchObject({ investCurrency: null, investFx: null });
+    expect(market.fetchFx).not.toHaveBeenCalled();
+    expect(market.fetchQuotes).not.toHaveBeenCalled();
+
+    await actions.setInvestCurrency(null);
+    expect(settings().investCurrency).toBeNull();
+  });
+
+  it('keeps the rate it already has for the currency chosen again', async () => {
+    const { actions, market, settings } = await shownIn('USD', dollars);
+    await actions.setInvestCurrency('USD');
+    expect(settings()).toMatchObject({ investCurrency: 'USD', investFx: dollars });
+    expect(market.fetchFx).not.toHaveBeenCalled();
+  });
+
+  it('keeps the choice, with no rate, when the price service is not set up', async () => {
+    vi.stubEnv('VITE_FUNANCIAL_API_TOKEN', '');
+    const { actions, market, settings } = await shownIn(null);
+    await actions.setInvestCurrency('USD');
+    expect(settings()).toMatchObject({ investCurrency: 'USD', investFx: null });
+    for (const route of Object.values(market)) expect(route).not.toHaveBeenCalled();
+  });
+
+  it('keeps the choice, with no rate, when the rate cannot be fetched', async () => {
+    const { actions, settings } = await shownIn(null, null, { fetchFx: down });
+    await actions.setInvestCurrency('USD');
+    expect(settings()).toMatchObject({ investCurrency: 'USD', investFx: null });
+  });
+
+  it('refuses a code that is not three capital letters', async () => {
+    const { actions, settings } = await shownIn(null);
+    await expect(actions.setInvestCurrency('usd')).rejects.toThrow();
+    expect(settings().investCurrency).toBeNull();
   });
 });
 

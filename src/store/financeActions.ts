@@ -499,7 +499,8 @@ export function createFinanceActions(store: StoreApi<AppState>) {
      * converted. Stored exchange rates were for the old currency, so each holding loses its own and
      * keeps the rest of its quote; the next Invest refresh fetches rates for the new one. A holding
      * with no quote, priced by hand in the old currency, is relabelled too: nothing else would say
-     * what it trades in, and it would drop out of the totals. One write.
+     * what it trades in, and it would drop out of the totals. The rate Invest is shown at was for the
+     * old currency too, so it goes, and Invest shown in the new currency is just the default. One write.
      */
     async changeCurrency(currency: string) {
       const profile = state().data.tables.profile[0];
@@ -518,9 +519,26 @@ export function createFinanceActions(store: StoreApi<AppState>) {
           { table: 'holding' as const, record: { ...h, currency: held, quote, updatedAt: at } },
         ];
       });
+      const settings = state().data.tables.settings[0];
+      const invest: TableRecord[] =
+        settings && (settings.investFx || settings.investCurrency === currency)
+          ? [
+              {
+                table: 'settings',
+                record: {
+                  ...settings,
+                  investCurrency:
+                    settings.investCurrency === currency ? null : settings.investCurrency,
+                  investFx: null,
+                  updatedAt: at,
+                },
+              },
+            ]
+          : [];
       await state().putMany([
         { table: 'profile', record: { ...profile, currency, updatedAt: at } },
         ...holdings,
+        ...invest,
       ]);
     },
 

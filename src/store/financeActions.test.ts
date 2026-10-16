@@ -443,6 +443,34 @@ describe('changing the currency', () => {
     expect(holding(store, 'ko').quote?.fxRate).toBe(1);
   });
 
+  describe('with a currency chosen for Invest', () => {
+    const rateTo = (currency: string) => ({
+      currency,
+      rate: 0.9,
+      asOf: '2026-10-14T09:00:00.000Z',
+    });
+    const settingsOf = (store: Awaited<ReturnType<typeof setup>>['store']) =>
+      store.getState().data.tables.settings[0]!;
+
+    it('drops the rate, which was for the old profile currency, and keeps the choice', async () => {
+      const { store, actions } = await withHoldings();
+      await store
+        .getState()
+        .put('settings', { ...settingsOf(store), investCurrency: 'GBP', investFx: rateTo('GBP') });
+      await actions.changeCurrency('EUR');
+      expect(settingsOf(store)).toMatchObject({ investCurrency: 'GBP', investFx: null });
+    });
+
+    it('goes back to the profile currency when the new one is what Invest was shown in', async () => {
+      const { store, actions } = await withHoldings();
+      await store
+        .getState()
+        .put('settings', { ...settingsOf(store), investCurrency: 'EUR', investFx: rateTo('EUR') });
+      await actions.changeCurrency('EUR');
+      expect(settingsOf(store)).toMatchObject({ investCurrency: null, investFx: null });
+    });
+  });
+
   it('is the only way to change it: updateProfile takes no currency', () => {
     expectTypeOf<
       Parameters<ReturnType<typeof createFinanceActions>['updateProfile']>[0]

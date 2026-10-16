@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Holding } from '@/domain/entities';
-import { portfolio, type Portfolio } from '@/domain/portfolio';
+import { convertMinor, formatMoney, type MoneyFormatOptions } from '@/domain/money';
+import { investRate, portfolio, type Portfolio } from '@/domain/portfolio';
 import { usePlatform } from '@/platform/PlatformProvider';
 import { market } from '@/services/market';
 import { useApp, useAppStore } from './AppStoreProvider';
@@ -21,6 +22,35 @@ export function usePortfolio(): Portfolio {
   const data = useApp((s) => s.data);
   const currency = useCurrency();
   return useMemo(() => portfolio(data, currency), [data, currency]);
+}
+
+/**
+ * What Invest shows money in. `format` takes minor units of the profile currency and writes them in
+ * `currency`: the one chosen for Invest, converted at its rate. Without a rate yet it writes the
+ * profile currency, and `currency` says so. Either way the amount is rounded once, so a chart's
+ * fractional minor units can be passed as they are.
+ */
+export function useInvestMoney(): {
+  currency: string;
+  format(minorInProfile: number, opts?: MoneyFormatOptions): string;
+} {
+  const profile = useCurrency();
+  const settings = useApp((s) => s.data.tables.settings[0]);
+  const rate = investRate(settings, profile);
+  const currency = (rate !== null && settings?.investCurrency) || profile;
+  return useMemo(
+    () => ({
+      currency,
+      format: (minor, opts) =>
+        formatMoney(
+          rate === null ? Math.round(minor) : convertMinor(minor, profile, currency, rate),
+          currency,
+          undefined,
+          opts,
+        ),
+    }),
+    [profile, currency, rate],
+  );
 }
 
 /** True without any quote, or when the newest one is older than `PRICES_FRESH_MS`. */
@@ -52,7 +82,15 @@ export function useMarketRefresh(): { status: MarketStatus; refresh: () => Promi
 
   useEffect(() => {
     const refreshIfStale = () => {
-      if (pricesStale(store.getState().data.tables.holding)) void refresh();
+      const { data } = store.getState();
+      const home = data.tables.profile[0]?.currency ?? 'USD';
+      const settings = data.tables.settings[0];
+      // A chosen currency with no rate is worth asking for again, whatever the age of the prices.
+      const noRate =
+        !!settings?.investCurrency &&
+        settings.investCurrency !== home &&
+        investRate(settings, home) === null;
+      if (noRate || pricesStale(data.tables.holding)) void refresh();
     };
     refreshIfStale();
     return platform.onResume(refreshIfStale);
