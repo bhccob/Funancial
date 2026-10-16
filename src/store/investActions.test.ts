@@ -1,0 +1,506 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { bucketBalances } from '@/domain/balances';
+import { duePayouts, type ExpectedPayout } from '@/domain/dividends';
+import type { Holding } from '@/domain/entities';
+import { MarketError, type Market } from '@/services/market';
+import { makeDividend, makeHolding, makeProfile, makeTransaction } from '@/test/fixtures';
+import { freshRealStore } from '@/test/realStore';
+import { createInvestActions } from './investActions';
+
+const TODAY = '2026-10-14';
+const ASOF = '2026-10-14T09:00:00.000Z';
+const HOURS = 3_600_000;
+const ago = (hours: number) => new Date(Date.now() - hours * HOURS).toISOString();
+
+const KO_PROFILE = {
+  symbol: 'KO',
+  name: 'The Coca-Cola Company',
+  type: 'stock' as const,
+  exchange: 'NYSE',
+  currency: 'USD',
+  sector: 'Consumer Defensive',
+};
+
+const down = () => Promise.reject(new MarketError());
+
+/** A price service that answers every route; a test overrides the routes it cares about. */
+function fakeMarket(over: Partial<Market> = {}) {
+  return {
+    fetchQuotes: vi.fn<Market['fetchQuotes']>(
+      over.fetchQuotes ??
+        (async (symbols) => ({
+          quotes: symbols.map((symbol) => ({
+            symbol,
+            name: symbol,
+            price: 100,
+            previousClose: 98,
+            currency: 'USD',
+            type: 'stock' as const,
+            exchange: 'NYQ',
+            asOf: ASOF,
+          })),
+          missing: [],
+        })),
+    ),
+    fetchProfile: vi.fn<Market['fetchProfile']>(over.fetchProfile ?? (async () => KO_PROFILE)),
+    fetchDividends: vi.fn<Market['fetchDividends']>(
+      over.fetchDividends ??
+        (async (symbol) => ({
+          symbol,
+          currency: 'USD',
+          history: [{ date: '2026-07-10', amount: 0.485 }],
+          next: { exDate: '2026-10-10', payDate: '2026-10-12', amount: 0.485 },
+        })),
+    ),
+    fetchNews: vi.fn<Market['fetchNews']>(over.fetchNews ?? (async () => ({ items: [] }))),
+    fetchFx: vi.fn<Market['fetchFx']>(
+      over.fetchFx ?? (async (from, to) => ({ from, to, rate: 0.92, asOf: ASOF })),
+    ),
+  };
+}
+
+async function setup(over: Partial<Market> = {}) {
+  const t = await freshRealStore();
+  await t.store.getState().put(
+    'profile',
+    makeProfile({
+      currency: 'EUR',
+      openingDate: '2026-10-01',
+      openingCash: 10_000_00,
+      openingSavings: 5_000_00,
+    }),
+  );
+  const market = fakeMarket(over);
+  const actions = createInvestActions(t.store, market);
+  const tables = () => t.store.getState().data.tables;
+  const balances = () => bucketBalances(t.store.getState().data, TODAY);
+  const holding = (id: string) => tables().holding.find((h) => h.id === id)!;
+  return { ...t, market, actions, tables, balances, holding };
+}
+
+const purchase = {
+  symbol: 'KO',
+  shares: 10,
+  costBasis: 500_00,
+  purchaseDate: '2026-10-01',
+  paidFrom: 'cash' as const,
+  withholdingPct: 15,
+};
+
+beforeEach(() => vi.stubEnv('VITE_FUNANCIAL_API_TOKEN', 'test-token'));
+afterEach(() => vi.unstubAllEnvs());
+
+describe('adding a holding', () => {
+  it('adds a holding from the profile and records an investment when paid from cash', async () => {
+    const { actions, market, tables, balances } = await setup();
+    const cashBefore = balances().cash;
+    await actions.addHolding({ ...purchase, symbol: 'ko' });
+    expect(market.fetchProfile).toHaveBeenCalledWith('KO');
+    expect(tables().holding).toMatchObject([
+      {
+        symbol: 'KO',
+        name: 'The Coca-Cola Company',
+        type: 'stock',
+        exchange: 'NYSE',
+        currency: 'USD',
+        sector: 'Consumer Defensive',
+        shares: 10,
+        costBasis: 500_00,
+        purchaseDate: '2026-10-01',
+        withholdingPct: 15,
+        manualPrice: null,
+        quote: null,
+        dividendInfo: null,
+        checkedAt: null,
+      },
+    ]);
+    expect(tables().transaction).toMatchObject([
+      { type: 'investment', amount: 500_00, date: '2026-10-01', from: 'cash', to: null },
+    ]);
+    expect(balances().cash).toBe(cashBefore - 500_00);
+  });
+
+  it('takes savings for an investment too, and nothing for a holding already owned', async () => {
+    const { actions, tables, balances } = await setup();
+    await actions.addHolding({ ...purchase, paidFrom: 'savings' });
+    expect(tables().transaction.map((t) => t.from)).toEqual(['savings']);
+    const { cash, savings } = balances();
+    await actions.addHolding({ ...purchase, paidFrom: 'owned' });
+    expect(tables().holding).toHaveLength(2);
+    expect(tables().transaction).toHaveLength(1);
+    expect(balances()).toMatchObject({ cash, savings });
+  });
+
+  it('needs name and currency when the profile lookup fails', async () => {
+    const { actions, tables } = await setup({ fetchProfile: down });
+    await expect(actions.addHolding(purchase)).rejects.toThrow(
+      "We couldn't find that symbol. Check it, or enter the name and currency yourself.",
+    );
+    await expect(actions.addHolding({ ...purchase, name: 'Coca-Cola' })).rejects.toThrow(
+      "We couldn't find that symbol.",
+    );
+    expect(tables().holding).toEqual([]);
+    expect(tables().transaction).toEqual([]);
+
+    await actions.addHolding({ ...purchase, name: ' Coca-Cola ', currency: 'usd', type: 'etf' });
+    expect(tables().holding).toMatchObject([
+      { name: 'Coca-Cola', currency: 'USD', type: 'etf', exchange: null, sector: null },
+    ]);
+  });
+
+  it('asks for name and currency without a token, and looks nothing up', async () => {
+    vi.stubEnv('VITE_FUNANCIAL_API_TOKEN', '');
+    const { actions, market, tables } = await setup();
+    await expect(actions.addHolding(purchase)).rejects.toThrow("We couldn't find that symbol.");
+    await actions.addHolding({ ...purchase, name: 'Coca-Cola', currency: 'USD' });
+    expect(market.fetchProfile).not.toHaveBeenCalled();
+    expect(tables().holding).toMatchObject([{ symbol: 'KO', type: 'stock', currency: 'USD' }]);
+  });
+
+  it('refuses a future date', async () => {
+    const { actions, tables } = await setup();
+    await expect(actions.addHolding({ ...purchase, purchaseDate: '2026-10-15' })).rejects.toThrow(
+      'Use today or an earlier date.',
+    );
+    expect(tables().holding).toEqual([]);
+  });
+});
+
+describe('editing a holding', () => {
+  it('updates it, and clears the old quote when the currency changes', async () => {
+    const { actions, store, holding } = await setup();
+    const quote = { price: 60, previousClose: null, fxRate: 0.9, asOf: ASOF };
+    const h = makeHolding({ currency: 'USD', quote });
+    await store.getState().put('holding', h);
+    await actions.updateHolding(h.id, { shares: 12.5, manualPrice: 58 });
+    expect(holding(h.id)).toMatchObject({ shares: 12.5, manualPrice: 58, quote });
+    await actions.updateHolding(h.id, { currency: 'GBP' });
+    expect(holding(h.id)).toMatchObject({ currency: 'GBP', quote: null });
+    await expect(actions.updateHolding(h.id, { purchaseDate: '2026-10-15' })).rejects.toThrow(
+      'Use today or an earlier date.',
+    );
+  });
+
+  it('marks a holding checked', async () => {
+    const { actions, store, holding } = await setup();
+    const h = makeHolding();
+    await store.getState().put('holding', h);
+    await actions.markChecked(h.id);
+    expect(holding(h.id).checkedAt).not.toBeNull();
+  });
+
+  it('deletes a holding but keeps its dividends and transactions', async () => {
+    const { actions, store, tables } = await setup();
+    const h = makeHolding();
+    await store.getState().putMany([
+      { table: 'holding', record: h },
+      { table: 'dividend', record: makeDividend({ holdingId: h.id }) },
+      { table: 'transaction', record: makeTransaction({ type: 'investment', to: null }) },
+    ]);
+    await actions.deleteHolding(h.id);
+    expect(tables().holding).toEqual([]);
+    expect(tables().dividend).toHaveLength(1);
+    expect(tables().transaction).toHaveLength(1);
+  });
+});
+
+describe('refreshing the market', () => {
+  it('refreshes quotes, rates and stale dividend info in one write', async () => {
+    const { actions, store, market, holding } = await setup();
+    const fresh = {
+      history: [{ date: '2026-07-01', amount: 1 }],
+      nextExDate: null,
+      nextPayDate: null,
+      nextAmount: null,
+      fetchedAt: ago(1),
+    };
+    const usd = makeHolding({ symbol: 'KO', currency: 'USD' });
+    const staleEur = makeHolding({
+      symbol: 'SAP',
+      currency: 'EUR',
+      dividendInfo: { ...fresh, fetchedAt: ago(25) },
+    });
+    const freshEur = makeHolding({ symbol: 'ABC', currency: 'EUR', dividendInfo: fresh });
+    await store
+      .getState()
+      .putMany([usd, staleEur, freshEur].map((record) => ({ table: 'holding' as const, record })));
+    const putMany = vi.spyOn(store.getState(), 'putMany');
+
+    await expect(actions.refreshMarket()).resolves.toBe('ok');
+
+    expect(putMany).toHaveBeenCalledTimes(1);
+    expect(putMany.mock.calls[0]![0]).toHaveLength(3);
+    expect(market.fetchQuotes).toHaveBeenCalledOnce();
+    expect(market.fetchQuotes).toHaveBeenCalledWith(['KO', 'SAP', 'ABC']);
+    expect(market.fetchFx).toHaveBeenCalledOnce();
+    expect(market.fetchFx).toHaveBeenCalledWith('USD', 'EUR');
+    expect(market.fetchDividends.mock.calls.map(([s]) => s)).toEqual(['KO', 'SAP']);
+
+    expect(holding(usd.id).quote).toEqual({
+      price: 100,
+      previousClose: 98,
+      fxRate: 0.92,
+      asOf: ASOF,
+    });
+    expect(holding(staleEur.id).quote).toMatchObject({ price: 100, fxRate: 1 });
+    expect(holding(usd.id).dividendInfo).toMatchObject({
+      history: [{ date: '2026-07-10', amount: 0.485 }],
+      nextExDate: '2026-10-10',
+      nextPayDate: '2026-10-12',
+      nextAmount: 0.485,
+    });
+    expect(Date.parse(holding(staleEur.id).dividendInfo!.fetchedAt)).toBeGreaterThan(
+      Date.now() - HOURS,
+    );
+    expect(holding(freshEur.id).dividendInfo).toEqual(fresh);
+  });
+
+  it('matches quotes by upper-case symbol and leaves a holding the service lacks as it was', async () => {
+    const { actions, store, holding } = await setup({
+      fetchQuotes: async () => ({
+        quotes: [
+          {
+            symbol: 'ko',
+            name: 'Coca-Cola',
+            price: 61,
+            previousClose: null,
+            currency: 'USD',
+            type: 'stock',
+            exchange: null,
+            asOf: ASOF,
+          },
+        ],
+        missing: ['ZZZ'],
+      }),
+    });
+    const ko = makeHolding({ symbol: 'KO' });
+    const old = { price: 7, previousClose: null, fxRate: 0.9, asOf: '2026-10-01T09:00:00.000Z' };
+    const zzz = makeHolding({ symbol: 'ZZZ', quote: old });
+    await store.getState().putMany([
+      { table: 'holding', record: ko },
+      { table: 'holding', record: zzz },
+    ]);
+    await actions.refreshMarket();
+    expect(holding(ko.id).quote?.price).toBe(61);
+    expect(holding(zzz.id).quote).toEqual(old);
+  });
+
+  it('keeps the last prices and returns "failed" when the service is down', async () => {
+    const { actions, store, holding } = await setup({
+      fetchQuotes: down,
+      fetchFx: down,
+      fetchDividends: down,
+    });
+    const quote = { price: 60, previousClose: 59, fxRate: 0.9, asOf: '2026-10-13T09:00:00.000Z' };
+    const h = makeHolding({ currency: 'USD', quote });
+    await store.getState().put('holding', h);
+    const putMany = vi.spyOn(store.getState(), 'putMany');
+    await expect(actions.refreshMarket()).resolves.toBe('failed');
+    expect(putMany).not.toHaveBeenCalled();
+    expect(holding(h.id)).toEqual(h);
+  });
+
+  it("keeps a holding's last rate and dividends when only those calls fail", async () => {
+    const { actions, store, holding } = await setup({ fetchFx: down, fetchDividends: down });
+    const info = {
+      history: [{ date: '2026-07-10', amount: 0.4 }],
+      nextExDate: null,
+      nextPayDate: null,
+      nextAmount: null,
+      fetchedAt: ago(48),
+    };
+    const old = { price: 60, previousClose: null, fxRate: 0.9, asOf: '2026-10-13T09:00:00.000Z' };
+    const h = makeHolding({ currency: 'USD', quote: old, dividendInfo: info });
+    await store.getState().put('holding', h);
+    await expect(actions.refreshMarket()).resolves.toBe('ok');
+    expect(holding(h.id).quote).toMatchObject({ price: 100, fxRate: 0.9, asOf: ASOF });
+    expect(holding(h.id).dividendInfo).toEqual(info);
+  });
+
+  it('applies the answers to the holdings as they are when the answers arrive', async () => {
+    let edit = Promise.resolve();
+    const ctx = await setup({
+      fetchQuotes: async (symbols) => {
+        await edit; // the person edits the holding while the request is out
+        return fakeMarket().fetchQuotes(symbols);
+      },
+    });
+    const h = makeHolding({ shares: 10 });
+    await ctx.store.getState().put('holding', h);
+    edit = ctx.actions.updateHolding(h.id, { shares: 20 });
+    await ctx.actions.refreshMarket();
+    expect(ctx.holding(h.id)).toMatchObject({ shares: 20, quote: { price: 100 } });
+  });
+
+  it('returns "not configured" without a token and makes no request', async () => {
+    vi.stubEnv('VITE_FUNANCIAL_API_TOKEN', '');
+    const { actions, store, market } = await setup();
+    await store.getState().put('holding', makeHolding());
+    await expect(actions.refreshMarket()).resolves.toBe('not configured');
+    for (const route of Object.values(market)) expect(route).not.toHaveBeenCalled();
+  });
+});
+
+describe('dividend payouts', () => {
+  /** A quarterly payer whose October payout (net 379 cents at 0.92) is waiting to be confirmed. */
+  async function withDuePayout(over: Partial<Holding> = {}) {
+    const t = await setup();
+    const h = makeHolding({
+      symbol: 'KO',
+      currency: 'USD',
+      shares: 10,
+      costBasis: 500_00,
+      purchaseDate: '2026-01-01',
+      withholdingPct: 15,
+      quote: { price: 60, previousClose: null, fxRate: 0.9, asOf: ASOF },
+      dividendInfo: {
+        history: [
+          { date: '2026-01-10', amount: 0.485 },
+          { date: '2026-04-10', amount: 0.485 },
+          { date: '2026-07-10', amount: 0.485 },
+        ],
+        nextExDate: '2026-10-10',
+        nextPayDate: '2026-10-12',
+        nextAmount: 0.485,
+        fetchedAt: ago(1),
+      },
+      ...over,
+    });
+    await t.store.getState().put('holding', h);
+    const due = () => duePayouts(t.store.getState().data, 'EUR', TODAY);
+    const [payout] = due() as [ExpectedPayout];
+    return { ...t, h, due, payout };
+  }
+
+  it('confirms a payout once, into savings', async () => {
+    const { actions, tables, balances, due, payout } = await withDuePayout();
+    expect(due()).toHaveLength(1);
+    const before = balances();
+
+    await actions.confirmDividend(payout, {
+      amount: 3_79,
+      paidOn: '2026-10-12',
+      bucket: 'savings',
+    });
+    expect(tables().dividend).toMatchObject([
+      {
+        symbol: 'KO',
+        expectedPayDate: payout.payDate,
+        paidOn: '2026-10-12',
+        status: 'confirmed',
+        amount: 3_79,
+        bucket: 'savings',
+        sharesAdded: null,
+      },
+    ]);
+    expect(due()).toEqual([]);
+    expect(balances()).toMatchObject({ savings: before.savings + 3_79, cash: before.cash });
+
+    // Asking again changes nothing.
+    await actions.confirmDividend(payout, { amount: 3_79, paidOn: '2026-10-12', bucket: 'cash' });
+    expect(tables().dividend).toHaveLength(1);
+    expect(balances()).toMatchObject({ savings: before.savings + 3_79, cash: before.cash });
+  });
+
+  it('confirms once when it is asked twice before the first save is done', async () => {
+    const { actions, tables, balances, payout } = await withDuePayout();
+    const before = balances();
+    const input = { amount: 3_79, paidOn: '2026-10-12', bucket: 'savings' as const };
+    await Promise.all([
+      actions.confirmDividend(payout, input),
+      actions.confirmDividend(payout, input),
+    ]);
+    expect(tables().dividend).toHaveLength(1);
+    expect(balances().savings).toBe(before.savings + 3_79);
+  });
+
+  it('reinvests once when it is asked twice before the first save is done', async () => {
+    const { actions, tables, holding, h, payout } = await withDuePayout();
+    const input = { amount: 3_79, paidOn: '2026-10-12', bucket: 'reinvest' as const };
+    await Promise.all([
+      actions.confirmDividend(payout, input),
+      actions.confirmDividend(payout, input),
+    ]);
+    expect(tables().dividend).toHaveLength(1);
+    expect(holding(h.id).costBasis).toBe(500_00 + 3_79);
+  });
+
+  it('stays settled when the person gives another date for it', async () => {
+    const { actions, due, payout } = await withDuePayout();
+    await actions.confirmDividend(payout, { amount: 3_79, paidOn: '2026-10-14', bucket: 'cash' });
+    expect(due()).toEqual([]);
+  });
+
+  it('refuses a payment date in the future', async () => {
+    const { actions, tables, payout } = await withDuePayout();
+    await expect(
+      actions.confirmDividend(payout, { amount: 3_79, paidOn: '2026-10-15', bucket: 'cash' }),
+    ).rejects.toThrow('Use today or an earlier date.');
+    expect(tables().dividend).toEqual([]);
+  });
+
+  it('reinvests by adding fractional shares and cost basis, not cash', async () => {
+    const { actions, tables, balances, holding, h, payout } = await withDuePayout();
+    const before = balances();
+
+    await actions.confirmDividend(payout, {
+      amount: 3_79,
+      paidOn: '2026-10-12',
+      bucket: 'reinvest',
+    });
+
+    // 60 USD at 0.9 is 54 EUR, or 5400 cents, a share.
+    const sharesAdded = 3_79 / 5400;
+    expect(tables().dividend).toMatchObject([
+      { status: 'confirmed', amount: 3_79, bucket: 'reinvest', sharesAdded },
+    ]);
+    expect(holding(h.id).shares).toBeCloseTo(10 + sharesAdded, 12);
+    expect(holding(h.id).costBasis).toBe(500_00 + 3_79);
+    expect(balances()).toEqual(before);
+  });
+
+  it('prices a reinvestment at the manual price when there is one', async () => {
+    const { actions, holding, h, payout } = await withDuePayout({ manualPrice: 30 });
+    await actions.confirmDividend(payout, {
+      amount: 5_40,
+      paidOn: '2026-10-12',
+      bucket: 'reinvest',
+    });
+    expect(holding(h.id).shares).toBeCloseTo(10 + 540 / 2700, 12);
+  });
+
+  it.each([
+    ['price', { quote: null }],
+    ['exchange rate', { quote: { price: 60, previousClose: null, fxRate: null, asOf: ASOF } }],
+    ['price above zero', { manualPrice: 0 }],
+  ])('will not reinvest without a %s', async (_what, over) => {
+    const { actions, tables, holding, h, payout } = await withDuePayout(over);
+    const kept = holding(h.id);
+    await expect(
+      actions.confirmDividend(payout, { amount: 3_79, paidOn: '2026-10-12', bucket: 'reinvest' }),
+    ).rejects.toThrow(
+      'Reinvesting needs a price for this holding. Refresh prices or set a manual price.',
+    );
+    expect(tables().dividend).toEqual([]);
+    expect(holding(h.id)).toEqual(kept);
+  });
+
+  it('skips a payout so it is not due again', async () => {
+    const { actions, tables, balances, due, payout } = await withDuePayout();
+    const before = balances();
+    await actions.skipDividend(payout);
+    await actions.skipDividend(payout);
+    expect(tables().dividend).toMatchObject([
+      {
+        symbol: 'KO',
+        expectedPayDate: payout.payDate,
+        status: 'skipped',
+        amount: 0,
+        bucket: null,
+        sharesAdded: null,
+      },
+    ]);
+    expect(due()).toEqual([]);
+    expect(balances()).toEqual(before);
+  });
+});

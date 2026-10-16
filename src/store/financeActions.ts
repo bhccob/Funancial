@@ -106,7 +106,7 @@ export interface OnboardingInput {
   cards: CardInput[];
 }
 
-const FUTURE = 'Use today or an earlier date.';
+export const FUTURE = 'Use today or an earlier date.';
 const PAYS_SUBSCRIPTION =
   'A subscription is paid with this card. Change how it is paid first, or keep the card.';
 const HAS_HISTORY =
