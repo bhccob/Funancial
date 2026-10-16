@@ -475,8 +475,9 @@ describe('Currency', () => {
     );
   }
   const row = () => within(screen.getByRole('region', { name: 'Profile & salary' }));
+  const changeButton = () => row().getByRole('button', { name: 'Change currency' });
   const openPicker = async () => {
-    await userEvent.click(row().getByRole('button', { name: 'Change currency' }));
+    await userEvent.click(changeButton());
     return screen.getByRole('dialog', { name: 'Change currency' });
   };
 
@@ -526,6 +527,7 @@ describe('Currency', () => {
     await userEvent.click(within(confirm).getByRole('button', { name: 'Change currency' }));
     expect(finance.changeCurrency).toHaveBeenCalledExactlyOnceWith('GBP');
     await vi.waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(changeButton()).toHaveFocus();
   });
 
   it('changes nothing on Cancel', async () => {
@@ -538,6 +540,16 @@ describe('Currency', () => {
     expect(finance.changeCurrency).not.toHaveBeenCalled();
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(row().getByText(labelOf('EUR'))).toBeInTheDocument();
+    // Both dialogs close together, and focus goes back to where the person started.
+    expect(changeButton()).toHaveFocus();
+  });
+
+  it('puts focus back on Change when the list is cancelled on its own', async () => {
+    renderCurrency('EUR');
+    const picker = await openPicker();
+    await userEvent.click(within(picker).getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(changeButton()).toHaveFocus();
   });
 
   it('stays open and says why when the change fails', async () => {

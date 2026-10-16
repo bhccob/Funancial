@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Dialog } from '@/components/ui/Dialog';
 import { Select } from '@/components/ui/Select';
@@ -19,6 +19,16 @@ export function CurrencyRow({ current }: { current: string }) {
   const [picking, setPicking] = useState(false);
   const [next, setNext] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const changeButton = useRef<HTMLButtonElement>(null);
+  const wasPicking = useRef(false);
+
+  // Both dialogs close in one render, the list while the confirm is still modal, so the browser's
+  // own focus return finds the Change button inert and focus drops to the page. A parent's effect
+  // runs after its children's, so by now both are closed and the button can take focus.
+  useEffect(() => {
+    if (wasPicking.current && !picking) changeButton.current?.focus();
+    wasPicking.current = picking;
+  }, [picking]);
 
   const currentLabel = currencyOptions((c) => c === current)[0]?.label ?? current;
   const options = [
@@ -45,6 +55,7 @@ export function CurrencyRow({ current }: { current: string }) {
         <p className="text-muted truncate">{currentLabel}</p>
       </div>
       <Button
+        ref={changeButton}
         variant="secondary"
         size="sm"
         aria-label="Change currency"
@@ -70,7 +81,7 @@ export function CurrencyRow({ current }: { current: string }) {
           hint={`Only currencies with the same decimals as ${current} are listed. Your amounts keep their numbers; they are not converted.`}
         />
       </Dialog>
-      {/* Opens over the list, so closing both returns focus to the Change button. */}
+      {/* Opens over the list; Cancel and a confirmed change close both. */}
       <Dialog
         open={next !== null}
         title={`Change your currency to ${next}?`}

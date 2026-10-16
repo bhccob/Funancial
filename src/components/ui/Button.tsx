@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes } from 'react';
+import type { ButtonHTMLAttributes, Ref } from 'react';
 import { Link, type LinkProps } from 'react-router';
 import { cn } from '@/lib/cn';
 
@@ -8,6 +8,7 @@ export type ButtonSize = 'sm' | 'md' | 'lg';
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant;
   size?: ButtonSize;
+  ref?: Ref<HTMLButtonElement>;
 }
 
 const base =
