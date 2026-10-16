@@ -1,7 +1,9 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   makeDebt,
+  makeDividend,
   makeExpense,
+  makeHolding,
   makeIncome,
   makeProfile,
   makeSettings,
@@ -10,7 +12,9 @@ import {
 import { localDateTime } from './dates';
 import type {
   Debt,
+  Dividend,
   Expense,
+  Holding,
   Income,
   ReminderSettings,
   SalaryFreeze,
@@ -35,6 +39,7 @@ const ONLY: Partial<ReminderSettings> = {
   freeze: false,
   reviews: false,
   backup: false,
+  dividends: false,
 };
 
 type Setup = {
@@ -49,6 +54,8 @@ type Setup = {
   expenses?: Expense[];
   incomes?: Income[];
   freezes?: SalaryFreeze[];
+  holdings?: Holding[];
+  dividends?: Dividend[];
 };
 
 function build(setup: Setup = {}): DataSnapshot {
@@ -71,6 +78,8 @@ function build(setup: Setup = {}): DataSnapshot {
   data.tables.expense = setup.expenses ?? [];
   data.tables.income = setup.incomes ?? [];
   data.tables.salaryFreeze = setup.freezes ?? [];
+  data.tables.holding = setup.holdings ?? [];
+  data.tables.dividend = setup.dividends ?? [];
   return data;
 }
 
@@ -107,6 +116,29 @@ function visa(over: Partial<Debt> = {}): { debts: Debt[]; expenses: Expense[] } 
       }),
     ],
   };
+}
+
+type Info = NonNullable<Holding['dividendInfo']>;
+
+/** KO: 10 shares in dollars, no tax withheld, paying 1.25 a share on the dates given. */
+function payer(info: Partial<Info>, over: Partial<Holding> = {}): Holding {
+  return makeHolding({
+    id: 'ko',
+    symbol: 'KO',
+    currency: 'USD',
+    shares: 10,
+    withholdingPct: 0,
+    purchaseDate: '2026-01-01',
+    dividendInfo: {
+      history: [],
+      nextExDate: null,
+      nextPayDate: null,
+      nextAmount: 1.25,
+      fetchedAt: '2026-10-14T08:00:00.000Z',
+      ...info,
+    },
+    ...over,
+  });
 }
 
 describe('upcomingReminders', () => {
@@ -427,12 +459,102 @@ describe('upcomingReminders', () => {
     expect(upcomingReminders(build({ reminders: { backup: true } }), NOW)).toEqual([]);
   });
 
+  it('reminds the day before an ex-date and on the pay date', () => {
+    const holdings = [payer({ nextExDate: '2026-10-20', nextPayDate: '2026-10-27' })];
+    const data = build({ reminders: { dividends: true }, holdings });
+    expect(upcomingReminders(data, NOW)).toEqual([
+      {
+        key: 'dividend-ex:ko:2026-10-27',
+        kind: 'dividend-ex',
+        at: '2026-10-19T09:00',
+        title: 'KO goes ex-dividend tomorrow',
+        body: 'Hold your shares through today to get the next payout.',
+        route: '/invest?tab=dividends',
+      },
+      {
+        key: 'dividend-pay:ko:2026-10-27',
+        kind: 'dividend-pay',
+        at: '2026-10-27T09:00',
+        title: 'KO pays a dividend today',
+        body: `Expected about ${money(12_50)}. Confirm it when it arrives.`,
+        route: '/invest?tab=dividends',
+      },
+    ]);
+  });
+
+  it('follows a holding through its payouts across the horizon', () => {
+    const history = [
+      { date: '2026-08-16', amount: 1.25 },
+      { date: '2026-09-16', amount: 1.25 },
+    ];
+    const holdings = [payer({ history, nextExDate: '2026-10-16', nextPayDate: '2026-10-23' })];
+    const data = build({ reminders: { dividends: true }, holdings });
+    expect(keys(upcomingReminders(data, NOW))).toEqual([
+      'dividend-ex:ko:2026-10-23',
+      'dividend-pay:ko:2026-10-23',
+    ]);
+    // November's payout has its ex-date reminder on the 15th, beyond the default 30 days.
+    const longer = upcomingReminders(data, NOW, { horizonDays: 60 });
+    expect(longer.map((r) => [r.kind, r.at])).toEqual([
+      ['dividend-ex', '2026-10-15T09:00'],
+      ['dividend-pay', '2026-10-23T09:00'],
+      ['dividend-ex', '2026-11-15T09:00'],
+      ['dividend-pay', '2026-11-23T09:00'],
+    ]);
+  });
+
+  it('reminds of an ex-date inside the horizon though the payout pays after it', () => {
+    // Ex on 11-10 (reminder 11-09), paying 11-20: the horizon ends 11-13.
+    const holdings = [payer({ nextExDate: '2026-11-10', nextPayDate: '2026-11-20' })];
+    const data = build({ reminders: { dividends: true }, holdings });
+    expect(upcomingReminders(data, NOW).map((r) => [r.kind, r.at])).toEqual([
+      ['dividend-ex', '2026-11-09T09:00'],
+    ]);
+  });
+
+  it('reminds only on the pay date when no ex-date is known', () => {
+    const holdings = [payer({ nextPayDate: '2026-10-27' })];
+    const data = build({ reminders: { dividends: true }, holdings });
+    expect(kinds(upcomingReminders(data, NOW))).toEqual(['dividend-pay']);
+  });
+
+  it('never schedules a moment already past, nor a payout already confirmed or skipped', () => {
+    // Ex on 10-15 would remind on 10-14 at 09:00, before NOW (10:00); it pays on 10-16.
+    const soon = [payer({ nextExDate: '2026-10-15', nextPayDate: '2026-10-16' })];
+    expect(
+      keys(upcomingReminders(build({ reminders: { dividends: true }, holdings: soon }), NOW)),
+    ).toEqual(['dividend-pay:ko:2026-10-16']);
+
+    const later = [payer({ nextExDate: '2026-10-20', nextPayDate: '2026-10-27' })];
+    for (const status of ['confirmed', 'skipped'] as const) {
+      const settled = makeDividend({
+        holdingId: 'ko',
+        expectedPayDate: '2026-10-27',
+        status,
+        ...(status === 'skipped' ? { amount: 0, bucket: null } : {}),
+      });
+      const data = build({
+        reminders: { dividends: true },
+        holdings: later,
+        dividends: [settled],
+      });
+      expect(upcomingReminders(data, NOW)).toEqual([]);
+    }
+  });
+
+  it('leaves the amount out when the exchange rate is unknown', () => {
+    const holdings = [payer({ nextPayDate: '2026-10-27' }, { currency: 'EUR', quote: null })];
+    const data = build({ reminders: { dividends: true }, holdings });
+    expect(upcomingReminders(data, NOW)[0]?.body).toBe('Confirm it when it arrives.');
+  });
+
   it('honours each switch', () => {
     const setup = {
       all: true,
       lastBackupAt: noon('2026-10-07'),
       subscriptions: [makeSubscription({ id: 'sub-tv', nextRenewal: '2026-10-20' })],
       freezes: [freeze()],
+      holdings: [payer({ nextExDate: '2026-10-20', nextPayDate: '2026-10-27' })],
       ...visa(),
     };
     const everything = upcomingReminders(build(setup), NOW);
@@ -440,6 +562,8 @@ describe('upcomingReminders', () => {
       'backup',
       'card-due',
       'daily-log',
+      'dividend-ex',
+      'dividend-pay',
       'freeze-end',
       'freeze-start',
       'monthly-review',
@@ -457,6 +581,7 @@ describe('upcomingReminders', () => {
     expect(dropped({ freeze: false })).toEqual(['freeze-end', 'freeze-start']);
     expect(dropped({ reviews: false })).toEqual(['monthly-review', 'weekly-review']);
     expect(dropped({ backup: false })).toEqual(['backup']);
+    expect(dropped({ dividends: false })).toEqual(['dividend-ex', 'dividend-pay']);
   });
 
   it('keeps the nearest 60 within 30 days, all after now', () => {

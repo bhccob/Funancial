@@ -177,6 +177,28 @@ describe('Root with reminders', () => {
     expect(stop).toHaveBeenCalledTimes(1);
   });
 
+  it('opens the tab a reminder points at, query and all', async () => {
+    let open: (route: string) => void = () => {};
+    const notifier = fakeNotifier({
+      onOpen: vi.fn((cb) => {
+        open = cb;
+        return () => {};
+      }),
+    });
+    const store = createStubStore({ phase: 'unlocked', data: onboarded() });
+    renderWithStore(onPhone(notifier, <Root />), store);
+    await screen.findByRole('heading', { level: 1, name: 'Home' });
+
+    act(() => open('/invest?tab=dividends'));
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'Invest' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Dividends' })).toHaveAttribute('aria-selected', 'true');
+
+    // The router outlives this test, so leave it where the next one expects to start.
+    act(() => open('/'));
+    await screen.findByRole('heading', { level: 1, name: 'Home' });
+  });
+
   it('keeps the phone reminders in step with the data once unlocked', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const data = onboarded();

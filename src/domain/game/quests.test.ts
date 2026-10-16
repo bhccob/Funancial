@@ -2,13 +2,16 @@ import { describe, expect, it } from 'vitest';
 import {
   localIso,
   makeCheckIn,
+  makeDividend,
   makeExpense,
+  makeHolding,
   makeIncome,
   makeLimit,
   makeProfile,
   makeSettings,
   makeSubscription,
 } from '@/test/fixtures';
+import type { Dividend } from '../entities';
 import { emptySnapshot, type DataSnapshot } from '../snapshot';
 import { currentQuests, QUEST_TITLES, questAwards, type QuestView } from './quests';
 import type { GameContext, QuestId } from './types';
@@ -40,6 +43,24 @@ const spent = (day: string, amount = 12_50) =>
 
 /** A weekly food limit of 120.00 that has existed since `since`. */
 const limitSince = (since: string) => makeLimit({ createdAt: localIso(since) });
+
+/** A holding that pays 1.00 a share once, ex on `ex` and paying on `pay`. */
+const payer = (ex: string, pay: string, id = 'h1') =>
+  makeHolding({
+    id,
+    purchaseDate: '2026-01-01',
+    dividendInfo: {
+      history: [],
+      nextExDate: ex,
+      nextPayDate: pay,
+      nextAmount: 1,
+      fetchedAt: localIso(ex),
+    },
+  });
+
+/** A confirmed dividend of holding `h1` that was expected on `expectedPayDate`. */
+const recorded = (expectedPayDate: string, over: Partial<Dividend> = {}) =>
+  makeDividend({ holdingId: 'h1', expectedPayDate, paidOn: expectedPayDate, ...over });
 
 describe('currentQuests', () => {
   it('shows each quest only when it applies', () => {
@@ -98,9 +119,10 @@ describe('currentQuests', () => {
       budgetLimit: [limitSince('2026-10-01')],
       profile: [makeProfile()],
       subscription: [makeSubscription()],
+      holding: [payer('2026-10-05', '2026-10-12')],
     });
     const views = currentQuests(data, ctx);
-    expect(views).toHaveLength(6);
+    expect(views).toHaveLength(7);
     for (const view of views) expect(view.title).toBe(QUEST_TITLES[view.id]);
     expect(Object.keys(QUEST_TITLES)).toEqual(views.map((q) => q.id));
   });
@@ -362,6 +384,89 @@ describe('currentQuests', () => {
     });
   });
 
+  describe('month-dividends', () => {
+    it('shows once a payout is due this month, or a dividend was recorded for this month', () => {
+      expect(ids(snap({}))).not.toContain('month-dividends');
+      expect(ids(snap({ holding: [makeHolding()] }))).not.toContain('month-dividends');
+      // Pays on the 20th, so it is not due yet; and one that paid last month is last month's.
+      expect(ids(snap({ holding: [payer('2026-10-10', '2026-10-20')] }))).not.toContain(
+        'month-dividends',
+      );
+      expect(ids(snap({ holding: [payer('2026-09-05', '2026-09-12')] }))).not.toContain(
+        'month-dividends',
+      );
+      const lastMonth = recorded('2026-09-12');
+      expect(ids(snap({ holding: [makeHolding()], dividend: [lastMonth] }))).not.toContain(
+        'month-dividends',
+      );
+
+      expect(
+        quest(snap({ holding: [payer('2026-10-05', '2026-10-12')] }), 'month-dividends'),
+      ).toEqual({
+        id: 'month-dividends',
+        cadence: 'monthly',
+        period: '2026-10',
+        title: "Confirm this month's dividends",
+        detail: '0 of 1 confirmed or skipped',
+        current: 0,
+        target: 1,
+        done: false,
+        reward: { xp: 80, coins: 20 },
+        action: null,
+      });
+      // Settled before today, and still this month's.
+      const settled = snap({ holding: [makeHolding()], dividend: [recorded('2026-10-03')] });
+      expect(ids(settled)).toContain('month-dividends');
+    });
+
+    it('is done once no due payout is left and one was confirmed or skipped', () => {
+      const holding = [payer('2026-10-05', '2026-10-12')];
+      for (const dividend of [
+        recorded('2026-10-12'),
+        recorded('2026-10-12', { status: 'skipped', amount: 0, bucket: null }),
+      ]) {
+        expect(quest(snap({ holding, dividend: [dividend] }), 'month-dividends')).toMatchObject({
+          done: true,
+          current: 1,
+          target: 1,
+          detail: '1 of 1 confirmed or skipped',
+        });
+      }
+    });
+
+    it('counts handled out of due plus handled, and is done only when none is left', () => {
+      const holding = [
+        payer('2026-10-02', '2026-10-05', 'a'),
+        payer('2026-10-08', '2026-10-12', 'b'),
+        payer('2026-10-09', '2026-10-13', 'c'),
+      ];
+      const partly = snap({ holding, dividend: [recorded('2026-10-05', { holdingId: 'a' })] });
+      expect(quest(partly, 'month-dividends')).toMatchObject({
+        done: false,
+        current: 1,
+        target: 3,
+        detail: '1 of 3 confirmed or skipped',
+      });
+
+      const all = snap({
+        holding,
+        dividend: ['a', 'b', 'c'].map((holdingId, i) =>
+          recorded(['2026-10-05', '2026-10-12', '2026-10-13'][i]!, { holdingId }),
+        ),
+      });
+      expect(quest(all, 'month-dividends')).toMatchObject({ done: true, current: 3, target: 3 });
+    });
+
+    it('stays open while a payout is due, though another was confirmed', () => {
+      const holding = [
+        payer('2026-10-02', '2026-10-05', 'a'),
+        payer('2026-10-08', '2026-10-12', 'b'),
+      ];
+      const data = snap({ holding, dividend: [recorded('2026-10-05', { holdingId: 'a' })] });
+      expect(quest(data, 'month-dividends')).toMatchObject({ done: false, current: 1, target: 2 });
+    });
+  });
+
   describe('month-backup', () => {
     it('completes with a backup this month', () => {
       const backedUp = snap({ settings: [makeSettings({ lastBackupAt: localIso('2026-10-02') })] });
@@ -428,13 +533,30 @@ describe('questAwards', () => {
       profile: [makeProfile()],
       income: [makeIncome({ source: 'salary', period: '2026-10', status: 'skipped' })],
       subscription: [makeSubscription({ auditedAt: localIso('2026-10-03') })],
+      holding: [payer('2026-10-05', '2026-10-12')],
+      dividend: [recorded('2026-10-12')],
       settings: [makeSettings({ lastBackupAt: localIso('2026-10-02') })],
     });
     expect(questAwards(data, ctx).map((a) => [a.key, a.xp, a.coins])).toEqual([
       ['quest:month-salary:2026-10', 100, 25],
       ['quest:month-audit:2026-10', 100, 25],
+      ['quest:month-dividends:2026-10', 80, 20],
       ['quest:month-backup:2026-10', 80, 20],
     ]);
+    expect(questAwards(data, ctx).find((a) => a.key.includes('dividends'))).toMatchObject({
+      kind: 'quest',
+      title: "Confirm this month's dividends",
+      label: "Quest: Confirm this month's dividends",
+    });
+  });
+
+  it('awards the dividend quest only once nothing is left to confirm', () => {
+    const holding = [
+      payer('2026-10-02', '2026-10-05', 'a'),
+      payer('2026-10-08', '2026-10-12', 'b'),
+    ];
+    const partly = snap({ holding, dividend: [recorded('2026-10-05', { holdingId: 'a' })] });
+    expect(questAwards(partly, ctx)).toEqual([]);
   });
 
   describe('the limits quest for the week that just closed', () => {

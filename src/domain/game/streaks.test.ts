@@ -2,13 +2,16 @@ import { describe, expect, it } from 'vitest';
 import {
   localIso,
   makeCheckIn,
+  makeDividend,
   makeExpense,
+  makeHolding,
   makeLedgerEntry,
   makeLimit,
   makeStreakFreeze,
 } from '@/test/fixtures';
 import { addDays, type LocalDate } from '../dates';
 import { emptySnapshot, type DataSnapshot } from '../snapshot';
+import { STREAK_MILESTONES } from './rules';
 import {
   computeStreaks,
   freezeTokensHeld,
@@ -61,12 +64,13 @@ function streak(data: DataSnapshot, kind: StreakKind, c: GameContext = ctx): Str
 }
 
 describe('computeStreaks', () => {
-  it('lists the logging, no-overspend and check-in streaks, in that order', () => {
+  it('lists the logging, no-overspend, check-in and dividend streaks, in that order', () => {
     const views = computeStreaks(snap({}), ctx);
     expect(views.map((v) => [v.kind, v.title, v.unit])).toEqual([
       ['logging', 'Daily logging', 'day'],
       ['no-overspend', 'No overspending', 'day'],
       ['checkin', 'Weekly check-in', 'week'],
+      ['dividend', 'Dividend streak', 'month'],
     ]);
   });
 
@@ -290,6 +294,105 @@ describe('computeStreaks', () => {
       });
     });
   });
+
+  describe('dividends', () => {
+    /** A confirmed dividend paid on each of `days`, for a portfolio with one holding. */
+    const paidOn = (...days: LocalDate[]) =>
+      snap({
+        holding: [makeHolding()],
+        dividend: days.map((day) => makeDividend({ paidOn: day })),
+      });
+
+    it('counts the months in a row, with the current one counting once it has a dividend', () => {
+      expect(streak(paidOn('2026-10-02', '2026-09-15', '2026-08-31'), 'dividend')).toEqual({
+        kind: 'dividend',
+        title: 'Dividend streak',
+        unit: 'month',
+        count: 3,
+        active: true,
+        doneThisPeriod: true,
+        tokens: null,
+        runStart: '2026-08-01',
+      });
+    });
+
+    it('keeps last month in the run until this month has its dividend', () => {
+      expect(streak(paidOn('2026-09-15', '2026-08-02'), 'dividend')).toMatchObject({
+        count: 2,
+        doneThisPeriod: false,
+        runStart: '2026-08-01',
+      });
+      // A month without one ends the run: October is open, September has none.
+      expect(streak(paidOn('2026-08-02', '2026-07-02'), 'dividend')).toMatchObject({
+        count: 0,
+        doneThisPeriod: false,
+        runStart: null,
+      });
+    });
+
+    it('stops at a gap and counts only the run that ends now', () => {
+      const data = paidOn('2026-10-02', '2026-09-15', '2026-07-20', '2026-06-20', '2026-05-20');
+      expect(streak(data, 'dividend')).toMatchObject({ count: 2, runStart: '2026-09-01' });
+    });
+
+    it('counts a month once however many dividends it has, by the day they were paid', () => {
+      const data = snap({
+        holding: [makeHolding()],
+        dividend: [
+          makeDividend({ paidOn: '2026-10-01' }),
+          makeDividend({ paidOn: '2026-10-28' }),
+          // Expected in September, paid on the 1st of October: it counts for October.
+          makeDividend({ expectedPayDate: '2026-09-28', paidOn: '2026-10-02' }),
+        ],
+      });
+      expect(streak(data, 'dividend')).toMatchObject({ count: 1, runStart: '2026-10-01' });
+    });
+
+    it('does not count a skipped payout', () => {
+      const skipped = makeDividend({
+        paidOn: '2026-10-02',
+        status: 'skipped',
+        amount: 0,
+        bucket: null,
+      });
+      const data = snap({
+        holding: [makeHolding()],
+        dividend: [skipped, makeDividend({ paidOn: '2026-09-02' })],
+      });
+      expect(streak(data, 'dividend')).toMatchObject({
+        count: 1,
+        doneThisPeriod: false,
+        runStart: '2026-09-01',
+      });
+    });
+
+    it('runs across the new year', () => {
+      const data = paidOn('2027-01-04', '2026-12-10', '2026-11-30');
+      expect(streak(data, 'dividend', { ...ctx, today: '2027-01-10' })).toMatchObject({
+        count: 3,
+        runStart: '2026-11-01',
+      });
+    });
+
+    it('is tracked only with a holding', () => {
+      const data = snap({ dividend: [makeDividend({ paidOn: '2026-10-02' })] });
+      expect(streak(data, 'dividend')).toEqual({
+        kind: 'dividend',
+        title: 'Dividend streak',
+        unit: 'month',
+        count: 0,
+        active: false,
+        doneThisPeriod: false,
+        tokens: null,
+        runStart: null,
+      });
+      expect(streak(snap({ holding: [makeHolding()] }), 'dividend')).toMatchObject({
+        active: true,
+        count: 0,
+        runStart: null,
+      });
+    });
+  });
 });
 
 describe('freezeTokensHeld', () => {
@@ -486,6 +589,37 @@ describe('streakAwards', () => {
         coins: 15,
       },
     ]);
+  });
+
+  it('awards dividend milestones by the month, keyed to the first day of the run', () => {
+    const months = ['2026-10-02', '2026-09-02', '2026-08-02'];
+    const data = snap({
+      holding: [makeHolding()],
+      dividend: months.map((paidOn) => makeDividend({ paidOn })),
+    });
+    expect(
+      streakAwards(computeStreaks(data, ctx)).filter((a) => a.key.includes('dividend')),
+    ).toEqual([
+      {
+        key: 'streak:dividend:2026-08-01:3',
+        kind: 'streak',
+        title: 'Dividend streak: 3-month streak',
+        label: 'Dividend streak: 3-month streak',
+        xp: 60,
+        coins: 15,
+      },
+    ]);
+    expect(STREAK_MILESTONES.dividend).toEqual([
+      { at: 3, xp: 60, coins: 15 },
+      { at: 6, xp: 150, coins: 40 },
+      { at: 12, xp: 400, coins: 100 },
+    ]);
+
+    const twoMonths = snap({
+      holding: [makeHolding()],
+      dividend: months.slice(0, 2).map((paidOn) => makeDividend({ paidOn })),
+    });
+    expect(streakAwards(computeStreaks(twoMonths, ctx))).toEqual([]);
   });
 
   it('awards no-overspend milestones and skips streaks with no run', () => {

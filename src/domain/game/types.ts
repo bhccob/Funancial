@@ -21,11 +21,26 @@ export type Award = {
   coins: number;
 };
 
-export type StreakKind = 'logging' | 'no-overspend' | 'checkin';
+export type StreakKind = 'logging' | 'no-overspend' | 'checkin' | 'dividend';
 
 export type QuestId =
-  'log-today' | 'week-limits' | 'week-checkin' | 'month-salary' | 'month-audit' | 'month-backup';
+  | 'log-today'
+  | 'week-limits'
+  | 'week-checkin'
+  | 'month-salary'
+  | 'month-audit'
+  | 'month-dividends'
+  | 'month-backup';
 
-export type BadgeId = 'first-expense' | 'subscription-slayer' | 'limit-keeper' | 'freeze-master';
+export type BadgeId =
+  | 'first-expense'
+  | 'subscription-slayer'
+  | 'limit-keeper'
+  | 'freeze-master'
+  | 'first-etf'
+  | 'portfolio-pro'
+  | 'first-dividend'
+  | 'dividend-collector'
+  | 'passive-income-pro';
 
 export type { ChallengeKind } from '../entities';

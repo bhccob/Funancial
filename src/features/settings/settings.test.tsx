@@ -488,6 +488,7 @@ describe('Reminders', () => {
     ['Salary freeze start and end', 'freeze'],
     ['Weekly and monthly reviews', 'reviews'],
     ['Backup reminder', 'backup'],
+    ['Dividends', 'dividends'],
   ] as const;
 
   /** What a fresh install holds: reminders off, the rest at their defaults, nobody asked yet. */

@@ -1,4 +1,16 @@
-import { Lock, Receipt, Scissors, Snowflake, Target, type LucideIcon } from 'lucide-react';
+import {
+  Briefcase,
+  ChartPie,
+  Coins,
+  HandCoins,
+  Lock,
+  PiggyBank,
+  Receipt,
+  Scissors,
+  Snowflake,
+  Target,
+  type LucideIcon,
+} from 'lucide-react';
 import { Section } from '@/components/ui/Section';
 import { localDay } from '@/domain/game/activity';
 import type { BadgeView } from '@/domain/game/badges';
@@ -12,6 +24,11 @@ const ICONS: Record<BadgeId, LucideIcon> = {
   'subscription-slayer': Scissors,
   'limit-keeper': Target,
   'freeze-master': Snowflake,
+  'first-etf': ChartPie,
+  'portfolio-pro': Briefcase,
+  'first-dividend': Coins,
+  'dividend-collector': HandCoins,
+  'passive-income-pro': PiggyBank,
 };
 
 function BadgeTile({ badge, frame }: { badge: BadgeView; frame: string }) {

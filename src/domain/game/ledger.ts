@@ -1,8 +1,14 @@
 import type { LedgerEntry } from '../entities';
 import type { DataSnapshot } from '../snapshot';
-import { loggedEntries } from './activity';
+import { loggedEntries, type LoggedEntry } from './activity';
 import { LOG_CAP_PER_DAY, LOG_XP } from './rules';
 import type { Award, Reward } from './types';
+
+const LOG_LABELS: Record<LoggedEntry['table'], string> = {
+  expense: 'Logged an expense',
+  income: 'Logged income',
+  dividend: 'Logged a dividend',
+};
 
 /** `-n`, but never `-0`: a reversal of 0 coins carries 0, not negative zero. */
 const negate = (n: number): number => (n === 0 ? 0 : -n);
@@ -41,7 +47,7 @@ export function loggingAwards(data: DataSnapshot): Award[] {
     const count = perDay.get(entry.day) ?? 0;
     if (count >= LOG_CAP_PER_DAY) continue;
     perDay.set(entry.day, count + 1);
-    const label = entry.table === 'expense' ? 'Logged an expense' : 'Logged income';
+    const label = LOG_LABELS[entry.table];
     awards.push({
       key: `log:${entry.table}:${entry.id}`,
       kind: 'log',

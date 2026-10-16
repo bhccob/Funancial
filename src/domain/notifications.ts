@@ -1,5 +1,6 @@
 import { nextDueDate, upcomingBills } from './budget';
 import { addDays, toLocalDate, type LocalDate } from './dates';
+import { expectedPayouts } from './dividends';
 import type { Profile, ReminderSettings, Settings } from './entities';
 import { isLoggedExpense } from './game/activity';
 import { formatMoney } from './money';
@@ -15,7 +16,9 @@ export type ReminderKind =
   | 'freeze-end'
   | 'weekly-review'
   | 'monthly-review'
-  | 'backup';
+  | 'backup'
+  | 'dividend-ex'
+  | 'dividend-pay';
 
 export type Reminder = {
   /** Stable for the same occasion, so a reminder can be replaced or cancelled by key. */
@@ -35,6 +38,9 @@ const MORNING = '09:00';
 const EVENING = '18:00';
 const BACKUP_TIME = '19:00';
 const BACKUP_EVERY_DAYS = 7;
+/** An ex-date reminder comes before its payout pays, so payouts are looked for this far past the horizon. */
+const PAY_LAG_DAYS = 60;
+const DIVIDENDS_ROUTE = '/invest?tab=dividends';
 
 type Context = {
   data: DataSnapshot;
@@ -206,7 +212,41 @@ function backups({ profile, settings, prefs, today, now, lastDay }: Context): Re
   return out;
 }
 
-const RULES: Rule[] = [dailyLog, renewals, cardBills, freezes, reviews, backups];
+/** The day before each expected ex-date, and each pay date, at 09:00. */
+function dividends({ data, profile, prefs, today, lastDay, money }: Context): Reminder[] {
+  if (!prefs.dividends) return [];
+  const payouts = expectedPayouts(data, profile.currency, today, addDays(lastDay, PAY_LAG_DAYS));
+  return payouts.flatMap(({ holding, exDate, payDate, net }): Reminder[] => {
+    const { id, symbol } = holding;
+    const ex: Reminder[] = exDate
+      ? [
+          {
+            key: `dividend-ex:${id}:${payDate}`,
+            kind: 'dividend-ex',
+            at: moment(addDays(exDate, -1), MORNING),
+            title: `${symbol} goes ex-dividend tomorrow`,
+            body: 'Hold your shares through today to get the next payout.',
+            route: DIVIDENDS_ROUTE,
+          },
+        ]
+      : [];
+    const confirm = 'Confirm it when it arrives.';
+    return [
+      ...ex,
+      {
+        key: `dividend-pay:${id}:${payDate}`,
+        kind: 'dividend-pay',
+        at: moment(payDate, MORNING),
+        title: `${symbol} pays a dividend today`,
+        // With no exchange rate there is no amount to name.
+        body: net === null ? confirm : `Expected about ${money(net)}. ${confirm}`,
+        route: DIVIDENDS_ROUTE,
+      },
+    ];
+  });
+}
+
+const RULES: Rule[] = [dailyLog, renewals, cardBills, freezes, reviews, backups, dividends];
 
 const byTimeThenKey = (a: Reminder, b: Reminder) =>
   a.at < b.at ? -1 : a.at > b.at ? 1 : a.key < b.key ? -1 : a.key > b.key ? 1 : 0;

@@ -1,4 +1,4 @@
-import { CalendarCheck, Flame, ShieldCheck, type LucideIcon } from 'lucide-react';
+import { CalendarCheck, Coins, Flame, ShieldCheck, type LucideIcon } from 'lucide-react';
 import { Link } from 'react-router';
 import { Section } from '@/components/ui/Section';
 import type { StreakView } from '@/domain/game/streaks';
@@ -8,11 +8,16 @@ const ICONS: Record<StreakKind, LucideIcon> = {
   logging: Flame,
   'no-overspend': ShieldCheck,
   checkin: CalendarCheck,
+  dividend: Coins,
 };
 
 /** What a streak that is not running says instead of a count, or `null` when it has one. */
 function hintOf(streak: StreakView): string | null {
-  if (!streak.active) return 'Set a limit to start this streak.';
+  if (!streak.active) {
+    return streak.kind === 'dividend'
+      ? 'Add a holding to start this streak.'
+      : 'Set a limit to start this streak.';
+  }
   if (streak.count > 0) return null;
   // A limit that is over stays over until its week or month resets, so today cannot start it.
   if (streak.kind === 'no-overspend' && !streak.doneThisPeriod) {
@@ -54,7 +59,7 @@ function StreakRow({ streak }: { streak: StreakView }) {
   );
 }
 
-/** Daily logging, no overspending and the weekly check-in: how long each has been kept. */
+/** Daily logging, no overspending, the weekly check-in and dividends: how long each has been kept. */
 export function StreaksSection({ streaks }: { streaks: readonly StreakView[] }) {
   return (
     <Section title="Streaks">

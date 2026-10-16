@@ -1096,7 +1096,35 @@ describe('Dividends tab', () => {
       `KO · Coca-Cola${usd(44_88)} a year`,
       `VWRL · All-World ETF${usd(34_00)} a year`,
     ]);
-    expect(screen.queryByText('Dividend streak')).not.toBeInTheDocument();
+  });
+
+  it('counts the dividend streak in months, below the top payers', () => {
+    const data = dividendData();
+    // MSFT paid on 2026-10-05; add September and August, and an earlier gap to stop at.
+    data.tables.dividend.push(
+      ...['2026-09-05', '2026-08-05', '2026-06-05'].map((day) =>
+        makeDividend({ holdingId: 'gone', symbol: 'MSFT', expectedPayDate: day, paidOn: day }),
+      ),
+    );
+    renderDividends(data);
+    expect(region('Dividend streak')).toHaveTextContent('Dividend streak3 months');
+    const titles = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent);
+    expect(titles.indexOf('Dividend streak')).toBeGreaterThan(titles.indexOf('Top payers'));
+  });
+
+  it('says how to start a dividend streak when none is running', () => {
+    const data = dividendData();
+    // Nothing confirmed paid this month or last.
+    data.tables.dividend = data.tables.dividend.filter((d) => d.paidOn < '2026-09-01');
+    renderDividends(data);
+    expect(region('Dividend streak')).toHaveTextContent('Start a new streak today.');
+    expect(region('Dividend streak')).not.toHaveTextContent('month');
+  });
+
+  it('counts one month in the singular', () => {
+    renderDividends();
+    expect(region('Dividend streak')).toHaveTextContent('Dividend streak1 month');
+    expect(region('Dividend streak')).not.toHaveTextContent('months');
   });
 
   it('says so when no holding pays dividends', () => {

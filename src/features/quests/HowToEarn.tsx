@@ -22,8 +22,12 @@ const QUEST_ORDER: readonly QuestId[] = [
   'week-checkin',
   'month-salary',
   'month-audit',
+  'month-dividends',
   'month-backup',
 ];
+
+/** "Daily logging" becomes "Daily logging streak"; "Dividend streak" already says it. */
+const streakGroupTitle = (title: string) => (title.endsWith('streak') ? title : `${title} streak`);
 
 function Rows({ lines }: { lines: readonly string[] }) {
   return (
@@ -47,7 +51,9 @@ export function HowToEarn({ streaks }: { streaks: readonly StreakView[] }) {
       <div className="flex flex-col gap-5">
         <Group title="Logging">
           <Rows
-            lines={[`Log an expense or income — +${LOG_XP} XP (up to ${LOG_CAP_PER_DAY} a day)`]}
+            lines={[
+              `Log an expense, income or dividend — +${LOG_XP} XP (up to ${LOG_CAP_PER_DAY} a day)`,
+            ]}
           />
         </Group>
         <Group title="Quests">
@@ -58,7 +64,7 @@ export function HowToEarn({ streaks }: { streaks: readonly StreakView[] }) {
           />
         </Group>
         {streaks.map((streak) => (
-          <Group key={streak.kind} title={`${streak.title} streak`}>
+          <Group key={streak.kind} title={streakGroupTitle(streak.title)}>
             <Rows
               lines={STREAK_MILESTONES[streak.kind].map(
                 (m) => `${m.at}-${streak.unit} streak — ${rewardText(m)}`,

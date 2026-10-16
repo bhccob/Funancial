@@ -15,8 +15,10 @@ import {
   localIso,
   makeChallenge,
   makeCheckIn,
+  makeDividend,
   makeExpense,
   makeGoal,
+  makeHolding,
   makeLedgerEntry,
   makeLimit,
   makeProfile,
@@ -115,7 +117,7 @@ describe('Quests screen: header', () => {
 });
 
 describe('Quests screen: streaks', () => {
-  it('lists the three streaks, with the no-limit hint and freezes held', () => {
+  it('lists the four streaks, with the no-limit and no-holding hints and freezes held', () => {
     renderQuests((d) => {
       d.tables.expense = ['2026-10-12', '2026-10-13', TODAY].map((day) =>
         makeExpense({ date: day, createdAt: AT(day) }),
@@ -124,8 +126,13 @@ describe('Quests screen: streaks', () => {
     });
 
     const rows = within(region('Streaks')).getAllByRole('listitem');
-    expect(rows).toHaveLength(3);
-    const [logging, noOverspend, checkin] = rows as [HTMLElement, HTMLElement, HTMLElement];
+    expect(rows).toHaveLength(4);
+    const [logging, noOverspend, checkin, dividend] = rows as [
+      HTMLElement,
+      HTMLElement,
+      HTMLElement,
+      HTMLElement,
+    ];
 
     expect(within(logging).getByText('Daily logging')).toBeInTheDocument();
     expect(within(logging).getByText('3 days')).toBeInTheDocument();
@@ -147,6 +154,11 @@ describe('Quests screen: streaks', () => {
       'href',
       '/shop',
     );
+
+    expect(within(dividend).getByText('Dividend streak')).toBeInTheDocument();
+    expect(within(dividend).getByText('Add a holding to start this streak.')).toBeInTheDocument();
+    expect(within(dividend).queryByText(/Freezes/)).not.toBeInTheDocument();
+    expect(within(dividend).queryByRole('link')).not.toBeInTheDocument();
   });
 
   it('counts each streak in its own unit', () => {
@@ -154,19 +166,23 @@ describe('Quests screen: streaks', () => {
       d.tables.budgetLimit = [aLimit()];
       d.tables.expense = [makeExpense({ date: TODAY, createdAt: AT(TODAY) })];
       d.tables.checkIn = [makeCheckIn({ kind: 'weekly', date: '2026-10-12' })];
+      d.tables.holding = [makeHolding()];
+      d.tables.dividend = ['2026-10-03', '2026-09-03'].map((paidOn) =>
+        makeDividend({ paidOn, createdAt: AT(paidOn) }),
+      );
     });
 
-    const [logging, noOverspend, checkin] = within(region('Streaks')).getAllByRole('listitem') as [
-      HTMLElement,
-      HTMLElement,
-      HTMLElement,
-    ];
+    const [logging, noOverspend, checkin, dividend] = within(region('Streaks')).getAllByRole(
+      'listitem',
+    ) as [HTMLElement, HTMLElement, HTMLElement, HTMLElement];
     expect(within(logging).getByText('1 day')).toBeInTheDocument();
     expect(within(logging).queryByText('Start a new streak today.')).not.toBeInTheDocument();
     // The limit has held since Oct 1, and nothing went over it.
     expect(within(noOverspend).getByText('14 days')).toBeInTheDocument();
     expect(within(noOverspend).queryByText(/Set a limit/)).not.toBeInTheDocument();
     expect(within(checkin).getByText('1 week')).toBeInTheDocument();
+    expect(within(dividend).getByText('2 months')).toBeInTheDocument();
+    expect(within(dividend).queryByText('Start a new streak today.')).not.toBeInTheDocument();
   });
 
   it('says the no-overspending streak waits for the limit to reset while today is over', () => {
@@ -397,6 +413,11 @@ describe('Quests screen: challenges', () => {
     expect(within(sprint).getByRole('button', { name: 'Start' })).toBeDisabled();
     expect(within(sprint).getByText('Add an emergency fund goal first.')).toBeInTheDocument();
 
+    const checkup = available.getByText('Portfolio Check-Up').closest('li')!;
+    expect(within(checkup).getByText('Check every holding within 7 days.')).toBeInTheDocument();
+    expect(within(checkup).getByRole('button', { name: 'Start' })).toBeDisabled();
+    expect(within(checkup).getByText('Add a holding first.')).toBeInTheDocument();
+
     const weekend = available.getByText('No-Spend Weekend').closest('li')!;
     expect(within(weekend).getByRole('button', { name: 'Start' })).toBeEnabled();
     expect(within(weekend).queryByText(/first\./)).not.toBeInTheDocument();
@@ -464,9 +485,11 @@ describe('Quests screen: challenges', () => {
       'subscription-audit': {},
       'budget-30': {},
       'emergency-sprint': { baseline: 300_000, goal: 100_000 },
+      'portfolio-checkup': {},
     };
     renderQuests((d) => {
       d.tables.budgetLimit = [aLimit()];
+      d.tables.holding = [makeHolding()];
       d.tables.subscription = [makeSubscription()];
       d.tables.goal = [makeGoal({ current: 300_000 })];
       d.tables.challenge = (Object.keys(running) as ChallengeKind[]).map((kind) =>
@@ -475,7 +498,7 @@ describe('Quests screen: challenges', () => {
     });
     const section = within(region('Challenges'));
     expect(section.getByRole('group', { name: 'Active' })).toBeInTheDocument();
-    expect(section.getAllByRole('button', { name: 'Give up' })).toHaveLength(4);
+    expect(section.getAllByRole('button', { name: 'Give up' })).toHaveLength(5);
     expect(section.queryByRole('group', { name: 'Available' })).not.toBeInTheDocument();
     expect(section.queryByRole('group', { name: 'Finished' })).not.toBeInTheDocument();
   });
@@ -501,7 +524,7 @@ describe('Quests screen: badges', () => {
     });
 
     const badges = within(region('Badges')).getAllByRole('listitem');
-    expect(badges).toHaveLength(4);
+    expect(badges).toHaveLength(9);
 
     const earned = badges[0]!;
     expect(within(earned).getByText('First Expense Logged')).toBeInTheDocument();
@@ -515,6 +538,11 @@ describe('Quests screen: badges', () => {
       'Subscription Slayer': ["Cancel a subscription you don't need.", 'scissors'],
       'Limit Keeper': ['Finish a calendar month without going over any limit.', 'target'],
       'Freeze Master': ['Get through a salary freeze without going over any limit.', 'snowflake'],
+      'First ETF': ['Add an ETF to your portfolio.', 'chart-pie'],
+      'Portfolio Pro': ['Hold five or more investments.', 'briefcase'],
+      'First Dividend': ['Confirm your first dividend.', 'coins'],
+      'Dividend Collector': ['Confirm 12 dividends.', 'hand-coins'],
+      'Passive Income Pro': ['Collect 100 in dividends in one month.', 'piggy-bank'],
     } as const;
     for (const [name, [description, icon]] of Object.entries(locked)) {
       const row = screen.getByText(name).closest('li')!;
@@ -524,7 +552,7 @@ describe('Quests screen: badges', () => {
       expect(within(row).queryByText(/Earned/)).not.toBeInTheDocument();
       expect(row.querySelector('[class*="ring-"]')).not.toBeInTheDocument();
     }
-    expect(container.querySelectorAll('svg.lucide-lock')).toHaveLength(3);
+    expect(container.querySelectorAll('svg.lucide-lock')).toHaveLength(8);
   });
 });
 
@@ -537,7 +565,7 @@ describe('Quests screen: how to earn', () => {
     const list = (name: string) => within(section.getByRole('group', { name }));
 
     expect(
-      list('Logging').getByText('Log an expense or income — +10 XP (up to 5 a day)'),
+      list('Logging').getByText('Log an expense, income or dividend — +10 XP (up to 5 a day)'),
     ).toBeInTheDocument();
 
     const quests = list('Quests');
@@ -550,8 +578,11 @@ describe('Quests screen: how to earn', () => {
       quests.getByText("Reconcile this month's salary — +100 XP, +25 coins"),
     ).toBeInTheDocument();
     expect(quests.getByText('Audit your subscriptions — +100 XP, +25 coins')).toBeInTheDocument();
+    expect(
+      quests.getByText("Confirm this month's dividends — +80 XP, +20 coins"),
+    ).toBeInTheDocument();
     expect(quests.getByText('Back up your data — +80 XP, +20 coins')).toBeInTheDocument();
-    expect(quests.getAllByRole('listitem')).toHaveLength(6);
+    expect(quests.getAllByRole('listitem')).toHaveLength(7);
 
     const logging = list('Daily logging streak');
     expect(logging.getByText('7-day streak — +50 XP, +10 coins')).toBeInTheDocument();
@@ -567,24 +598,36 @@ describe('Quests screen: how to earn', () => {
     expect(checkin.getByText('4-week streak — +60 XP, +15 coins')).toBeInTheDocument();
     expect(checkin.getByText('12-week streak — +200 XP, +50 coins')).toBeInTheDocument();
     expect(checkin.getByText('52-week streak — +800 XP, +200 coins')).toBeInTheDocument();
+    const dividend = list('Dividend streak');
+    expect(dividend.getAllByRole('listitem').map((li) => li.textContent)).toEqual([
+      '3-month streak — +60 XP, +15 coins',
+      '6-month streak — +150 XP, +40 coins',
+      '12-month streak — +400 XP, +100 coins',
+    ]);
 
     const badges = list('Badges');
     expect(badges.getByText('First Expense Logged — +50 XP, +10 coins')).toBeInTheDocument();
     expect(badges.getByText('Subscription Slayer — +100 XP, +25 coins')).toBeInTheDocument();
     expect(badges.getByText('Limit Keeper — +150 XP, +40 coins')).toBeInTheDocument();
     expect(badges.getByText('Freeze Master — +150 XP, +40 coins')).toBeInTheDocument();
+    expect(badges.getByText('First ETF — +100 XP, +25 coins')).toBeInTheDocument();
+    expect(badges.getByText('Portfolio Pro — +150 XP, +40 coins')).toBeInTheDocument();
+    expect(badges.getByText('First Dividend — +100 XP, +25 coins')).toBeInTheDocument();
+    expect(badges.getByText('Dividend Collector — +150 XP, +40 coins')).toBeInTheDocument();
+    expect(badges.getByText('Passive Income Pro — +200 XP, +50 coins')).toBeInTheDocument();
 
     const challenges = list('Challenges');
     expect(challenges.getByText('No-Spend Weekend — +120 XP, +30 coins')).toBeInTheDocument();
     expect(challenges.getByText('Subscription Audit — +120 XP, +30 coins')).toBeInTheDocument();
     expect(challenges.getByText('30-Day Budget Streak — +400 XP, +100 coins')).toBeInTheDocument();
     expect(challenges.getByText('Emergency Fund Sprint — +250 XP, +60 coins')).toBeInTheDocument();
+    expect(challenges.getByText('Portfolio Check-Up — +120 XP, +30 coins')).toBeInTheDocument();
   });
 });
 
 describe('Quests screen: how to earn, with nothing set up', () => {
-  it('lists all six quests with their rewards, whether or not they apply yet', () => {
-    // No limit, no salary, no subscription, and a demo that cannot back up: three quests do not apply.
+  it('lists all seven quests with their rewards, whether or not they apply yet', () => {
+    // No limit, no salary, no subscription, no dividend and a demo that cannot back up: four quests do not apply.
     renderQuests(() => {}, { namespace: 'demo' });
     expect(screen.queryByRole('group', { name: 'This month' })).not.toBeInTheDocument();
 
@@ -595,6 +638,7 @@ describe('Quests screen: how to earn, with nothing set up', () => {
       'Do your weekly check-in — +40 XP, +10 coins',
       "Reconcile this month's salary — +100 XP, +25 coins",
       'Audit your subscriptions — +100 XP, +25 coins',
+      "Confirm this month's dividends — +80 XP, +20 coins",
       'Back up your data — +80 XP, +20 coins',
     ]);
   });

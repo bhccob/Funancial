@@ -17,11 +17,15 @@ import { useFinanceActions } from '@/store/useFinance';
 const HOURS = Array.from({ length: 17 }, (_, i) => `${String(i + 7).padStart(2, '0')}:00`);
 
 /** The rules after the daily nudge, which has its time beside it. */
-const RULES: Array<{ key: 'bills' | 'freeze' | 'reviews' | 'backup'; label: string }> = [
+const RULES: Array<{
+  key: 'bills' | 'freeze' | 'reviews' | 'backup' | 'dividends';
+  label: string;
+}> = [
   { key: 'bills', label: 'Bills and renewals' },
   { key: 'freeze', label: 'Salary freeze start and end' },
   { key: 'reviews', label: 'Weekly and monthly reviews' },
   { key: 'backup', label: 'Backup reminder' },
+  { key: 'dividends', label: 'Dividends' },
 ];
 
 /** Only offered where the phone can schedule reminders (`Platform.notifier`). */

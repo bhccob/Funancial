@@ -13,11 +13,13 @@ import {
   topPayers,
   type ExpectedPayout,
 } from '@/domain/dividends';
+import { dividendStreak } from '@/domain/game/streaks';
 import { cn } from '@/lib/cn';
 import { formatDay, formatMonthShort, formatMonthYear, formatPercent } from '@/lib/format';
 import { useAction } from '@/lib/useAction';
 import { useApp } from '@/store/AppStoreProvider';
 import { useCurrency, useMoney, useToday } from '@/store/useFinance';
+import { useGameContext } from '@/store/useGame';
 import { useInvestActions, usePortfolio } from '@/store/useInvest';
 import { ConfirmDividendDialog } from './ConfirmDividendDialog';
 
@@ -103,13 +105,15 @@ function DueRow({
 
 /**
  * Dividends: what came in and what is expected, a bar per month, the payouts waiting to be
- * confirmed, those coming in the next 60 days, and the holdings that pay the most.
+ * confirmed, those coming in the next 60 days, the holdings that pay the most, and the streak of
+ * months with a dividend.
  */
 export function DividendsTab() {
   const money = useMoney();
   const data = useApp((s) => s.data);
   const currency = useCurrency();
   const today = useToday();
+  const game = useGameContext();
   const { value } = usePortfolio();
   const { skipDividend } = useInvestActions();
   const run = useAction();
@@ -131,6 +135,7 @@ export function DividendsTab() {
       empty: data.tables.dividend.length === 0 && due.length === 0 && ahead.length === 0,
     };
   }, [data, currency, today]);
+  const streak = useMemo(() => dividendStreak(data, game), [data, game]);
   const months = useMemo(
     () =>
       monthlyIncome(data, currency, today, dir).map(({ month, amount }) => ({
@@ -256,6 +261,18 @@ export function DividendsTab() {
               />
             ))}
           </ul>
+        </Section>
+      )}
+
+      {streak.active && (
+        <Section title="Dividend streak">
+          {streak.count > 0 ? (
+            <p className="text-[15px] font-extrabold tabular-nums">
+              {`${streak.count} ${streak.unit}${streak.count === 1 ? '' : 's'}`}
+            </p>
+          ) : (
+            <p className="text-muted text-sm font-semibold">Start a new streak today.</p>
+          )}
         </Section>
       )}
 

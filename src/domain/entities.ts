@@ -299,6 +299,7 @@ export const ChallengeKindSchema = z.enum([
   'subscription-audit',
   'budget-30',
   'emergency-sprint',
+  'portfolio-checkup',
 ]);
 export type ChallengeKind = z.infer<typeof ChallengeKindSchema>;
 
