@@ -60,7 +60,7 @@ function SellForm({ holding, onDone }: { holding: Holding; onDone(): void }) {
   }
   const all = plan ? plan.all : n === held;
   // Said only for a part of them; all of them, or none that make sense, say what selling all does.
-  const left = n !== null && n > 0 && n < held ? held - n : null;
+  const left = n !== null && n > 0 && n < held && !all ? held - n : null;
 
   function clear(key: keyof Errors) {
     setErrors((e) => ({ ...e, [key]: undefined }));

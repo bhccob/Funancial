@@ -68,6 +68,29 @@ describe('planSale', () => {
     expect(plan).toMatchObject({ all: true, shares: 10, cost: 500_00 });
   });
 
+  it('sells all when the count typed is the one shown, to four decimals', () => {
+    // Shown as 10.0709: selling that many would leave 0.0000064 of a share, too little to sell.
+    const odd = makeHolding({ shares: 10.070906432748538, costBasis: 500_00 });
+    expect(formatShares(odd.shares, 'en-US')).toBe('10.0709');
+    expect(planSale(odd, 10.0709, 60_00)).toMatchObject({
+      all: true,
+      shares: odd.shares,
+      cost: 500_00,
+    });
+    // Shown as 10.071, a hair more than is held.
+    const up = makeHolding({ shares: 10.07096, costBasis: 500_00 });
+    expect(formatShares(up.shares, 'en-US')).toBe('10.071');
+    expect(planSale(up, 10.071, 60_00)).toMatchObject({ all: true, shares: up.shares });
+  });
+
+  it('never leaves less than half the last shown digit of a share', () => {
+    const plan = (sold: number) => planSale(ko, sold, 60_00);
+    expect(plan(10 - 4.9e-5)).toMatchObject({ all: true, shares: 10 });
+    expect(plan(10 - 6e-5)).toMatchObject({ all: false, shares: 10 - 6e-5 });
+    expect(plan(10 + 4.9e-5)).toMatchObject({ all: true, shares: 10 });
+    expect(() => plan(10 + 6e-5)).toThrow('You only have 10 shares.');
+  });
+
   it('sells fractions of a share', () => {
     const plan = planSale(makeHolding({ shares: 2.5, costBasis: 100_00 }), 0.5, 10_00);
     expect(plan).toMatchObject({ shares: 0.5, proceeds: 5_00, cost: 20_00, profit: -15_00 });
@@ -100,6 +123,8 @@ describe('planSale', () => {
     expect(() => planSale(odd, 2000, 1_00)).toThrow(
       `You only have ${formatShares(1234.56789)} shares.`,
     );
+    // One share is "1 share".
+    expect(() => planSale(makeHolding({ shares: 1 }), 2, 1_00)).toThrow('You only have 1 share.');
   });
 });
 

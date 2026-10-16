@@ -1,11 +1,11 @@
-import { formatShares } from '@/lib/format';
+import { sharesText } from '@/lib/format';
 import type { LocalDate } from './dates';
 import type { Holding, Sale } from './entities';
 import { costForShares, portfolio } from './portfolio';
 import type { DataSnapshot } from './snapshot';
 
-/** Selling this close to every share is selling every share: the rest is floating-point dust. */
-const ALL = 1e-9;
+/** Half the last of the 4 decimals shares are shown to: a count within it of every share is all. */
+const DUST = 5e-5;
 
 /** What `planSale` says about a price that leaves no proceeds; the Sell dialog shows it at the price. */
 export const NO_PROCEEDS = 'Enter a price above 0.';
@@ -27,8 +27,9 @@ export type SalePlan = {
  */
 export function planSale(h: Holding, shares: number, pricePerShareMinor: number): SalePlan {
   if (!(shares > 0)) throw new Error('Sell at least a part of a share.');
-  if (shares > h.shares + ALL) throw new Error(`You only have ${formatShares(h.shares)} shares.`);
-  const all = shares >= h.shares - ALL;
+  if (shares > h.shares + DUST) throw new Error(`You only have ${sharesText(h.shares)}.`);
+  // A sale that would leave less than DUST sells all, so no unsellable sliver stays behind.
+  const all = shares >= h.shares - DUST;
   const sold = all ? h.shares : shares;
   const cost = costForShares(h, sold);
   const proceeds = Math.round(sold * pricePerShareMinor);

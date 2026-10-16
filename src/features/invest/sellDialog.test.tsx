@@ -6,6 +6,7 @@ import type { Holding } from '@/domain/entities';
 import { formatMoney } from '@/domain/money';
 import { FUTURE } from '@/store/financeActions';
 import { saleBeforePurchase } from '@/store/investActions';
+import { formatShares, sharesText } from '@/lib/format';
 import { toastStore } from '@/lib/toast';
 import { market } from '@/services/market';
 import { renderWithStore } from '@/test/appStoreStub';
@@ -151,6 +152,15 @@ describe('Sell dialog', () => {
     await enter(dialog, SHARES, '10');
     await enter(dialog, SHARES, '40');
     expect(dialog).not.toHaveTextContent(/shares? stays?\./);
+  });
+
+  it('takes the count shown, to four decimals, as all, with no sliver said to stay', async () => {
+    const { dialog } = await openSell(vusa({ shares: 10.070906432748538 }));
+    await enter(dialog, `Shares to sell · of ${formatShares(10.0709)}`, '10.0709');
+    expect(dialog).not.toHaveTextContent(/shares? stays?\./);
+    expect(
+      within(dialog).getByRole('button', { name: `Sell all ${sharesText(10.0709)}` }),
+    ).toBeInTheDocument();
   });
 
   it('shows what you get and the profit on these shares as the shares and the price change', async () => {
