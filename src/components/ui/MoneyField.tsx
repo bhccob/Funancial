@@ -1,6 +1,7 @@
 import { useId, useState } from 'react';
 import { currencySymbol, formatMoneyPlain, parseMoney } from '@/domain/money';
 import { cn } from '@/lib/cn';
+import { lineInput, lineLabel, type FieldVariant } from './lineField';
 
 export interface MoneyFieldProps {
   label: string;
@@ -11,6 +12,8 @@ export interface MoneyFieldProps {
   error?: string;
   autoFocus?: boolean;
   id?: string;
+  /** `line` is the lighter field of the Invest forms: the label over the value, a hairline under it. */
+  variant?: FieldVariant;
 }
 
 const UNREADABLE = 'Enter an amount like 12.50';
@@ -25,6 +28,7 @@ export function MoneyField({
   error,
   autoFocus,
   id,
+  variant = 'box',
 }: MoneyFieldProps) {
   const autoId = useId();
   const inputId = id ?? autoId;
@@ -34,16 +38,20 @@ export function MoneyField({
   const symbol = currencySymbol(currency);
   const hintId = hint ? `${inputId}-hint` : undefined;
   const errorId = shownError ? `${inputId}-error` : undefined;
+  const line = variant === 'line';
 
   return (
-    <div className="flex flex-col gap-1.5">
-      <label htmlFor={inputId} className="text-sm font-bold">
+    <div className={cn('flex flex-col', line ? 'gap-0.5' : 'gap-1.5')}>
+      <label htmlFor={inputId} className={line ? lineLabel : 'text-sm font-bold'}>
         {label}
       </label>
       <div className="relative">
         <span
           aria-hidden
-          className="text-muted pointer-events-none absolute inset-y-0 left-3 flex items-center text-base font-semibold"
+          className={cn(
+            'text-muted pointer-events-none absolute inset-y-0 flex items-center text-base font-semibold',
+            line ? 'left-0' : 'left-3',
+          )}
         >
           {symbol}
         </span>
@@ -57,7 +65,7 @@ export function MoneyField({
           aria-invalid={shownError ? true : undefined}
           aria-describedby={[hintId, errorId].filter(Boolean).join(' ') || undefined}
           // Room for the symbol whatever its length ("$", "US$", "CHF").
-          style={{ paddingLeft: `calc(${symbol.length}ch + 1.25rem)` }}
+          style={{ paddingLeft: `calc(${symbol.length}ch + ${line ? 0.5 : 1.25}rem)` }}
           onChange={(e) => {
             setText(e.target.value);
             setUnreadable(false);
@@ -73,10 +81,14 @@ export function MoneyField({
               setText(formatMoneyPlain(parsed, currency));
             }
           }}
-          className={cn(
-            'text-text h-11 w-full rounded-md border bg-transparent pr-3 text-base font-semibold tabular-nums',
-            shownError ? 'border-danger' : 'border-border-strong',
-          )}
+          className={
+            line
+              ? lineInput(!!shownError)
+              : cn(
+                  'text-text h-11 w-full rounded-md border bg-transparent pr-3 text-base font-semibold tabular-nums',
+                  shownError ? 'border-danger' : 'border-border-strong',
+                )
+          }
         />
       </div>
       {hint && (
