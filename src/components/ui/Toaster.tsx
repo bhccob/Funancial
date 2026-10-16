@@ -13,7 +13,7 @@ const bars: Record<ToastTone, string> = {
 };
 
 /**
- * Toasts float just above the 76px bottom bar on phones (plus a 12px gap and the safe area) and at
+ * Toasts float just above the 64px bottom bar on phones (plus a 12px gap and the safe area) and at
  * the bottom center on desktop. While a modal dialog is open they render inside it, since the
  * page behind it is inert.
  */
@@ -23,7 +23,7 @@ export function Toaster() {
   const region = (
     <div
       aria-live="polite"
-      className="pointer-events-none fixed inset-x-3 bottom-[calc(88px+env(safe-area-inset-bottom))] z-40 flex flex-col items-center gap-2 md:bottom-8"
+      className="pointer-events-none fixed inset-x-3 bottom-[calc(76px+env(safe-area-inset-bottom))] z-40 flex flex-col items-center gap-2 md:bottom-8"
     >
       {toasts.map((t) => (
         <div

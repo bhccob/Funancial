@@ -54,15 +54,10 @@ test('unknown route shows not found with a way home', async ({ page }) => {
   await expect(page.getByRole('heading', { level: 1, name: 'Home' })).toBeVisible();
 });
 
-test('add is reachable from the bar on mobile and opens Add Expense', async ({
-  page,
-}, testInfo) => {
+test('add is reachable from Home on mobile and opens Add Expense', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'mobile-chromium', 'mobile layout only');
-  await startFresh(page, '/goals');
-  await page
-    .getByRole('navigation', { name: 'Primary' })
-    .getByRole('link', { name: 'Add expense' })
-    .click();
+  await startFresh(page);
+  await page.getByRole('link', { name: 'Expense', exact: true }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Add' })).toBeVisible();
   await expect(page.getByRole('radio', { name: 'Expense' })).toBeChecked();
 });

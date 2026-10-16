@@ -64,32 +64,17 @@ const row = (sheet: HTMLElement, label: string) =>
   within(sheet).getByRole('link', { name: new RegExp(`^${label}`) });
 
 describe('bottom bar', () => {
-  it('shows Home, Budget, Add expense, Quests and Menu in the bottom bar', () => {
+  it('shows Home, Budget, Quests and Menu in the bottom bar, with no Add button', () => {
     renderAt('/');
     const bar = screen.getByRole('navigation', { name: 'Primary' });
 
     const slots = [...bar.querySelectorAll('a, button')];
-    expect(slots.map((s) => s.getAttribute('aria-label') ?? s.textContent)).toEqual([
-      'Home',
-      'Budget',
-      'Add expense',
-      'Quests',
-      'Menu',
-    ]);
+    expect(slots.map((s) => s.textContent)).toEqual(['Home', 'Budget', 'Quests', 'Menu']);
     expect(within(bar).getByRole('link', { name: 'Home' })).toHaveAttribute('href', '/');
     expect(within(bar).getByRole('link', { name: 'Budget' })).toHaveAttribute('href', '/budget');
-    expect(within(bar).getByRole('link', { name: 'Add expense' })).toHaveAttribute('href', '/add');
     expect(within(bar).getByRole('link', { name: 'Quests' })).toHaveAttribute('href', '/quests');
     expect(within(bar).getByRole('button', { name: 'Menu' })).toBeInTheDocument();
-  });
-
-  it('labels the round Add button "Add" like the other slots, inside its "Add expense" name', () => {
-    renderAt('/');
-    const bar = screen.getByRole('navigation', { name: 'Primary' });
-    const add = within(bar).getByRole('link', { name: 'Add expense' });
-    // The visible text is "Add" and the plus is decoration, so the name keeps the label in it.
-    expect(add.textContent).toBe('Add');
-    expect(add.querySelector('svg')?.closest('[aria-hidden="true"]')).not.toBeNull();
+    expect(within(bar).queryByRole('link', { name: /add/i })).not.toBeInTheDocument();
   });
 
   it('marks the current screen and leaves the Menu sheet closed', () => {
@@ -115,14 +100,6 @@ describe('bottom bar', () => {
 
     await userEvent.keyboard('{Escape}');
     expect(menu).toHaveAttribute('aria-expanded', 'false');
-  });
-
-  it('opens Add from the bar on any screen', async () => {
-    renderAt('/invest');
-    const bar = screen.getByRole('navigation', { name: 'Primary' });
-    await userEvent.click(within(bar).getByRole('link', { name: 'Add expense' }));
-    expect(screen.getByRole('heading', { level: 1, name: 'Add' })).toBeInTheDocument();
-    expect(screen.getByRole('radio', { name: 'Expense' })).toBeChecked();
   });
 });
 

@@ -149,11 +149,11 @@ describe('Dialog', () => {
 });
 
 describe('Toaster', () => {
-  it('floats toasts just above the 76px bottom bar on phones, and low on desktop', () => {
+  it('floats toasts just above the 64px bottom bar on phones, and low on desktop', () => {
     toastStore.setState({ toasts: [] });
     const { container } = render(<Toaster />);
     expect(container.firstElementChild).toHaveClass(
-      'bottom-[calc(88px+env(safe-area-inset-bottom))]',
+      'bottom-[calc(76px+env(safe-area-inset-bottom))]',
       'md:bottom-8',
     );
   });
