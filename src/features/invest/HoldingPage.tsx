@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import { Link, Navigate, useParams } from 'react-router';
+import { Link, Navigate, useLocation, useNavigate, useParams } from 'react-router';
 import { Button } from '@/components/ui/Button';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Section } from '@/components/ui/Section';
@@ -33,6 +33,8 @@ function Fact({ label, note, children }: { label: string; note?: string; childre
  */
 export function HoldingPage() {
   const { id } = useParams();
+  const navigate = useNavigate();
+  const location = useLocation();
   const holding = useApp((s) => s.data.tables.holding.find((h) => h.id === id));
   const dividends = useApp((s) => s.data.tables.dividend);
   const row = useInvestPortfolio().rows.find((r) => r.holding.id === id);
@@ -58,8 +60,14 @@ export function HoldingPage() {
     <div>
       <Link
         to="/invest?tab=holdings"
-        // Replaces the holding's page, so Back from Invest does not return to it.
+        // Opened from inside the app, Back is a step back to the Invest it came from, as it was.
+        // Opened directly there is nothing to go back to: Holdings takes the holding's place.
         replace
+        onClick={(e) => {
+          if (location.key === 'default') return;
+          e.preventDefault();
+          void navigate(-1);
+        }}
         aria-label="Back to Invest"
         className="text-muted -mb-1 inline-flex min-h-11 items-center text-[15px] font-extrabold"
       >

@@ -111,18 +111,24 @@ describe('the way to a holding', () => {
     expect(screen.getByRole('tab', { name: 'Holdings' })).toHaveAttribute('aria-selected', 'true');
   });
 
-  it('replaces the holding in the history on the way back, so Back from Invest skips it', async () => {
-    const { router } = renderPage(dataOf(), '/invest');
+  it('goes back one step to the Invest it came from, with its pies choice kept', async () => {
+    const { router } = renderPage(dataOf(), '/invest?pies=together');
     await userEvent.click(screen.getByRole('link', { name: /^VUSA\.AS · / }));
     await userEvent.click(screen.getByRole('link', { name: 'Back to Invest' }));
-    expect(router.state.historyAction).toBe('REPLACE');
-    expect(router.state.location.search).toBe('?tab=holdings');
-
-    // One step back is the Invest the person started from, not the holding they left.
-    await router.navigate(-1);
-    await waitFor(() => expect(router.state.location.pathname).toBe('/invest'));
-    expect(router.state.location.search).toBe('');
+    // A step back in the history, not a new entry, so the first Android Back leaves Invest.
+    expect(router.state.historyAction).toBe('POP');
+    expect(router.state.location.pathname).toBe('/invest');
+    expect(router.state.location.search).toBe('?pies=together');
     expect(screen.queryByRole('heading', { level: 1, name: 'VUSA.AS' })).not.toBeInTheDocument();
+  });
+
+  it('opens Holdings in place of the holding when there is nothing to go back to', async () => {
+    const { router } = renderPage();
+    await userEvent.click(screen.getByRole('link', { name: 'Back to Invest' }));
+    expect(router.state.historyAction).toBe('REPLACE');
+    expect(router.state.location.pathname).toBe('/invest');
+    expect(router.state.location.search).toBe('?tab=holdings');
+    expect(screen.getByRole('tab', { name: 'Holdings' })).toHaveAttribute('aria-selected', 'true');
   });
 
   it('goes back to Invest for a holding that is not there', () => {
