@@ -111,7 +111,17 @@ export const fetchSearch = (q: string) => get<SearchResponse>('search', { q });
 export const fetchHistory = (symbol: string, from: LocalDate) =>
   get<HistoryResponse>('history', { symbol: symbol.toUpperCase(), from });
 
-/** What the invest actions need from the price service; tests hand them a fake. */
+/** What a product page gave: a price in major units, a currency code, and the page's own name. */
+export type ExtractResponse = {
+  name: string | null;
+  price: number | null;
+  currency: string | null;
+};
+
+/** Only the link goes out, and only when the person pastes one; nothing else about them does. */
+export const fetchExtract = (url: string) => get<ExtractResponse>('extract', { url });
+
+/** What the actions need from the price service; tests hand them a fake. */
 export const market = {
   fetchQuotes,
   fetchProfile,
@@ -120,5 +130,6 @@ export const market = {
   fetchFx,
   fetchSearch,
   fetchHistory,
+  fetchExtract,
 };
 export type Market = typeof market;

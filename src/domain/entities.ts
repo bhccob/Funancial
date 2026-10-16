@@ -502,6 +502,10 @@ export const BuyDecisionSchema = z.object({
   meter: MeterSchema,
   verdict: VerdictSchema,
   confidence: ConfidenceSchema,
+  /** Why the meter was held at Wait, as it was when asked: the answer shows these, not a recount. */
+  guards: z.object({ capAtWait: z.boolean(), reasons: z.array(z.string()) }),
+  /** The lines under the answer: how About you shaped it, and the person's own words. */
+  notes: z.array(z.string()),
   status: z.enum(['open', 'waiting', 'bought', 'skipped']),
   /** The day to ask again, for a decision to wait. */
   remindOn: LocalDateSchema.nullable(),

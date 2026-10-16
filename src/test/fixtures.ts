@@ -314,6 +314,8 @@ export function makeBuyDecision(overrides: Partial<BuyDecision> = {}): BuyDecisi
     meter: 50,
     verdict: 'wait',
     confidence: 'low',
+    guards: { capAtWait: false, reasons: [] },
+    notes: [],
     status: 'open',
     remindOn: null,
     boughtOn: null,

@@ -555,6 +555,22 @@ describe('BuyDecision', () => {
       }
     }
   });
+  it('keeps the notes and the guard reasons the answer was shown with', () => {
+    const d = makeBuyDecision({
+      notes: ['You said: a bike'],
+      guards: { capAtWait: true, reasons: ["Needs money you don't have"] },
+    });
+    expect(BuyDecisionSchema.parse(d)).toEqual(d);
+    expect(ok(BuyDecisionSchema, makeBuyDecision({ notes: 'a bike' as never }))).toBe(false);
+    expect(ok(BuyDecisionSchema, makeBuyDecision({ guards: { capAtWait: 'yes' } as never }))).toBe(
+      false,
+    );
+    for (const key of ['notes', 'guards']) {
+      const without: Record<string, unknown> = { ...makeBuyDecision() };
+      delete without[key];
+      expect(ok(BuyDecisionSchema, without), key).toBe(false);
+    }
+  });
   it('knows four statuses', () => {
     for (const status of ['open', 'waiting', 'bought', 'skipped'] as const) {
       expect(ok(BuyDecisionSchema, makeBuyDecision({ status }))).toBe(true);
