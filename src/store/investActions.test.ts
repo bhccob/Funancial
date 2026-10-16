@@ -902,7 +902,7 @@ describe('selling a holding', () => {
     expect(tables().transaction).toHaveLength(1);
   });
 
-  it('refuses a future date, too many shares and a holding that is gone, writing nothing', async () => {
+  it('refuses a future date, too many shares, a zero price and a holding that is gone, writing nothing', async () => {
     const { actions, tables, holding, h } = await withHolding();
     const kept = holding(h.id);
     await expect(actions.sellHolding(h.id, { ...sell, soldOn: '2026-10-15' })).rejects.toThrow(
@@ -913,6 +913,9 @@ describe('selling a holding', () => {
     );
     await expect(actions.sellHolding(h.id, { ...sell, shares: 0 })).rejects.toThrow(
       'Sell at least a part of a share.',
+    );
+    await expect(actions.sellHolding(h.id, { ...sell, pricePerShareMinor: 0 })).rejects.toThrow(
+      'Enter a price above 0.',
     );
     await expect(actions.sellHolding('nope', sell)).rejects.toThrow('That item no longer exists.');
     expect(tables().sale).toEqual([]);

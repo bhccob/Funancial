@@ -78,6 +78,21 @@ describe('planSale', () => {
     expect(() => planSale(ko, -1, 60_00)).toThrow('Sell at least a part of a share.');
   });
 
+  it('refuses a price that makes the proceeds nothing', () => {
+    const message = 'Enter a price above 0.';
+    expect(() => planSale(ko, 5, 0)).toThrow(message);
+    expect(() => planSale(ko, 5, -60_00)).toThrow(message);
+    expect(() => planSale(ko, 5, NaN)).toThrow(message);
+    // 0.4 of a share at 1 cent rounds to nothing.
+    expect(() => planSale(ko, 0.4, 1)).toThrow(message);
+    expect(planSale(ko, 0.5, 1).proceeds).toBe(1);
+  });
+
+  it('names the shares before the price when both are wrong', () => {
+    expect(() => planSale(ko, 0, 0)).toThrow('Sell at least a part of a share.');
+    expect(() => planSale(ko, 11, 0)).toThrow('You only have 10 shares.');
+  });
+
   it('refuses more than is held, naming how many are', () => {
     expect(() => planSale(ko, 11, 60_00)).toThrow('You only have 10 shares.');
     expect(() => planSale(ko, 10.001, 60_00)).toThrow('You only have 10 shares.');

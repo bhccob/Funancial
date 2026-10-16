@@ -45,8 +45,27 @@ export function categorySlices(expenses: Expense[], range: Range, top = 5): Slic
 }
 
 /**
- * Cash, savings and passive income plus the holdings bought by then, less everything owed, as of
- * the end of `day`.
+ * What the shares sold after `day` were worth on it, which the holdings left no longer show: each
+ * sale's proceeds, for a sale of shares bought by then. The purchase date is the live holding's, else
+ * a snapshot of it a sale kept; a sale with neither is left out.
+ */
+function soldLater(data: DataSnapshot, day: LocalDate): number {
+  const { holding, sale } = data.tables;
+  let value = 0;
+  for (const s of sale) {
+    if (s.soldOn <= day) continue;
+    const was =
+      holding.find((h) => h.id === s.holdingId) ??
+      sale.find((o) => o.holdingId === s.holdingId && o.restore)?.restore;
+    // shortcut: the sold shares are valued at the sale price, there is no price history; upgrade when prices are stored by day
+    if (was && was.purchaseDate <= day) value += s.proceeds;
+  }
+  return value;
+}
+
+/**
+ * Cash, savings and passive income plus the holdings bought by then (and the shares sold since, at
+ * their sale price), less everything owed, as of the end of `day`.
  */
 export function netWorthOn(data: DataSnapshot, day: LocalDate): number {
   const debtTotal = data.tables.debt.reduce((sum, d) => sum + debtBalance(d, data, day), 0);
@@ -58,7 +77,7 @@ export function netWorthOn(data: DataSnapshot, day: LocalDate): number {
         0,
       )
     : 0;
-  return netWorth(bucketBalances(data, day), debtTotal, investments);
+  return netWorth(bucketBalances(data, day), debtTotal, investments + soldLater(data, day));
 }
 
 /** Net worth on each of the `days` days ending `endDay`, oldest first. */

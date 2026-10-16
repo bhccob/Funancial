@@ -20,6 +20,7 @@ export type SalePlan = {
  * What selling `shares` of a holding at `pricePerShareMinor` (profile minor units, unrounded) comes
  * to: the proceeds, the part of the cost basis those shares carried, and the profit. Selling all of
  * them sells exactly `h.shares` and carries exactly `h.costBasis`. Each amount is rounded once.
+ * Refuses no shares, more than held, and a price that leaves no proceeds (a sale record needs some).
  */
 export function planSale(h: Holding, shares: number, pricePerShareMinor: number): SalePlan {
   if (!(shares > 0)) throw new Error('Sell at least a part of a share.');
@@ -28,6 +29,7 @@ export function planSale(h: Holding, shares: number, pricePerShareMinor: number)
   const sold = all ? h.shares : shares;
   const cost = costForShares(h, sold);
   const proceeds = Math.round(sold * pricePerShareMinor);
+  if (!(proceeds > 0)) throw new Error('Enter a price above 0.');
   return { shares: sold, proceeds, cost, profit: proceeds - cost, all };
 }
 
