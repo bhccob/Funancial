@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { makeDividend, makeHolding, makeProfile } from '@/test/fixtures';
 import { addDays } from './dates';
 import {
+  addMonths,
   dividendTotals,
   duePayouts,
   expectedPayouts,
@@ -56,6 +57,17 @@ function dataOf(holdings: Holding[], currency = 'USD') {
 
 const dates = (xs: Array<{ exDate: string | null; payDate: string }>) =>
   xs.map((p) => [p.exDate, p.payDate]);
+
+describe('addMonths', () => {
+  it('moves a day by calendar months, to the end of a month that is too short', () => {
+    expect(addMonths('2026-10-14', -12)).toBe('2025-10-14');
+    expect(addMonths('2026-01-15', -2)).toBe('2025-11-15');
+    expect(addMonths('2026-03-31', -1)).toBe('2026-02-28');
+    expect(addMonths('2024-03-31', -1)).toBe('2024-02-29');
+    expect(addMonths('2026-01-31', 1)).toBe('2026-02-28');
+    expect(addMonths('2026-10-14', 0)).toBe('2026-10-14');
+  });
+});
 
 describe('inferFrequency', () => {
   const every = (days: number, count = 5) =>

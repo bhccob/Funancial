@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { PriceLine } from '@/components/charts/PriceLine';
-import { addDays, type LocalDate } from '@/domain/dates';
+import type { LocalDate } from '@/domain/dates';
+import { addMonths } from '@/domain/dividends';
 import type { Holding } from '@/domain/entities';
 import { minorDigits } from '@/domain/money';
 import { cn } from '@/lib/cn';
@@ -9,12 +10,11 @@ import { marketConfigured, type HistoryResponse } from '@/services/market';
 import { useCurrency, useMoney } from '@/store/useFinance';
 import { loadHistory } from './historyCache';
 
-// A month is 30 days and half a year 183: a chart's reach, not a calendar.
 const RANGES = [
-  { label: 'Since you bought', days: null },
-  { label: '1Y', days: 365 },
-  { label: '6M', days: 183 },
-  { label: '1M', days: 30 },
+  { label: 'Since you bought', months: null },
+  { label: '1Y', months: 12 },
+  { label: '6M', months: 6 },
+  { label: '1M', months: 1 },
 ] as const;
 
 const NEEDS_SERVICE = 'The chart needs the price service.';
@@ -43,9 +43,9 @@ export function HoldingChart({
     null,
   );
 
-  const days = RANGES[range]!.days;
+  const months = RANGES[range]!.months;
   // The price service takes a day to start from; a range never reaches back before the purchase.
-  const reach = days === null ? holding.purchaseDate : addDays(today, -days);
+  const reach = months === null ? holding.purchaseDate : addMonths(today, -months);
   const from = reach < holding.purchaseDate ? holding.purchaseDate : reach;
   const key = `${holding.symbol} ${from}`;
   // Bought today: there is a single close at most, so the service is not asked.
@@ -88,6 +88,8 @@ export function HoldingChart({
       <PriceLine
         points={points}
         paid={holding.costBasis / holding.shares}
+        // The shorter ranges fit their own closes; the paid line shows when it falls among them.
+        scaleToPaid={range === 0}
         formatValue={price}
         formatDate={formatDate}
         label={`From ${price(first.value)} on ${formatDate(first.date)} to ${price(last.value)} ${

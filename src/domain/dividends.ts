@@ -32,7 +32,7 @@ const daysApart = (a: LocalDate, b: LocalDate) =>
   Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / DAY_MS);
 
 /** `d` moved by `n` months, on the same day of the month where the month is long enough. */
-function addMonths(d: LocalDate, n: number): LocalDate {
+export function addMonths(d: LocalDate, n: number): LocalDate {
   const total = Number(d.slice(0, 4)) * 12 + Number(d.slice(5, 7)) - 1 + n;
   const y = Math.floor(total / 12);
   const m = (total % 12) + 1;

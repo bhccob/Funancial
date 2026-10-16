@@ -55,6 +55,8 @@ export function HoldingPage() {
     <div>
       <Link
         to="/invest?tab=holdings"
+        // Replaces the holding's page, so Back from Invest does not return to it.
+        replace
         aria-label="Back to Invest"
         className="text-muted -mb-1 inline-flex min-h-11 items-center text-[15px] font-extrabold"
       >

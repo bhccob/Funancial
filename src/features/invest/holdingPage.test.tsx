@@ -67,8 +67,8 @@ function dataOf(holding: Holding = vusa()): DataSnapshot {
   return data;
 }
 
-function renderPage(data = dataOf(), path = '/invest/holding/vusa') {
-  const store = createStubStore({ data, today: TODAY });
+function renderPage(data = dataOf(), path = '/invest/holding/vusa', today = TODAY) {
+  const store = createStubStore({ data, today });
   const router = createMemoryRouter(
     [
       { path: '/invest', element: <InvestScreen /> },
@@ -109,6 +109,20 @@ describe('the way to a holding', () => {
     await userEvent.click(back);
     expect(router.state.location.pathname).toBe('/invest');
     expect(screen.getByRole('tab', { name: 'Holdings' })).toHaveAttribute('aria-selected', 'true');
+  });
+
+  it('replaces the holding in the history on the way back, so Back from Invest skips it', async () => {
+    const { router } = renderPage(dataOf(), '/invest');
+    await userEvent.click(screen.getByRole('link', { name: /^VUSA\.AS · / }));
+    await userEvent.click(screen.getByRole('link', { name: 'Back to Invest' }));
+    expect(router.state.historyAction).toBe('REPLACE');
+    expect(router.state.location.search).toBe('?tab=holdings');
+
+    // One step back is the Invest the person started from, not the holding they left.
+    await router.navigate(-1);
+    await waitFor(() => expect(router.state.location.pathname).toBe('/invest'));
+    expect(router.state.location.search).toBe('');
+    expect(screen.queryByRole('heading', { level: 1, name: 'VUSA.AS' })).not.toBeInTheDocument();
   });
 
   it('goes back to Invest for a holding that is not there', () => {
@@ -250,6 +264,22 @@ describe('Holding page chart', () => {
     expect(screen.getByText(`${formatDate('2025-09-01')} · ${usd(204_00)}`)).toBeInTheDocument();
   });
 
+  it('reaches back by calendar months, to the end of a month that is too short', async () => {
+    configured();
+    fetchHistory.mockResolvedValue(closes());
+    // Mar 31: a month back is Feb 28 (not Mar 1), half a year Sep 30, a year Mar 31.
+    renderPage(dataOf(vusa({ purchaseDate: '2025-01-01' })), '/invest/holding/vusa', '2026-03-31');
+    const chips = await screen.findByRole('group', { name: 'Chart range' });
+    for (const [name, from] of [
+      ['1M', '2026-02-28'],
+      ['6M', '2025-09-30'],
+      ['1Y', '2025-03-31'],
+    ] as const) {
+      await userEvent.click(within(chips).getByRole('button', { name }));
+      await waitFor(() => expect(fetchHistory).toHaveBeenLastCalledWith('VUSA.AS', from));
+    }
+  });
+
   it('starts from the day it was bought, and the range chips change where it starts', async () => {
     configured();
     fetchHistory.mockResolvedValue(closes());
@@ -280,6 +310,37 @@ describe('Holding page chart', () => {
     await userEvent.click(within(chips).getByRole('button', { name: 'Since you bought' }));
     await chart();
     expect(fetchHistory).toHaveBeenCalledTimes(4);
+  });
+
+  it('keeps the price paid on the chart since the purchase, and fits the other ranges to their own closes', async () => {
+    configured();
+    // Since the purchase the closes straddle the $210.50 paid; in the last month they are all above it.
+    fetchHistory.mockImplementation(async (_symbol, from) =>
+      from === '2025-03-03'
+        ? closes()
+        : closes({
+            points: [
+              { date: '2026-09-14', close: 250 },
+              { date: TODAY, close: 260 },
+            ],
+          }),
+    );
+    renderPage();
+    const since = await chart();
+    expect(since.querySelector('line[stroke-dasharray]')).toBeInTheDocument();
+    expect(within(since).getByText(`You bought · ${usd(210_50)}`)).toBeInTheDocument();
+
+    const chips = screen.getByRole('group', { name: 'Chart range' });
+    await userEvent.click(within(chips).getByRole('button', { name: '1M' }));
+    const month = await screen.findByRole('img', {
+      name: `From ${usd(300_00)} on ${formatDate('2026-09-14')} to ${usd(312_00)} today`,
+    });
+    expect(month.querySelector('line[stroke-dasharray]')).not.toBeInTheDocument();
+    // The line would lie below the closes: an edge label points down to it.
+    expect(within(month).getByText(`You bought · ${usd(210_50)} ↓`)).toBeInTheDocument();
+
+    await userEvent.click(within(chips).getByRole('button', { name: 'Since you bought' }));
+    expect((await chart()).querySelector('line[stroke-dasharray]')).toBeInTheDocument();
   });
 
   it('never reaches back before the purchase', async () => {
