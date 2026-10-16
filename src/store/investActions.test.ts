@@ -206,7 +206,16 @@ describe('editing a holding', () => {
 
 describe('refreshing the market', () => {
   it('refreshes quotes, rates and stale dividend info in one write', async () => {
-    const { actions, store, market, holding } = await setup();
+    // Each quote in the currency its symbol is listed in.
+    const { actions, store, market, holding } = await setup({
+      fetchQuotes: async (symbols) => {
+        const { quotes } = await fakeMarket().fetchQuotes(symbols);
+        return {
+          quotes: quotes.map((q) => ({ ...q, currency: q.symbol === 'KO' ? 'USD' : 'EUR' })),
+          missing: [],
+        };
+      },
+    });
     const fresh = {
       history: [{ date: '2026-07-01', amount: 1 }],
       nextExDate: null,
@@ -253,6 +262,52 @@ describe('refreshing the market', () => {
       Date.now() - HOURS,
     );
     expect(holding(freshEur.id).dividendInfo).toEqual(fresh);
+  });
+
+  it("adopts the quote's currency and fetches that currency's rate", async () => {
+    const quoted = { symbol: 'ASML', name: 'ASML', price: 700, previousClose: 690 };
+    const { actions, store, market, tables, holding } = await setup({
+      fetchQuotes: async () => ({
+        quotes: [{ ...quoted, currency: 'EUR', type: 'stock', exchange: 'AMS', asOf: ASOF }],
+        missing: [],
+      }),
+      fetchFx: async (from, to) => ({ from, to, rate: from === 'EUR' ? 1.08 : 0.5, asOf: ASOF }),
+    });
+    await store.getState().put('profile', { ...tables().profile[0]!, currency: 'USD' });
+    // Typed in by hand as dollars, the profile's own currency: Yahoo lists it in euros.
+    const h = makeHolding({ symbol: 'ASML', currency: 'USD' });
+    await store.getState().put('holding', h);
+
+    await expect(actions.refreshMarket()).resolves.toBe('ok');
+    expect(market.fetchFx.mock.calls).toEqual([['EUR', 'USD']]);
+    expect(holding(h.id)).toMatchObject({ currency: 'EUR', quote: { price: 700, fxRate: 1.08 } });
+  });
+
+  it("keeps no rate of the old currency when the adopted one's rate cannot be fetched", async () => {
+    const { actions, store, holding } = await setup({
+      fetchQuotes: async () => ({
+        quotes: [
+          {
+            symbol: 'ASML',
+            name: 'ASML',
+            price: 700,
+            previousClose: 690,
+            currency: 'USD',
+            type: 'stock',
+            exchange: 'NMS',
+            asOf: ASOF,
+          },
+        ],
+        missing: [],
+      }),
+      fetchFx: down,
+    });
+    const old = { price: 600, previousClose: null, fxRate: 1.17, asOf: ASOF };
+    const h = makeHolding({ symbol: 'ASML', currency: 'GBP', quote: old });
+    await store.getState().put('holding', h);
+
+    await actions.refreshMarket();
+    expect(holding(h.id)).toMatchObject({ currency: 'USD', quote: { price: 700, fxRate: null } });
   });
 
   it('matches quotes by upper-case symbol and leaves a holding the service lacks as it was', async () => {

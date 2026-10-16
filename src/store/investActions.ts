@@ -18,6 +18,8 @@ const NO_PRICE =
 /** What `deleteDividend` says when taking a reinvested payout's shares back would leave none. */
 export const SHARES_GONE =
   'The holding has fewer shares than this dividend bought. Edit the holding first.';
+/** A currency code a holding can take; a quote with anything else keeps the holding's own. */
+const CURRENCY = /^[A-Z]{3}$/;
 /** A holding's dividend history is fetched again once it is older than this. */
 const DIVIDENDS_MAX_AGE_MS = 24 * 3_600_000;
 
@@ -170,7 +172,6 @@ export function createInvestActions(store: StoreApi<AppState>, market: Market) {
         const asked = holdings();
         if (asked.length === 0) return 'ok';
         const symbols = [...new Set(asked.map((h) => h.symbol))];
-        const currencies = [...new Set(asked.map((h) => h.currency))].filter((c) => c !== home);
         const stale = asked.filter(
           (h) =>
             !h.dividendInfo ||
@@ -178,10 +179,15 @@ export function createInvestActions(store: StoreApi<AppState>, market: Market) {
         );
         // A rate or a dividend history the service cannot give only goes missing; quotes are the check.
         const orNull = <T>(call: Promise<T>) => call.catch(() => null);
-        const [quotes, rates, dividends] = await Promise.all([
-          market.fetchQuotes(symbols),
+        const asking = Promise.all(stale.map((h) => orNull(market.fetchDividends(h.symbol))));
+        const quotes = await market.fetchQuotes(symbols);
+        // Yahoo is authoritative for a listed symbol's currency, so the rates follow the quotes'.
+        const currencies = [...new Set(quotes.quotes.map((q) => q.currency))].filter(
+          (c) => c !== home && CURRENCY.test(c),
+        );
+        const [rates, dividends] = await Promise.all([
           Promise.all(currencies.map((c) => orNull(market.fetchFx(c, home)))),
-          Promise.all(stale.map((h) => orNull(market.fetchDividends(h.symbol)))),
+          asking,
         ]);
         const quoteOf = new Map(quotes.quotes.map((q) => [q.symbol.toUpperCase(), q]));
         const rateOf = new Map(currencies.map((c, i) => [c, rates[i]?.rate]));
@@ -194,14 +200,17 @@ export function createInvestActions(store: StoreApi<AppState>, market: Market) {
           const q = quoteOf.get(h.symbol.toUpperCase());
           const d = dividendsOf.get(h.id);
           if (!q && !d) continue;
+          const currency = q && CURRENCY.test(q.currency) ? q.currency : h.currency;
+          // The last rate is only worth keeping while it is for the same currency.
+          const lastRate = currency === h.currency ? (h.quote?.fxRate ?? null) : null;
           const record: Holding = {
             ...h,
+            currency,
             quote: q
               ? {
                   price: q.price,
                   previousClose: q.previousClose,
-                  fxRate:
-                    h.currency === home ? 1 : (rateOf.get(h.currency) ?? h.quote?.fxRate ?? null),
+                  fxRate: currency === home ? 1 : (rateOf.get(currency) ?? lastRate),
                   asOf: q.asOf,
                 }
               : h.quote,
