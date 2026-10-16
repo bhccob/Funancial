@@ -2,102 +2,82 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Before buying something, you can ask the app. It checks the purchase against your real numbers. It shows a 0–100% buy meter with a verdict, always pushes back with a question you can argue with, and remembers what you choose to tell it. After you've decided, it reminds you if you chose to wait, and asks later whether the thing was worth it.
+> **Revised 2026-10-16: no AI.** The owner chose a fully offline, free and private check. There is no AI advisor, no questions and no debate. Tasks 1–3 are already built. The original Task 4 (`POST /api/advisor`) was built and is removed by the new Task 4. Wireframes: `design/wireframes/m5-m6.html` for the M6 Ask and answer screens, without the question, reply and debate; `design/wireframes/m6-no-ai.html` for About you only, since its "Think it through" questions are scrapped.
+
+**Goal:** Before buying something, you can ask the app. It checks the purchase against your real numbers, then shows a 0–100% buy meter, a verdict and the facts behind it, plus reminders from your own "About you" notes. After you decide, it reminds you if you chose to wait, and asks later whether the thing was worth it. Everything runs on your phone.
 
 **Architecture:**
-- **Rules engine.** A pure engine in `src/domain/advisor/` turns a totals-only snapshot of your finances and the purchase into facts: limits after, available after, emergency months, goal delay and whether it needs debt. From those it computes a baseline meter and a verdict. It runs offline and always.
-- **Advisor route.** `POST /api/advisor` on the existing Vercel price service sends the snapshot, the ask, your "About you" notes and the debate so far to Claude, and gets back structured JSON. The server clamps the meter so the AI can never push past the hard guards.
-- **Product links.** `GET /api/extract` reads a product link's name and price, guarded against SSRF.
-- **Storage.** Decisions and About-you notes are encrypted records, like everything else. The screens live in `src/features/buy/`.
+- **Rules engine.** A pure engine in `src/domain/advisor/` turns a snapshot of your finances, the purchase and your About-you choices into facts, a meter, a verdict and guards. It runs offline, always.
+- **Product links.** `GET /api/extract` on the existing price service reads a product link's name and price, guarded against SSRF. This is the only network call, and it is optional.
+- **Storage and screens.** Decisions and About-you notes are encrypted records like everything else. The screens live in `src/features/buy/`.
 
-**Tech Stack:**
-- Existing: React 19, TypeScript, Tailwind 4, zustand, zod 4, Vitest, Playwright, Capacitor, Vercel functions.
-- New: `@anthropic-ai/sdk`, server-side only under `api/` and pinned exact.
+**Tech Stack:** React 19, TypeScript, Tailwind 4, zustand, zod 4, Vitest, Playwright, Capacitor, and Vercel functions. No new dependency; Task 4 removes `@anthropic-ai/sdk`.
 
 **Spec:**
-- `docs/superpowers/specs/2026-10-14-funancial-design.md`: the "Should I Buy It?" section and M6.
-- `docs/spec/original-spec.md` §3.8, plus the badges and notifications lists.
-- `docs/superpowers/specs/2026-10-15-redesign-open-design.md`: "M6 additions from the owner".
-- The approved wireframe `design/wireframes/m5-m6.html`, M6 row. Match its layout and copy unless this plan says otherwise.
+- `docs/superpowers/specs/2026-10-14-funancial-design.md`: the "Should I Buy It?" section and M6. The owner's no-AI decision supersedes its Claude parts.
+- `docs/spec/original-spec.md` §3.8, minus the AI debate.
+- `docs/superpowers/specs/2026-10-15-redesign-open-design.md`: "M6 additions". The buy meter and About you are kept; "always debates" and "facts remembered from debates" are dropped.
+- The wireframes named above.
 
-## Calls this plan makes (for the owner's review)
+## Calls this plan makes (the owner approved 1–9 before the no-AI change; 10–12 are new)
 
-1. **The Ask form gains two fields the wireframe didn't show.**
-   - **Category**, needed to show the right limit, e.g. "Fun limit after 132%".
-   - **Pay with**, the app's existing choices, needed for the "needs debt" guard.
-
-   Both use the lighter line style from the Invest forms.
-2. **Meter zones:** Skip 0–33, Wait 34–66, Buy 67–100.
-   - The rules engine sets the baseline using the formula in Task 1.
-   - The AI may move it at most 30 points either way.
-   - It can never enter the Buy zone when the purchase needs debt, would leave the available balance below zero, or is a want or treat that drops the emergency fund under one month.
+1. **Ask form.** It asks for Category (to show the right limit) and Pay with (for the "needs debt" guard), plus an optional "Why do you want it?". It uses line fields and underline tabs.
+2. **Meter zones.**
+   - The zones are Skip 0–33, Wait 34–66 and Buy 67–100, and the rules engine sets the meter.
+   - It never reaches Buy when the purchase needs debt, would leave the available balance below zero, or is a want or treat that drops the emergency fund under one month.
 3. **Verdicts:** Buy it / Wait a few days / Look for a cheaper one / Skip it.
-4. **Model.** The advisor uses `claude-opus-5-5`, changeable with an `ANTHROPIC_MODEL` setting in Vercel. Each ask and each debate reply is one call.
-   - Without `ANTHROPIC_API_KEY`, or offline, you get the rules-only "Basic check" and no debate.
-5. **Wait.** "Remind me" sets a reminder for:
-   - the day the over-limit resets, when a limit is the reason (the wireframe's "Nov 1");
-   - otherwise the AI's cooling-off time, or 48 hours.
-
-   It sends "Still want it? ${item}".
-6. **Bought.**
-   - "I bought it" marks the decision bought and opens Add Expense filled in with the name, price and category. You still save the expense.
-   - 14 days later a reminder asks "Was ${item} worth it?" with a 1–5 rating.
+4. **No AI, no network for the check.** Only the optional link fill uses the price service.
+5. **Wait.** "Remind me" sets a reminder for the day the over-limit resets, or 48 hours later when no limit is over. The reminder reads "Still want it? ${item}".
+6. **Bought.** "I bought it" opens Add Expense filled in. 14 days later the app asks "Was ${item} worth it?" (1–5).
 7. **Badges:**
-
-   | Badge | Condition | XP / coins |
-   |---|---|---|
-   | Smart Shopper | rate something you bought 4 or 5 | 100/25 |
-   | Impulse Controller | skip 5 decisions | 150/40 |
-   | Budget Defender | skip 3 decisions that would have gone over a limit | 150/40 |
-
-8. **Similar past purchases** are the last 10 decisions that share a word of 3 or more letters in the name, or the category.
-9. **Home.** "Buy it?" replaces History among Home's four round actions. History stays in the Menu. Add Expense gets "Haven't bought it yet? Ask first →".
-10. **Not in M6:** "buy used" price lookups, price-drop watching, and sharing a decision.
+   - Smart Shopper (rate a purchase 4–5), 100/25;
+   - Impulse Controller (skip 5), 150/40;
+   - Budget Defender (skip 3 that would have gone over a limit), 150/40.
+8. **Similar past purchases** are the last 10 decisions sharing a word of 3+ letters, or the category. A low rating lowers the meter, and a high rating raises it.
+9. **Home.** "Buy it?" replaces History among the round actions. Add Expense gets "Haven't bought it yet? Ask first →".
+10. **About you** has four parts:
+    - **What matters to you**: shown back on every answer as `You said: ${text}`.
+    - **Where you tend to overspend**: category picks. A purchase in one of them lowers the meter by 10 and shows `You said you tend to overspend on ${category}.`
+    - **A goal to protect**: an existing goal. Its delay is the goal-delay fact, and a delay of more than 7 days lowers the meter by 10. Without one, the nearest-deadline goal is used, as today.
+    - **Your situation**: optional free text, shown back with the matters line.
+11. **Removed:**
+    - the AI advisor route;
+    - Claude's SDK;
+    - the debate;
+    - the "Remember" offers;
+    - About-you facts.
+12. **Your own words.** The answer shows your optional "Why do you want it?" as `You said: ${why}`.
 
 ## Global Constraints
 
-- `@anthropic-ai/sdk` is imported only under `api/`, pinned exact (`npm i -E @anthropic-ai/sdk`). No other new runtime dependency.
-- **Advisor route.** It keeps the existing guard: `X-Funancial-Token`, a constant-time compare, `401 no-store`, and `500 not configured` when `FUNANCIAL_ACCESS_TOKEN` is missing.
-  - Without `ANTHROPIC_API_KEY` it returns `503 {"error":"advisor off"}` with `no-store`.
-  - Every advisor response is `no-store`.
-  - The body is limited to 64 KB and validated with zod; anything else gets `400 {"error":"bad request"}`.
-  - Claude failing, refusing or returning invalid JSON gives `502 {"error":"upstream"}`, with no details in the body.
-- **CORS.** `api/_lib/http.ts` allows `GET, POST, OPTIONS` and the headers `X-Funancial-Token, Content-Type`. Same origins as today.
-- **Totals only.** What leaves the phone for an ask is the `AdvisorSnapshot` from Task 1, the ask, your About-you notes and the debate turns. No individual expense, income, transaction, note, id or date of a past transaction is ever sent.
-- **Guard rules.** The server clamps the meter to `[baseline − 30, baseline + 30] ∩ [0, 100]`. When `guards.capAtWait` is true it also clamps to `≤ 66` and replaces a `buy` recommendation with `wait`. It returns `clamped: true` when it changed anything.
-- **System prompt.** It states that the advisor:
-  - gives no licensed financial advice;
-  - never encourages debt or risky spending;
-  - is transparent and non-manipulative, never shaming;
-  - is told every figure comes from the app;
-  - always ends with one pointed question or counterargument (`question`);
-  - offers `remember` only for a new, durable personal fact the person stated.
-- **The UI always shows** `Not financial advice` under an answer.
-- **Exact copy:**
-  - Basic check: `Basic check · the advisor explains this when you're online.`
-  - No debate: `The debate needs the advisor. You can still decide.`
-- **Money and rounding.** Money is integer minor units in the profile currency, rounded once at the edge. It is formatted only through `useMoney` / `formatMoney`, and dates only through `src/lib/format.ts`.
-- **Code and style.**
-  - Domain code is pure, with time passed in.
-  - The Open style applies, with line fields and underline tabs for the forms.
-  - Touch targets are at least 44px, every action has a label, and motion is only under `motion-safe:`.
+- **No new runtime dependency.** Task 4 removes `@anthropic-ai/sdk` and everything that used it.
+- **Nothing about you leaves the phone for an ask.** The only network call is the optional `GET /api/extract?url=`, which carries the link alone.
+- **The extract route keeps its rules:**
+  - the token guard;
+  - SSRF checks on every hop;
+  - a 2 MiB cut and a 5 s budget;
+  - `no-store` errors with no details;
+  - CORS `GET, OPTIONS` and the `X-Funancial-Token` header.
+- **Money and dates.** Money is integer minor units in the profile currency, rounded once at the edge. It is formatted only through `useMoney` / `formatMoney`, and dates only through `src/lib/format.ts`.
+- **Code style.** Domain code is pure, with time passed in. The UI uses the Open style, with line fields and underline tabs for forms.
+- **Accessibility.** Touch targets are at least 44px, every action has a label, and motion runs only under `motion-safe:`.
+- **Disclaimer.** The UI always shows `Not financial advice` under an answer.
 - **Commits** end with your model's `Co-Authored-By: Claude <Model> 5.5 <noreply@anthropic.com>` trailer.
 - **Every task** runs `npm test`, `npm run typecheck` and `npm run lint`. UI and e2e tasks also run `npm run test:e2e`.
 
 ## Review Focus
 
-1. **The AI can never talk you into the Buy zone past a guard.** With a crafted model reply of `{ meter: 95, recommendation: 'buy' }` and `capAtWait`, the response is 66 / `wait` / `clamped: true`. Pinned in Task 4.
-2. **Nothing private leaves the phone.** A snapshot built from data full of notes and transactions contains no note text, no ids and no individual amounts beyond the totals listed. Pinned in Task 1, by serialising and searching for a known note string.
-3. **Offline or no key never blocks a decision.** Ask still shows the rules meter, verdict and facts with the Basic check line, and you can still Remind / I bought it / Skip. Pinned in Tasks 5 and 6.
-4. **Extract can't be aimed inside the network.** `localhost`, `127.0.0.1`, `10.x`, `172.16–31.x`, `192.168.x`, `169.254.x`, `::1`, `fc00::/7`, a hostname that resolves to any of those, redirects to those, non-http(s), more than 1 MB and more than 5 s are all refused. Pinned in Task 3.
-5. **Odd money input.**
-   - A price of 0 is refused.
-   - A price over 10,000,000 is refused.
-   - Quantity above 1 multiplies the price.
-   - A want with no limit set in that category still gets a sensible meter (the overall limit is used, or the line is left out).
-   - A profile with no spending history shows the emergency months as `—`, not `∞` or NaN.
+1. **The meter never reaches Buy past a guard.** This holds with About-you adjustments, similar-purchase history and every combination of urgency and timing. Pinned in Task 4, with a table-driven test over guard × adjustments.
+2. **About-you edge cases.**
+   - The protected goal is deleted or completed: fall back to the nearest-deadline goal.
+   - An empty overspend list changes nothing.
+   - A category picked twice counts once.
+   - Notes at the 500-character limit are accepted; longer ones are refused with a message.
 
-   Pinned in Task 1.
+   Pinned in Tasks 4 and 7.
+3. **Offline never blocks a decision.** With no network, Ask works: the link fill fails quietly with its message, and every other path completes. Pinned in Tasks 5 and 6.
+4. **Extract can't be aimed inside the network.** This was done in Task 3 and its tests stay green through Task 4's removals.
+5. **Odd money input.** Price 0 and over 10,000,000, quantity, a category with no limit, and no spending history. This was done in Task 1 and its tests stay green.
 
 ---
 
@@ -229,251 +209,216 @@ it('finds similar past decisions by shared word or category, newest 10', () => {
 
 ---
 
-### Task 4: `POST /api/advisor`
+### Task 4: Remove the AI advisor, and teach the rules About you
 
 **Files:**
-- Create: `api/advisor.ts`, `api/_lib/claude.ts`, `api/_lib/advisorSchema.ts`
-- Modify: `api/_lib/http.ts` (POST, `Content-Type`), `api/_lib/api.test.ts`, `package.json`, `.env.example` (`ANTHROPIC_API_KEY=`, `ANTHROPIC_MODEL=`)
+- **Delete:** `api/advisor.ts`, `api/_lib/claude.ts`, `api/_lib/claude.test.ts`, `api/_lib/advisorSchema.ts`, and the advisor tests in `api/_lib/api.test.ts`.
+- **Modify:**
+  - `package.json` and the lockfile: run `npm uninstall @anthropic-ai/sdk`.
+  - `vercel.json`: drop the advisor entry.
+  - `.env.example`: drop the `ANTHROPIC_*` lines.
+  - `vite.config.ts`: drop the dev plugin's POST support and the `ANTHROPIC_*` copy.
+  - `api/_lib/http.ts`: CORS back to `GET, OPTIONS` and `X-Funancial-Token`.
+  - `src/domain/entities.ts`, `src/domain/migrations.ts`, `src/test/fixtures.ts`, `src/domain/advisor/*`.
 
-**Interfaces:**
-- **Request** (zod): `{ snapshot: AdvisorSnapshot; ask: BuyAsk; facts: Facts; rules: { meter; verdict; confidence; guards }; about: { situation; matters; overspend; facts: string[] }; debate: Array<{ role; text }> /* last 20 */ }`.
-  - Share the schema shape with the client by duplicating the zod schema in `api/_lib/advisorSchema.ts`. It is the same contract as Task 1's types, so add a type-level test in `src` that keeps them equal.
-- **Model output** (structured, validated with zod): `{ recommendation: Verdict; meter: number; confidence: 'low' | 'medium' | 'high'; summary: string; pros: string[]; cons: string[]; alternatives: string[]; coolingOffHours: number | null; reply: string /* empty on the first ask */; question: string; remember: string | null }`.
-- **Response:** the model output after clamping (see Global Constraints) plus `clamped: boolean`.
-- **`claude.ts`:**
-  - Uses `@anthropic-ai/sdk` with `model = process.env.ANTHROPIC_MODEL ?? 'claude-opus-5-5'`.
-  - Asks for structured JSON output, using the installed SDK's structured-output option. Check its types in node_modules.
-  - Treats `stop_reason === 'refusal'` or invalid JSON as upstream errors.
-  - Keeps `max_tokens` modest (1500).
-- **The user message** carries the JSON input; the system prompt carries the guardrails.
+**Keep:** everything Task 3 built, including the dedicated agents and the blocked ranges, plus their tests.
 
-- [ ] **Step 1: Write the failing tests** (mock `./_lib/claude`):
+**Schema v8 changes in place.** v8 has never shipped to a device.
+- **`BuyDecisionSchema`:**
+  - Drop `ai` and `debate`.
+  - Keep `meter`, `verdict` and `confidence`, which now always come from the rules.
+  - Keep `rulesMeter` and `rulesVerdict` as the values at ask time.
+- **`AboutYouSchema`:** `{ id: 'about', situation: string ≤ 500, matters: string ≤ 500, overspend: Category[] (unique), protectGoalId: string | null }`. Drop `facts`.
 
-```ts
-it('needs the token, allows the POST preflight, and says advisor off without a key', async () => {});
-it('rejects bodies over 64 KB or failing the schema with 400', async () => {});
-it('clamps to ±30 of the rules meter and caps at 66 with buy→wait when capAtWait', async () => {
-  // model {meter: 95, recommendation: 'buy'}, rules meter 40, capAtWait → meter 66, 'wait', clamped true
-});
-it('returns 502 without details when Claude refuses or returns invalid JSON', async () => {});
-it('sends no-store on every advisor response', async () => {});
-```
+**Rules: `analyse(snapshot, ask, today, about?: AboutYou)`.**
+- **Overspend:** when `about.overspend` includes `ask.category`, subtract 10 and add the reason `You said you tend to overspend on ${label}.` to a new `notes: string[]` in the result. Use the app's category label.
+- **Goal to protect:** when `about.protectGoalId` names a goal in the snapshot, `goalDelay` uses that goal.
+  - A delay of more than 7 days subtracts 10, in place of the generic more-than-14-days rule for that goal.
+  - The snapshot's goals gain `id` for this. It is local-only now.
+  - A protected goal that is missing or complete falls back to the nearest-deadline goal.
+- **Your own words:** `notes` also carry `You said: ${about.matters}` (when set), `${about.situation}` (when set), and `You said: ${ask.why}` (when set).
+- **Guards:** unchanged, and applied after every adjustment.
 
-- [ ] **Step 2: Run** `npx vitest run api`. Expected: FAIL.
-- [ ] **Step 3: Implement.** Install with `npm i -E @anthropic-ai/sdk`.
-- [ ] **Step 4: Run** the gate. Also live-check with `npm run dev`, but only if the owner has put an `ANTHROPIC_API_KEY` in `.env.local`; otherwise record that the live check waits for Task 11.
-- [ ] **Step 5: Commit:** `feat: advisor route with structured answers and hard guards`
+**Rename the totals-only test.** It stays valid, but rename it to "the snapshot holds totals, not transactions".
+
+- [ ] **Step 1: Write the failing tests:**
+  - overspend −10 with its note;
+  - protect-goal delay > 7 days −10, and the fallback when that goal is gone or complete;
+  - the notes copy;
+  - a table over guard × overspend × protect × similar history, proving the meter never reaches 67 under a guard;
+  - About-you schema limits and unique categories;
+  - no `@anthropic-ai/sdk` in `package.json`, and no `api/advisor.ts`.
+- [ ] **Step 2: Run** `npx vitest run src/domain api`. Expected: FAIL.
+- [ ] **Step 3: Implement** the removals and the rule changes.
+- [ ] **Step 4: Run** `npm test && npm run typecheck && npm run lint`. Expected: PASS.
+- [ ] **Step 5: Commit** in two parts:
+  - `refactor: remove the AI advisor`
+  - `feat: the buy check reads About you`
 
 ---
 
-### Task 5: Client and buy actions
+### Task 5: Buy actions
 
 **Files:**
-- Create: `src/services/advisor.ts`, `src/store/buyActions.ts`, `src/store/useBuy.ts`, plus tests
+- Create: `src/store/buyActions.ts`, `src/store/useBuy.ts`, plus tests
+- Modify: `src/services/market.ts` (add `fetchExtract(url)`, same pattern as the other fetchers)
 
 **Interfaces:**
-- **`advisor.ts`:** `fetchAdvice(body)` and `fetchExtract(url)`, using the same base URL, token header, timeout (20 s for advice) and `MarketError` pattern as `market.ts`. Also `advisorAvailable(): boolean`, which is true when the price service is configured.
-- **`createBuyActions(store, advisor)`:**
-  - `ask(ask: BuyAsk): Promise<string /* decision id */>`
-    - Validates: item 1–80 chars, price > 0 and ≤ 10,000,000 major units, quantity 1–99.
-    - Runs `buildSnapshot` + `analyse` and saves the decision with the rules result.
-    - When the advisor is available, calls it and updates `meter`/`verdict`/`confidence`/`ai`, and adds the advisor's `question` as the first debate turn.
-    - On a failure it keeps the Basic check. It never throws for advisor problems.
-  - `reply(id, text)`: adds your turn, calls the advisor with the debate, then adds the advisor's `reply` + `question` as a turn with its meter and updates the meter and verdict. Text is 1–500 chars. It returns `remember` (string or null) without saving it.
-  - `remember(text)`: appends to About-you facts.
-  - `forget(factId)`
-  - `saveAbout(patch)`
-  - `wait(id)`: sets status `waiting` and `remindOn` (rule from Calls #5).
-  - `bought(id)`: sets status `bought` and `boughtOn` to today, and returns the Add Expense prefill `{ item, amount: price × quantity, category }`.
-  - `skip(id)`
-  - `rate(id, usage)`
-  - `deleteDecision(id)`
-- **`useBuy.ts`:** `useBuyActions()`, `useDecisions()` (newest first) and `useAboutYou()`.
+- **`createBuyActions(store, market)`:**
+  - **`ask(ask: BuyAsk): Promise<string>`.** It validates with `BuyAskSchema`, using the existing friendly messages for name, price and quantity. It runs `buildSnapshot`, passing past decisions without the new one, then `analyse` with the About-you record. It saves the decision with status `open` and returns its id.
+  - **`wait(id)`:** status `waiting`; `remindOn` is `facts.resetsOn`, else today + 2 days.
+  - **`bought(id)`:** status `bought`, `boughtOn` today. It returns the prefill `{ item, amount: price × quantity, category }`.
+  - **`skip(id)`**, **`rate(id, usage: 1–5)`** and **`deleteDecision(id)`**.
+  - **`saveAbout(patch)`:** it creates the single `aboutYou` record if missing, and enforces the limits with messages.
+- **`useBuy.ts`:** `useBuyActions()`, `useDecisions()` (newest first), `useDecision(id)` and `useAboutYou()`.
 
-- [ ] **Step 1: Write the failing tests** (real store via `freshRealStore`, fake advisor):
-  - an ask saves a rules-only decision when the advisor is unavailable;
-  - with the advisor, the AI meter, verdict and first question are saved;
-  - an advisor failure keeps the Basic check;
-  - a reply moves the meter and returns a remember offer without saving it;
-  - `remember` and `forget`;
-  - `wait` picks the limit reset date or +48 h;
-  - `bought` returns the prefill;
-  - validation messages;
-  - the debate cap of 40.
-- [ ] **Steps 2–5:**
-  1. Watch the tests fail.
+- [ ] **Steps 1–5:**
+  1. Write tests with a real store (`freshRealStore`) and watch them fail. Cover:
+     - an ask saves the rules result, and works offline;
+     - About you changes the meter;
+     - past decisions exclude the new one;
+     - wait picks the reset date or +2 days;
+     - bought returns the prefill;
+     - the rate range;
+     - the validation messages;
+     - saveAbout creates, then updates the record.
   2. Implement.
-  3. Run the gate until it passes.
-  4. Commit: `feat: buy actions with offline rules and the advisor`
+  3. Run the gate.
+  4. Commit: `feat: buy actions`
 
 ---
 
-### Task 6: Ask and answer screens, and the ways in
+### Task 6: Ask, answer and the ways in
 
 **Files:**
 - Create in `src/features/buy/`: `BuyScreen.tsx` (list + Ask), `AskForm.tsx`, `AnswerScreen.tsx`, `BuyMeter.tsx`, plus tests
 - Modify:
   - `src/app/routes.tsx` (`/buy`, `/buy/:id`)
-  - `src/app/menu.ts` (Buy it? without `soon`; "Coming next" goes away)
+  - `src/app/menu.ts` (Buy it? without `soon`; "Coming next" goes)
   - `src/features/dashboard/HomeActions.tsx` (Buy it? replaces History)
-  - `src/features/add/ExpenseForm.tsx` (the line `Haven't bought it yet? Ask first →`, linking to `/buy`)
-  - the navigation tests and e2e
+  - `src/features/add/AddScreen.tsx` / `ExpenseForm.tsx`: the line `Haven't bought it yet? Ask first →`, plus prefill from router `state: { prefill: { item, amount, category } }` (Ruling C)
+  - navigation tests and e2e
 
-**What to build:**
-- **Ask form** (wireframe phone 2, line fields and underline tabs):
-  - `Paste a link (fills name and price)`: on paste or blur it calls `fetchExtract` and fills empty fields, showing `Couldn't read that link. Fill it in yourself.` on failure.
-  - `What is it?`, `Price`, Quantity (a stepper, default 1), Category, `Pay with`, and `Why do you want it? (optional)`.
-  - `Need · Want · Treat`; `How soon? Today · This month · No rush`.
-  - The `Ask` button; the footnote `Only totals (not your transactions) leave the phone.`
-- **Answer:**
-  - **`BuyMeter`:** a horizontal gauge 0–100 with Skip/Wait/Buy zone labels and a marker. It shows `${meter}% a buy` large, has `role="meter"` with `aria-valuenow` / `aria-valuemin` / `aria-valuemax` and an `aria-valuetext` like `38% a buy, Wait zone`, and animates the marker only under `motion-safe:`.
-  - **The verdict line** (`Buy it` / `Wait a few days` / `Look for a cheaper one` / `Skip it`). Under it: `Budget check agrees` or `Budget check says ${rules verdict}`, then `· confidence ${level}`.
-  - **The facts grid:**
-    - `${Category} limit after ${pct}% · over by ${amount}`;
-    - `Available after ${amount}`;
-    - `Emergency fund ${before} → ${after} months`;
-    - `${goal} goal +${days} days later`.
-    Leave out a line whose fact is null.
-  - **Guard reasons**, when `capAtWait`, in a warning `Banner`.
-  - **The AI summary**, pros, cons and alternatives (collapsed under `Why`).
-  - **The challenge:** `Before you decide, the advisor asks:` with the question and a `Reply…` field that opens the debate (Task 7).
-  - **Without the AI:** the Basic check line and the no-debate line instead.
-  - **Footer:** `Not financial advice`.
-- **List:** past decisions, newest first, each showing item, price, meter %, verdict and status.
+**Ask form** (line fields and underline tabs):
+- `Paste a link (fills name and price)`: on paste or blur, call `fetchExtract`, fill the empty fields, and show `Couldn't read that link. Fill it in yourself.` on failure or offline.
+- `What is it?`, `Price`, Quantity (a stepper, default 1), Category, `Pay with`, and `Why do you want it? (optional)`.
+- `Need · Want · Treat` and `How soon? Today · This month · No rush`.
+- The `Ask` button, and the footnote `Your numbers stay on your phone.`
+
+**Answer:**
+- **`BuyMeter`.** A 0–100 gauge with Skip, Wait and Buy zones and a marker. It shows `${meter}% a buy`, and has `role="meter"` with `aria-valuenow`, `aria-valuemin`, `aria-valuemax` and `aria-valuetext` (`38% a buy, Wait zone`). The marker moves only under `motion-safe:`.
+- **The verdict line**, then `· confidence ${level}`.
+- **The facts grid:**
+  - `${Category} limit after ${pct}% · over by ${amount}`
+  - `Available after ${amount}`
+  - `Emergency fund ${before} → ${after} months`
+  - `${goal} goal +${days} days later`
+
+  Leave out a line when its fact is null.
+- **Guard reasons** in a warning `Banner` when `capAtWait`.
+- **The `notes`** as muted lines (overspend, `You said: …`).
+- **The decide buttons:** `Remind me ${formatDay(remindOn)}` → wait; `I bought it` → bought, then navigate to `/add` with the prefill; `Skip it` → skip. After deciding, show the status line (`Waiting until ${day}` / `Bought ${day}` / `Skipped`). A bought decision shows a `Was it worth it?` 1–5 rating.
+- **The footer:** `Not financial advice`.
+
+**List:** past decisions, newest first, each with item, price, meter %, verdict and status. A decision can be deleted.
 
 - [ ] **Steps 1–5:**
-  1. Write tests:
-     - the form's validation and link fill (stubbed);
+  1. Write tests and watch them fail. Cover:
+     - form validation, and the link fill, both the stubbed fill and the offline failure;
      - the meter's ARIA and zone;
-     - the verdict and budget-check wording;
-     - facts lines left out when null;
+     - the verdict;
+     - facts left out when null;
      - the guard banner;
-     - the Basic check path;
-     - the Home action and Menu entry;
-     - the Add Expense line.
-     Watch them fail.
+     - the notes;
+     - each decide button, including the Add Expense prefill;
+     - the rating;
+     - the Home action, Menu entry and Add Expense line.
   2. Implement.
   3. Run the gate + e2e.
-  4. Look at it at 375px, light and dark.
+  4. Look at it at 375px in light and dark.
   5. Commit: `feat: ask whether to buy, with the buy meter`
 
 ---
 
-### Task 7: Debate, remember and deciding
-
-**Files:**
-- Create: `src/features/buy/Debate.tsx`, plus tests
-- Modify: `AnswerScreen.tsx`
-
-**What to build** (wireframe phone 4):
-- **The meter header:** `Buy meter: ${first}% → ${now}%`.
-- **Turns:** advisor turns labelled `Advisor`, or `Advisor · meter ${n}%` when the turn moved the meter; your turns labelled `You`.
-- **The reply field:** `Argue back…`, with Send.
-- **Remember offer.** When a reply returns `remember`, show the chip `Remember: ${text}` with `Not now`. Tapping it saves the fact, and Not now dismisses it.
-- **Deciding buttons:**
-  - `Remind me ${formatDay(remindOn)}` → `wait`;
-  - `I bought it` → `bought`, then navigate to `/add` with the prefill;
-  - `Skip it` → `skip`.
-- **Decided state.** After a decision the buttons are replaced by its status line: `Waiting until ${day}` / `Bought ${day}` / `Skipped`. A bought decision also gets a `Was it worth it?` 1–5 rating, shown once its reminder date has passed or when opened later.
-- **Errors.** While replying, the advisor's errors show inline (`Couldn't reach the advisor. Try again.`) and keep the text.
-
-- [ ] **Steps 1–5:**
-  1. Write tests:
-     - a reply adds both turns and moves the header;
-     - Remember saves only on accept;
-     - each decision button's effect, including the Add Expense prefill;
-     - the rating;
-     - the error keeps the typed text;
-     - the debate is disabled without the advisor.
-     Watch them fail.
-  2. Implement.
-  3. Run the gate + e2e.
-  4. Look at it at 375px.
-  5. Commit: `feat: debate the advisor, remember facts and decide`
-
----
-
-### Task 8: About you
+### Task 7: About you
 
 **Files:**
 - Create: `src/features/buy/AboutYouScreen.tsx`, plus tests
 - Modify: `routes.tsx` (`/about-you`), `menu.ts` (About you in "You", after Quests)
 
-**What to build** (wireframe phone 5, line fields):
-- Heading `About you`, intro `The advisor reads this every time you ask. Only you can change it.`
-- Fields `Your situation`, `What matters to you` and `Where you tend to overspend`, saved on blur with a `Saved` status.
-- `Remembered from your debates`: each fact with its date and `remove`.
-- Footnote `Also uses your app data: income, spending by category, limits, savings, goals, debts, investments and dividends (totals only).`
+**What to build** (wireframe `m6-no-ai.html`, About you phone):
+- The heading `About you` and the intro `The app uses this every time you ask. It stays on your phone.`
+- `What matters to you` (a line field).
+- `Where you tend to overspend` (category chips, multi-select).
+- `A goal to protect` (a select of your goals plus `None`).
+- `Your situation (optional)`.
+- Saved on change or blur, with a `Saved` status.
+- The explanatory note from the wireframe.
 
 - [ ] **Steps 1–5:**
-  1. Write tests for save, remove and the 500/200 char limits with a message. Watch them fail.
+  1. Write tests for saving each field, the chips' toggle and uniqueness, the goal select including a deleted goal, and the 500-character limits with a message. Watch them fail.
   2. Implement.
   3. Run the gate.
-  4. Commit: `feat: About you notes for the advisor`
+  4. Commit: `feat: About you for the buy check`
 
 ---
 
-### Task 9: Badges and reminders
+### Task 8: Badges and reminders
 
 **Files:**
-- Modify in `src/domain/game/`: `types.ts`, `badges.ts`, `rules.ts`, plus their tests
-- Modify: `src/domain/notifications.ts`, `src/features/settings/RemindersSection.tsx` (a `Buy it?` switch on `reminders.buyIt` from Task 2), quest labels and icons
+- Modify in `src/domain/game/`: `types.ts`, `badges.ts`, `rules.ts`, plus tests
+- Modify: `src/domain/notifications.ts`, `src/features/settings/RemindersSection.tsx` (a `Buy it?` switch on `reminders.buyIt`), and quest labels/icons
 
 **What to build:**
-- **Badges** `smart-shopper`, `impulse-controller` and `budget-defender`, with the conditions and rewards from Calls #7. Budget Defender counts skipped decisions whose `facts.overBy > 0`.
+- **Badges** `smart-shopper`, `impulse-controller` and `budget-defender` (Calls #7). Budget Defender counts skipped decisions whose `facts.overBy > 0`.
 - **Reminders** (kinds `buy-wait` and `buy-usage`, route `/buy/${id}`):
-  - at 09:00 on `remindOn` for `waiting`: title `Still want it? ${item}`, body `You chose to wait. See what the advisor said.`;
-  - at 09:00 14 days after `boughtOn` while `usage` is null: title `Was ${item} worth it?`, body `Rate it so the advisor learns what you use.`
+  - At 09:00 on `remindOn` for `waiting`: title `Still want it? ${item}`, body `You chose to wait. See your check again.`
+  - At 09:00 14 days after `boughtOn` while `usage` is null: title `Was ${item} worth it?`, body `Rate it, and your next check takes it into account.`
 
 - [ ] **Steps 1–5:**
-  1. Write tests for each badge condition, both reminder kinds and the switch. Watch them fail.
+  1. Write tests for each badge, both reminders and the switch. Watch them fail.
   2. Implement.
   3. Run the gate.
   4. Commit: `feat: buy-it badges and reminders`
 
 ---
 
-### Task 10: Demo and end to end
+### Task 9: Demo and end to end
 
 **Files:**
-- Modify: `src/data/demoSeed.ts` (three decisions: one waiting with a debate, one bought and rated, one skipped over a limit; plus About-you notes), and its tests
-- Create: `tests/e2e/buy.spec.ts`
+- Modify: `src/data/demoSeed.ts` (three decisions: one waiting, one bought and rated, one skipped over a limit; plus an About-you record), and its tests
+- Create: `tests/e2e/buy.spec.ts` (mock `**/api/extract`)
 
-**e2e** (mock `**/api/advisor` and `**/api/extract`):
-1. From Home's Buy it?, ask about an item over the Fun limit. The meter, verdict and facts show, and the question appears.
-2. Reply. The meter moves, Remember is offered and accepted, and About you lists the fact.
-3. Choose I bought it. Add Expense opens prefilled.
-4. With `/api/advisor` answering 503, ask again. The Basic check shows, and Skip still works.
+**e2e:**
+1. From Home's Buy it?, paste a link (mocked), ask about something over the Fun limit, and see the meter, verdict, facts and guard banner.
+2. Set About you overspend to that category, ask again, and see the meter drop and the note appear.
+3. Choose I bought it, and see Add Expense open prefilled.
+4. With `/api/extract` failing, the link message shows and Ask still works.
 
 - [ ] **Steps 1–5:**
-  1. Write the demo tests and the e2e, and watch them fail.
+  1. Write the tests and watch them fail.
   2. Implement.
   3. Run the gate + e2e.
   4. Commit: `test: buy-it end to end and demo decisions`
 
 ---
 
-### Task 11: Turn the advisor on, then the phone (needs the owner)
+### Task 10: Deploy the link reader, then the phone (needs the owner)
 
-- [ ] **Step 1: The owner's setup.**
-  1. Create an Anthropic API key in the Anthropic Console.
-  2. Run `npx vercel env add ANTHROPIC_API_KEY production`, pasting the key.
-  3. Optionally run `npx vercel env add ANTHROPIC_MODEL production`.
-
-  Controller rule: never print or handle the key.
-- [ ] **Step 2: Deploy.** Run `npx vercel --prod` once the owner confirms. Then live-check `/api/advisor` with the token: one ask and one reply. Without the token, confirm the 401. With a crafted body, confirm `capAtWait` is honoured.
-- [ ] **Step 3: Install** with `npm run android:run`, setting `JAVA_HOME` to `C:\Users\bhcco\.jdks\temurin-21.0.12.1` for that command.
-- [ ] **Step 4: Checklist.**
-  1. Ask about something real.
-  2. Check the meter, verdict, facts and question.
-  3. Reply and see the meter move.
-  4. Remember a fact, and see it in About you.
-  5. Remind me, then I bought it.
-  6. In airplane mode, the Basic check shows.
-- [ ] **Step 5: Commit** any fixes as `fix: on-device findings`.
+- [ ] **Step 1: Deploy.** Once the owner confirms, run `npx vercel --prod`; `/api/extract` isn't live yet.
+  - Live-check `/api/extract` with the token on one real product link, and confirm 400 for `http://127.0.0.1` and 401 without the token.
+  - Ask the owner whether to remove the unused `ANTHROPIC_API_KEY` with `npx vercel env rm ANTHROPIC_API_KEY production`. Never print it.
+- [ ] **Step 2: Install** with `npm run android:run`, with `JAVA_HOME` set to `C:\Users\bhcco\.jdks\temurin-21.0.12.1` for that command.
+- [ ] **Step 3: Checklist.**
+  1. Ask about something real, using a pasted link.
+  2. Check the meter, verdict, facts and notes.
+  3. Use About you.
+  4. Remind me, then I bought it.
+  5. In airplane mode, Ask still works.
+- [ ] **Step 4: Commit** any fixes as `fix: on-device findings`.
 
 ---
 
 ## Milestone checkpoint (M6 done)
 
-On the phone you can ask before you buy and get an honest, guarded verdict with a meter. You can argue with it, decide, and be reminded, and the app learns only what you allow. Next is M7: help, polish and the rest of the forms in the new style.
+On the phone you can ask before you buy and get a guarded verdict with a meter, built from your own numbers and your own notes, entirely on the phone. Next is M7: help, polish and the rest of the forms in the new style.
