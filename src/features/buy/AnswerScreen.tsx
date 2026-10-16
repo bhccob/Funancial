@@ -128,8 +128,11 @@ export function AnswerScreen() {
       </PageHeader>
 
       <Section>
-        <div className="mb-3 flex items-center justify-center gap-3">
-          <span className="text-muted text-sm font-bold">Buy meter</span>
+        <div className="mb-3 flex items-center justify-center gap-1">
+          {/* The meter and the "?" below already name it. */}
+          <span aria-hidden="true" className="text-muted text-sm font-bold">
+            Buy meter
+          </span>
           <HelpTip pageId="buy-it" label="the buy meter" />
         </div>
         <BuyMeter meter={decision.meter} />

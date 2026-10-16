@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { startFresh } from './helpers';
+import { startDemo, startFresh } from './helpers';
 
 test('Help: search the index, open a page and read its worked example', async ({ page }) => {
   await startFresh(page, '/help');
@@ -71,4 +71,23 @@ test('Home: the "?" on Available to spend opens a tip, gives focus back, and lin
   await sheet.getByRole('link', { name: "How it's worked out ›" }).click();
   await expect(page).toHaveURL(/\/help\/available$/);
   await expect(page.getByRole('heading', { level: 1, name: 'Available to spend' })).toBeVisible();
+});
+
+test('Home: each "?" can be tapped over its whole 44px, down to its bottom edge', async ({
+  page,
+}) => {
+  // Demo money: a wide amount under the label, which is what can sit over the lower part of the "?".
+  await startDemo(page);
+  const tips = await page.getByRole('button', { name: /^What is/ }).all();
+  expect(tips).toHaveLength(3);
+  for (const tip of tips) {
+    await tip.evaluate((el) => el.scrollIntoView({ block: 'center' }));
+    const box = (await tip.boundingBox())!;
+    // Two pixels above the bottom edge: the amount under the label must not sit over it.
+    const reached = await tip.evaluate(
+      (el, [x, y]) => el.contains(document.elementFromPoint(x!, y!)),
+      [box.x + box.width / 2, box.y + box.height - 2],
+    );
+    expect(reached, (await tip.getAttribute('aria-label')) ?? '').toBe(true);
+  }
 });

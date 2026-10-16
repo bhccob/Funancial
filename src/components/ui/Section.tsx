@@ -5,7 +5,7 @@ import { cn } from '@/lib/cn';
 
 export interface SectionProps {
   title?: string;
-  /** A `HelpTip` for the title: it sits just after it, and `action` stays on the right. */
+  /** A `HelpTip` for the title: 4px after it (the row's 12px gap less 8px), and `action` stays on the right. */
   help?: ReactNode;
   /** What sits on the right of the title: a `SectionLink`, tabs, a button or a figure. */
   action?: ReactNode;
@@ -35,7 +35,7 @@ export function Section({ title, help, action, children, className }: SectionPro
               {title}
             </h2>
           )}
-          {help && <div className="mr-auto flex">{help}</div>}
+          {help && <div className="mr-auto -ml-2 flex">{help}</div>}
           {action && <div className="text-muted text-[13.5px] font-bold">{action}</div>}
         </div>
       )}

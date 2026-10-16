@@ -120,6 +120,16 @@ describe('the answer', () => {
     await expectHelpTip(document.body, 'the buy meter', 'buy-it');
   });
 
+  it('names the meter once: the caption above it is for the eye, and sits 4px from the "?"', async () => {
+    await renderAnswer(full());
+    // The meter and the "?" already carry the name, so a screen reader skips the drawn caption.
+    const caption = screen.getByText('Buy meter');
+    expect(caption).toHaveAttribute('aria-hidden', 'true');
+    expect(caption.parentElement).toHaveClass('gap-1');
+    expect(screen.getByRole('meter', { name: 'Buy meter' })).toBeInTheDocument();
+    expect(screen.getAllByText('Buy meter')).toHaveLength(1);
+  });
+
   it.each([
     ['buy', 'Buy it'],
     ['wait', 'Wait a few days'],

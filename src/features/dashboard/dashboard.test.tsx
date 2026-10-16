@@ -928,6 +928,14 @@ describe('DashboardScreen help tips', () => {
     await expectHelpTip(region('Available to spend'), 'available to spend', 'available');
   });
 
+  it('sets the "?" 4px after the Available to spend title', () => {
+    renderDashboard(monthData(), TODAY);
+    const tip = within(region('Available to spend')).getByRole('button', {
+      name: 'What is available to spend?',
+    });
+    expect(tip.parentElement).toHaveClass('gap-1');
+  });
+
   it('leaves the month line to its own taps', async () => {
     renderDashboard(monthData(), TODAY);
     const hero = region('Available to spend');

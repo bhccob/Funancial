@@ -7,8 +7,9 @@ import { Sheet } from './Sheet';
 /**
  * A small "?" for the label of a key number. It opens the help page's title and summary in a
  * `Sheet`, with a link to the full page. The glyph is 16px; the 14px of padding around it make the
- * 44px tap area, and the equal negative margin keeps that padding from growing the row. Put it
- * beside the label, never inside a button or link the number already has.
+ * 44px tap area, and the equal negative margin keeps that padding from growing the row. It is
+ * `relative` so the amount under the label, which comes later in the page, cannot sit over its
+ * lower half. Put it beside the label, never inside a button or link the number already has.
  */
 export function HelpTip({ pageId, label }: { pageId: string; label: string }) {
   const [open, setOpen] = useState(false);
@@ -22,7 +23,7 @@ export function HelpTip({ pageId, label }: { pageId: string; label: string }) {
         type="button"
         aria-label={`What is ${label}?`}
         onClick={() => setOpen(true)}
-        className="text-muted hover:text-text -m-3.5 inline-flex flex-none p-3.5"
+        className="text-muted hover:text-text relative -m-3.5 inline-flex flex-none rounded-full p-3.5"
       >
         <CircleQuestionMark aria-hidden="true" className="size-4" />
       </button>

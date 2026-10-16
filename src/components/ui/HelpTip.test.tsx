@@ -35,6 +35,8 @@ describe('HelpTip', () => {
     expect(tip()).toHaveAttribute('type', 'button');
     // 16px glyph + 14px of padding each side; the negative margin keeps it from growing the row.
     expect(tip()).toHaveClass('text-muted', 'p-3.5', '-m-3.5');
+    // A circle for the focus ring, and above the amount under it, which would cover its lower half.
+    expect(tip()).toHaveClass('rounded-full', 'relative');
     expect(tip().querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
     expect(tip().querySelector('svg')).toHaveClass('size-4');
   });

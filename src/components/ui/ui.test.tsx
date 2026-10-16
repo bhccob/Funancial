@@ -192,6 +192,26 @@ describe('Sheet and Dialog focus', () => {
       expect(opener).toHaveFocus();
     },
   );
+
+  it('does not throw, or focus a detached node, when the opener is gone before it closes', () => {
+    const page = (hasOpener: boolean, open: boolean) => (
+      <>
+        {hasOpener && <button type="button">Open</button>}
+        <Sheet open={open} title="Details" onClose={() => {}} />
+      </>
+    );
+    const { rerender } = render(page(true, false));
+    const opener = screen.getByRole('button', { name: 'Open' });
+    const focus = vi.spyOn(opener, 'focus');
+    opener.focus();
+    focus.mockClear();
+    rerender(page(true, true));
+    rerender(page(false, true));
+    expect(opener).not.toBeInTheDocument();
+    expect(() => rerender(page(false, false))).not.toThrow();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(focus).not.toHaveBeenCalled();
+  });
 });
 
 describe('Toaster', () => {
@@ -356,6 +376,19 @@ describe('Section', () => {
     );
     expect(screen.getByRole('link', { name: 'All' })).toHaveAttribute('href', '/goals');
     expect(screen.getByRole('link', { name: 'Add a goal' })).toHaveClass('min-h-11');
+  });
+
+  it('sets a help tip 4px after the title, with the action still on the right', () => {
+    render(
+      <Section title="Limits" help={<button type="button">?</button>} action={<a href="/b">All</a>}>
+        body
+      </Section>,
+    );
+    // The row's gap is 12px; the tip pulls in 8px of it.
+    expect(screen.getByRole('button', { name: '?' }).parentElement).toHaveClass('-ml-2', 'mr-auto');
+    expect(screen.getByRole('heading', { name: 'Limits' }).parentElement).toContainElement(
+      screen.getByRole('link', { name: 'All' }),
+    );
   });
 
   it('is labelled by its title and shows its action', () => {

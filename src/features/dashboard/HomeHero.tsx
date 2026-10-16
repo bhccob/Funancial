@@ -59,7 +59,7 @@ export function HomeHero({ view, today }: { view: FinanceView; today: LocalDate 
 
   return (
     <section aria-labelledby={labelId}>
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-1">
         <h2 id={labelId} className="text-muted text-sm font-bold">
           Available to spend
         </h2>
