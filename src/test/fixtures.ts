@@ -328,8 +328,8 @@ export function makeAboutYou(overrides: Partial<AboutYou> = {}): AboutYou {
     ...stamp(),
     situation: '',
     matters: '',
-    overspend: '',
-    facts: [],
+    overspend: [],
+    protectGoalId: null,
     ...overrides,
   };
 }

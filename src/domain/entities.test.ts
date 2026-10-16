@@ -27,6 +27,7 @@ import {
   BudgetLimitSchema,
   BuyAskSchema,
   BuyDecisionSchema,
+  CategorySchema,
   ChallengeSchema,
   CheckInSchema,
   DebtSchema,
@@ -578,12 +579,7 @@ describe('BuyDecision', () => {
 });
 
 describe('AboutYou', () => {
-  const fact = (over: object = {}) => ({
-    id: 'f1',
-    text: 'I commute by bike.',
-    addedOn: '2026-10-16',
-    ...over,
-  });
+  const messages = (v: unknown) => AboutYouSchema.safeParse(v).error?.issues.map((i) => i.message);
 
   it('is one record with the id about, empty to start', () => {
     const about = makeAboutYou();
@@ -591,30 +587,39 @@ describe('AboutYou', () => {
       id: 'about',
       situation: '',
       matters: '',
-      overspend: '',
-      facts: [],
+      overspend: [],
+      protectGoalId: null,
     });
+    expect(ok(AboutYouSchema, about)).toBe(true);
     expect(ok(AboutYouSchema, makeAboutYou({ id: 'other' as never }))).toBe(false);
   });
-  it('keeps each of the three notes to 500 characters', () => {
-    for (const key of ['situation', 'matters', 'overspend'] as const) {
+  it('keeps no list of remembered facts: nothing is debated any more', () => {
+    expect(Object.keys(AboutYouSchema.shape)).not.toContain('facts');
+    expect(Object.keys(makeAboutYou())).not.toContain('facts');
+  });
+  it('accepts a situation and what matters at 500 characters, and refuses more with a message', () => {
+    for (const key of ['situation', 'matters'] as const) {
       expect(ok(AboutYouSchema, makeAboutYou({ [key]: 'x'.repeat(500) }))).toBe(true);
-      expect(ok(AboutYouSchema, makeAboutYou({ [key]: 'x'.repeat(501) }))).toBe(false);
+      const long = makeAboutYou({ [key]: 'x'.repeat(501) });
+      expect(ok(AboutYouSchema, long)).toBe(false);
+      expect(messages(long)).toEqual(['Keep it to 500 characters or fewer']);
     }
   });
-  it('keeps each fact to 200 characters, with a real day it was added', () => {
-    expect(
-      ok(
-        AboutYouSchema,
-        makeAboutYou({ facts: [fact(), fact({ id: 'f2', text: 'x'.repeat(200) })] }),
-      ),
-    ).toBe(true);
-    expect(ok(AboutYouSchema, makeAboutYou({ facts: [fact({ text: 'x'.repeat(201) })] }))).toBe(
-      false,
-    );
-    expect(ok(AboutYouSchema, makeAboutYou({ facts: [fact({ id: '' })] }))).toBe(false);
-    expect(ok(AboutYouSchema, makeAboutYou({ facts: [fact({ addedOn: '2026-13-01' })] }))).toBe(
-      false,
-    );
+  it('takes overspend as categories the app knows, each picked once', () => {
+    expect(ok(AboutYouSchema, makeAboutYou({ overspend: [] }))).toBe(true);
+    expect(ok(AboutYouSchema, makeAboutYou({ overspend: ['food', 'entertainment'] }))).toBe(true);
+    expect(ok(AboutYouSchema, makeAboutYou({ overspend: [...CategorySchema.options] }))).toBe(true);
+    expect(ok(AboutYouSchema, makeAboutYou({ overspend: ['travel' as never] }))).toBe(false);
+    expect(ok(AboutYouSchema, makeAboutYou({ overspend: 'food' as never }))).toBe(false);
+
+    const twice = makeAboutYou({ overspend: ['food', 'rent', 'food'] });
+    expect(ok(AboutYouSchema, twice)).toBe(false);
+    expect(messages(twice)).toEqual(['Pick each category once']);
+  });
+  it('takes the goal to protect as an id, or none', () => {
+    expect(ok(AboutYouSchema, makeAboutYou({ protectGoalId: 'goal-1' }))).toBe(true);
+    expect(ok(AboutYouSchema, makeAboutYou({ protectGoalId: null }))).toBe(true);
+    expect(ok(AboutYouSchema, makeAboutYou({ protectGoalId: '' }))).toBe(false);
+    expect(ok(AboutYouSchema, { ...makeAboutYou(), protectGoalId: undefined })).toBe(false);
   });
 });

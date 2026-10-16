@@ -15,7 +15,8 @@ import { computeFinanceView } from '../view';
 
 /**
  * Everything about the person's money that the rules weigh, as totals. No individual expense,
- * income or transaction, no note, no id and no date of a past one: only sums, balances and limits.
+ * income or transaction, no note, no id (but a goal's) and no date of a past one: only sums,
+ * balances and limits.
  * Money is integer minor units of `currency`; `emergencyMonths` is a count of months.
  *
  * Beyond what the plan listed it also carries what the rules need and cannot find elsewhere: `cash`,
@@ -47,7 +48,14 @@ export type AdvisorSnapshot = {
   avgMonthlySpend: number;
   /** `emergencyFund` over `avgMonthlySpend`; null when nothing was spent. */
   emergencyMonths: number | null;
-  goals: Array<{ name: string; target: number; saved: number; deadline: LocalDate | null }>;
+  /** The `id` is for finding the goal the person protects; the snapshot stays on the phone. */
+  goals: Array<{
+    id: string;
+    name: string;
+    target: number;
+    saved: number;
+    deadline: LocalDate | null;
+  }>;
   debts: { total: number; cardsDue: number };
   /** Owed on the card the ask pays with; null when it is paid another way or the card is unknown. */
   cardBalance: number | null;
@@ -155,6 +163,7 @@ export function buildSnapshot(
     avgMonthlySpend,
     emergencyMonths: avgMonthlySpend === 0 ? null : emergencyFund / avgMonthlySpend,
     goals: data.tables.goal.map((g) => ({
+      id: g.id,
       name: g.name,
       target: g.target,
       saved: g.current,

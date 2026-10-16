@@ -19,11 +19,24 @@ export function confidenceOf(meter: number): Confidence {
 
 const URGENCY = { need: 20, want: 0, treat: -10 } as const;
 
+/** What the person's About you changes about this ask. */
+export type Leanings = {
+  /** The ask is in a category they say they tend to overspend on. */
+  overspends: boolean;
+  /** The goal the facts measure is the one they asked to protect. */
+  protectedGoal: boolean;
+};
+
 /**
  * The meter before the guards: 50, moved by the kind of purchase and by what it does to the
  * person's limits, available balance, emergency fund and goals, then kept within 0–100.
  */
-export function baselineMeter(snapshot: AdvisorSnapshot, ask: BuyAsk, facts: Facts): number {
+export function baselineMeter(
+  snapshot: AdvisorSnapshot,
+  ask: BuyAsk,
+  facts: Facts,
+  leanings: Leanings,
+): number {
   const { categoryAfter, overallAfter, goalDelay } = facts;
   const lines = [categoryAfter, overallAfter].filter((l) => l !== null);
   const over = (l: Facts['overallAfter']) => l !== null && l.spentAfter > l.limit;
@@ -40,7 +53,9 @@ export function baselineMeter(snapshot: AdvisorSnapshot, ask: BuyAsk, facts: Fac
   if (facts.availableAfter * 10 < snapshot.monthIncome) m -= 10;
   if (facts.emergencyAfter !== null)
     m += facts.emergencyAfter >= 3 ? 10 : facts.emergencyAfter < 1 ? -15 : 0;
-  if (goalDelay !== null && goalDelay.days > 14) m -= 10;
+  // A goal the person protects may slip a week, not two.
+  if (goalDelay !== null && goalDelay.days > (leanings.protectedGoal ? 7 : 14)) m -= 10;
+  if (leanings.overspends) m -= 10;
   if (rated((u) => u <= 2)) m -= 10;
   if (rated((u) => u >= 4)) m += 5;
   return Math.min(100, Math.max(0, m));

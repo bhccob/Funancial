@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  makeAboutYou,
   makeBuyAsk,
   makeDebt,
   makeExpense,
@@ -9,16 +10,21 @@ import {
   makeSubscription,
 } from '@/test/fixtures';
 import { history, TODAY, world } from '@/test/testWorld';
-import { FactsSchema, type BuyAsk } from '../entities';
+import { FactsSchema, type AboutYou, type BuyAsk } from '../entities';
 import { analyse } from './rules';
 import { buildSnapshot, type PastDecision } from './snapshot';
 
 type Options = Parameters<typeof world>[0];
 
 /** Builds the snapshot for `data` and analyses the ask against it. */
-function run(o: Options = {}, over: Partial<BuyAsk> = {}, past: PastDecision[] = []) {
+function run(
+  o: Options = {},
+  over: Partial<BuyAsk> = {},
+  past: PastDecision[] = [],
+  about?: AboutYou,
+) {
   const ask = makeBuyAsk(over);
-  return analyse(buildSnapshot(world(o), TODAY, ask, past), ask, TODAY);
+  return analyse(buildSnapshot(world(o), TODAY, ask, past), ask, TODAY, about);
 }
 
 const fun = (amount: number, period: 'weekly' | 'monthly' = 'monthly') =>
@@ -400,5 +406,234 @@ describe('verdict', () => {
       { urgency: 'treat', howSoon: 'norush', price: 150_00 },
     );
     expect(r).toMatchObject({ meter: 25, verdict: 'skip' });
+  });
+});
+
+describe('About you', () => {
+  const neutral = { cash: 5_000_00 };
+  // 12 months to go: 100.00 a month, so a purchase slips it ceil(price × 30 / 100.00) days.
+  const bike = makeGoal({
+    id: 'bike',
+    name: 'Bike',
+    kind: 'savings',
+    target: 1_200_00,
+    current: 0,
+    deadline: '2027-10-14',
+  });
+  // The nearer deadline, and the same 100.00 a month.
+  const trip = makeGoal({
+    id: 'trip',
+    name: 'Trip',
+    kind: 'savings',
+    target: 600_00,
+    current: 0,
+    deadline: '2027-04-14',
+  });
+  const protectBike = makeAboutYou({ protectGoalId: 'bike' });
+  const both = { ...neutral, goals: [trip, bike] };
+
+  describe('overspend', () => {
+    it('takes 10 off for a category you tend to overspend on, and says so', () => {
+      const r = run(neutral, {}, [], makeAboutYou({ overspend: ['entertainment'] }));
+      expect(r.meter).toBe(40);
+      expect(r.notes).toEqual(['You said you tend to overspend on Fun.']);
+    });
+
+    it("names the category by the label the app shows, and only the one that's asked about", () => {
+      const about = makeAboutYou({ overspend: ['shopping', 'food'] });
+      const r = run(neutral, { category: 'shopping' }, [], about);
+      expect(r.notes).toEqual(['You said you tend to overspend on Shopping.']);
+      expect(r.meter).toBe(40);
+    });
+
+    it('changes nothing for another category, an empty list, or no About you at all', () => {
+      const plain = run(neutral);
+      expect(plain).toMatchObject({ meter: 50, notes: [] });
+      const others = [undefined, makeAboutYou(), makeAboutYou({ overspend: ['food', 'shopping'] })];
+      for (const about of others) expect(run(neutral, {}, [], about)).toEqual(plain);
+    });
+
+    it('counts a category listed twice once', () => {
+      const twice = makeAboutYou({ overspend: ['entertainment', 'entertainment'] });
+      const r = run(neutral, {}, [], twice);
+      expect(r.meter).toBe(40);
+      expect(r.notes).toEqual(['You said you tend to overspend on Fun.']);
+    });
+  });
+
+  describe('the goal to protect', () => {
+    it('measures that goal, not the nearest deadline, and takes 10 off above 7 days', () => {
+      expect(run(both, { price: 40_00 }).facts.goalDelay).toEqual({ name: 'Trip', days: 12 });
+      const r = run(both, { price: 40_00 }, [], protectBike);
+      expect(r.facts.goalDelay).toEqual({ name: 'Bike', days: 12 });
+      // 12 days is under the generic 14, so only the stricter rule bites.
+      expect(r.meter).toBe(40);
+    });
+
+    it('is strict above 7 days and not at 7', () => {
+      const at7 = run(both, { price: 23_33 }, [], protectBike);
+      expect(at7).toMatchObject({ facts: { goalDelay: { days: 7 } }, meter: 50 });
+      const at8 = run(both, { price: 23_34 }, [], protectBike);
+      expect(at8).toMatchObject({ facts: { goalDelay: { days: 8 } }, meter: 40 });
+    });
+
+    it('takes 10 off once, in place of the generic rule, when both would apply', () => {
+      const o = { ...neutral, goals: [bike] };
+      // 15 days: over 14 and over 7.
+      expect(run(o, { price: 50_00 }).meter).toBe(40);
+      expect(run(o, { price: 50_00 }, [], protectBike).meter).toBe(40);
+    });
+
+    it.each<[string, string | null, Parameters<typeof makeGoal>[0]]>([
+      ['no goal is chosen', null, {}],
+      ['it was deleted', 'gone', {}],
+      [
+        'it is complete',
+        'done',
+        {
+          id: 'done',
+          name: 'Done',
+          kind: 'savings',
+          target: 100_00,
+          current: 100_00,
+          deadline: '2026-11-01',
+        },
+      ],
+      [
+        'it has no deadline',
+        'open',
+        { id: 'open', name: 'Open', kind: 'custom', target: 1_200_00, current: 0, deadline: null },
+      ],
+    ])('falls back to the nearest deadline and the generic rule when %s', (_n, id, extra) => {
+      const goals = [makeGoal({ kind: 'savings', ...extra }), bike, trip];
+      const about = makeAboutYou({ protectGoalId: id });
+      const r = run({ ...neutral, goals }, { price: 40_00 }, [], about);
+      expect(r.facts.goalDelay).toEqual({ name: 'Trip', days: 12 });
+      expect(r.meter).toBe(50);
+    });
+
+    it('still applies the generic rule to the goal it falls back to', () => {
+      const r = run(both, { price: 50_00 }, [], makeAboutYou({ protectGoalId: 'gone' }));
+      expect(r.facts.goalDelay).toEqual({ name: 'Trip', days: 15 });
+      expect(r.meter).toBe(40);
+    });
+  });
+
+  describe('your own words', () => {
+    it('shows back what matters, your situation and why you want it, and moves nothing', () => {
+      const about = makeAboutYou({
+        matters: 'Saving for a house deposit',
+        situation: 'Rent a flat in Amsterdam',
+      });
+      const r = run(neutral, { why: 'for the commute' }, [], about);
+      expect(r.notes).toEqual([
+        'You said: Saving for a house deposit',
+        'Rent a flat in Amsterdam',
+        'You said: for the commute',
+      ]);
+      expect(r.meter).toBe(50);
+    });
+
+    it('leaves out words that are empty, or only spaces', () => {
+      expect(run(neutral, { why: null }, [], makeAboutYou()).notes).toEqual([]);
+      const blank = makeAboutYou({ matters: '  ', situation: ' \n' });
+      expect(run(neutral, { why: '   ' }, [], blank).notes).toEqual([]);
+      expect(run(neutral, { why: 'for the commute' }).notes).toEqual(['You said: for the commute']);
+    });
+
+    it('lists the overspend reason first, then the words', () => {
+      const about = makeAboutYou({
+        overspend: ['entertainment'],
+        matters: 'A house',
+        situation: 'A flat',
+      });
+      expect(run(neutral, { why: 'a sale' }, [], about).notes).toEqual([
+        'You said you tend to overspend on Fun.',
+        'You said: A house',
+        'A flat',
+        'You said: a sale',
+      ]);
+    });
+  });
+
+  it('still stops at 0 when every adjustment piles on', () => {
+    const r = run(
+      {
+        cash: 50_00,
+        savings: 200_00,
+        expenses: history(300_00),
+        limits: [fun(10_00), overall(10_00)],
+        goals: [bike],
+        incomes: [makeIncome({ amount: 1_000_00, date: '2026-10-01' })],
+      },
+      { urgency: 'treat', howSoon: 'today', price: 100_00 },
+      [pastDecision(1)],
+      makeAboutYou({ overspend: ['entertainment'], protectGoalId: 'bike' }),
+    );
+    expect(r.meter).toBe(0);
+    expect(r.verdict).toBe('skip');
+  });
+});
+
+describe('guards hold under every adjustment', () => {
+  // 120.00 over 12 months is 10.00 a month: any purchase slips it by more than 7 days.
+  const steep = makeGoal({
+    id: 'steep',
+    kind: 'savings',
+    target: 120_00,
+    current: 0,
+    deadline: '2027-10-14',
+  });
+  const visa = makeDebt({ openingBalance: 50_00, openingDate: '2026-06-01' });
+  const calm = { cash: 5_000_00, limits: [overall(10_000_00)], goals: [steep] };
+  const all = ['need', 'want', 'treat'] as const;
+  // A need is let through the emergency guard, so only wants and treats are tried there.
+  const wants = ['want', 'treat'] as const;
+
+  const scenarios: Array<[string, Options, Partial<BuyAsk>, ReadonlyArray<BuyAsk['urgency']>]> = [
+    [
+      'it needs debt',
+      { ...calm, debts: [visa] },
+      { payWith: 'credit_card', cardId: visa.id, price: 10_00 },
+      all,
+    ],
+    ['it overdraws the available balance', { ...calm, cash: 100_00 }, { price: 150_00 }, all],
+    [
+      'it drops the emergency fund under a month',
+      { ...calm, savings: 100_00, expenses: history(300_00) },
+      { price: 20_00 },
+      wants,
+    ],
+  ];
+
+  it.each(scenarios)('never reaches buy when %s', (_name, o, over, urgencies) => {
+    let tried = 0;
+    for (const urgency of urgencies) {
+      for (const howSoon of ['today', 'month', 'norush'] as const) {
+        for (const past of [[], [pastDecision(5)], [pastDecision(1)]]) {
+          for (const protectGoalId of [null, 'steep', 'gone']) {
+            for (const overspend of [[], ['entertainment' as const], ['food' as const]]) {
+              const about = makeAboutYou({ overspend, protectGoalId });
+              const label = JSON.stringify({ urgency, howSoon, past: past.length, about });
+              const r = run(o, { ...over, urgency, howSoon }, past, about);
+              expect(r.guards.capAtWait, label).toBe(true);
+              expect(r.meter, label).toBeLessThanOrEqual(66);
+              expect(r.verdict, label).not.toBe('buy');
+              tried++;
+            }
+          }
+        }
+      }
+    }
+    expect(tried).toBe(urgencies.length * 3 * 3 * 3 * 3);
+  });
+
+  it('reaches buy in the same world once nothing is guarded, so the table has teeth', () => {
+    const best = { urgency: 'need', howSoon: 'norush', price: 10_00 } as const;
+    const about = makeAboutYou({ overspend: ['entertainment'], protectGoalId: 'steep' });
+    // 50 + 20 + 5 + 10 (far inside its limit) + 5 (rated 5) − 10 (overspend) − 10 (protected goal).
+    const r = run(calm, best, [pastDecision(5)], about);
+    expect(r).toMatchObject({ meter: 70, verdict: 'buy' });
+    expect(r.guards.capAtWait).toBe(false);
   });
 });

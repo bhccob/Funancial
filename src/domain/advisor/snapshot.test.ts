@@ -57,8 +57,10 @@ describe('buildSnapshot', () => {
     expect(json).not.toContain('Streamflix');
     expect(json).not.toContain('KO');
     expect(json).not.toContain('Coca-Cola');
+    // A goal's id stays: it is how the rules find the goal the person protects, and it never leaves the phone.
+    const goalIds = new Set(data.tables.goal.map((g) => g.id));
     for (const row of Object.values(data.tables).flat()) {
-      if (row.id.length > 8) expect(json).not.toContain(row.id);
+      if (row.id.length > 8 && !goalIds.has(row.id)) expect(json).not.toContain(row.id);
     }
     for (const amount of ['1337', '2468', '1717']) expect(json).not.toContain(amount);
     for (const date of ['2026-10-02', '2026-10-03', '2026-10-04']) {
@@ -94,8 +96,15 @@ describe('buildSnapshot', () => {
         makeLimit({ category: 'entertainment', period: 'monthly', amount: 200_00 }),
       ],
       goals: [
-        makeGoal({ name: 'Emergency fund', kind: 'emergency', target: 1_000_00, current: 900_00 }),
         makeGoal({
+          id: 'goal-emergency',
+          name: 'Emergency fund',
+          kind: 'emergency',
+          target: 1_000_00,
+          current: 900_00,
+        }),
+        makeGoal({
+          id: 'goal-bike',
           name: 'Bike',
           kind: 'savings',
           target: 1_200_00,
@@ -179,8 +188,20 @@ describe('buildSnapshot', () => {
       { scope: 'food', period: 'week', limit: 150_00, spent: 0, resetsOn: '2026-10-19' },
     ]);
     expect(s.goals).toEqual([
-      { name: 'Emergency fund', target: 1_000_00, saved: 900_00, deadline: null },
-      { name: 'Bike', target: 1_200_00, saved: 450_00, deadline: '2027-02-14' },
+      {
+        id: 'goal-emergency',
+        name: 'Emergency fund',
+        target: 1_000_00,
+        saved: 900_00,
+        deadline: null,
+      },
+      {
+        id: 'goal-bike',
+        name: 'Bike',
+        target: 1_200_00,
+        saved: 450_00,
+        deadline: '2027-02-14',
+      },
     ]);
     expect(s.dividendsYear).toBe(projectedAnnual(data, 'USD', TODAY));
     expect(s.dividendsYear).toBeGreaterThan(0);

@@ -511,15 +511,21 @@ export const BuyDecisionSchema = z.object({
 });
 export type BuyDecision = z.infer<typeof BuyDecisionSchema>;
 
-/** What the person chose to tell the advisor about themselves: the one record, `id: 'about'`. */
+const tooLong = 'Keep it to 500 characters or fewer';
+
+/**
+ * What the person chose to tell the rules about themselves: the one record, `id: 'about'`.
+ * `overspend` lists the categories they tend to overspend on, each once; `protectGoalId` is the
+ * goal a purchase should not slip, or null.
+ */
 export const AboutYouSchema = z.object({
   ...base,
   id: z.literal('about'),
-  situation: z.string().max(500),
-  matters: z.string().max(500),
-  overspend: z.string().max(500),
-  facts: z.array(
-    z.object({ id: z.string().min(1), text: z.string().max(200), addedOn: LocalDateSchema }),
-  ),
+  situation: z.string().max(500, tooLong),
+  matters: z.string().max(500, tooLong),
+  overspend: z
+    .array(CategorySchema)
+    .refine((xs) => new Set(xs).size === xs.length, 'Pick each category once'),
+  protectGoalId: z.string().min(1).nullable(),
 });
 export type AboutYou = z.infer<typeof AboutYouSchema>;
