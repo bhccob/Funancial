@@ -884,30 +884,62 @@ describe('price service', () => {
       await upstreamFailure(await extract('https://a.example/'));
     });
 
-    it('reads a page of exactly 1 MB and refuses one byte more', async () => {
+    it('reads a page of exactly 1 MB whole, and only the first 1 MB of a bigger one', async () => {
       const mb = 1024 * 1024;
-      fetchMock.mockImplementation(async () => page('<title>Big</title>'.padEnd(mb, ' ')));
-      const ok = await extract('https://shop.example/p');
-      expect(ok.status).toBe(200);
-      expect(await ok.json()).toEqual({ name: 'Big', price: null, currency: null });
+      const head = '<title>Big</title>';
+      const tag = '<meta property="og:price:amount" content="7">';
+      const room = mb - head.length - tag.length;
+      const want = { name: 'Big', price: 7, currency: null };
 
-      fetchMock.mockImplementation(async () => page('<title>Big</title>'.padEnd(mb + 1, ' ')));
-      await upstreamFailure(await extract('https://shop.example/p'));
+      fetchMock.mockImplementation(async () => page(head + ' '.repeat(room) + tag));
+      expect(await (await extract('https://shop.example/p')).json()).toEqual(want);
+
+      // One byte further and the tag is cut off at the cap: the page is read, not refused.
+      fetchMock.mockImplementation(async () => page(head + ' '.repeat(room + 1) + tag));
+      const cut = await extract('https://shop.example/p');
+      expect(cut.status).toBe(200);
+      expect(await cut.json()).toEqual({ name: 'Big', price: null, currency: null });
+
+      // Whatever follows the cap is never read.
+      fetchMock.mockImplementation(async () => page(head + ' '.repeat(mb) + tag));
+      expect(await (await extract('https://shop.example/p')).json()).toEqual({
+        name: 'Big',
+        price: null,
+        currency: null,
+      });
     });
 
-    it('stops reading a body that never ends instead of draining it', async () => {
+    it('answers from the OpenGraph tags of a page much larger than 1 MB', async () => {
+      const head = [
+        '<title>Page title</title>',
+        '<meta property="og:title" content="Standing Desk">',
+        '<meta property="product:price:amount" content="249.00">',
+        '<meta property="product:price:currency" content="GBP">',
+      ].join('');
+      const body = `<!doctype html><html><head>${head}</head><body>${'<p>filler</p>'.repeat(150_000)}</body></html>`;
+      expect(body.length).toBeGreaterThan(1.5 * 1024 * 1024);
+      fetchMock.mockImplementation(async () => page(body));
+      const res = await extract('https://shop.example/p');
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ name: 'Standing Desk', price: 249, currency: 'GBP' });
+    });
+
+    it('stops reading a body that never ends instead of draining it, and answers from what it read', async () => {
       let pulls = 0;
+      const first = new TextEncoder().encode('<title>Endless</title>'.padEnd(256 * 1024, ' '));
       const chunk = new Uint8Array(256 * 1024).fill(32);
       fetchMock.mockImplementation(async () => {
         const body = new ReadableStream<Uint8Array>({
           pull(controller) {
             pulls += 1;
-            controller.enqueue(chunk);
+            controller.enqueue(pulls === 1 ? first : chunk);
           },
         });
         return page(body);
       });
-      await upstreamFailure(await extract('https://shop.example/p'));
+      const res = await extract('https://shop.example/p');
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ name: 'Endless', price: null, currency: null });
       expect(pulls).toBeGreaterThan(3);
       expect(pulls).toBeLessThan(10);
     });

@@ -57,26 +57,26 @@ async function assertPublic(url: URL): Promise<void> {
   }
 }
 
+// A bigger page is cut at the cap, not refused: the cap bounds memory and time, and a product's
+// name and price sit in the head, well inside the first 1 MB.
 async function readCapped(res: Response): Promise<string> {
   const reader = res.body?.getReader();
   if (!reader) return '';
   const chunks: Uint8Array[] = [];
   let size = 0;
-  for (;;) {
+  while (size < MAX_BYTES) {
     const { done, value } = await reader.read();
     if (done) return Buffer.concat(chunks).toString('utf8');
+    chunks.push(value.subarray(0, MAX_BYTES - size));
     size += value.byteLength;
-    if (size > MAX_BYTES) {
-      await reader.cancel();
-      throw new Error('page over 1 MB');
-    }
-    chunks.push(value);
   }
+  await reader.cancel();
+  return Buffer.concat(chunks).toString('utf8');
 }
 
 /**
- * The HTML at a public http(s) link, or a throw: BlockedUrlError for a link that is refused,
- * anything else for a page that cannot be read. Every redirect hop is checked again.
+ * The first 1 MB of the HTML at a public http(s) link, or a throw: BlockedUrlError for a link
+ * that is refused, anything else for a page that cannot be read. Every redirect hop is checked again.
  */
 export async function safeFetch(link: string): Promise<string> {
   let url: URL;
