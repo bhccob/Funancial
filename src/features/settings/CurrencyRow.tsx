@@ -6,6 +6,7 @@ import { minorDigits } from '@/domain/money';
 import { currencyOptions } from '@/features/shared/currencies';
 import { useAction } from '@/lib/useAction';
 import { useFinanceActions } from '@/store/useFinance';
+import { useInvestActions } from '@/store/useInvest';
 
 const CHOOSE = { value: '', label: 'Choose a currency' };
 
@@ -15,6 +16,7 @@ const CHOOSE = { value: '', label: 'Choose a currency' };
  */
 export function CurrencyRow({ current }: { current: string }) {
   const { changeCurrency } = useFinanceActions();
+  const { refreshMarket } = useInvestActions();
   const run = useAction();
   const [picking, setPicking] = useState(false);
   const [next, setNext] = useState<string | null>(null);
@@ -45,7 +47,11 @@ export function CurrencyRow({ current }: { current: string }) {
     setBusy(true);
     const ok = await run(() => changeCurrency(next), { success: `Currency changed to ${next}.` });
     setBusy(false);
-    if (ok) close();
+    if (ok) {
+      // The change cleared every holding's rate; fetch the new ones now, without holding up the dialog.
+      void refreshMarket();
+      close();
+    }
   }
 
   return (

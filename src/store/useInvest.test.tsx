@@ -247,6 +247,28 @@ describe('useMarketRefresh', () => {
     expect(fetchQuotes).not.toHaveBeenCalled();
   });
 
+  it('asks again when a quoted holding in another currency has no rate, whatever the age of the prices', async () => {
+    const lost = { ...quote(minutesAgo(1)), fxRate: null };
+    const { wrapper } = setup([makeHolding({ currency: 'USD', quote: lost })]);
+    const { result } = renderHook(() => useMarketRefresh(), { wrapper });
+    await waitFor(() => expect(result.current.status).toBe('ok'));
+    expect(fetchQuotes).toHaveBeenCalledOnce();
+  });
+
+  it('leaves fresh prices alone when the foreign holding has its rate, or no quote to convert', () => {
+    const { wrapper } = setup([
+      makeHolding({
+        symbol: 'KO',
+        currency: 'USD',
+        quote: { ...quote(minutesAgo(1)), fxRate: 0.9 },
+      }),
+      makeHolding({ symbol: 'SAP', currency: 'USD', manualPrice: 5, quote: null }),
+      makeHolding({ symbol: 'NESN', currency: 'EUR', quote: quote(minutesAgo(1)) }),
+    ]);
+    renderHook(() => useMarketRefresh(), { wrapper });
+    expect(fetchQuotes).not.toHaveBeenCalled();
+  });
+
   it('stops listening for the app coming back when it unmounts', () => {
     const { native, wrapper } = setup([makeHolding({ quote: quote(minutesAgo(10)) })]);
     const { unmount } = renderHook(() => useMarketRefresh(), { wrapper });

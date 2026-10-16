@@ -105,7 +105,11 @@ export function useMarketRefresh(): { status: MarketStatus; refresh: () => Promi
         !!settings?.investCurrency &&
         settings.investCurrency !== home &&
         investRate(settings, home) === null;
-      if (noRate || pricesStale(data.tables.holding)) void refresh();
+      // So is a quoted holding in another currency whose rate went (a currency switch made offline).
+      const lostRate = data.tables.holding.some(
+        (h) => h.quote !== null && h.currency !== home && h.quote.fxRate == null,
+      );
+      if (noRate || lostRate || pricesStale(data.tables.holding)) void refresh();
     };
     refreshIfStale();
     return platform.onResume(refreshIfStale);

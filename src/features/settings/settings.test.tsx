@@ -32,10 +32,17 @@ vi.mock('@/store/useFinance', async (importOriginal) => ({
   useFinanceActions: () => finance,
 }));
 
+const invest = vi.hoisted(() => ({ refreshMarket: vi.fn(async () => 'ok' as const) }));
+vi.mock('@/store/useInvest', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/store/useInvest')>()),
+  useInvestActions: () => invest,
+}));
+
 beforeEach(() => {
   toastStore.setState({ toasts: [] });
   vi.mocked(downloadText).mockClear();
   finance.changeCurrency.mockClear();
+  invest.refreshMarket.mockClear();
   finance.updateProfile.mockClear();
   finance.updateSettings.mockClear();
 });
@@ -528,6 +535,22 @@ describe('Currency', () => {
     expect(finance.changeCurrency).toHaveBeenCalledExactlyOnceWith('GBP');
     await vi.waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     expect(changeButton()).toHaveFocus();
+  });
+
+  it('fetches the rates for the new currency at once, and not when the change fails', async () => {
+    finance.changeCurrency.mockRejectedValueOnce(new Error('Storage is full.'));
+    renderCurrency('EUR');
+    const picker = await openPicker();
+    await userEvent.selectOptions(within(picker).getByLabelText('New currency'), 'GBP');
+    const confirm = screen.getByRole('dialog', { name: 'Change your currency to GBP?' });
+    const change = within(confirm).getByRole('button', { name: 'Change currency' });
+    await userEvent.click(change);
+    expect(await screen.findByText('Storage is full.')).toBeInTheDocument();
+    expect(invest.refreshMarket).not.toHaveBeenCalled();
+
+    await userEvent.click(change);
+    await vi.waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(invest.refreshMarket).toHaveBeenCalledOnce();
   });
 
   it('changes nothing on Cancel', async () => {
