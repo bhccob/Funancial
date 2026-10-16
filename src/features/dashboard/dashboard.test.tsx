@@ -406,6 +406,11 @@ describe('DashboardScreen spending donut', () => {
     expect(within(spending).queryByText('Rent')).not.toBeInTheDocument();
   });
 
+  it('writes no percentages on the donut or in its legend', () => {
+    renderDashboard(monthData(), TODAY);
+    expect(within(region('Spending')).queryAllByText(/^\d+%$/)).toHaveLength(0);
+  });
+
   it('shows a slice when its arc is read out and tapped by a keyboard or screen reader', async () => {
     renderDashboard(monthData(), TODAY);
     const spending = region('Spending');

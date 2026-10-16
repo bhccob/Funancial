@@ -5,6 +5,12 @@ import { sliceColors } from './colors';
 
 /** The space between neighbouring arcs, in px along the ring. */
 const GAP = 3;
+/** A slice gets its percentage written on the pie from this share of the pie up; smaller ones keep it to the legend. */
+const LABEL_MIN_SHARE = 0.06;
+/** How far a percentage stands off the ring, and the room around the donut that keeps one on the screen. */
+const LABEL_GAP = 4;
+const LABEL_ROOM_X = 28;
+const LABEL_ROOM_Y = 16;
 
 export interface DonutProps {
   slices: Slice[];
@@ -17,6 +23,8 @@ export interface DonutProps {
   caption?: string;
   selected: number | null;
   onSelect(index: number | null): void;
+  /** Write each slice's share just outside the ring (slices of 6% or more); the donut then takes room for it. */
+  showPercent?: boolean;
 }
 
 export function Donut({
@@ -28,6 +36,7 @@ export function Donut({
   caption,
   selected,
   onSelect,
+  showPercent = false,
 }: DonutProps) {
   const [focused, setFocused] = useState<number | null>(null);
   const total = slices.reduce((sum, s) => sum + Math.max(0, s.amount), 0);
@@ -39,22 +48,33 @@ export function Donut({
   const r = (size - thickness) / 2;
   const circumference = 2 * Math.PI * r;
   const centre = size / 2;
-  // Where each arc starts along the ring, and how long it is once the gap is taken off.
+  // Where each arc starts along the ring, how long it is once the gap is taken off, and where its middle points.
   const arcs = drawn.map((slice, i) => {
     const before = drawn.slice(0, i).reduce((sum, s) => sum + Math.max(0, s.amount), 0);
-    const share = (Math.max(0, slice.amount) / total) * circumference;
+    const amount = Math.max(0, slice.amount);
     return {
-      dash: `${Math.max(0, share - (drawn.length > 1 ? GAP : 0))} ${circumference}`,
+      dash: `${Math.max(0, (amount / total) * circumference - (drawn.length > 1 ? GAP : 0))} ${circumference}`,
       offset: -(before / total) * circumference,
+      share: amount / total,
+      // Clockwise from the top, where the first arc starts.
+      mid: ((before + amount / 2) / total) * 2 * Math.PI,
     };
   });
+  const labelRadius = r + thickness / 2 + LABEL_GAP;
 
   const toggle = (i: number) => onSelect(i === selected ? null : i);
   const big = size >= 200;
   const focusedArc = focused !== null ? arcs[focused] : undefined;
 
   return (
-    <div className="relative flex-none" style={{ width: size, height: size }}>
+    <div
+      className="relative flex-none"
+      style={{
+        width: size,
+        height: size,
+        margin: showPercent ? `${LABEL_ROOM_Y}px ${LABEL_ROOM_X}px` : undefined,
+      }}
+    >
       <svg
         width={size}
         height={size}
@@ -100,6 +120,27 @@ export function Donut({
           />
         ))}
       </svg>
+      {showPercent &&
+        drawn.map((slice, i) => {
+          const { share, mid } = arcs[i]!;
+          if (share < LABEL_MIN_SHARE) return null;
+          const [x, y] = [Math.sin(mid), -Math.cos(mid)];
+          return (
+            <span
+              key={slice.key}
+              aria-hidden="true"
+              className="text-text pointer-events-none absolute text-xs leading-none font-extrabold tabular-nums"
+              style={{
+                left: centre + labelRadius * x,
+                top: centre + labelRadius * y,
+                // The label stands on the outside of its point, so it never lands on the ring.
+                transform: `translate(${-50 + 50 * x}%, ${-50 + 50 * y}%)`,
+              }}
+            >
+              {`${pct(slice)}%`}
+            </span>
+          );
+        })}
       <div className="pointer-events-none absolute inset-0 grid place-content-center px-2 text-center">
         {caption && (
           <span className={cn('text-muted font-bold', big ? 'text-[13px]' : 'text-xs')}>
@@ -136,14 +177,24 @@ export interface DonutLegendProps {
   formatAmount(minor: number): string;
   selected: number | null;
   onSelect(index: number | null): void;
+  /** Add each slice's share of the whole, at the end of its row; the amount then sits under the name. */
+  showPercent?: boolean;
 }
 
-export function DonutLegend({ slices, formatAmount, selected, onSelect }: DonutLegendProps) {
+export function DonutLegend({
+  slices,
+  formatAmount,
+  selected,
+  onSelect,
+  showPercent = false,
+}: DonutLegendProps) {
   const colors = sliceColors(slices);
+  const total = slices.reduce((sum, s) => sum + Math.max(0, s.amount), 0);
   return (
     <ul className="min-w-0 flex-1">
       {slices.map((slice, i) => {
         const on = i === selected;
+        const amountTone = on ? 'text-text font-extrabold' : 'text-muted font-bold';
         return (
           <li key={slice.key} className="border-border border-b last:border-b-0">
             <button
@@ -157,17 +208,31 @@ export function DonutLegend({ slices, formatAmount, selected, onSelect }: DonutL
                 className="size-[9px] flex-none rounded-full"
                 style={{ backgroundColor: colors[i] }}
               />
-              <span className={cn('min-w-0 flex-1 truncate', on ? 'font-extrabold' : 'font-bold')}>
-                {slice.label}
-              </span>
-              <span
-                className={cn(
-                  'flex-none',
-                  on ? 'text-text font-extrabold' : 'text-muted font-bold',
-                )}
-              >
-                {formatAmount(slice.amount)}
-              </span>
+              {showPercent ? (
+                // Room is tight beside a donut with percentages on it, so the amount goes under the name.
+                <>
+                  <span className="min-w-0 flex-1">
+                    <span className={cn('block truncate', on ? 'font-extrabold' : 'font-bold')}>
+                      {slice.label}
+                    </span>
+                    <span className={cn('block text-[12.5px]', amountTone)}>
+                      {formatAmount(slice.amount)}
+                    </span>
+                  </span>
+                  <span className="text-muted flex-none font-bold tabular-nums">
+                    {`${total > 0 ? Math.round((Math.max(0, slice.amount) / total) * 100) : 0}%`}
+                  </span>
+                </>
+              ) : (
+                <>
+                  <span
+                    className={cn('min-w-0 flex-1 truncate', on ? 'font-extrabold' : 'font-bold')}
+                  >
+                    {slice.label}
+                  </span>
+                  <span className={cn('flex-none', amountTone)}>{formatAmount(slice.amount)}</span>
+                </>
+              )}
             </button>
           </li>
         );
