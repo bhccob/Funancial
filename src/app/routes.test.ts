@@ -5,6 +5,7 @@ import { AnswerScreen } from '@/features/buy/AnswerScreen';
 import { BuyScreen } from '@/features/buy/BuyScreen';
 import { HelpPage } from '@/features/help/HelpPage';
 import { HelpScreen } from '@/features/help/HelpScreen';
+import { InboxScreen } from '@/features/inbox/InboxScreen';
 import { HoldingPage } from '@/features/invest/HoldingPage';
 import { InvestScreen } from '@/features/invest/InvestScreen';
 import { ShopScreen } from '@/features/shop/ShopScreen';
@@ -86,4 +87,9 @@ it('serves Help from its own screens: the index and a page', () => {
   expect(isValidElement(index?.element) && index.element.type).toBe(HelpScreen);
   const page = APP_ROUTES.find((r) => r.path === '/help/:id');
   expect(isValidElement(page?.element) && page.element.type).toBe(HelpPage);
+});
+
+it('serves the Inbox from its own screen, not a placeholder', () => {
+  const inbox = APP_ROUTES.find((r) => r.path === '/inbox');
+  expect(isValidElement(inbox?.element) && inbox.element.type).toBe(InboxScreen);
 });

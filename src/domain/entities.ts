@@ -89,6 +89,16 @@ export const CosmeticsSchema = z.object({
 });
 export type Cosmetics = z.infer<typeof CosmeticsSchema>;
 
+/**
+ * What the inbox has been told is read: every reminder up to `readBefore` ("Mark all as read"), and
+ * the keys read one by one since, at most 200 of them (the store drops the oldest).
+ */
+export const InboxSchema = z.object({
+  readBefore: IsoTimestampSchema.nullable(),
+  read: z.array(z.string()),
+});
+export type Inbox = z.infer<typeof InboxSchema>;
+
 export const SettingsSchema = z.object({
   ...base,
   id: z.literal('settings'),
@@ -118,6 +128,7 @@ export const SettingsSchema = z.object({
       asOf: IsoTimestampSchema,
     })
     .nullable(),
+  inbox: InboxSchema,
 });
 export type Settings = z.infer<typeof SettingsSchema>;
 export type AutoLockMinutes = Settings['autoLockMinutes'];
@@ -146,6 +157,7 @@ export function defaultSettings(now: string): Settings {
     cosmetics: { theme: 'theme-violet', avatar: 'avatar-sprout', frame: 'frame-none' },
     investCurrency: null,
     investFx: null,
+    inbox: { readBefore: null, read: [] },
   };
 }
 

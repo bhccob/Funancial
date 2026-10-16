@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { CURRENT_SCHEMA_VERSION, emptySnapshot, type DataSnapshot } from '@/domain/snapshot';
-import { makeExpense, makeGoal, makeSubscription } from '@/test/fixtures';
+import { makeExpense, makeGoal, makeSettings, makeSubscription } from '@/test/fixtures';
 import {
   backupFileName,
   createBackup,
@@ -122,6 +122,23 @@ describe('older backups', () => {
     const restored = await readBackup(await createBackup(v1, PASS, FAST), PASS);
     expect(restored.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
     expect(restored.tables.subscription[0]?.anchorDay).toBe(31);
+  });
+
+  it('restores a v7 backup, from before the Buy it? reminder and the inbox, into the current version', async () => {
+    const current = makeSettings();
+    const old: Record<string, unknown> = { ...current };
+    delete old.inbox;
+    const reminders: Record<string, unknown> = { ...current.reminders };
+    delete reminders.buyIt;
+    old.reminders = reminders;
+    const v7 = emptySnapshot() as unknown as DataSnapshot;
+    v7.schemaVersion = 7;
+    (v7.tables as unknown as Record<string, unknown[]>).settings = [old];
+    const restored = await readBackup(await createBackup(v7, PASS, FAST), PASS);
+    expect(restored.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+    expect(restored.tables.settings).toEqual([
+      { ...current, inbox: { readBefore: null, read: [] } },
+    ]);
   });
 });
 

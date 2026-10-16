@@ -243,6 +243,37 @@ describe('repository: older schema versions', () => {
     expect(await backend.meta.get('dataVersion')).toBe(CURRENT_SCHEMA_VERSION);
   });
 
+  it('upgrades v7 settings rows on load: Buy it? on, an empty inbox, and the new version stored', async () => {
+    const backend = await testBackend();
+    const key = await generateDataKey();
+    const current = makeSettings();
+    const v7: Record<string, unknown> = { ...current };
+    delete v7.inbox;
+    const reminders: Record<string, unknown> = { ...current.reminders };
+    delete reminders.buyIt;
+    v7.reminders = reminders;
+    await backend.records.write(
+      [
+        {
+          table: 'settings',
+          id: 'settings',
+          updatedAt: current.updatedAt,
+          ...(await encryptRecord(key, 'settings:settings', v7)),
+        },
+      ],
+      { replace: false },
+    );
+    await backend.meta.put('dataVersion', 7);
+
+    const { snapshot, skipped } = await createRepository(backend, key).loadAll();
+    expect(skipped).toEqual([]);
+    const upgraded = { ...current, inbox: { readBefore: null, read: [] } };
+    expect(snapshot.tables.settings).toEqual([upgraded]);
+    expect(await backend.meta.get('dataVersion')).toBe(CURRENT_SCHEMA_VERSION);
+    const row = await storedRow(backend, 'settings', 'settings');
+    expect(await decryptRecord(key, 'settings:settings', row!)).toEqual(upgraded);
+  });
+
   it('putMany removes records in the same write, and none when a record is invalid', async () => {
     const backend = await testBackend();
     const repo = createRepository(backend, await generateDataKey());

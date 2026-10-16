@@ -1,7 +1,7 @@
-import { fireEvent, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createMemoryRouter, RouterProvider } from 'react-router';
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SalaryFreeze } from '@/domain/entities';
 import { levelStart } from '@/domain/game/levels';
 import { newId, nowIso } from '@/domain/ids';
@@ -10,6 +10,7 @@ import { emptySnapshot, type DataSnapshot } from '@/domain/snapshot';
 import { topDialog } from '@/lib/dialogStack';
 import { formatDay } from '@/lib/format';
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
+import { INBOX_NOW, inboxData } from '@/test/inboxData';
 import { makeGoal, makeLedgerEntry, makeProfile, makeSubscription } from '@/test/fixtures';
 import { MENU_GROUPS } from './menu';
 import { appRouteObjects } from './router';
@@ -147,7 +148,7 @@ describe('Menu sheet', () => {
     expect(row(sheet, 'Quests')).toHaveTextContent('Level 1');
     expect(row(sheet, 'About you')).toHaveTextContent('What the buy check knows');
     expect(row(sheet, 'Shop')).toHaveTextContent('130 coins to spend');
-    expect(row(sheet, 'Inbox')).toHaveTextContent('Your notices');
+    expect(row(sheet, 'Inbox')).toHaveTextContent(/^Inbox$/);
     expect(row(sheet, 'Help')).toHaveTextContent('How everything works');
     expect(row(sheet, 'Settings')).toHaveTextContent('Lock, backups, reminders');
   });
@@ -209,16 +210,37 @@ describe('Menu sheet', () => {
     expect(row(sheet, 'Shop')).toHaveTextContent('0 coins to spend');
   });
 
+  describe('Inbox row', () => {
+    beforeEach(() => vi.useFakeTimers({ toFake: ['Date'], now: INBOX_NOW }));
+    afterEach(() => vi.useRealTimers());
+
+    it('says how many reminders are new', async () => {
+      renderAt('/', inboxData({ readBefore: null, read: ['week:2026-10-11'] }));
+      const sheet = await openMenu();
+      expect(row(sheet, 'Inbox')).toHaveTextContent('Inbox7 new');
+    });
+
+    it('says nothing when there are none, whether none came due or all were read', async () => {
+      renderAt('/');
+      const sheet = await openMenu();
+      expect(row(sheet, 'Inbox')).toHaveTextContent(/^Inbox$/);
+      cleanup();
+
+      renderAt('/', inboxData({ readBefore: '2026-10-14T09:00:00.000Z', read: [] }));
+      expect(row(await openMenu(), 'Inbox')).toHaveTextContent(/^Inbox$/);
+    });
+  });
+
   it('marks soon items', async () => {
     renderAt('/');
     const sheet = await openMenu();
     expect(row(sheet, 'Buy it\\?')).not.toHaveTextContent('Soon');
-    expect(row(sheet, 'Inbox')).toHaveTextContent('Soon');
+    expect(row(sheet, 'Inbox')).not.toHaveTextContent('Soon');
     expect(row(sheet, 'Help')).not.toHaveTextContent('Soon');
     expect(row(sheet, 'Quests')).not.toHaveTextContent('Soon');
     expect(row(sheet, 'Subscriptions')).not.toHaveTextContent('Soon');
     expect(row(sheet, 'Settings')).not.toHaveTextContent('Soon');
-    expect(within(sheet).getAllByText('Soon')).toHaveLength(
+    expect(within(sheet).queryAllByText('Soon')).toHaveLength(
       MENU_GROUPS.flatMap((g) => g.items).filter((i) => i.soon).length,
     );
   });
@@ -342,7 +364,10 @@ describe('sidebar', () => {
     expect(within(sidebar).getByRole('link', { name: /^Buy it/ })).not.toHaveTextContent('Soon');
     expect(within(sidebar).getByRole('link', { name: /^Settings/ })).not.toHaveTextContent('Soon');
     expect(within(sidebar).getByRole('link', { name: /^Help/ })).not.toHaveTextContent('Soon');
-    expect(within(sidebar).getAllByText('Soon')).toHaveLength(1);
+    expect(within(sidebar).getByRole('link', { name: /^Inbox/ })).not.toHaveTextContent('Soon');
+    expect(within(sidebar).queryAllByText('Soon')).toHaveLength(
+      MENU_GROUPS.flatMap((g) => g.items).filter((i) => i.soon).length,
+    );
   });
 
   it('marks the current screen', () => {

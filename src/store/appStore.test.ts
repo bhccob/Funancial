@@ -87,6 +87,7 @@ describe('first run', () => {
         cosmetics: { theme: 'theme-violet', avatar: 'avatar-sprout', frame: 'frame-none' },
         investCurrency: null,
         investFx: null,
+        inbox: { readBefore: null, read: [] },
       },
     ]);
   });

@@ -74,6 +74,13 @@ const STEPS: Record<number, Step> = {
         ? { ...r, reminders: { ...r.reminders, buyIt: true } }
         : r,
   },
+  // Spelled out like step 3: nothing is read yet. A phone still on v7 runs step 8 first, then this.
+  9: {
+    settings: (r) =>
+      typeof r.inbox === 'object' && r.inbox !== null
+        ? r
+        : { ...r, inbox: { readBefore: null, read: [] } },
+  },
 };
 
 export const LATEST_VERSION = Math.max(1, ...Object.keys(STEPS).map(Number));

@@ -399,6 +399,22 @@ describe('Profile and Settings', () => {
       expect(ok(SettingsSchema, without), key).toBe(false);
     }
   });
+  it('keeps what the inbox has read: keys, and a moment before which all of it is', () => {
+    const inbox = { readBefore: '2026-10-14T09:00:00.000Z', read: ['week:2026-10-11'] };
+    expect(ok(SettingsSchema, makeSettings({ inbox }))).toBe(true);
+    expect(ok(SettingsSchema, makeSettings({ inbox: { readBefore: null, read: [] } }))).toBe(true);
+    for (const bad of [
+      { ...inbox, readBefore: 'yesterday' },
+      { ...inbox, read: [3] },
+      { ...inbox, read: 'week:2026-10-11' },
+      { read: [] },
+    ]) {
+      expect(ok(SettingsSchema, { ...makeSettings(), inbox: bad })).toBe(false);
+    }
+    const without: Record<string, unknown> = { ...makeSettings() };
+    delete without.inbox;
+    expect(ok(SettingsSchema, without)).toBe(false);
+  });
   it('has the documented defaults', () => {
     const s = defaultSettings('2026-10-14T10:00:00.000Z');
     expect(s).toEqual({
@@ -424,6 +440,7 @@ describe('Profile and Settings', () => {
       cosmetics: { theme: 'theme-violet', avatar: 'avatar-sprout', frame: 'frame-none' },
       investCurrency: null,
       investFx: null,
+      inbox: { readBefore: null, read: [] },
     });
     expect(ok(SettingsSchema, s)).toBe(true);
   });

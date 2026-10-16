@@ -58,7 +58,7 @@ export const MENU_GROUPS: MenuGroup[] = [
       { path: '/quests', label: 'Quests', icon: Trophy, color: '#b86e00' },
       { path: '/about-you', label: 'About you', icon: UserRound, color: '#0e7490' },
       { path: '/shop', label: 'Shop', icon: Store, color: '#6b46f5' },
-      { path: '/inbox', label: 'Inbox', icon: Inbox, color: '#3b82c4', soon: true },
+      { path: '/inbox', label: 'Inbox', icon: Inbox, color: '#3b82c4' },
       { path: '/help', label: 'Help', icon: CircleQuestionMark, color: '#128a60' },
       { path: '/settings', label: 'Settings', icon: Settings, color: '#5b6270' },
     ],
