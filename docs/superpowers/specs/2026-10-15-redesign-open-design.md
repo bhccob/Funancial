@@ -104,3 +104,11 @@ Every other screen keeps its content and adopts the Open styling:
 - New features.
 - Changes to finance or game rules.
 - Investments, Buy it? and Help content. These are M5–M7.
+
+## After the phone check (2026-10-16)
+
+- **The + goes.** The owner found the middle + redundant and wanted the space back. The bottom bar is **Home · Budget · Quests · Menu**. You add an expense from Home's Expense action, or from "Add expense" in the desktop sidebar.
+- **Proposed for M5 and M6, to be confirmed on the wireframe:**
+  - **M5.** Invest takes a bar slot: **Home · Budget · Invest · Menu**. Quests moves into the Menu, and Home's level ring still opens it. Invest has three tabs: **Holdings · Dividends · News**. The owner asked for dividends to sit with the stocks.
+  - **M6.** "Should I buy it?" becomes one of Home's round actions, replacing History, which stays in the Menu. The Add Expense screen gets a line, "Haven't bought it yet? Ask first →". It is also in the Menu.
+- **Wireframes first.** M5 and M6 each start with a wireframe for the owner, before any building.
