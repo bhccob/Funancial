@@ -163,10 +163,19 @@ describe('convertMinor', () => {
     expect(convertMinor(10_00.4, 'EUR', 'USD', 1.1)).toBe(11_00);
   });
 
-  it('converts a loss to the same size as the same gain, and never to -0', () => {
+  it('converts a loss like a gain, and never to -0', () => {
     expect(convertMinor(-100_00, 'EUR', 'USD', 1.1)).toBe(-110_00);
-    expect(convertMinor(-15, 'EUR', 'USD', 1.5)).toBe(-23);
     expect(convertMinor(-12_34, 'EUR', 'JPY', 160)).toBe(-1974);
     expect(Object.is(convertMinor(-1, 'EUR', 'JPY', 0.1), 0)).toBe(true);
+  });
+
+  it('rounds an exact half the way Math.round does, for a loss too, and the same with no conversion', () => {
+    // The money rule is Math.round: a half goes up, so -22.5 is -22 where 22.5 is 23.
+    expect(convertMinor(15, 'EUR', 'USD', 1.5)).toBe(Math.round(22.5));
+    expect(convertMinor(-15, 'EUR', 'USD', 1.5)).toBe(Math.round(-22.5));
+    expect(convertMinor(-15, 'EUR', 'USD', 1.5)).toBe(-22);
+    // Rate 1 between one currency and itself is the rounding alone.
+    expect(convertMinor(-2.5, 'EUR', 'EUR', 1)).toBe(Math.round(-2.5));
+    expect(convertMinor(2.5, 'EUR', 'EUR', 1)).toBe(3);
   });
 });

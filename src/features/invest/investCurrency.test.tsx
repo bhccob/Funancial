@@ -168,6 +168,40 @@ describe('Invest shown in another currency: Holdings', () => {
   });
 });
 
+describe('Invest shown in another currency: totals that add up', () => {
+  /** Two stocks each worth EUR 600.04, up EUR 10.03 today: at 1.1 each is $660.04 and $11.03. */
+  const twins = () =>
+    ['aaa', 'bbb'].map((id) =>
+      makeHolding({
+        id,
+        symbol: id.toUpperCase(),
+        name: `${id} Inc`,
+        currency: 'EUR',
+        shares: 1,
+        costBasis: 500_05,
+        purchaseDate: '2026-01-05',
+        quote: quote(600.04, 590.01),
+      }),
+    );
+
+  it('shows a portfolio value and a day that are the sums of the rows shown', () => {
+    renderInvest(dataOf(twins(), inDollars));
+    // Each row rounds to $660.04, so the two are $1,320.08. Converting the EUR 1,200.08 total on its
+    // own would say $1,320.09, one cent more than the rows add up to.
+    expect(screen.getByRole('link', { name: /^AAA · / })).toHaveTextContent(usd(660_04));
+    expect(screen.getByRole('link', { name: /^BBB · / })).toHaveTextContent(usd(660_04));
+    expect(within(region('Portfolio value')).getByText(usd(1_320_08))).toHaveClass('text-[34px]');
+    // The same for the day: $11.03 and $11.03, not the $22.07 of EUR 20.06 converted whole.
+    expect(screen.getByText(`▲ ${usd(22_06)} today`)).toBeInTheDocument();
+  });
+
+  it('names a selected slice by its row, so the pie adds up to the portfolio too', async () => {
+    renderInvest(dataOf(twins(), inDollars));
+    await userEvent.click(within(pie('Stocks')).getByText('AAA').closest('button')!);
+    expect(within(pie('Stocks')).getAllByText(usd(660_04)).length).toBeGreaterThanOrEqual(1);
+  });
+});
+
 describe('Invest shown in another currency: a holding', () => {
   it('converts the value, the gain, the facts and the chart', async () => {
     configured();
@@ -207,10 +241,37 @@ describe('Invest shown in another currency: a holding', () => {
     expect(screen.queryByText(/€/)).not.toBeInTheDocument();
   });
 
-  it('shows the profile currency, and the note on Invest, until the rate loads', () => {
+  it('shows the profile currency on its page until the rate loads', () => {
     renderInvest(dataOf([ko()], { investCurrency: 'USD', investFx: null }), '/invest/holding/ko');
     expect(screen.getByText(eur(600_00))).toHaveClass('text-[34px]');
     expect(fact('You paid in total')).toHaveTextContent(eur(500_00));
+  });
+
+  it('says on Invest, where the note is, that the profile currency is shown until the rate loads', () => {
+    renderInvest(dataOf([ko()], { investCurrency: 'USD', investFx: null }));
+    expect(screen.getByText(noRateNote('USD'))).toBeInTheDocument();
+  });
+
+  it('shows a gain that is the value shown less the amount paid shown', () => {
+    // EUR 600.04 worth, EUR 500.05 paid: $660.04 and $550.06 at 1.1. The EUR 99.99 gain on its own
+    // would convert to $109.99; the two figures beside it leave $109.98.
+    const h = ko({ shares: 1, costBasis: 500_05, quote: quote(600.04, 600.04) });
+    renderInvest(dataOf([h], inDollars), '/invest/holding/ko');
+    expect(screen.getByText(usd(660_04), { selector: 'p' })).toHaveClass('text-[34px]');
+    expect(fact('You paid in total')).toHaveTextContent(usd(550_06));
+    expect(screen.getByText(`▲ ${usd(109_98)}`)).toBeInTheDocument();
+  });
+
+  it('rounds the price per share and the price now once, from the unrounded amounts', () => {
+    // EUR 250.025 paid a share and EUR 0.335 a share now, at 1.5: $375.04 (37503.75) and $0.50
+    // (50.25). Rounding the euro cents first would give $375.05 and $0.51.
+    const h = ko({ shares: 2, costBasis: 500_05, quote: quote(0.335, 0.335) });
+    renderInvest(
+      dataOf([h], { investCurrency: 'USD', investFx: { ...dollars, rate: 1.5 } }),
+      '/invest/holding/ko',
+    );
+    expect(fact('You paid per share')).toHaveTextContent(usd(375_04));
+    expect(fact('Price now')).toHaveTextContent(usd(50));
   });
 });
 
@@ -296,6 +357,18 @@ describe('Invest shown in another currency: Dividends', () => {
     expect(figure('This month')).toHaveTextContent(`This month${eur(42_10)}`);
     expect(region('Due')).toHaveTextContent(eur(10_00));
     expect(screen.getByText(noRateNote('USD'))).toBeInTheDocument();
+  });
+
+  it('converts each figure from its own total, as none is shown as the sum of others', () => {
+    // Two payouts of EUR 1.05 this month: the month is EUR 2.10, which is $2.31. Each payout alone
+    // would be $1.16, and two of those $2.32.
+    const data = dataOf([ko()], inDollars);
+    data.tables.dividend = ['2026-10-05', '2026-10-06'].map((paidOn) =>
+      makeDividend({ holdingId: 'ko', expectedPayDate: paidOn, paidOn, amount: 1_05 }),
+    );
+    renderInvest(data, '/invest?tab=dividends');
+    expect(figure('This month')).toHaveTextContent(`This month${usd(2_31)}`);
+    expect(figure('This year')).toHaveTextContent(`This year${usd(2_31)}`);
   });
 
   it('keeps the amount the person confirms in the profile currency', async () => {

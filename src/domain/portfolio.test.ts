@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { makeHolding, makeProfile, makeSettings } from '@/test/fixtures';
 import type { Holding } from './entities';
-import { allocation, holdingPrice, holdingValue, investRate, portfolio } from './portfolio';
+import {
+  allocation,
+  convertPortfolio,
+  holdingPrice,
+  holdingValue,
+  investRate,
+  portfolio,
+} from './portfolio';
 import { emptySnapshot } from './snapshot';
 
 type Quote = NonNullable<Holding['quote']>;
@@ -238,5 +245,67 @@ describe('investRate', () => {
     expect(investRate(settings('USD', null), 'EUR')).toBeNull();
     // A rate left from another choice is not this one's.
     expect(investRate(settings('GBP', fx), 'EUR')).toBeNull();
+  });
+});
+
+describe('convertPortfolio', () => {
+  const at = (rate: number) => (minor: number) => Math.round(minor * rate);
+  /** Worth EUR 600.04 for EUR 500.05, up EUR 10.03 today. */
+  const twin = (id: string, extra: Partial<Holding> = {}) =>
+    makeHolding({
+      id,
+      symbol: id,
+      currency: 'EUR',
+      shares: 1,
+      costBasis: 500_05,
+      quote: quote(600.04, { previousClose: 590.01, fxRate: 1 }),
+      ...extra,
+    });
+  const euros = (...holdings: Holding[]) => portfolio(dataOf(holdings, 'EUR'), 'EUR');
+
+  it('converts each row once and adds the totals up from the converted rows', () => {
+    const p = euros(twin('A'), twin('B'));
+    const shown = convertPortfolio(p, at(1.1));
+    // 60004 x 1.1 = 66004.4 for each row, 132008 for both; 120008 x 1.1 on its own is 132009.
+    expect(shown.rows.map((r) => r.value)).toEqual([66_004, 66_004]);
+    expect(shown.value).toBe(132_008);
+    expect(shown.value).not.toBe(at(1.1)(p.value));
+    // 50005 x 1.1 = 55005.5, so 55006 for each.
+    expect(shown.cost).toBe(110_012);
+    expect(shown.gain).toBe(shown.value - shown.cost);
+    expect(shown.rows.map((r) => r.gain)).toEqual([66_004 - 55_006, 66_004 - 55_006]);
+    // 1003 x 1.1 = 1103.3 for each row.
+    expect(shown.rows.map((r) => r.dayChange)).toEqual([1_103, 1_103]);
+    expect(shown.dayChange).toBe(2_206);
+  });
+
+  it('leaves the percentages, the counts and the holdings as they were', () => {
+    const p = euros(twin('A'), twin('B', { costBasis: 400_00 }), twin('C', { quote: null }));
+    const shown = convertPortfolio(p, at(1.1));
+    expect(shown.gainPct).toBe(p.gainPct);
+    expect(shown.rows.map((r) => r.gainPct)).toEqual(p.rows.map((r) => r.gainPct));
+    expect(shown.unpriced).toBe(1);
+    expect(shown.rows.map((r) => r.holding)).toEqual(p.rows.map((r) => r.holding));
+  });
+
+  it('keeps a holding with no price out of the totals, with no value and no gain', () => {
+    const shown = convertPortfolio(euros(twin('A'), twin('C', { quote: null })), at(1.1));
+    const [, unpriced] = shown.rows;
+    expect(unpriced).toMatchObject({ value: null, gain: null, dayChange: null });
+    expect(shown.value).toBe(66_004);
+    expect(shown.cost).toBe(55_006);
+  });
+
+  it('names the best and the worst among the converted rows', () => {
+    const p = euros(twin('A'), twin('B', { costBasis: 400_00 }), twin('C', { costBasis: 700_00 }));
+    const shown = convertPortfolio(p, at(1.1));
+    expect(shown.best).toBe(shown.rows.find((r) => r.holding.id === p.best!.holding.id));
+    expect(shown.worst).toBe(shown.rows.find((r) => r.holding.id === p.worst!.holding.id));
+    expect(shown.best?.value).toBe(66_004);
+  });
+
+  it('changes nothing when the amounts are not converted', () => {
+    const p = euros(twin('A'), twin('B', { costBasis: 400_00 }), twin('C', { quote: null }));
+    expect(convertPortfolio(p, (minor) => minor)).toEqual(p);
   });
 });

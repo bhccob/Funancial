@@ -75,7 +75,7 @@ export type Portfolio = {
 
 /**
  * Every holding as a row, and the totals of the rows that have a value. Each row is rounded once,
- * so a total is always the sum of the rows shown.
+ * so a total is always the sum of the rows shown (`convertPortfolio` keeps that in another currency).
  */
 export function portfolio(data: DataSnapshot, profileCurrency: string): Portfolio {
   const rows = data.tables.holding.map((holding): HoldingRow => {
@@ -107,6 +107,40 @@ export function portfolio(data: DataSnapshot, profileCurrency: string): Portfoli
     unpriced: rows.length - priced.length,
     best: ranked.length >= 2 ? ranked[0]! : null,
     worst: ranked.length >= 2 ? ranked[ranked.length - 1]! : null,
+  };
+}
+
+/**
+ * The portfolio as Invest shows it in another currency. Each row's value, day change and cost are
+ * converted once, and the totals, the gains and the cost are made from those converted rows, so
+ * what is shown adds up: the total is the sum of the rows, and a gain is the value less what was
+ * paid, both as shown. The percentages come from the profile-currency amounts and do not change.
+ * The rows keep their holdings, whose cost is still in the profile currency.
+ */
+export function convertPortfolio(p: Portfolio, convert: (minor: number) => number): Portfolio {
+  const rows = p.rows.map((row): HoldingRow => {
+    const value = row.value === null ? null : convert(row.value);
+    return {
+      ...row,
+      value,
+      gain: value === null ? null : value - convert(row.holding.costBasis),
+      dayChange: row.dayChange === null ? null : convert(row.dayChange),
+    };
+  });
+  const priced = rows.filter((r) => r.value !== null);
+  const value = rows.reduce((sum, r) => sum + (r.value ?? 0), 0);
+  const cost = priced.reduce((sum, r) => sum + convert(r.holding.costBasis), 0);
+  const shown = (row: HoldingRow | null) =>
+    row && rows.find((r) => r.holding.id === row.holding.id)!;
+  return {
+    ...p,
+    rows,
+    value,
+    cost,
+    gain: value - cost,
+    dayChange: rows.reduce((sum, r) => sum + (r.dayChange ?? 0), 0),
+    best: shown(p.best),
+    worst: shown(p.worst),
   };
 }
 

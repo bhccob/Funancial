@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Holding } from '@/domain/entities';
 import { convertMinor, formatMoney, type MoneyFormatOptions } from '@/domain/money';
-import { investRate, portfolio, type Portfolio } from '@/domain/portfolio';
+import { convertPortfolio, investRate, portfolio, type Portfolio } from '@/domain/portfolio';
 import { usePlatform } from '@/platform/PlatformProvider';
 import { market } from '@/services/market';
 import { useApp, useAppStore } from './AppStoreProvider';
@@ -25,32 +25,47 @@ export function usePortfolio(): Portfolio {
 }
 
 /**
- * What Invest shows money in. `format` takes minor units of the profile currency and writes them in
- * `currency`: the one chosen for Invest, converted at its rate. Without a rate yet it writes the
- * profile currency, and `currency` says so. Either way the amount is rounded once, so a chart's
- * fractional minor units can be passed as they are.
+ * What Invest shows money in: `currency` is the one chosen for Invest, converted at its rate. Without
+ * a rate yet it is the profile currency, unconverted.
+ *
+ * - `convert` takes minor units of the profile currency to minor units of `currency`, rounded once
+ *   with `Math.round` (the same rule with and without a rate). Figures that are shown beside their
+ *   sum are converted one by one with it, and the sum is made from the converted ones.
+ * - `formatConverted` writes minor units that are already in `currency`.
+ * - `format` is `convert` then `formatConverted`, for a figure that stands on its own. A chart's
+ *   fractional minor units can be passed as they are.
  */
 export function useInvestMoney(): {
   currency: string;
+  convert(minorInProfile: number): number;
+  formatConverted(minorInCurrency: number, opts?: MoneyFormatOptions): string;
   format(minorInProfile: number, opts?: MoneyFormatOptions): string;
 } {
   const profile = useCurrency();
   const settings = useApp((s) => s.data.tables.settings[0]);
   const rate = investRate(settings, profile);
   const currency = (rate !== null && settings?.investCurrency) || profile;
-  return useMemo(
-    () => ({
+  return useMemo(() => {
+    const convert = (minor: number) => convertMinor(minor, profile, currency, rate ?? 1);
+    const formatConverted = (minor: number, opts?: MoneyFormatOptions) =>
+      formatMoney(minor, currency, undefined, opts);
+    return {
       currency,
-      format: (minor, opts) =>
-        formatMoney(
-          rate === null ? Math.round(minor) : convertMinor(minor, profile, currency, rate),
-          currency,
-          undefined,
-          opts,
-        ),
-    }),
-    [profile, currency, rate],
-  );
+      convert,
+      formatConverted,
+      format: (minor, opts) => formatConverted(convert(minor), opts),
+    };
+  }, [profile, currency, rate]);
+}
+
+/**
+ * The portfolio as Invest shows it: each row converted once, the totals and gains made from the
+ * converted rows (see `convertPortfolio`). Use `useInvestMoney().formatConverted` to write its amounts.
+ */
+export function useInvestPortfolio(): Portfolio {
+  const portfolio = usePortfolio();
+  const { convert } = useInvestMoney();
+  return useMemo(() => convertPortfolio(portfolio, convert), [portfolio, convert]);
 }
 
 /** True without any quote, or when the newest one is older than `PRICES_FRESH_MS`. */

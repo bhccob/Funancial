@@ -9,7 +9,7 @@ import type { Holding } from '@/domain/entities';
 import { allocation, holdingPrice, TYPE_LABELS, type HoldingRow } from '@/domain/portfolio';
 import { cn } from '@/lib/cn';
 import { formatPercent, formatShares } from '@/lib/format';
-import { useInvestMoney, usePortfolio } from '@/store/useInvest';
+import { useInvestMoney, useInvestPortfolio } from '@/store/useInvest';
 import { HoldingDialog } from './HoldingDialog';
 
 /** Stocks, then ETFs, then the rest: the order of the pies and of the rows. */
@@ -26,7 +26,7 @@ const tone = (n: number) => (n < 0 ? 'text-danger' : 'text-accent-text');
 const arrow = (n: number) => (n < 0 ? '▼' : '▲');
 
 function HoldingItem({ row }: { row: HoldingRow }) {
-  const { format: money } = useInvestMoney();
+  const { formatConverted: money } = useInvestMoney();
   const { holding, value, gainPct } = row;
   return (
     <li className="border-border border-t first:border-t-0">
@@ -72,7 +72,7 @@ function PieBlock({
   label: string;
   summary?: string;
 }) {
-  const { format: money } = useInvestMoney();
+  const { formatConverted: money } = useInvestMoney();
   const headingId = useId();
   const [selected, setSelected] = useState<number | null>(null);
   const slices = useMemo(() => allocation(rows, 'holding'), [rows]);
@@ -123,8 +123,9 @@ function PieBlock({
  * own page. `refresh` fetches prices for a new holding.
  */
 export function HoldingsTab({ refresh }: { refresh(): Promise<void> }) {
-  const { format: money } = useInvestMoney();
-  const portfolio = usePortfolio();
+  // The portfolio is converted row by row, so what is written here adds up on the screen.
+  const { formatConverted: money } = useInvestMoney();
+  const portfolio = useInvestPortfolio();
   const [params, setParams] = useSearchParams();
   const [adding, setAdding] = useState(false);
 

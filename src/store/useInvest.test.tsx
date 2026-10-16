@@ -10,7 +10,13 @@ import { createStubStore } from '@/test/appStoreStub';
 import { fakeAppLifecycle } from '@/test/fakeAppLifecycle';
 import { makeHolding, makeProfile, makeSettings } from '@/test/fixtures';
 import { AppStoreProvider } from './AppStoreProvider';
-import { useInvestActions, useInvestMoney, useMarketRefresh, usePortfolio } from './useInvest';
+import {
+  useInvestActions,
+  useInvestMoney,
+  useInvestPortfolio,
+  useMarketRefresh,
+  usePortfolio,
+} from './useInvest';
 
 const NOW = new Date('2026-10-14T12:00:00.000Z');
 const minutesAgo = (m: number) => new Date(NOW.getTime() - m * 60_000).toISOString();
@@ -132,6 +138,37 @@ describe('useInvestMoney', () => {
     expect(dollar.result.current.format(10_00.5)).toBe(formatMoney(11_01, 'USD'));
   });
 
+  it('converts minor units on their own, for amounts to be added up before they are shown', () => {
+    const { result } = render({ investCurrency: 'USD', investFx: dollars });
+    expect(result.current.convert(100_00)).toBe(110_00);
+    expect(result.current.convert(-100_00)).toBe(-110_00);
+    // Written without converting again.
+    expect(result.current.formatConverted(110_00)).toBe(formatMoney(110_00, 'USD'));
+    expect(result.current.formatConverted(1_234_00, { whole: true })).toBe(
+      formatMoney(1_234_00, 'USD', undefined, { whole: true }),
+    );
+    // Writing a converted amount is the same as converting and writing in one go.
+    expect(result.current.formatConverted(result.current.convert(7_77))).toBe(
+      result.current.format(7_77),
+    );
+  });
+
+  it('converts and rounds an exact half by one rule, with a rate and without', () => {
+    const rated = render({
+      investCurrency: 'USD',
+      investFx: { ...dollars, rate: 1.5 },
+    });
+    // The rule is Math.round: -22.5 is -22 and 22.5 is 23.
+    expect(rated.result.current.convert(15)).toBe(Math.round(22.5));
+    expect(rated.result.current.convert(-15)).toBe(Math.round(-22.5));
+    expect(rated.result.current.format(-15)).toBe(formatMoney(-22, 'USD'));
+
+    const plain = render(null);
+    expect(plain.result.current.convert(-2.5)).toBe(Math.round(-2.5));
+    expect(plain.result.current.convert(2.5)).toBe(Math.round(2.5));
+    expect(plain.result.current.format(-2.5)).toBe(formatMoney(-2, 'EUR'));
+  });
+
   it('keeps its value until what it depends on changes', () => {
     const { wrapper } = setup(undefined, { investCurrency: 'USD', investFx: dollars });
     const { result, rerender } = renderHook(() => useInvestMoney(), { wrapper });
@@ -246,5 +283,46 @@ describe('useMarketRefresh', () => {
     const { result } = renderHook(() => useMarketRefresh(), { wrapper });
     await waitFor(() => expect(result.current.status).toBe('failed'));
     expect(store.getState().putMany).not.toHaveBeenCalled();
+  });
+});
+
+describe('useInvestPortfolio', () => {
+  /** Two holdings each worth EUR 600.04 and costing EUR 500.05. */
+  const twins = ['A', 'B'].map((id) =>
+    makeHolding({
+      id,
+      symbol: id,
+      currency: 'EUR',
+      shares: 1,
+      costBasis: 500_05,
+      quote: { price: 600.04, previousClose: 590.01, fxRate: 1, asOf: minutesAgo(1) },
+    }),
+  );
+
+  it('shows rows converted once, with totals that are the sums of those rows', () => {
+    const { wrapper } = setup(twins, { investCurrency: 'USD', investFx: dollars });
+    const { result } = renderHook(() => useInvestPortfolio(), { wrapper });
+    const { rows, value, cost, gain, dayChange } = result.current;
+    expect(rows.map((r) => r.value)).toEqual([66_004, 66_004]);
+    expect(value).toBe(132_008);
+    expect(cost).toBe(110_012);
+    expect(gain).toBe(value - cost);
+    expect(dayChange).toBe(2_206);
+  });
+
+  it('is the portfolio itself, in the profile currency, until the rate has loaded', () => {
+    const { wrapper } = setup(twins, { investCurrency: 'USD', investFx: null });
+    const { result } = renderHook(() => ({ shown: useInvestPortfolio(), own: usePortfolio() }), {
+      wrapper,
+    });
+    expect(result.current.shown).toEqual(result.current.own);
+  });
+
+  it('keeps its value until the data or the rate changes', () => {
+    const { wrapper } = setup(twins, { investCurrency: 'USD', investFx: dollars });
+    const { result, rerender } = renderHook(() => useInvestPortfolio(), { wrapper });
+    const first = result.current;
+    rerender();
+    expect(result.current).toBe(first);
   });
 });

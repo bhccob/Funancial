@@ -3,12 +3,13 @@ import { Link, Navigate, useParams } from 'react-router';
 import { Button } from '@/components/ui/Button';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Section } from '@/components/ui/Section';
-import { holdingPrice, holdingRate, toMinor } from '@/domain/portfolio';
+import { minorDigits } from '@/domain/money';
+import { holdingPrice, holdingRate } from '@/domain/portfolio';
 import { formatDate, formatPercent, formatShares, relativeDays } from '@/lib/format';
 import { useAction } from '@/lib/useAction';
 import { useApp } from '@/store/AppStoreProvider';
 import { useCurrency, useToday } from '@/store/useFinance';
-import { useInvestActions, useInvestMoney, usePortfolio } from '@/store/useInvest';
+import { useInvestActions, useInvestMoney, useInvestPortfolio } from '@/store/useInvest';
 import { HoldingChart } from './HoldingChart';
 import { HoldingDialog } from './HoldingDialog';
 
@@ -34,8 +35,10 @@ export function HoldingPage() {
   const { id } = useParams();
   const holding = useApp((s) => s.data.tables.holding.find((h) => h.id === id));
   const dividends = useApp((s) => s.data.tables.dividend);
-  const row = usePortfolio().rows.find((r) => r.holding.id === id);
-  const { format: money } = useInvestMoney();
+  const row = useInvestPortfolio().rows.find((r) => r.holding.id === id);
+  // `formatConverted` writes what the portfolio row already converted, so the value and the gain add
+  // up with the amount paid below; `format` converts a figure from its unrounded profile amount.
+  const { format, formatConverted } = useInvestMoney();
   const currency = useCurrency();
   const today = useToday();
   const { markChecked } = useInvestActions();
@@ -68,14 +71,16 @@ export function HoldingPage() {
 
       <Section>
         <p className="text-[34px] leading-tight font-extrabold tracking-[-0.035em] tabular-nums">
-          {value === null ? '—' : money(value)}
+          {value === null ? '—' : formatConverted(value)}
         </p>
         <p className="mt-1 text-[13.5px] font-extrabold tabular-nums">
           {gain === null ? (
             <span className="text-muted">—</span>
           ) : (
             <>
-              <span className={tone(gain)}>{`${arrow(gain)} ${money(Math.abs(gain))}`}</span>
+              <span
+                className={tone(gain)}
+              >{`${arrow(gain)} ${formatConverted(Math.abs(gain))}`}</span>
               {gainPct !== null && (
                 <>
                   <span className="text-muted"> · </span>
@@ -97,14 +102,14 @@ export function HoldingPage() {
             {formatDate(holding.purchaseDate)}
           </Fact>
           <Fact label="Shares">{formatShares(holding.shares)}</Fact>
-          <Fact label="You paid per share">
-            {money(Math.round(holding.costBasis / holding.shares))}
-          </Fact>
+          <Fact label="You paid per share">{format(holding.costBasis / holding.shares)}</Fact>
           <Fact label="Price now">
-            {price === null || rate === null ? '—' : money(toMinor(price, rate, currency))}
+            {price === null || rate === null
+              ? '—'
+              : format(price * rate * 10 ** minorDigits(currency))}
           </Fact>
-          <Fact label="You paid in total">{money(holding.costBasis)}</Fact>
-          <Fact label="Dividends received">{money(received)}</Fact>
+          <Fact label="You paid in total">{format(holding.costBasis)}</Fact>
+          <Fact label="Dividends received">{format(received)}</Fact>
         </dl>
         <div className="mt-7 flex gap-2">
           <Button className="flex-1" onClick={() => setEditing(true)}>

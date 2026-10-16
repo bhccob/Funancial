@@ -165,10 +165,10 @@ export function currencySymbol(currency: string, locale?: string): string {
 
 /**
  * `minor` units of `from` as minor units of `to` at `rate` (units of `to` for one of `from`),
- * rounded once. The currencies may differ in decimals: ¥ has none, € has two. A loss rounds to the
- * same size as the same gain, and the `+ 0` turns a rounded -0 into 0, which would print as "-¥0".
+ * rounded once with `Math.round`, the one rule for money: an exact half goes up, so -22.5 is -22.
+ * The currencies may differ in decimals: ¥ has none, € has two. The `+ 0` turns a rounded -0 into
+ * 0, which would print as "-¥0". With `from` the same as `to` and a rate of 1 it is the rounding alone.
  */
 export function convertMinor(minor: number, from: string, to: string, rate: number): number {
-  const converted = Math.abs(minor) * rate * 10 ** (minorDigits(to) - minorDigits(from));
-  return Math.sign(minor) * Math.round(converted) + 0;
+  return Math.round(minor * rate * 10 ** (minorDigits(to) - minorDigits(from))) + 0;
 }
