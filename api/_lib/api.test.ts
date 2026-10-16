@@ -733,6 +733,33 @@ describe('price service', () => {
         '[::ffff:10.1.2.3]',
         '[::ffff:a9fe:a9fe]',
         '[::ffff:c0a8:1]',
+        // More spellings of loopback: another number base, a short form, a trailing dot, percent
+        // escapes, fullwidth digits and an IPv4-compatible IPv6 address.
+        '0x7f000001',
+        '017700000001',
+        '127.0.1',
+        '127.0.0.1.',
+        '%31%32%37.0.0.1',
+        '１２７.０.０.１',
+        '[::127.0.0.1]',
+        // A zone id is not a valid host at all.
+        '[fe80::1%25eth0]',
+        // Benchmarking and IETF protocol ranges, and the IPv6 ranges that carry an IPv4 address.
+        '192.0.0.1',
+        '192.0.0.255',
+        '198.18.0.1',
+        '198.19.255.255',
+        '[::ffff:c612:1]',
+        '[::ffff:c000:1]',
+        '[64:ff9b::7f00:1]',
+        '[64:ff9b::a00:1]',
+        '[64:ff9b:1::1]',
+        '[64:ff9b:1:ffff::1]',
+        '[2002::1]',
+        '[2002:7f00:1::1]',
+        '[2002:ffff:ffff::1]',
+        '[fec0::1]',
+        '[feff::1]',
       ];
       for (const host of hosts) {
         await refused(`http://${host}/`);
@@ -756,8 +783,16 @@ describe('price service', () => {
         '192.167.255.255',
         '192.169.0.1',
         '223.255.255.255',
+        '191.255.255.255',
+        '192.0.1.1',
+        '198.17.255.255',
+        '198.20.0.1',
         '[2606:4700::1111]',
         '[::ffff:808:808]',
+        '[64:ff9a::1]',
+        '[64:ff9b:2::1]',
+        '[2003::1]',
+        '[fbff::1]',
       ];
       for (const host of hosts) {
         expect((await extract(`https://${host}/p`)).status, host).toBe(200);

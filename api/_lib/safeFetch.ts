@@ -21,15 +21,21 @@ for (const [net, bits] of [
   ['127.0.0.0', 8], // loopback
   ['169.254.0.0', 16], // link-local, which holds cloud metadata services
   ['172.16.0.0', 12],
+  ['192.0.0.0', 24], // IETF protocol assignments
   ['192.168.0.0', 16],
+  ['198.18.0.0', 15], // benchmarking
   ['224.0.0.0', 3], // multicast and reserved, up to the broadcast address
 ] as const) {
   PRIVATE.addSubnet(net, bits, 'ipv4');
 }
 for (const [net, bits] of [
   ['::', 96], // unspecified, loopback and the old IPv4-compatible range
+  ['64:ff9b::', 96], // NAT64, which carries an IPv4 address in its last 32 bits
+  ['64:ff9b:1::', 48], // local-use NAT64
+  ['2002::', 16], // 6to4, which carries an IPv4 address after the prefix
   ['fc00::', 7], // unique local
   ['fe80::', 10], // link-local
+  ['fec0::', 10], // site-local, the deprecated private range
   ['ff00::', 8], // multicast
 ] as const) {
   PRIVATE.addSubnet(net, bits, 'ipv6');
