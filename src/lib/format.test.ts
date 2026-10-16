@@ -2,10 +2,12 @@ import { describe, expect, it } from 'vitest';
 import {
   daysUntil,
   formatDate,
+  formatDateTime,
   formatDay,
   formatMonth,
   formatMonthShort,
   formatMonthYear,
+  formatPercent,
   formatWeekday,
   ordinal,
   relativeDays,
@@ -50,5 +52,22 @@ describe('date display', () => {
     expect(relativeDays('2026-10-30', '2026-11-02')).toBe('in 3 days');
     expect(relativeDays('2026-10-14', '2026-10-13')).toBe('1 day ago');
     expect(daysUntil('2026-10-14', '2027-03-01')).toBe(138);
+  });
+});
+
+describe('moments and percentages', () => {
+  it('shows a moment as a day and a time', () => {
+    // Local time: built from parts, so the test machine's zone does not matter.
+    const moment = new Date(2026, 9, 14, 15, 5).toISOString();
+    expect(formatDateTime(moment, 'en-US')).toMatch(/^Oct 14, 3:05\s?PM$/);
+  });
+
+  it('shows a percentage with one decimal, and a true minus when signed', () => {
+    expect(formatPercent(8.44, false, 'en-US')).toBe('8.4%');
+    expect(formatPercent(-3, false, 'en-US')).toBe('3.0%');
+    expect(formatPercent(12, true, 'en-US')).toBe('+12.0%');
+    expect(formatPercent(-3, true, 'en-US')).toBe('−3.0%');
+    expect(formatPercent(-0.04, true, 'en-US')).toBe('0.0%');
+    expect(formatPercent(0, true, 'en-US')).toBe('0.0%');
   });
 });

@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
 import type { SalaryFreeze } from '@/domain/entities';
+import { levelStart } from '@/domain/game/levels';
 import { newId, nowIso } from '@/domain/ids';
 import { formatMoney } from '@/domain/money';
 import { emptySnapshot, type DataSnapshot } from '@/domain/snapshot';
@@ -64,17 +65,34 @@ const row = (sheet: HTMLElement, label: string) =>
   within(sheet).getByRole('link', { name: new RegExp(`^${label}`) });
 
 describe('bottom bar', () => {
-  it('shows Home, Budget, Quests and Menu in the bottom bar, with no Add button', () => {
+  it('shows Home, Budget, Invest and Menu in the bar, and Quests first in the Menu', async () => {
     renderAt('/');
     const bar = screen.getByRole('navigation', { name: 'Primary' });
 
     const slots = [...bar.querySelectorAll('a, button')];
-    expect(slots.map((s) => s.textContent)).toEqual(['Home', 'Budget', 'Quests', 'Menu']);
+    expect(slots.map((s) => s.textContent)).toEqual(['Home', 'Budget', 'Invest', 'Menu']);
     expect(within(bar).getByRole('link', { name: 'Home' })).toHaveAttribute('href', '/');
     expect(within(bar).getByRole('link', { name: 'Budget' })).toHaveAttribute('href', '/budget');
-    expect(within(bar).getByRole('link', { name: 'Quests' })).toHaveAttribute('href', '/quests');
+    expect(within(bar).getByRole('link', { name: 'Invest' })).toHaveAttribute('href', '/invest');
     expect(within(bar).getByRole('button', { name: 'Menu' })).toBeInTheDocument();
-    expect(within(bar).queryByRole('link', { name: /add/i })).not.toBeInTheDocument();
+    expect(within(bar).queryByRole('link', { name: /add|quests/i })).not.toBeInTheDocument();
+
+    const sheet = await openMenu();
+    const you = within(sheet).getByRole('heading', { level: 3, name: 'You' }).parentElement!;
+    const first = within(you).getAllByRole('link')[0]!;
+    expect(first).toHaveAttribute('href', '/quests');
+    expect(first).toHaveTextContent('Level 1');
+  });
+
+  it('opens the Invest screen from the bar and marks it as the current one', async () => {
+    renderAt('/');
+    const bar = screen.getByRole('navigation', { name: 'Primary' });
+    await userEvent.click(within(bar).getByRole('link', { name: 'Invest' }));
+    expect(screen.getByRole('heading', { level: 1, name: 'Invest' })).toBeInTheDocument();
+    expect(within(bar).getByRole('link', { name: 'Invest' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
   });
 
   it('marks the current screen and leaves the Menu sheet closed', () => {
@@ -125,14 +143,28 @@ describe('Menu sheet', () => {
     expect(row(sheet, 'Salary freeze')).toHaveTextContent(
       `Active until ${formatDay('2026-10-20')}`,
     );
-    expect(row(sheet, 'Invest')).toHaveTextContent('Stocks and ETFs');
     expect(row(sheet, 'Buy it\\?')).toHaveTextContent('Ask before you spend');
-    expect(row(sheet, 'Dividends')).toHaveTextContent('Passive income');
-    expect(row(sheet, 'News')).toHaveTextContent('For what you hold');
+    expect(row(sheet, 'Quests')).toHaveTextContent('Level 1');
     expect(row(sheet, 'Shop')).toHaveTextContent('130 coins to spend');
     expect(row(sheet, 'Inbox')).toHaveTextContent('Your notices');
     expect(row(sheet, 'Help')).toHaveTextContent('How everything works');
     expect(row(sheet, 'Settings')).toHaveTextContent('Lock, backups, reminders');
+  });
+
+  it('moves the Invest, Dividends and News rows out of the Menu', async () => {
+    renderAt('/');
+    const sheet = await openMenu();
+    for (const label of ['Invest', 'Dividends', 'News']) {
+      expect(within(sheet).queryByRole('link', { name: new RegExp(`^${label}`) })).toBeNull();
+    }
+  });
+
+  it('shows the level the player has reached on the Quests row', async () => {
+    const data = emptySnapshot();
+    data.tables.ledger.push(makeLedgerEntry({ coins: 0, xp: levelStart(3) }));
+    renderAt('/', data);
+    const sheet = await openMenu();
+    expect(row(sheet, 'Quests')).toHaveTextContent('Level 3');
   });
 
   it('says so when there is nothing yet', async () => {
@@ -179,8 +211,9 @@ describe('Menu sheet', () => {
   it('marks soon items', async () => {
     renderAt('/');
     const sheet = await openMenu();
-    expect(row(sheet, 'Invest')).toHaveTextContent('Soon');
+    expect(row(sheet, 'Buy it\\?')).toHaveTextContent('Soon');
     expect(row(sheet, 'Inbox')).toHaveTextContent('Soon');
+    expect(row(sheet, 'Quests')).not.toHaveTextContent('Soon');
     expect(row(sheet, 'Subscriptions')).not.toHaveTextContent('Soon');
     expect(row(sheet, 'Settings')).not.toHaveTextContent('Soon');
     expect(within(sheet).getAllByText('Soon')).toHaveLength(
@@ -242,7 +275,7 @@ describe('sidebar', () => {
     const links = within(sidebar).getAllByRole('link');
     expect(links[0]).toHaveAccessibleName('Add expense');
     expect(links[0]).toHaveAttribute('href', '/add');
-    expect(links.slice(1, 4).map((a) => a.textContent)).toEqual(['Home', 'Budget', 'Quests']);
+    expect(links.slice(1, 4).map((a) => a.textContent)).toEqual(['Home', 'Budget', 'Invest']);
 
     expect(
       within(sidebar)
@@ -257,9 +290,9 @@ describe('sidebar', () => {
   it('tags the soon items', () => {
     renderAt('/');
     const sidebar = screen.getByRole('navigation', { name: 'All sections' });
-    expect(within(sidebar).getByRole('link', { name: /^Dividends/ })).toHaveTextContent('Soon');
+    expect(within(sidebar).getByRole('link', { name: /^Buy it/ })).toHaveTextContent('Soon');
     expect(within(sidebar).getByRole('link', { name: /^Settings/ })).not.toHaveTextContent('Soon');
-    expect(within(sidebar).getAllByText('Soon')).toHaveLength(6);
+    expect(within(sidebar).getAllByText('Soon')).toHaveLength(3);
   });
 
   it('marks the current screen', () => {
@@ -276,8 +309,8 @@ describe('menu items', () => {
   it('has the three groups in order, with a fixed chip colour that holds 3:1 against a white icon', () => {
     expect(MENU_GROUPS.map((g) => [g.title, g.items.length])).toEqual([
       ['Your money', 4],
-      ['Coming next', 4],
-      ['You', 4],
+      ['Coming next', 1],
+      ['You', 5],
     ]);
     const luminance = (hex: string) => {
       const [r, g, b] = [1, 3, 5].map((i) => {

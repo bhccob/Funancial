@@ -10,7 +10,8 @@ import { marketConfigured, type Market } from '@/services/market';
 import type { AppState } from './appStore';
 import { FUTURE } from './financeActions';
 
-const UNKNOWN_SYMBOL =
+/** What `addHolding` says when the price service cannot name a symbol and none was typed in. */
+export const UNKNOWN_SYMBOL =
   "We couldn't find that symbol. Check it, or enter the name and currency yourself.";
 const NO_PRICE =
   'Reinvesting needs a price for this holding. Refresh prices or set a manual price.';

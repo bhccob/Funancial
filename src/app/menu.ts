@@ -2,10 +2,8 @@ import {
   ChartPie,
   CircleQuestionMark,
   Clock,
-  Coins,
   House,
   Inbox,
-  Newspaper,
   Repeat,
   Settings,
   ShoppingBag,
@@ -35,11 +33,11 @@ export interface MenuGroup {
   items: MenuItem[];
 }
 
-/** The three places the bottom bar links to besides Add and Menu, and the sidebar's first links. */
+/** The three places the bottom bar links to besides the Menu, and the sidebar's first links. */
 export const HOME: NavTarget = { path: '/', label: 'Home', icon: House };
 export const BUDGET: NavTarget = { path: '/budget', label: 'Budget', icon: ChartPie };
-export const QUESTS: NavTarget = { path: '/quests', label: 'Quests', icon: Trophy };
-export const PRIMARY_LINKS: NavTarget[] = [HOME, BUDGET, QUESTS];
+export const INVEST: NavTarget = { path: '/invest', label: 'Invest', icon: TrendingUp };
+export const PRIMARY_LINKS: NavTarget[] = [HOME, BUDGET, INVEST];
 
 /** Everything else, grouped the way the Menu sheet and the sidebar list it. */
 export const MENU_GROUPS: MenuGroup[] = [
@@ -54,16 +52,12 @@ export const MENU_GROUPS: MenuGroup[] = [
   },
   {
     title: 'Coming next',
-    items: [
-      { path: '/invest', label: 'Invest', icon: TrendingUp, color: '#b86e00', soon: true },
-      { path: '/buy', label: 'Buy it?', icon: ShoppingBag, color: '#c43b6a', soon: true },
-      { path: '/dividends', label: 'Dividends', icon: Coins, color: '#0b7f8a', soon: true },
-      { path: '/news', label: 'News', icon: Newspaper, color: '#5b6270', soon: true },
-    ],
+    items: [{ path: '/buy', label: 'Buy it?', icon: ShoppingBag, color: '#c43b6a', soon: true }],
   },
   {
     title: 'You',
     items: [
+      { path: '/quests', label: 'Quests', icon: Trophy, color: '#b86e00' },
       { path: '/shop', label: 'Shop', icon: Store, color: '#6b46f5' },
       { path: '/inbox', label: 'Inbox', icon: Inbox, color: '#3b82c4', soon: true },
       {

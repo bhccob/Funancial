@@ -1,7 +1,7 @@
 import { Menu } from 'lucide-react';
 import { NavLink } from 'react-router';
 import { cn } from '@/lib/cn';
-import { BUDGET, HOME, QUESTS, type NavTarget } from './menu';
+import { BUDGET, HOME, INVEST, type NavTarget } from './menu';
 
 const slot =
   'flex h-16 flex-col items-center justify-center gap-1 text-[11.5px] leading-[14px] font-bold';
@@ -16,7 +16,7 @@ function BarLink({ path, label, icon: Icon }: NavTarget) {
   );
 }
 
-/** Flat bar along the phone's bottom edge: Home, Budget, Quests and the Menu sheet. Adding lives on Home and in the sidebar. */
+/** Flat bar along the phone's bottom edge: Home, Budget, Invest and the Menu sheet. Adding lives on Home and in the sidebar. */
 export function BottomBar({
   menuOpen,
   onMenu,
@@ -36,7 +36,7 @@ export function BottomBar({
     >
       <BarLink {...HOME} />
       <BarLink {...BUDGET} />
-      <BarLink {...QUESTS} />
+      <BarLink {...INVEST} />
       <button
         type="button"
         aria-haspopup="dialog"

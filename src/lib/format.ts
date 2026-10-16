@@ -65,3 +65,24 @@ export function relativeDays(today: LocalDate, d: LocalDate): string {
   if (days > 1) return `in ${days} days`;
   return days === -1 ? '1 day ago' : `${-days} days ago`;
 }
+
+/** "Oct 14, 3:05 PM": a moment (an ISO timestamp) in the reader's own time zone. */
+export function formatDateTime(iso: string, locale?: string): string {
+  return new Intl.DateTimeFormat(locale, {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(new Date(iso));
+}
+
+/** 8.44 → "8.4%". With `signed`: "+8.4%", "−3.0%" (a true minus), and a plain "0.0%" for nothing. */
+export function formatPercent(pct: number, signed = false, locale?: string): string {
+  const rounded = Math.round(Math.abs(pct) * 10) / 10;
+  const text = new Intl.NumberFormat(locale, {
+    style: 'percent',
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  }).format(rounded / 100);
+  return signed && rounded !== 0 ? `${pct < 0 ? '−' : '+'}${text}` : text;
+}

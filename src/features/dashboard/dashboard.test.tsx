@@ -1,4 +1,4 @@
-import { act, screen, within } from '@testing-library/react';
+import { act, cleanup, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -18,6 +18,7 @@ import {
   makeDebt,
   makeExpense,
   makeGoal,
+  makeHolding,
   makeIncome,
   makeLedgerEntry,
   makeLimit,
@@ -617,6 +618,42 @@ describe('DashboardScreen net worth', () => {
   it('says there is no change when net worth has not moved this month', () => {
     renderDashboard(emptySnapshot(), TODAY);
     expect(screen.getByText('No change this month')).toHaveClass('text-muted');
+  });
+
+  it('adds Investments to the legend, in the second chart colour, once they are worth something', () => {
+    const data = monthData();
+    data.tables.holding = [
+      makeHolding({
+        shares: 10,
+        quote: { price: 100, previousClose: 99, fxRate: 1, asOf: '2026-10-14T10:00:00.000Z' },
+      }),
+    ];
+    renderDashboard(data, TODAY);
+    const worth = region('Net worth');
+    const item = within(worth).getByText(`Investments ${usdWhole(1_000_00)}`);
+    expect(item.firstElementChild).toHaveStyle({ backgroundColor: 'var(--color-chart-2)' });
+    // Between Savings and Debts, and part of the figure: 6,450 plus the 1,000 held.
+    expect(
+      within(worth)
+        .getAllByRole('listitem')
+        .map((li) => li.textContent),
+    ).toEqual([
+      `Cash ${usdWhole(3_680_00)}`,
+      `Savings ${usdWhole(3_000_00)}`,
+      `Investments ${usdWhole(1_000_00)}`,
+      `Debts ${usdWhole(230_00)}`,
+    ]);
+    expect(within(worth).getByText(usd(7_450_00))).toBeInTheDocument();
+  });
+
+  it('leaves Investments out of the legend when there are none, or none are priced', () => {
+    const data = monthData();
+    renderDashboard(data, TODAY);
+    expect(within(region('Net worth')).queryByText(/^Investments/)).not.toBeInTheDocument();
+    cleanup();
+    data.tables.holding = [makeHolding()];
+    renderDashboard(data, TODAY);
+    expect(within(region('Net worth')).queryByText(/^Investments/)).not.toBeInTheDocument();
   });
 
   it('shows 34px net worth', () => {
