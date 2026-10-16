@@ -4,6 +4,7 @@ import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
 import type { Holding } from '@/domain/entities';
 import { formatMoney, formatMoneyPlain } from '@/domain/money';
+import { costForShares } from '@/domain/portfolio';
 import { emptySnapshot, type DataSnapshot, type TableRecord } from '@/domain/snapshot';
 import { toastStore } from '@/lib/toast';
 import {
@@ -12,6 +13,7 @@ import {
   formatMonthShort,
   formatMonthYear,
   formatPercent,
+  formatShares,
 } from '@/lib/format';
 import {
   market,
@@ -421,7 +423,11 @@ describe('HoldingDialog adding', () => {
 
     await enter(dialog, 'Symbol', 'acme');
     await enter(dialog, 'Shares', '2.5');
-    await enter(dialog, 'What you paid in total', '400');
+    await enter(dialog, 'Price per share (your average)', '160');
+    // The total is made live from the two.
+    expect(dialog).toHaveTextContent(
+      `Total paid${formatShares(2.5)} × ${usd(160_00)} = ${usd(400_00)}`,
+    );
     await userEvent.click(within(dialog).getByRole('radio', { name: 'Cash' }));
     await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
 
@@ -463,6 +469,76 @@ describe('HoldingDialog adding', () => {
     await waitFor(() => expect(fetchQuotes).toHaveBeenCalledTimes(1));
   });
 
+  it('asks for the shares with a stepper and for the price per share, in lighter fields', async () => {
+    const { store } = renderInvest(noHoldings());
+    const dialog = await openNewHolding();
+    // Symbol, Shares (stepper), the price per share, the total, the date, Paid from: in that order.
+    const order = [
+      'Symbol',
+      'Shares',
+      'Price per share (your average)',
+      'Total paid',
+      'Purchase date',
+      'Paid from',
+    ];
+    const at = (text: string) => dialog.textContent!.indexOf(text);
+    for (const [i, label] of order.entries()) {
+      expect(at(label), label).toBeGreaterThanOrEqual(0);
+      if (i > 0)
+        expect(at(order[i - 1]!), `${order[i - 1]} before ${label}`).toBeLessThan(at(label));
+    }
+    expect(within(dialog).queryByLabelText('What you paid in total')).not.toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'Fewer shares' })).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'More shares' })).toBeInTheDocument();
+    for (const label of ['Symbol', 'Price per share (your average)', 'Purchase date']) {
+      expect(within(dialog).getByLabelText(label), label).toHaveClass('border-b', 'font-extrabold');
+      expect(within(dialog).getByLabelText(label), label).not.toHaveClass('rounded-md');
+    }
+    // Paid from is underline tabs, still radios.
+    expect(within(dialog).getByText('Already owned')).toHaveClass('border-b-2', 'border-text');
+    expect(store.getState().putMany).not.toHaveBeenCalled();
+  });
+
+  it('shows the total as shares times price while they are typed, and a dash until both are there', async () => {
+    renderInvest(noHoldings());
+    const dialog = await openNewHolding();
+    expect(dialog).toHaveTextContent('Total paid—');
+    await enter(dialog, 'Shares', '40');
+    await enter(dialog, 'Price per share (your average)', '96.40');
+    expect(dialog).toHaveTextContent(`Total paid40 × ${usd(96_40)} = ${usd(3_856_00)}`);
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Fewer shares' }));
+    expect(dialog).toHaveTextContent(`Total paid39 × ${usd(96_40)} = ${usd(3_759_60)}`);
+    await enter(dialog, 'Shares', 'abc');
+    expect(dialog).toHaveTextContent('Total paid—');
+  });
+
+  it('saves the cost basis as shares times the price per share, rounded once', async () => {
+    const { store } = renderInvest(noHoldings());
+    const dialog = await openNewHolding();
+    await enter(dialog, 'Symbol', 'KO');
+    await enter(dialog, 'Name', 'Coca-Cola');
+    await enter(dialog, 'Currency', 'USD');
+    // The stepper: 1 more than 1.5 is 2.5.
+    await enter(dialog, 'Shares', '1.5');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'More shares' }));
+    expect(within(dialog).getByLabelText('Shares')).toHaveValue('2.5');
+    // 2.5 x 33.33 = 83.325: one rounding, to 83.33.
+    await enter(dialog, 'Price per share (your average)', '33.33');
+    await userEvent.click(within(dialog).getByRole('radio', { name: 'Cash' }));
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(store.getState().putMany).toHaveBeenCalledTimes(1));
+    const items = vi.mocked(store.getState().putMany).mock.calls[0]![0];
+    expect(items[0]).toEqual({
+      table: 'holding',
+      record: expect.objectContaining({ shares: 2.5, costBasis: 83_33 }),
+    });
+    // What leaves cash is the same figure.
+    expect(items[1]).toEqual({
+      table: 'transaction',
+      record: expect.objectContaining({ amount: 83_33, from: 'cash' }),
+    });
+  });
+
   it('names the holding from the price service when it knows the symbol', async () => {
     configured();
     fetchProfile.mockResolvedValue(MICROSOFT);
@@ -470,7 +546,7 @@ describe('HoldingDialog adding', () => {
     const dialog = await openNewHolding();
     await enter(dialog, 'Symbol', ' msft ');
     await enter(dialog, 'Shares', '3');
-    await enter(dialog, 'What you paid in total', '900');
+    await enter(dialog, 'Price per share (your average)', '300');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
 
     await waitFor(() => expect(store.getState().putMany).toHaveBeenCalledTimes(1));
@@ -500,7 +576,7 @@ describe('HoldingDialog adding', () => {
     await enter(dialog, 'Name', 'All-World ETF');
     await enter(dialog, 'Currency', 'gbp');
     await enter(dialog, 'Shares', '40');
-    await enter(dialog, 'What you paid in total', '4,000.50');
+    await enter(dialog, 'Price per share (your average)', '100.01');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
 
     await waitFor(() => expect(store.getState().putMany).toHaveBeenCalledTimes(1));
@@ -512,7 +588,7 @@ describe('HoldingDialog adding', () => {
         name: 'All-World ETF',
         currency: 'GBP',
         shares: 40,
-        costBasis: 4_000_50,
+        costBasis: 4_000_40,
       }),
     });
   });
@@ -535,7 +611,7 @@ describe('HoldingDialog adding', () => {
     await enter(dialog, 'Name', 'Acme');
     await enter(dialog, 'Currency', 'US');
     await enter(dialog, 'Shares', '0');
-    await enter(dialog, 'What you paid in total', '10');
+    await enter(dialog, 'Price per share (your average)', '10');
     fireEvent.change(within(dialog).getByLabelText('Purchase date'), {
       target: { value: '2026-10-15' },
     });
@@ -563,7 +639,7 @@ describe('HoldingDialog adding', () => {
     await enter(dialog, 'Name', 'Bitcoin');
     await enter(dialog, 'Currency', 'USD');
     await enter(dialog, 'Shares', '0,25');
-    await enter(dialog, 'What you paid in total', '0');
+    await enter(dialog, 'Price per share (your average)', '0');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
 
     await waitFor(() => expect(store.getState().putMany).toHaveBeenCalledTimes(1));
@@ -579,7 +655,7 @@ describe('HoldingDialog adding', () => {
     await enter(dialog, 'Symbol', 'KO');
     await enter(dialog, 'Name', 'Coca-Cola');
     await enter(dialog, 'Currency', 'USD');
-    await enter(dialog, 'What you paid in total', '100');
+    await enter(dialog, 'Price per share (your average)', '100');
 
     // "1,000" and "1.000" are a thousand or one: saved as neither, and the person is asked.
     for (const text of ['1,000', '1.000']) {
@@ -607,7 +683,7 @@ describe('HoldingDialog adding', () => {
     await enter(dialog, 'Symbol', 'BTC-USD');
     await enter(dialog, 'Name', 'Bitcoin');
     await enter(dialog, 'Currency', 'USD');
-    await enter(dialog, 'What you paid in total', '100');
+    await enter(dialog, 'Price per share (your average)', '100');
     await enter(dialog, 'Shares', '0.125');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(store.getState().putMany).toHaveBeenCalledTimes(1));
@@ -624,7 +700,7 @@ describe('HoldingDialog adding', () => {
     await enter(dialog, 'Name', 'Coca-Cola');
     await enter(dialog, 'Currency', 'USD');
     await enter(dialog, 'Shares', '1');
-    await enter(dialog, 'What you paid in total', '0');
+    await enter(dialog, 'Price per share (your average)', '0');
     await userEvent.click(within(dialog).getByRole('radio', { name: 'Savings' }));
     fireEvent.change(within(dialog).getByLabelText('Purchase date'), {
       target: { value: '19999-01-01' },
@@ -707,7 +783,7 @@ describe('HoldingDialog symbol search', () => {
     expect(within(dialog).queryByRole('listbox')).not.toBeInTheDocument();
 
     await enter(dialog, 'Shares', '3');
-    await enter(dialog, 'What you paid in total', '300');
+    await enter(dialog, 'Price per share (your average)', '300');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(store.getState().putMany).toHaveBeenCalledTimes(1));
     expect(fetchProfile).toHaveBeenCalledWith('VUSA.AS');
@@ -789,7 +865,7 @@ describe('HoldingDialog symbol search', () => {
     expect(within(dialog).queryByRole('listbox')).not.toBeInTheDocument();
 
     await enter(dialog, 'Shares', '3');
-    await enter(dialog, 'What you paid in total', '900');
+    await enter(dialog, 'Price per share (your average)', '900');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(store.getState().putMany).toHaveBeenCalledTimes(1));
     expect(fetchProfile).toHaveBeenCalledWith('MSFT');
@@ -835,7 +911,7 @@ describe('HoldingDialog symbol search', () => {
     await waitFor(() => expect(fetchSearch.mock.calls).toEqual([['Vanguard S&P 500']]));
 
     await enter(dialog, 'Shares', '3');
-    await enter(dialog, 'What you paid in total', '300');
+    await enter(dialog, 'Price per share (your average)', '300');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
     expect(
       within(dialog).getByText('Use letters and numbers only, like KO or VWRL.L'),
@@ -859,7 +935,7 @@ describe('HoldingDialog symbol search', () => {
     expect(within(dialog).queryByText(/No matches/)).not.toBeInTheDocument();
 
     await enter(dialog, 'Shares', '3');
-    await enter(dialog, 'What you paid in total', '900');
+    await enter(dialog, 'Price per share (your average)', '900');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(store.getState().putMany).toHaveBeenCalledTimes(1));
   });
@@ -896,14 +972,15 @@ describe('HoldingDialog symbol search', () => {
 });
 
 describe('HoldingDialog editing', () => {
-  it('edits a manual price and marks a holding checked', async () => {
+  it('edits a manual price, and keeps the average price per share when only the shares change', async () => {
     const data = portfolioData();
     const { store } = renderInvest(data);
     const dialog = await openEdit('KO');
     expect(dialog).toHaveAccessibleDescription('Coca-Cola');
     expect(within(dialog).getByLabelText('Symbol')).toBeDisabled();
     expect(within(dialog).getByLabelText('Shares')).toHaveValue('10');
-    expect(within(dialog).getByLabelText('What you paid in total')).toHaveValue('500.00');
+    // 500.00 for 10 shares, to the cent.
+    expect(within(dialog).getByLabelText('Price per share (your average)')).toHaveValue('50.00');
     expect(within(dialog).getByLabelText('Purchase date')).toHaveValue(
       data.tables.holding[0]!.purchaseDate,
     );
@@ -927,26 +1004,109 @@ describe('HoldingDialog editing', () => {
         symbol: 'KO',
         manualPrice: 65.5,
         shares: 12.5,
-        costBasis: 500_00,
+        // 12.5 shares at the 50.00 average of the 10 held.
+        costBasis: 625_00,
         withholdingPct: 15,
       }),
     );
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(toastStore.getState().toasts.at(-1)?.message).toBe('Holding updated.');
+  });
 
-    await userEvent.click(screen.getByRole('button', { name: 'Edit' }));
-    await userEvent.click(
-      within(screen.getByRole('dialog', { name: 'Edit KO' })).getByRole('button', {
-        name: 'Mark as checked',
+  it('no longer marks a holding as checked from its dialog', async () => {
+    renderInvest(portfolioData());
+    const dialog = await openEdit('KO');
+    expect(within(dialog).queryByRole('button', { name: /^Mark as/ })).not.toBeInTheDocument();
+  });
+
+  it('keeps the cost to the cent when the shares change by one, with no drift from the shown price', async () => {
+    // 40 shares for $100.00: $2.50 each, so 41 cost $102.50.
+    const data = portfolioData();
+    data.tables.holding[0] = { ...data.tables.holding[0]!, shares: 40, costBasis: 100_00 };
+    const { store } = renderInvest(data);
+    const dialog = await openEdit('KO');
+    expect(within(dialog).getByLabelText('Price per share (your average)')).toHaveValue('2.50');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'More shares' }));
+    expect(within(dialog).getByLabelText('Shares')).toHaveValue('41');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(store.getState().put).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(store.getState().put).mock.calls[0]![1]).toEqual(
+      expect.objectContaining({
+        shares: 41,
+        costBasis: costForShares(data.tables.holding[0]!, 41),
       }),
     );
-    await waitFor(() => expect(store.getState().put).toHaveBeenCalledTimes(2));
-    const checked = vi.mocked(store.getState().put).mock.calls[1]!;
-    expect(checked[0]).toBe('holding');
-    expect(checked[1]).toEqual(
-      expect.objectContaining({ id: 'ko', checkedAt: expect.any(String), manualPrice: null }),
+    expect(vi.mocked(store.getState().put).mock.calls[0]![1]).toEqual(
+      expect.objectContaining({ costBasis: 102_50 }),
     );
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('does not let the rounded price drift the cost: 3 shares for $100.00 are $33.33 each, and 4 cost $133.33', async () => {
+    const data = portfolioData();
+    data.tables.holding[0] = { ...data.tables.holding[0]!, shares: 3, costBasis: 100_00 };
+    const { store } = renderInvest(data);
+    const dialog = await openEdit('KO');
+    expect(within(dialog).getByLabelText('Price per share (your average)')).toHaveValue('33.33');
+    // The line says what will be saved.
+    expect(dialog).toHaveTextContent(`Total paid3 × ${usd(33_33)} = ${usd(100_00)}`);
+    await userEvent.click(within(dialog).getByRole('button', { name: 'More shares' }));
+    expect(dialog).toHaveTextContent(`Total paid4 × ${usd(33_33)} = ${usd(133_33)}`);
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(store.getState().put).toHaveBeenCalledTimes(1));
+    // Not 4 x 33.33 = 133.32.
+    expect(vi.mocked(store.getState().put).mock.calls[0]![1]).toEqual(
+      expect.objectContaining({ shares: 4, costBasis: 133_33 }),
+    );
+  });
+
+  it('keeps the cost exactly when neither the shares nor the price change', async () => {
+    const data = portfolioData();
+    data.tables.holding[0] = { ...data.tables.holding[0]!, shares: 3, costBasis: 100_00 };
+    const { store } = renderInvest(data);
+    const dialog = await openEdit('KO');
+    fireEvent.change(within(dialog).getByLabelText('Purchase date'), {
+      target: { value: '2026-09-02' },
+    });
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(store.getState().put).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(store.getState().put).mock.calls[0]![1]).toEqual(
+      expect.objectContaining({ shares: 3, costBasis: 100_00, purchaseDate: '2026-09-02' }),
+    );
+  });
+
+  it('works the cost out again from the shares and the new price when the price changes', async () => {
+    const { store } = renderInvest(portfolioData());
+    const dialog = await openEdit('KO');
+    await enter(dialog, 'Price per share (your average)', '60');
+    expect(dialog).toHaveTextContent(`Total paid10 × ${usd(60_00)} = ${usd(600_00)}`);
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(store.getState().put).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(store.getState().put).mock.calls[0]![1]).toEqual(
+      expect.objectContaining({ id: 'ko', shares: 10, costBasis: 600_00 }),
+    );
+    vi.mocked(store.getState().put).mockClear();
+    cleanup();
+
+    // Both at once: 12 shares at 61.25.
+    const second = renderInvest(portfolioData());
+    const again = await openEdit('KO');
+    await enter(again, 'Shares', '12');
+    await enter(again, 'Price per share (your average)', '61.25');
+    await userEvent.click(within(again).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(second.store.getState().put).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(second.store.getState().put).mock.calls[0]![1]).toEqual(
+      expect.objectContaining({ shares: 12, costBasis: 735_00 }),
+    );
+  });
+
+  it('asks for the price when it is cleared, with the friendly message', async () => {
+    const { store } = renderInvest(portfolioData());
+    const dialog = await openEdit('KO');
+    await enter(dialog, 'Price per share (your average)', '');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+    expect(within(dialog).getByLabelText('Price per share (your average)')).toBeInvalid();
+    expect(dialog.textContent).toContain('Enter an amount like 12.50');
+    expect(store.getState().put).not.toHaveBeenCalled();
   });
 
   it('refuses a withholding that could be a thousand times out, or over 100', async () => {

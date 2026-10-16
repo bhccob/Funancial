@@ -4,14 +4,18 @@ import { Dialog } from '@/components/ui/Dialog';
 import { MoneyField } from '@/components/ui/MoneyField';
 import { RadioGroup } from '@/components/ui/RadioGroup';
 import { Select } from '@/components/ui/Select';
+import { ShareStepper } from '@/components/ui/ShareStepper';
 import { TextField } from '@/components/ui/TextField';
 import type { Holding } from '@/domain/entities';
 import { formatDecimal, isAmbiguousDecimal, parseDecimal } from '@/domain/money';
+import { costForShares, costPerShare } from '@/domain/portfolio';
+import { DateField } from '@/features/add/DateField';
+import { formatShares } from '@/lib/format';
 import { marketConfigured } from '@/services/market';
 import { useAction } from '@/lib/useAction';
 import { FUTURE } from '@/store/financeActions';
 import { UNKNOWN_SYMBOL, type HoldingInput, type HoldingPatch } from '@/store/investActions';
-import { useCurrency, useToday } from '@/store/useFinance';
+import { useCurrency, useMoney, useToday } from '@/store/useFinance';
 import { useInvestActions } from '@/store/useInvest';
 import { SymbolSearchField } from './SymbolSearchField';
 
@@ -36,7 +40,8 @@ function unreadable(text: string, fallback: string): string {
 interface Form {
   symbol: string;
   shares: string;
-  cost: number | null;
+  /** What one share cost on average, in minor units of the profile currency. */
+  perShare: number | null;
   date: string;
   paidFrom: PaidFrom;
   withholding: string;
@@ -47,8 +52,27 @@ interface Form {
 }
 type Errors = Partial<Record<keyof Form, string>>;
 
+/** The price per share an edit starts from: the holding's average, to the cent. */
+const startingPrice = (h: Holding) => Math.round(costPerShare(h));
+
+/**
+ * What the holding cost in all, in minor units, or null until the shares and the price are
+ * readable. A holding whose price is as it was shown keeps its cost per share exactly (no drift from
+ * the rounded price shown); a new price is multiplied by the shares and rounded once.
+ */
+function totalCost(f: Form, holding: Holding | null): number | null {
+  const shares = parseDecimal(f.shares);
+  if (shares === null || shares <= 0 || f.perShare === null) return null;
+  return holding && f.perShare === startingPrice(holding)
+    ? costForShares(holding, shares)
+    : Math.round(shares * f.perShare);
+}
+
 /** The friendly message for each field that is wrong, so the schema's own errors never show. */
-function validate(f: Form, ctx: { today: string; editing: boolean; details: boolean }): Errors {
+function validate(
+  f: Form,
+  ctx: { today: string; editing: boolean; details: boolean; cost: number | null },
+): Errors {
   const errors: Errors = {};
   const shares = parseDecimal(f.shares);
   if (!ctx.editing && !SYMBOL.test(f.symbol.trim())) {
@@ -57,10 +81,10 @@ function validate(f: Form, ctx: { today: string; editing: boolean; details: bool
   if (shares === null || shares <= 0) {
     errors.shares = unreadable(f.shares, 'Enter how many shares, like 2 or 0.5');
   }
-  if (f.cost === null) errors.cost = 'Enter an amount like 12.50';
+  if (f.perShare === null) errors.perShare = 'Enter an amount like 12.50';
   // The purchase moves money, and a move of nothing is not one.
-  else if (f.cost === 0 && f.paidFrom !== 'owned' && !ctx.editing) {
-    errors.cost = 'Enter what you paid, or choose Already owned';
+  else if (ctx.cost === 0 && f.paidFrom !== 'owned' && !ctx.editing) {
+    errors.perShare = 'Enter what you paid, or choose Already owned';
   }
   if (!/^\d{4}-\d{2}-\d{2}$/.test(f.date)) errors.date = 'Choose the day you bought it';
   else if (f.date > ctx.today) errors.date = FUTURE;
@@ -88,8 +112,9 @@ function HoldingForm({
   onDone(): void;
   onAdded(): void;
 }) {
-  const { addHolding, updateHolding, deleteHolding, markChecked } = useInvestActions();
+  const { addHolding, updateHolding, deleteHolding } = useInvestActions();
   const currency = useCurrency();
+  const money = useMoney();
   const today = useToday();
   const run = useAction();
   const editing = holding !== null;
@@ -97,7 +122,7 @@ function HoldingForm({
   const [form, setForm] = useState<Form>({
     symbol: holding?.symbol ?? '',
     shares: holding ? formatDecimal(holding.shares) : '',
-    cost: holding?.costBasis ?? null,
+    perShare: holding ? startingPrice(holding) : null,
     date: holding?.purchaseDate ?? today,
     paidFrom: 'owned',
     withholding: formatDecimal(holding?.withholdingPct ?? 0),
@@ -112,6 +137,7 @@ function HoldingForm({
 
   // Without the price service nothing can name the symbol, so the person does.
   const details = !marketConfigured() || lookupFailed;
+  const cost = totalCost(form, holding);
 
   function set<K extends keyof Form>(key: K, value: Form[K]) {
     setForm((f) => ({ ...f, [key]: value }));
@@ -129,7 +155,7 @@ function HoldingForm({
 
   async function submit(e: FormEvent) {
     e.preventDefault();
-    const found = validate(form, { today, editing, details });
+    const found = validate(form, { today, editing, details, cost });
     setErrors(found);
     if (Object.keys(found).length > 0) return;
 
@@ -142,7 +168,7 @@ function HoldingForm({
       const patch: HoldingPatch = {
         ...named,
         shares,
-        costBasis: form.cost!,
+        costBasis: cost!,
         purchaseDate: form.date,
         withholdingPct: parseDecimal(form.withholding)!,
         manualPrice: form.price.trim() === '' ? null : parseDecimal(form.price),
@@ -154,7 +180,7 @@ function HoldingForm({
       ...named,
       symbol: form.symbol.trim(),
       shares,
-      costBasis: form.cost!,
+      costBasis: cost!,
       purchaseDate: form.date,
       paidFrom: form.paidFrom,
       withholdingPct: 0,
@@ -174,6 +200,7 @@ function HoldingForm({
 
   const symbolField = {
     label: 'Symbol',
+    variant: 'line' as const,
     value: form.symbol,
     error: errors.symbol,
     autoCapitalize: 'characters',
@@ -199,6 +226,7 @@ function HoldingForm({
       {details && (
         <>
           <TextField
+            variant="line"
             label="Name"
             value={form.name}
             error={errors.name}
@@ -206,12 +234,14 @@ function HoldingForm({
             onChange={(e) => set('name', e.target.value)}
           />
           <Select
+            variant="line"
             label="Type"
             value={form.type}
             options={TYPE_OPTIONS}
             onChange={(v) => set('type', v as Holding['type'])}
           />
           <TextField
+            variant="line"
             label="Currency"
             value={form.currency}
             error={errors.currency}
@@ -223,31 +253,39 @@ function HoldingForm({
           />
         </>
       )}
-      <TextField
+      <ShareStepper
         label="Shares"
         value={form.shares}
         error={errors.shares}
-        inputMode="decimal"
-        autoComplete="off"
-        onChange={(e) => set('shares', e.target.value)}
+        onChange={(text) => set('shares', text)}
       />
       <MoneyField
-        label="What you paid in total"
+        variant="line"
+        label="Price per share (your average)"
         currency={currency}
-        value={form.cost}
-        error={errors.cost}
-        onChange={(v) => set('cost', v)}
+        value={form.perShare}
+        error={errors.perShare}
+        onChange={(v) => set('perShare', v)}
       />
-      <TextField
+      <p className="flex justify-between gap-3 text-[13.5px] font-extrabold tabular-nums">
+        <span className="text-muted font-bold">Total paid</span>
+        <span>
+          {cost === null
+            ? '—'
+            : `${formatShares(parseDecimal(form.shares)!)} × ${money(form.perShare!)} = ${money(cost)}`}
+        </span>
+      </p>
+      <DateField
+        variant="line"
         label="Purchase date"
-        type="date"
-        max={today}
+        today={today}
         value={form.date}
         error={errors.date}
-        onChange={(e) => set('date', e.target.value)}
+        onChange={(date) => set('date', date)}
       />
       {!editing && (
         <RadioGroup<PaidFrom>
+          variant="underline"
           legend="Paid from"
           value={form.paidFrom}
           onChange={(v) => set('paidFrom', v)}
@@ -260,6 +298,7 @@ function HoldingForm({
       )}
       {holding && (
         <TextField
+          variant="line"
           label="Manual price"
           value={form.price}
           error={errors.price}
@@ -271,6 +310,7 @@ function HoldingForm({
       )}
       {editing && (
         <TextField
+          variant="line"
           label="Tax withheld on dividends (%)"
           value={form.withholding}
           error={errors.withholding}
@@ -278,16 +318,6 @@ function HoldingForm({
           autoComplete="off"
           onChange={(e) => set('withholding', e.target.value)}
         />
-      )}
-      {holding && (
-        <Button
-          variant="secondary"
-          className="self-start"
-          disabled={busy}
-          onClick={() => void perform(() => markChecked(holding.id), 'Marked as checked.')}
-        >
-          Mark as checked
-        </Button>
       )}
       <div className="flex flex-wrap items-center justify-between gap-2">
         {holding ? (

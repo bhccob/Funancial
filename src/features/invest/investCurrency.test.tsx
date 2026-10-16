@@ -404,22 +404,24 @@ describe('Invest shown in another currency: Dividends', () => {
 });
 
 describe('Invest shown in another currency: the holding dialog', () => {
-  it('keeps what you paid in the profile currency, as it is stored', async () => {
+  it('keeps what you paid per share in the profile currency, as it is stored', async () => {
     renderInvest(dataOf([ko()], inDollars), '/invest/holding/ko');
     expect(fact('You paid in total')).toHaveTextContent(usd(550_00));
     await userEvent.click(screen.getByRole('button', { name: 'Edit' }));
     const dialog = screen.getByRole('dialog', { name: 'Edit KO' });
-    expect(within(dialog).getByLabelText('What you paid in total')).toHaveValue(
-      formatMoneyPlain(500_00, 'EUR'),
+    // EUR 500.00 for 10 shares, in euros and not in the dollars Invest is shown in.
+    expect(within(dialog).getByLabelText('Price per share (your average)')).toHaveValue(
+      formatMoneyPlain(50_00, 'EUR'),
     );
+    expect(dialog).toHaveTextContent(`Total paid10 × ${eur(50_00)} = ${eur(500_00)}`);
     expect(dialog).toHaveTextContent(currencySymbol('EUR'));
   });
 
-  it('keeps the cost of a new holding in the profile currency too', async () => {
+  it('keeps the price of a new holding in the profile currency too', async () => {
     renderInvest(dataOf([], inDollars));
     await userEvent.click(screen.getByRole('button', { name: 'Add your first holding' }));
     const dialog = screen.getByRole('dialog');
-    expect(within(dialog).getByLabelText('What you paid in total')).toBeInTheDocument();
+    expect(within(dialog).getByLabelText('Price per share (your average)')).toBeInTheDocument();
     expect(dialog).toHaveTextContent(currencySymbol('EUR'));
     expect(dialog).not.toHaveTextContent(currencySymbol('USD'));
   });
