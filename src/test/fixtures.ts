@@ -2,6 +2,7 @@ import { addDays, toLocalDate, type LocalDate } from '@/domain/dates';
 import {
   defaultSettings,
   type BudgetLimit,
+  type BuyAsk,
   type Challenge,
   type CheckIn,
   type Debt,
@@ -269,6 +270,22 @@ export function makeSale(overrides: Partial<Sale> = {}): Sale {
     soldOn: today(),
     to: 'cash',
     restore: null,
+    ...overrides,
+  };
+}
+
+export function makeBuyAsk(overrides: Partial<BuyAsk> = {}): BuyAsk {
+  return {
+    item: 'Headphones',
+    price: 100_00,
+    quantity: 1,
+    category: 'entertainment',
+    urgency: 'want',
+    howSoon: 'month',
+    payWith: 'debit',
+    cardId: null,
+    link: null,
+    why: null,
     ...overrides,
   };
 }

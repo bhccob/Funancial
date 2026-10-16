@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   localIso,
+  makeBuyAsk,
   makeChallenge,
   makeCheckIn,
   makeDebt,
@@ -21,12 +22,14 @@ import {
 import { toLocalDate } from './dates';
 import {
   BudgetLimitSchema,
+  BuyAskSchema,
   ChallengeSchema,
   CheckInSchema,
   DebtSchema,
   defaultSettings,
   DividendSchema,
   ExpenseSchema,
+  FactsSchema,
   GoalSchema,
   HoldingSchema,
   IncomeSchema,
@@ -38,6 +41,7 @@ import {
   StreakFreezeSchema,
   SubscriptionSchema,
   TransactionSchema,
+  VerdictSchema,
 } from './entities';
 
 const ok = (schema: { safeParse(v: unknown): { success: boolean } }, v: unknown) =>
@@ -434,5 +438,67 @@ describe('Profile and Settings', () => {
     const b = defaultSettings('2026-10-14T10:00:00.000Z');
     expect(a.reminders).not.toBe(b.reminders);
     expect(a.cosmetics).not.toBe(b.cosmetics);
+  });
+});
+
+describe('BuyAsk', () => {
+  it('takes a well-formed ask, with or without a note and a link', () => {
+    expect(ok(BuyAskSchema, makeBuyAsk())).toBe(true);
+    expect(
+      ok(BuyAskSchema, makeBuyAsk({ why: 'for the commute', link: 'https://shop.test/x' })),
+    ).toBe(true);
+  });
+  it('wants a name of 1 to 80 characters', () => {
+    expect(ok(BuyAskSchema, makeBuyAsk({ item: '' }))).toBe(false);
+    expect(ok(BuyAskSchema, makeBuyAsk({ item: 'x'.repeat(80) }))).toBe(true);
+    expect(ok(BuyAskSchema, makeBuyAsk({ item: 'x'.repeat(81) }))).toBe(false);
+  });
+  it('wants a positive whole price, of at most 10,000,000.00', () => {
+    expect(ok(BuyAskSchema, makeBuyAsk({ price: 0 }))).toBe(false);
+    expect(ok(BuyAskSchema, makeBuyAsk({ price: -5_00 }))).toBe(false);
+    expect(ok(BuyAskSchema, makeBuyAsk({ price: 12.5 }))).toBe(false);
+    expect(ok(BuyAskSchema, makeBuyAsk({ price: 1 }))).toBe(true);
+    expect(ok(BuyAskSchema, makeBuyAsk({ price: 10_000_000_00 }))).toBe(true);
+    expect(ok(BuyAskSchema, makeBuyAsk({ price: 10_000_000_01 }))).toBe(false);
+  });
+  it('wants a quantity from 1 to 99', () => {
+    expect(ok(BuyAskSchema, makeBuyAsk({ quantity: 0 }))).toBe(false);
+    expect(ok(BuyAskSchema, makeBuyAsk({ quantity: 1.5 }))).toBe(false);
+    expect(ok(BuyAskSchema, makeBuyAsk({ quantity: 99 }))).toBe(true);
+    expect(ok(BuyAskSchema, makeBuyAsk({ quantity: 100 }))).toBe(false);
+  });
+  it('keeps the note to 200 characters', () => {
+    expect(ok(BuyAskSchema, makeBuyAsk({ why: 'x'.repeat(200) }))).toBe(true);
+    expect(ok(BuyAskSchema, makeBuyAsk({ why: 'x'.repeat(201) }))).toBe(false);
+  });
+  it('only knows the offered categories, urgencies, timings and ways to pay', () => {
+    expect(ok(BuyAskSchema, makeBuyAsk({ category: 'travel' as never }))).toBe(false);
+    expect(ok(BuyAskSchema, makeBuyAsk({ urgency: 'must' as never }))).toBe(false);
+    expect(ok(BuyAskSchema, makeBuyAsk({ howSoon: 'now' as never }))).toBe(false);
+    expect(ok(BuyAskSchema, makeBuyAsk({ payWith: 'crypto' as never }))).toBe(false);
+  });
+});
+
+describe('Verdict and Facts', () => {
+  it('knows the four verdicts', () => {
+    for (const v of ['buy', 'wait', 'cheaper', 'skip']) expect(ok(VerdictSchema, v)).toBe(true);
+    expect(ok(VerdictSchema, 'maybe')).toBe(false);
+  });
+  it('takes facts with the optional lines left out', () => {
+    const facts = {
+      total: 40_00,
+      categoryAfter: null,
+      overallAfter: { limit: 500_00, spentAfter: 170_00, pct: 34 },
+      overBy: 0,
+      availableAfter: -5_00,
+      emergencyBefore: null,
+      emergencyAfter: null,
+      goalDelay: { name: 'Bike', days: 12 },
+      requiresDebt: false,
+      resetsOn: null,
+    };
+    expect(ok(FactsSchema, facts)).toBe(true);
+    expect(ok(FactsSchema, { ...facts, overBy: -1 })).toBe(false);
+    expect(ok(FactsSchema, { ...facts, resetsOn: '2026-02-30' })).toBe(false);
   });
 });

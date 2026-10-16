@@ -433,3 +433,50 @@ export const SaleSchema = z.object({
   restore: HoldingSchema.nullable(),
 });
 export type Sale = z.infer<typeof SaleSchema>;
+
+export const VerdictSchema = z.enum(['buy', 'wait', 'cheaper', 'skip']);
+export type Verdict = z.infer<typeof VerdictSchema>;
+
+/** The dearest single item an ask takes: 10,000,000.00 in a currency with two decimals. */
+export const MAX_ASK_PRICE = 1_000_000_000;
+
+/** "Should I buy it?": what the person asks about. `price` is for one item, in minor units. */
+export const BuyAskSchema = z.object({
+  item: z.string().min(1).max(80),
+  price: PositiveMoney.max(MAX_ASK_PRICE),
+  quantity: z.number().int().min(1).max(99),
+  category: CategorySchema,
+  urgency: z.enum(['need', 'want', 'treat']),
+  howSoon: z.enum(['today', 'month', 'norush']),
+  payWith: PaymentMethodSchema,
+  cardId: z.string().min(1).nullable(),
+  link: z.string().nullable(),
+  /** Optional reason, sent to the advisor only. */
+  why: z.string().max(200).nullable(),
+});
+export type BuyAsk = z.infer<typeof BuyAskSchema>;
+
+const LimitAfterSchema = z.object({
+  limit: PositiveMoney,
+  spentAfter: NonNegativeMoney,
+  pct: z.number().int().nonnegative(),
+});
+
+/** What the rules engine finds out about an ask, from the totals alone. */
+export const FactsSchema = z.object({
+  /** Price times quantity. */
+  total: PositiveMoney,
+  categoryAfter: LimitAfterSchema.nullable(),
+  overallAfter: LimitAfterSchema.nullable(),
+  /** The most the purchase takes any limit over, 0 when none. */
+  overBy: NonNegativeMoney,
+  availableAfter: Money,
+  /** Months the emergency fund covers; null without spending history. */
+  emergencyBefore: z.number().nonnegative().nullable(),
+  emergencyAfter: z.number().nonnegative().nullable(),
+  goalDelay: z.object({ name: z.string(), days: z.number().int().nonnegative() }).nullable(),
+  requiresDebt: z.boolean(),
+  /** First day of the next period of the limit the purchase is furthest over; null when none is. */
+  resetsOn: LocalDateSchema.nullable(),
+});
+export type Facts = z.infer<typeof FactsSchema>;
