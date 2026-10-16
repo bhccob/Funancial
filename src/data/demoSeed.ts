@@ -405,20 +405,23 @@ export function buildDemoSnapshot(today: LocalDate, seed = 42): DataSnapshot {
     // The announced payout is already past (ex 29 days ago, paid 13 days ago), as Yahoo gives it.
     dividendInfo: quarterly(-29, [0.5, 0.5, 0.51, 0.53], -29, -13),
   });
+  // VWRL's last payout (ex 58 days ago, paid 53 days ago) went to Passive, so nothing is due.
+  const vwrl = holding({
+    symbol: 'VWRL',
+    name: 'Vanguard All-World ETF',
+    type: 'etf',
+    exchange: 'AMS',
+    sector: null,
+    currency: 'EUR',
+    shares: 40,
+    costBasis: 4_600_00,
+    purchaseDate: addDays(today, -200),
+    quote: quote(118.4, 117.9, 1.08),
+    dividendInfo: quarterly(-58, [0.38, 0.52, 0.41, 0.47], 33, 38),
+  });
+  const vwrlLast = toMinor(40 * 0.47 * (1 - TAX / 100), 1.08, 'USD');
   t.holding.push(
-    holding({
-      symbol: 'VWRL',
-      name: 'Vanguard All-World ETF',
-      type: 'etf',
-      exchange: 'AMS',
-      sector: null,
-      currency: 'EUR',
-      shares: 40,
-      costBasis: 4_600_00,
-      purchaseDate: addDays(today, -200),
-      quote: quote(118.4, 117.9, 1.08),
-      dividendInfo: quarterly(-58, [0.38, 0.52, 0.41, 0.47], 33, 38),
-    }),
+    vwrl,
     aapl,
     ko,
     holding({
@@ -435,13 +438,13 @@ export function buildDemoSnapshot(today: LocalDate, seed = 42): DataSnapshot {
       dividendInfo: quarterly(-70, [1.52, 1.52, 1.52, 1.6], 21, 30),
     }),
   );
-  const paid = (payDays: number, amount: number, bucket: 'reinvest' | 'passive') => {
+  const paid = (h: Holding, payDays: number, amount: number, bucket: 'reinvest' | 'passive') => {
     const payDate = addDays(today, -payDays);
     t.dividend.push({
-      id: `${ko.id}:${payDate}`,
+      id: `${h.id}:${payDate}`,
       ...stampFor(payDate),
-      holdingId: ko.id,
-      symbol: ko.symbol,
+      holdingId: h.id,
+      symbol: h.symbol,
       expectedPayDate: payDate,
       paidOn: payDate,
       status: 'confirmed',
@@ -450,8 +453,9 @@ export function buildDemoSnapshot(today: LocalDate, seed = 42): DataSnapshot {
       sharesAdded: bucket === 'reinvest' ? koAdded : null,
     });
   };
-  paid(104, koFirst, 'reinvest');
-  paid(13, koSecond, 'passive');
+  paid(ko, 104, koFirst, 'reinvest');
+  paid(ko, 13, koSecond, 'passive');
+  paid(vwrl, 53, vwrlLast, 'passive');
   t.transaction.push({
     id: id('transaction'),
     ...stampFor(aapl.purchaseDate),

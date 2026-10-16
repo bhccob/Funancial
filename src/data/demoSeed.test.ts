@@ -141,7 +141,7 @@ describe('demo investments', () => {
 
   it('pays no dividend that is due, and has three coming in the next 60 days', () => {
     expect(duePayouts(demo, 'USD', TODAY)).toEqual([]);
-    const coming = expectedPayouts(demo, 'USD', addDays(TODAY, 1), addDays(TODAY, 60));
+    const coming = expectedPayouts(demo, 'USD', addDays(TODAY, 1), addDays(TODAY, 60), TODAY);
     expect(coming.map((p) => [p.holding.symbol, p.payDate])).toEqual([
       ['AAPL', '2026-10-29'],
       ['ASML', '2026-11-13'],
@@ -149,10 +149,26 @@ describe('demo investments', () => {
     ]);
   });
 
+  it("confirmed VWRL's last payout into Passive, so it is not due", () => {
+    const vwrl = holdingOf('VWRL');
+    expect(t.dividend.filter((d) => d.holdingId === vwrl.id)).toMatchObject([
+      {
+        id: `${vwrl.id}:2026-08-22`,
+        symbol: 'VWRL',
+        expectedPayDate: '2026-08-22', // ex 2026-08-17, and Yahoo's 5-day gap to its pay date
+        paidOn: '2026-08-22',
+        status: 'confirmed',
+        amount: 17_26, // 40 shares × €0.47, after 15% tax, at 1.08
+        bucket: 'passive',
+        sharesAdded: null,
+      },
+    ]);
+  });
+
   it('confirmed two KO dividends: one reinvested, then one into Passive', () => {
     const ko = holdingOf('KO');
-    const [reinvested, passive] = t.dividend;
-    expect(t.dividend).toHaveLength(2);
+    const [reinvested, passive] = t.dividend.filter((d) => d.holdingId === ko.id);
+    expect(t.dividend).toHaveLength(3);
     expect(reinvested).toMatchObject({
       id: `${ko.id}:2026-07-02`,
       holdingId: ko.id,

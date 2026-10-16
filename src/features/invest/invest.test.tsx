@@ -1089,6 +1089,41 @@ describe('Dividends tab', () => {
     ]);
   });
 
+  it('marks the dates it guessed with ~', () => {
+    const data = noHoldings();
+    data.tables.holding = [
+      held({
+        id: 'o',
+        symbol: 'O',
+        name: 'Realty Income',
+        shares: 100,
+        purchaseDate: '2025-01-01',
+        quote: quote(60, 60),
+        // Monthly ex-dates and nothing announced: every pay date is 14 days after one, a guess.
+        dividendInfo: info({
+          history: ['2026-07-25', '2026-08-25', '2026-09-25'].map((date) => ({
+            date,
+            amount: 0.25,
+          })),
+        }),
+      }),
+    ];
+    renderDividends(data);
+    const titles = (name: string) =>
+      within(region(name))
+        .getAllByRole('listitem')
+        .map((r) => r.textContent);
+    expect(titles('Due')).toEqual([
+      expect.stringContaining(`O · paid ~${formatDay('2026-09-08')}`),
+      expect.stringContaining(`O · paid ~${formatDay('2026-10-09')}`),
+    ]);
+    // The next ones step forward from the last ex-date: both of their dates are guesses.
+    expect(titles('Coming up')).toEqual([
+      `O · pays ~${formatDay('2026-11-08')}ex-date ~${formatDay('2026-10-25')} · after 15% tax${usd(21_25)}`,
+      `O · pays ~${formatDay('2026-12-09')}ex-date ~${formatDay('2026-11-25')} · after 15% tax${usd(21_25)}`,
+    ]);
+  });
+
   it('ranks the top payers by what they are expected to pay', () => {
     renderDividends();
     const rows = within(region('Top payers')).getAllByRole('listitem');

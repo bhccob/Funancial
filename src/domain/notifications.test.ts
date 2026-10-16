@@ -493,13 +493,20 @@ describe('upcomingReminders', () => {
       'dividend-ex:ko:2026-10-23',
       'dividend-pay:ko:2026-10-23',
     ]);
-    // November's payout has its ex-date reminder on the 15th, beyond the default 30 days.
+    // November's payout is a step forward with guessed dates, so it gets no reminder.
     const longer = upcomingReminders(data, NOW, { horizonDays: 60 });
     expect(longer.map((r) => [r.kind, r.at])).toEqual([
       ['dividend-ex', '2026-10-15T09:00'],
       ['dividend-pay', '2026-10-23T09:00'],
-      ['dividend-ex', '2026-11-15T09:00'],
-      ['dividend-pay', '2026-11-23T09:00'],
+    ]);
+  });
+
+  it('reminds only of the dates Yahoo gave, not of guessed ones', () => {
+    // An ex-date alone: the pay date is a guess, so there is no pay-day reminder.
+    const exOnly = [payer({ nextExDate: '2026-10-20' })];
+    const data = build({ reminders: { dividends: true }, holdings: exOnly });
+    expect(upcomingReminders(data, NOW).map((r) => [r.kind, r.at])).toEqual([
+      ['dividend-ex', '2026-10-19T09:00'],
     ]);
   });
 

@@ -24,6 +24,8 @@ const SETTLE_WITHIN: Record<Frequency, number> = {
   annual: 180,
 };
 const SETTLE_WITHIN_UNKNOWN = 45;
+/** Days from ex-date to pay date when Yahoo announces no pay date to measure the gap by. */
+const DEFAULT_LAG = 14;
 const DAY_MS = 86_400_000;
 const pad = (n: number) => String(n).padStart(2, '0');
 const daysApart = (a: LocalDate, b: LocalDate) =>
@@ -58,85 +60,155 @@ export type ExpectedPayout = {
   holding: Holding;
   exDate: LocalDate | null;
   payDate: LocalDate;
+  /** Whether `exDate` is a real ex-date from the price service, not a guess. */
+  exDateKnown: boolean;
+  /** Whether `payDate` is a real pay date from the price service, not a guess. */
+  payDateKnown: boolean;
   /** In the holding's currency. */
   perShare: number;
   /** After withholding, in minor units of the profile currency; null when the rate is unknown. */
   net: number | null;
 };
 
+type Payout = Omit<ExpectedPayout, 'holding' | 'net'>;
+
 /**
- * The payouts whose pay date falls from `from` through `to` (inclusive) and that the person has
- * neither confirmed nor skipped. Each holding has one anchor payout: Yahoo's `next` when it has an
- * ex- or pay date (it is the latest announced payout, so it is often already past), else the last
- * history entry. Later payouts step forward from the anchor by the inferred frequency. A payout
- * whose ex-date (its pay date, without one) is before the purchase is not earned, so it is left out.
- * A payout is settled by a record for the same holding whose `expectedPayDate` is its pay date or
- * within half a step of it (see `SETTLE_WITHIN`).
+ * Every payout of a holding, earned or not, settled or not: one per history entry (a real ex-date,
+ * at its own amount), Yahoo's `next` (which replaces a history entry on the same ex-date), and steps
+ * forward from the latest ex-date by the frequency, up to `to`. A dividend with no payout for over
+ * two steps before `today` has stopped, so it gets no steps; without a frequency there are none.
+ */
+function schedule(
+  holding: Holding,
+  frequency: Frequency | null,
+  to: LocalDate,
+  today: LocalDate,
+): Payout[] {
+  const info = holding.dividendInfo;
+  if (!info) return [];
+  const { history, nextExDate } = info;
+  const last = history.reduce<(typeof history)[number] | undefined>(
+    (latest, e) => (!latest || e.date > latest.date ? e : latest),
+    undefined,
+  );
+  // A pay date before its ex-date is the previous cycle's, left behind by Yahoo: no pay date.
+  const nextPay =
+    info.nextPayDate !== null && nextExDate !== null && info.nextPayDate < nextExDate
+      ? null
+      : info.nextPayDate;
+  // shortcut: no per-symbol pay lag without Yahoo's calendar, so every payout takes the announced
+  // payout's ex-to-pay gap, or 14 days without one; upgrade when pay dates are stored per payout.
+  const lag =
+    nextExDate !== null && nextPay !== null ? daysApart(nextExDate, nextPay) : DEFAULT_LAG;
+
+  const out: Payout[] = history
+    .filter((e) => e.date !== nextExDate)
+    .map((e) => ({
+      exDate: e.date,
+      payDate: addDays(e.date, lag),
+      exDateKnown: true,
+      payDateKnown: false,
+      perShare: e.amount,
+    }));
+  const perShare = info.nextAmount ?? last?.amount;
+  if (perShare === undefined) return out;
+  if (nextExDate !== null || nextPay !== null) {
+    out.push({
+      exDate: nextExDate,
+      payDate: nextPay ?? addDays(nextExDate!, lag),
+      exDateKnown: nextExDate !== null,
+      payDateKnown: nextPay !== null,
+      perShare,
+    });
+  }
+
+  // A pay date alone stands for an ex-date `lag` days before it.
+  const nextEx = nextExDate ?? (nextPay === null ? null : addDays(nextPay, -lag));
+  const latest = nextEx !== null && (!last || nextEx > last.date) ? nextEx : last?.date;
+  if (!frequency || !latest) return out;
+  const months = STEP_MONTHS[frequency];
+  if (latest < addMonths(today, -2 * months)) return out;
+  for (let k = 1; ; k++) {
+    const exDate = addMonths(latest, k * months);
+    const payDate = addDays(exDate, lag);
+    if (payDate > to) break;
+    out.push({ exDate, payDate, exDateKnown: false, payDateKnown: false, perShare });
+  }
+  return out;
+}
+
+/**
+ * The payouts of the holdings that pay from `from` through `to` (inclusive), earned by holding the
+ * shares on the ex-date (the pay date, without one), that a record settles (`settled`) or that
+ * still wait. A payout is settled by a confirmed or skipped record of the same holding whose
+ * `expectedPayDate` is within half a step of its pay date (see `SETTLE_WITHIN`); a record whose
+ * holding was deleted settles by symbol, so deleting and adding a holding again cannot reopen a
+ * payout, while two lots of one symbol keep their records apart.
+ */
+function payouts(
+  data: DataSnapshot,
+  profileCurrency: string,
+  from: LocalDate,
+  to: LocalDate,
+  today: LocalDate,
+  settled: boolean,
+): ExpectedPayout[] {
+  const held = new Set(data.tables.holding.map((h) => h.id));
+  const out: ExpectedPayout[] = [];
+
+  for (const holding of data.tables.holding) {
+    const frequency = inferFrequency(holding.dividendInfo?.history ?? []);
+    const settleWithin = frequency ? SETTLE_WITHIN[frequency] : SETTLE_WITHIN_UNKNOWN;
+    const records = data.tables.dividend.filter((d) =>
+      held.has(d.holdingId) ? d.holdingId === holding.id : d.symbol === holding.symbol,
+    );
+    const rate = holdingRate(holding, profileCurrency);
+
+    for (const p of schedule(holding, frequency, to, today)) {
+      if (p.payDate < from || p.payDate > to || (p.exDate ?? p.payDate) < holding.purchaseDate) {
+        continue;
+      }
+      const isSettled = records.some(
+        (d) => Math.abs(daysApart(d.expectedPayDate, p.payDate)) < settleWithin,
+      );
+      if (isSettled !== settled) continue;
+      const net =
+        rate === null
+          ? null
+          : toMinor(
+              holding.shares * p.perShare * (1 - holding.withholdingPct / 100),
+              rate,
+              profileCurrency,
+            );
+      out.push({ holding, ...p, net });
+    }
+  }
+  return out.sort((a, b) => a.payDate.localeCompare(b.payDate));
+}
+
+/**
+ * The payouts from `from` through `to` that the person has neither confirmed nor skipped yet, as
+ * seen on `today`, which decides whether a dividend has stopped (see `schedule`).
  */
 export function expectedPayouts(
   data: DataSnapshot,
   profileCurrency: string,
   from: LocalDate,
   to: LocalDate,
+  today: LocalDate,
 ): ExpectedPayout[] {
-  const recorded = new Map<string, LocalDate[]>();
-  for (const d of data.tables.dividend) {
-    recorded.set(d.holdingId, [...(recorded.get(d.holdingId) ?? []), d.expectedPayDate]);
-  }
-  const out: ExpectedPayout[] = [];
+  return payouts(data, profileCurrency, from, to, today, false);
+}
 
-  for (const holding of data.tables.holding) {
-    const info = holding.dividendInfo;
-    if (!info) continue;
-    const last = info.history.reduce<(typeof info.history)[number] | undefined>(
-      (latest, e) => (!latest || e.date > latest.date ? e : latest),
-      undefined,
-    );
-    const perShare = info.nextAmount ?? last?.amount;
-    // A pay date before its ex-date is the previous cycle's, left behind by Yahoo: no pay date.
-    const nextPay =
-      info.nextPayDate !== null && info.nextExDate !== null && info.nextPayDate < info.nextExDate
-        ? null
-        : info.nextPayDate;
-    const base = info.nextExDate ?? nextPay ?? last?.date;
-    if (perShare === undefined || base === undefined) continue;
-    // The base is an ex-date unless Yahoo gave only a pay date.
-    const baseIsEx = info.nextExDate !== null || nextPay === null;
-    // shortcut: later payouts reuse the announced payout's ex-to-pay gap, and it is 0 when Yahoo
-    // has no pay date; upgrade when pay dates are stored per payout.
-    const lag =
-      info.nextExDate !== null && nextPay !== null ? daysApart(info.nextExDate, nextPay) : 0;
-    const frequency = inferFrequency(info.history);
-    const months = frequency ? STEP_MONTHS[frequency] : 0;
-    const settleWithin = frequency ? SETTLE_WITHIN[frequency] : SETTLE_WITHIN_UNKNOWN;
-    const records = recorded.get(holding.id) ?? [];
-    const rate = holdingRate(holding, profileCurrency);
-    const net =
-      rate === null
-        ? null
-        : toMinor(
-            holding.shares * perShare * (1 - holding.withholdingPct / 100),
-            rate,
-            profileCurrency,
-          );
-
-    // With no frequency there is only the anchor; otherwise step until past `to`.
-    for (let k = 0; k === 0 || months > 0; k++) {
-      const stepped = addMonths(base, k * months);
-      const payDate = addDays(stepped, lag);
-      if (payDate > to) break;
-      const exDate = baseIsEx ? stepped : null;
-      if (
-        payDate < from ||
-        (exDate ?? payDate) < holding.purchaseDate ||
-        records.some((d) => Math.abs(daysApart(d, payDate)) < settleWithin)
-      ) {
-        continue;
-      }
-      out.push({ holding, exDate, payDate, perShare, net });
-    }
-  }
-  return out.sort((a, b) => a.payDate.localeCompare(b.payDate));
+/** The payouts from `from` through `to` that a confirmed or skipped record settles. */
+export function settledPayouts(
+  data: DataSnapshot,
+  profileCurrency: string,
+  from: LocalDate,
+  to: LocalDate,
+  today: LocalDate,
+): ExpectedPayout[] {
+  return payouts(data, profileCurrency, from, to, today, true);
 }
 
 /** Payouts that paid in the last 60 days and still wait to be confirmed or skipped. */
@@ -145,7 +217,7 @@ export function duePayouts(
   profileCurrency: string,
   today: LocalDate,
 ): ExpectedPayout[] {
-  return expectedPayouts(data, profileCurrency, addDays(today, -60), today);
+  return expectedPayouts(data, profileCurrency, addDays(today, -60), today, today);
 }
 
 /** Confirmed dividends by the day they were paid, reinvested ones included. */
@@ -166,7 +238,7 @@ export function dividendTotals(
 
 /** The expected payouts of the next 365 days: today through the day before the same day next year. */
 function nextYear(data: DataSnapshot, profileCurrency: string, today: LocalDate) {
-  return expectedPayouts(data, profileCurrency, today, addDays(today, 364));
+  return expectedPayouts(data, profileCurrency, today, addDays(today, 364), today);
 }
 
 /** What the holdings are expected to pay over the next 365 days, net, in minor units. */
@@ -198,10 +270,12 @@ export function monthlyIncome(
       ? data.tables.dividend
           .filter((d) => d.status === 'confirmed')
           .map((d) => ({ month: monthKey(d.paidOn), amount: d.amount }))
-      : expectedPayouts(data, profileCurrency, today, endOfMonth(`${shift(11)}-01`)).map((p) => ({
-          month: monthKey(p.payDate),
-          amount: p.net ?? 0,
-        }));
+      : expectedPayouts(data, profileCurrency, today, endOfMonth(`${shift(11)}-01`), today).map(
+          (p) => ({
+            month: monthKey(p.payDate),
+            amount: p.net ?? 0,
+          }),
+        );
   return months.map((month) => ({
     month,
     amount: items.reduce((sum, i) => (i.month === month ? sum + i.amount : sum), 0),

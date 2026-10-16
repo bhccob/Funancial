@@ -206,7 +206,21 @@ describe('gameUpdates', () => {
 
   it('pays a confirmed dividend once: logging XP, two quests and its badges', () => {
     const data = snap({
-      holding: [makeHolding({ id: 'h1', type: 'etf' })],
+      holding: [
+        makeHolding({
+          id: 'h1',
+          type: 'etf',
+          purchaseDate: '2026-01-01',
+          // The payout of 12 October that the dividend below settles.
+          dividendInfo: {
+            history: [],
+            nextExDate: '2026-10-05',
+            nextPayDate: '2026-10-12',
+            nextAmount: 1,
+            fetchedAt: localIso('2026-10-05', 9),
+          },
+        }),
+      ],
       dividend: [
         makeDividend({
           id: 'd1',

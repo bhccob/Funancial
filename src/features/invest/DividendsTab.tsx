@@ -31,6 +31,8 @@ const PERIODS: Array<{ id: Dir; label: string }> = [
 ];
 
 const UNKNOWN = '—';
+/** A date, with "~" in front when it is a guess rather than one the price service gave. */
+const day = (date: string, known: boolean) => `${known ? '' : '~'}${formatDay(date)}`;
 
 function Figure({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -87,7 +89,7 @@ function DueRow({
   return (
     <Row
       titleId={titleId}
-      title={`${payout.holding.symbol} · paid ${formatDay(payout.payDate)}`}
+      title={`${payout.holding.symbol} · paid ${day(payout.payDate, payout.payDateKnown)}`}
       amount={payout.net === null ? UNKNOWN : money(payout.net)}
     >
       <div className="mt-1 flex flex-wrap gap-2">
@@ -123,8 +125,8 @@ export function DividendsTab() {
 
   const view = useMemo(() => {
     const due = duePayouts(data, currency, today);
-    const coming = expectedPayouts(data, currency, addDays(today, 1), addDays(today, 60));
-    const ahead = expectedPayouts(data, currency, today, addDays(today, 364));
+    const coming = expectedPayouts(data, currency, addDays(today, 1), addDays(today, 60), today);
+    const ahead = expectedPayouts(data, currency, today, addDays(today, 364), today);
     return {
       due,
       coming,
@@ -240,8 +242,8 @@ export function DividendsTab() {
               return (
                 <Row
                   key={`${p.holding.id}:${p.payDate}`}
-                  title={`${p.holding.symbol} · pays ${formatDay(p.payDate)}`}
-                  sub={p.exDate ? `ex-date ${formatDay(p.exDate)} · ${tax}` : tax}
+                  title={`${p.holding.symbol} · pays ${day(p.payDate, p.payDateKnown)}`}
+                  sub={p.exDate ? `ex-date ${day(p.exDate, p.exDateKnown)} · ${tax}` : tax}
                   amount={p.net === null ? UNKNOWN : money(p.net)}
                 />
               );

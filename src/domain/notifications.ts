@@ -212,37 +212,43 @@ function backups({ profile, settings, prefs, today, now, lastDay }: Context): Re
   return out;
 }
 
-/** The day before each expected ex-date, and each pay date, at 09:00. */
+/** The day before each known ex-date, and each known pay date, at 09:00. */
 function dividends({ data, profile, prefs, today, lastDay, money }: Context): Reminder[] {
   if (!prefs.dividends) return [];
-  const payouts = expectedPayouts(data, profile.currency, today, addDays(lastDay, PAY_LAG_DAYS));
-  return payouts.flatMap(({ holding, exDate, payDate, net }): Reminder[] => {
-    const { id, symbol } = holding;
-    const ex: Reminder[] = exDate
-      ? [
-          {
-            key: `dividend-ex:${id}:${payDate}`,
-            kind: 'dividend-ex',
-            at: moment(addDays(exDate, -1), MORNING),
-            title: `${symbol} goes ex-dividend tomorrow`,
-            body: 'Hold your shares through today to get the next payout.',
-            route: DIVIDENDS_ROUTE,
-          },
-        ]
-      : [];
-    const confirm = 'Confirm it when it arrives.';
-    return [
-      ...ex,
-      {
-        key: `dividend-pay:${id}:${payDate}`,
+  const payouts = expectedPayouts(
+    data,
+    profile.currency,
+    today,
+    addDays(lastDay, PAY_LAG_DAYS),
+    today,
+  );
+  // Only dates the price service gave: a guessed date would remind on the wrong day.
+  return payouts.flatMap((p): Reminder[] => {
+    const { id, symbol } = p.holding;
+    const out: Reminder[] = [];
+    if (p.exDate && p.exDateKnown) {
+      out.push({
+        key: `dividend-ex:${id}:${p.payDate}`,
+        kind: 'dividend-ex',
+        at: moment(addDays(p.exDate, -1), MORNING),
+        title: `${symbol} goes ex-dividend tomorrow`,
+        body: 'Hold your shares through today to get the next payout.',
+        route: DIVIDENDS_ROUTE,
+      });
+    }
+    if (p.payDateKnown) {
+      const confirm = 'Confirm it when it arrives.';
+      out.push({
+        key: `dividend-pay:${id}:${p.payDate}`,
         kind: 'dividend-pay',
-        at: moment(payDate, MORNING),
+        at: moment(p.payDate, MORNING),
         title: `${symbol} pays a dividend today`,
         // With no exchange rate there is no amount to name.
-        body: net === null ? confirm : `Expected about ${money(net)}. ${confirm}`,
+        body: p.net === null ? confirm : `Expected about ${money(p.net)}. ${confirm}`,
         route: DIVIDENDS_ROUTE,
-      },
-    ];
+      });
+    }
+    return out;
   });
 }
 

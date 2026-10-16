@@ -1,6 +1,6 @@
 import { addDays, type LocalDate } from '../dates';
-import { expectedPayouts } from '../dividends';
-import { monthKey, weekRange } from '../periods';
+import { expectedPayouts, settledPayouts } from '../dividends';
+import { endOfMonth, monthKey, weekRange } from '../periods';
 import type { DataSnapshot } from '../snapshot';
 import { anyOver, createSpendIndex, isLoggedExpense, loggedEntries, localDay } from './activity';
 import { QUEST_REWARDS } from './rules';
@@ -126,14 +126,15 @@ function monthAudit(data: DataSnapshot, month: string): QuestView {
 }
 
 /**
- * Handled out of due this month: the dividends expected this month that were confirmed or skipped,
+ * Handled out of due this month: this month's payouts that a record settles (confirmed or skipped),
  * out of those and the payouts that came due this month and still wait. It exists once there is one
  * of either.
  */
 function monthDividends(data: DataSnapshot, ctx: GameContext, month: string): QuestView | null {
   const currency = data.tables.profile[0]?.currency ?? 'USD';
-  const waiting = expectedPayouts(data, currency, `${month}-01`, ctx.today).length;
-  const handled = data.tables.dividend.filter((d) => monthKey(d.expectedPayDate) === month).length;
+  const start = `${month}-01`;
+  const waiting = expectedPayouts(data, currency, start, ctx.today, ctx.today).length;
+  const handled = settledPayouts(data, currency, start, endOfMonth(start), ctx.today).length;
   const target = waiting + handled;
   if (target === 0) return null;
   return view('month-dividends', 'monthly', month, {

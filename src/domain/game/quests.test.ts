@@ -415,7 +415,10 @@ describe('currentQuests', () => {
         action: null,
       });
       // Settled before today, and still this month's.
-      const settled = snap({ holding: [makeHolding()], dividend: [recorded('2026-10-03')] });
+      const settled = snap({
+        holding: [payer('2026-09-28', '2026-10-03')],
+        dividend: [recorded('2026-10-03')],
+      });
       expect(ids(settled)).toContain('month-dividends');
     });
 
@@ -455,6 +458,21 @@ describe('currentQuests', () => {
         ),
       });
       expect(quest(all, 'month-dividends')).toMatchObject({ done: true, current: 3, target: 3 });
+    });
+
+    it('counts a payout as handled by the record that settles it, whatever day it names', () => {
+      // Recorded for 28 Sep, settling the payout that paid on 2 Oct: October's, and handled.
+      const early = snap({
+        holding: [payer('2026-09-25', '2026-10-02')],
+        dividend: [recorded('2026-09-28')],
+      });
+      expect(quest(early, 'month-dividends')).toMatchObject({ done: true, current: 1, target: 1 });
+      // Recorded for 3 Oct, settling September's payout of the 29th: not October's.
+      const late = snap({
+        holding: [payer('2026-09-22', '2026-09-29')],
+        dividend: [recorded('2026-10-03')],
+      });
+      expect(ids(late)).not.toContain('month-dividends');
     });
 
     it('stays open while a payout is due, though another was confirmed', () => {
