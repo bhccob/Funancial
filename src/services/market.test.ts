@@ -5,6 +5,7 @@ import {
   fetchNews,
   fetchProfile,
   fetchQuotes,
+  fetchSearch,
   MarketError,
   marketConfigured,
 } from './market';
@@ -44,6 +45,8 @@ describe('market client', () => {
     await fetchNews(['ko', 'msft']);
     answer({});
     await fetchFx('USD', 'EUR');
+    answer({ results: [] });
+    await fetchSearch('vusa etf');
 
     const calls = fetchMock.mock.calls as Array<[string, RequestInit]>;
     expect(calls.map(([url]) => url)).toEqual([
@@ -52,6 +55,7 @@ describe('market client', () => {
       'https://prices.example/api/dividends?symbol=KO',
       'https://prices.example/api/news?symbols=KO%2CMSFT',
       'https://prices.example/api/fx?from=USD&to=EUR',
+      'https://prices.example/api/search?q=vusa+etf',
     ]);
     for (const [, init] of calls) {
       expect(init.headers).toEqual({ 'X-Funancial-Token': 'secret' });
@@ -77,6 +81,16 @@ describe('market client', () => {
     };
     answer(body);
     await expect(fetchProfile('KO')).resolves.toEqual(body);
+  });
+
+  it('returns the search results as the service sent them', async () => {
+    const body = {
+      results: [
+        { symbol: 'VUSA.AS', name: 'Vanguard S&P 500', exchange: 'Amsterdam', type: 'etf' },
+      ],
+    };
+    answer(body);
+    await expect(fetchSearch('vusa')).resolves.toEqual(body);
   });
 
   it('sends 26 symbols as two requests and joins the answers', async () => {

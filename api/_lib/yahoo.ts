@@ -112,6 +112,21 @@ export async function getNews(symbol: string): Promise<RawNewsItem[]> {
   }));
 }
 
+export interface RawSearchQuote {
+  [key: string]: unknown;
+  symbol?: string;
+  quoteType?: string;
+  longname?: string;
+  shortname?: string;
+  exchDisp?: string;
+  exchange?: string;
+}
+
+export async function search(q: string): Promise<RawSearchQuote[]> {
+  const { quotes } = await retried(() => yahoo.search(q, { quotesCount: 10, newsCount: 0 }));
+  return quotes;
+}
+
 export async function getFxRate(from: string, to: string): Promise<RawFxRate> {
   const [pair] = await retried(() => yahoo.quote([`${from}${to}=X`]));
   if (!pair?.regularMarketPrice || !pair.regularMarketTime) throw new Error('no rate for pair');

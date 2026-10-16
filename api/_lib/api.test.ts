@@ -4,6 +4,7 @@ import { GET as fxGET } from '../fx.js';
 import { GET as newsGET } from '../news.js';
 import { GET as profileGET } from '../profile.js';
 import { GET as quoteGET, OPTIONS as quoteOPTIONS } from '../quote.js';
+import { GET as searchGET } from '../search.js';
 import { parseSymbols } from './http.js';
 import * as yahoo from './yahoo.js';
 
@@ -14,6 +15,7 @@ vi.mock('./yahoo.js', async (orig) => ({
   getDividends: vi.fn(),
   getNews: vi.fn(),
   getFxRate: vi.fn(),
+  search: vi.fn(),
 }));
 
 const TOKEN = 'test-token';
@@ -309,6 +311,127 @@ describe('price service', () => {
       to: 'EUR',
       rate: 0.89,
       asOf: '2026-10-16T07:01:29.000Z',
+    });
+  });
+
+  describe('symbol search', () => {
+    const hit = (symbol: string, quoteType: string, extra: Record<string, unknown> = {}) => ({
+      symbol,
+      quoteType,
+      longname: `${symbol} long`,
+      shortname: `${symbol} short`,
+      exchDisp: 'Amsterdam',
+      exchange: 'AMS',
+      ...extra,
+    });
+
+    it('wants the token', async () => {
+      const res = await searchGET(request('/api/search?q=vusa', {}));
+      expect(res.status).toBe(401);
+      expect(res.headers.get('Cache-Control')).toBe('no-store');
+      expect(yahoo.search).not.toHaveBeenCalled();
+    });
+
+    it("takes letters, numbers, spaces and . & ' - up to 40, and nothing else", async () => {
+      const bad = [
+        '',
+        '%20%20',
+        'a'.repeat(41),
+        'vusa;drop',
+        'a/b',
+        'a,b',
+        'x%00',
+        '%3Cb%3E',
+        'a_b',
+      ];
+      for (const q of bad) {
+        const res = await searchGET(request(`/api/search?q=${q}`));
+        expect(res.status, q).toBe(400);
+        expect(res.headers.get('Cache-Control')).toBe('no-store');
+        expect(await res.json()).toEqual({ error: 'bad request' });
+      }
+      expect((await searchGET(request('/api/search'))).status).toBe(400);
+      expect(yahoo.search).not.toHaveBeenCalled();
+
+      vi.mocked(yahoo.search).mockResolvedValue([]);
+      const good = ['a'.repeat(40), 'AT%26T', "L'Or%C3%A9al", 'S%C3%BCdzucker', 'Coca-Cola', 'a.b'];
+      for (const q of good) {
+        expect((await searchGET(request(`/api/search?q=${q}`))).status, q).toBe(200);
+      }
+    });
+
+    it('trims the query before it asks Yahoo', async () => {
+      vi.mocked(yahoo.search).mockResolvedValue([]);
+      await searchGET(request('/api/search?q=%20vusa%20'));
+      expect(yahoo.search).toHaveBeenCalledWith('vusa');
+    });
+
+    it('keeps stocks and ETFs with a usable symbol, in Yahoo order, and drops the rest', async () => {
+      vi.mocked(yahoo.search).mockResolvedValue([
+        hit('VUSA.AS', 'ETF'),
+        hit('VUSD.L', 'MUTUALFUND'),
+        hit('VUSA-USD', 'CRYPTOCURRENCY'),
+        hit('^VUSA', 'INDEX'),
+        hit('VUS.L', 'EQUITY'),
+        hit('BAD SYMBOL', 'EQUITY'),
+        hit('WAYTOOLONGSYMBOL1', 'ETF'),
+        { index: 'other', name: 'Not Yahoo', permalink: 'x', isYahooFinance: false },
+      ]);
+      const res = await searchGET(request('/api/search?q=vusa'));
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({
+        results: [
+          { symbol: 'VUSA.AS', name: 'VUSA.AS long', exchange: 'Amsterdam', type: 'etf' },
+          { symbol: 'VUS.L', name: 'VUS.L long', exchange: 'Amsterdam', type: 'stock' },
+        ],
+      });
+    });
+
+    it('returns at most 8', async () => {
+      vi.mocked(yahoo.search).mockResolvedValue(
+        Array.from({ length: 10 }, (_, i) => hit(`S${i}`, 'EQUITY')),
+      );
+      const res = await searchGET(request('/api/search?q=s'));
+      const { results } = (await res.json()) as { results: Array<{ symbol: string }> };
+      expect(results.map((r) => r.symbol)).toEqual([
+        'S0',
+        'S1',
+        'S2',
+        'S3',
+        'S4',
+        'S5',
+        'S6',
+        'S7',
+      ]);
+    });
+
+    it('names a result by long name, short name, then symbol; the exchange by display name, code, then null', async () => {
+      vi.mocked(yahoo.search).mockResolvedValue([
+        { symbol: 'A', quoteType: 'EQUITY', shortname: 'Short A', exchange: 'NMS' },
+        { symbol: 'B', quoteType: 'ETF' },
+      ]);
+      const res = await searchGET(request('/api/search?q=a'));
+      expect(await res.json()).toEqual({
+        results: [
+          { symbol: 'A', name: 'Short A', exchange: 'NMS', type: 'stock' },
+          { symbol: 'B', name: 'B', exchange: null, type: 'etf' },
+        ],
+      });
+    });
+
+    it('caches a day, and says nothing of Yahoo when it throws', async () => {
+      vi.mocked(yahoo.search).mockResolvedValue([]);
+      const ok = await searchGET(request('/api/search?q=vusa'));
+      expect(ok.headers.get('Cache-Control')).toBe('s-maxage=86400');
+      expect(await ok.json()).toEqual({ results: [] });
+
+      const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+      vi.mocked(yahoo.search).mockRejectedValue(new Error('crumb exploded at /secret/path'));
+      const res = await searchGET(request('/api/search?q=vusa'));
+      expect(res.status).toBe(502);
+      expect(res.headers.get('Cache-Control')).toBe('no-store');
+      expect(await res.text()).toBe('{"error":"upstream"}');
+      log.mockRestore();
     });
   });
 });

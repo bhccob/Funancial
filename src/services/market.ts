@@ -46,6 +46,13 @@ export type NewsItem = {
 };
 export type NewsResponse = { items: NewsItem[] };
 export type FxResponse = { from: string; to: string; rate: number; asOf: string };
+export type SearchResult = {
+  symbol: string;
+  name: string;
+  exchange: string | null;
+  type: 'stock' | 'etf';
+};
+export type SearchResponse = { results: SearchResult[] };
 
 /** Live prices need a token; without one the app never asks. */
 export const marketConfigured = (): boolean => Boolean(import.meta.env.VITE_FUNANCIAL_API_TOKEN);
@@ -93,6 +100,15 @@ export const fetchNews = (symbols: string[]) =>
 
 export const fetchFx = (from: string, to: string) => get<FxResponse>('fx', { from, to });
 
+export const fetchSearch = (q: string) => get<SearchResponse>('search', { q });
+
 /** What the invest actions need from the price service; tests hand them a fake. */
-export const market = { fetchQuotes, fetchProfile, fetchDividends, fetchNews, fetchFx };
+export const market = {
+  fetchQuotes,
+  fetchProfile,
+  fetchDividends,
+  fetchNews,
+  fetchFx,
+  fetchSearch,
+};
 export type Market = typeof market;
