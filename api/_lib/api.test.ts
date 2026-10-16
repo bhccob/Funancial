@@ -884,11 +884,11 @@ describe('price service', () => {
       await upstreamFailure(await extract('https://a.example/'));
     });
 
-    it('reads a page of exactly 1 MB whole, and only the first 1 MB of a bigger one', async () => {
-      const mb = 1024 * 1024;
+    it('reads a page of exactly 2 MiB whole, and only the first 2 MiB of a bigger one', async () => {
+      const cap = 2 * 1024 * 1024;
       const head = '<title>Big</title>';
       const tag = '<meta property="og:price:amount" content="7">';
-      const room = mb - head.length - tag.length;
+      const room = cap - head.length - tag.length;
       const want = { name: 'Big', price: 7, currency: null };
 
       fetchMock.mockImplementation(async () => page(head + ' '.repeat(room) + tag));
@@ -901,7 +901,7 @@ describe('price service', () => {
       expect(await cut.json()).toEqual({ name: 'Big', price: null, currency: null });
 
       // Whatever follows the cap is never read.
-      fetchMock.mockImplementation(async () => page(head + ' '.repeat(mb) + tag));
+      fetchMock.mockImplementation(async () => page(head + ' '.repeat(cap) + tag));
       expect(await (await extract('https://shop.example/p')).json()).toEqual({
         name: 'Big',
         price: null,
@@ -909,15 +909,26 @@ describe('price service', () => {
       });
     });
 
-    it('answers from the OpenGraph tags of a page much larger than 1 MB', async () => {
+    it('reads JSON-LD that sits past 1 MB, as IKEA product pages put it', async () => {
+      const product = {
+        '@type': 'Product',
+        name: 'BILLY bookcase',
+        offers: { price: '79', priceCurrency: 'USD' },
+      };
+      const body = `<title>IKEA</title>${'<p>filler</p>'.repeat(90_000)}${ld(product)}`;
+      expect(body.indexOf('application/ld+json')).toBeGreaterThan(1.1 * 1024 * 1024);
+      expect(await read(body)).toEqual({ name: 'BILLY bookcase', price: 79, currency: 'USD' });
+    });
+
+    it('answers from the OpenGraph tags of a page much larger than 2 MiB', async () => {
       const head = [
         '<title>Page title</title>',
         '<meta property="og:title" content="Standing Desk">',
         '<meta property="product:price:amount" content="249.00">',
         '<meta property="product:price:currency" content="GBP">',
       ].join('');
-      const body = `<!doctype html><html><head>${head}</head><body>${'<p>filler</p>'.repeat(150_000)}</body></html>`;
-      expect(body.length).toBeGreaterThan(1.5 * 1024 * 1024);
+      const body = `<!doctype html><html><head>${head}</head><body>${'<p>filler</p>'.repeat(250_000)}</body></html>`;
+      expect(body.length).toBeGreaterThan(3 * 1024 * 1024);
       fetchMock.mockImplementation(async () => page(body));
       const res = await extract('https://shop.example/p');
       expect(res.status).toBe(200);
@@ -940,8 +951,9 @@ describe('price service', () => {
       const res = await extract('https://shop.example/p');
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({ name: 'Endless', price: null, currency: null });
-      expect(pulls).toBeGreaterThan(3);
-      expect(pulls).toBeLessThan(10);
+      // Eight 256 KiB chunks make 2 MiB; the stream is cancelled there, not read on.
+      expect(pulls).toBeGreaterThan(7);
+      expect(pulls).toBeLessThan(16);
     });
 
     it('gives up after 5 seconds, as one budget for the whole chain', async () => {
@@ -1364,11 +1376,11 @@ describe('price service', () => {
 
     it('stays fast on a page built to make the parser backtrack', async () => {
       const bodies = [
-        '<script type="application/ld+json">'.repeat(25_000),
-        '<script '.repeat(100_000),
-        '<meta '.repeat(100_000),
-        '<title '.repeat(100_000),
-        `<title>${'<'.repeat(900_000)}`,
+        '<script type="application/ld+json">'.repeat(55_000),
+        '<script '.repeat(250_000),
+        '<meta '.repeat(300_000),
+        '<title '.repeat(280_000),
+        `<title>${'<'.repeat(2_000_000)}`,
       ];
       for (const body of bodies) {
         expect(await read(body)).toEqual({ name: null, price: null, currency: null });

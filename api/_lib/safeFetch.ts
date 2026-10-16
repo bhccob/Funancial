@@ -2,7 +2,9 @@ import { lookup } from 'node:dns/promises';
 import { BlockList, isIP } from 'node:net';
 
 const TIMEOUT_MS = 5000;
-const MAX_BYTES = 1024 * 1024;
+// 2 MiB, not 1: IKEA product pages put their JSON-LD, and so the price, at about 1.1 MB. The 5 s
+// timeout still bounds the time, and a bigger page is cut here, so the memory is bounded too.
+const MAX_BYTES = 2 * 1024 * 1024;
 const MAX_REDIRECTS = 3;
 const HTML = /^(?:text\/html|application\/xhtml\+xml)\s*(?:;|$)/i;
 
@@ -57,8 +59,7 @@ async function assertPublic(url: URL): Promise<void> {
   }
 }
 
-// A bigger page is cut at the cap, not refused: the cap bounds memory and time, and a product's
-// name and price sit in the head, well inside the first 1 MB.
+// A bigger page is cut at the cap, not refused: a product's name and price sit well inside it.
 async function readCapped(res: Response): Promise<string> {
   const reader = res.body?.getReader();
   if (!reader) return '';
@@ -75,7 +76,7 @@ async function readCapped(res: Response): Promise<string> {
 }
 
 /**
- * The first 1 MB of the HTML at a public http(s) link, or a throw: BlockedUrlError for a link
+ * The first 2 MiB of the HTML at a public http(s) link, or a throw: BlockedUrlError for a link
  * that is refused, anything else for a page that cannot be read. Every redirect hop is checked again.
  */
 export async function safeFetch(link: string): Promise<string> {
