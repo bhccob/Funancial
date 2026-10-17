@@ -1,4 +1,4 @@
-import { screen, within } from '@testing-library/react';
+import { act, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createMemoryRouter, Link, RouterProvider } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -66,6 +66,20 @@ describe('AppShell', () => {
     expect(within(bar).getByRole('link', { name: 'Budget' })).toHaveFocus();
   });
 
+  it('moves focus to the heading of a screen chosen from the Menu sheet, not back to the Menu button', async () => {
+    renderAt('/');
+    const bar = screen.getByRole('navigation', { name: 'Primary' });
+    const menu = within(bar).getByRole('button', { name: 'Menu' });
+    await userEvent.click(menu);
+    await userEvent.click(
+      within(screen.getByRole('dialog', { name: 'Menu' })).getByRole('link', { name: /^Goals/ }),
+    );
+
+    const goals = screen.getByRole('heading', { level: 1, name: 'Goals & debts' });
+    expect(menu).not.toHaveFocus();
+    expect(goals).toHaveFocus();
+  });
+
   it('puts the bottom bar before the page, so Tab goes on into the page after a bar link', () => {
     renderAt('/');
     const bar = screen.getByRole('navigation', { name: 'Primary' });
@@ -78,5 +92,40 @@ describe('AppShell', () => {
     await userEvent.click(screen.getByRole('link', { name: 'Expense' }));
     expect(screen.getByRole('heading', { level: 1, name: 'Add' })).toBeInTheDocument();
     expect(screen.getByLabelText('Amount')).toHaveFocus();
+  });
+});
+
+describe('AppShell scroll', () => {
+  const scrolledTo = (y: number) =>
+    Object.defineProperty(window, 'scrollY', { configurable: true, value: y });
+  afterEach(() => {
+    // jsdom's own scrollY is a plain 0.
+    Object.defineProperty(window, 'scrollY', { configurable: true, value: 0 });
+  });
+
+  it('opens a new screen at the top, though the last one was scrolled', async () => {
+    const scrollTo = vi.spyOn(window, 'scrollTo');
+    renderAt('/');
+    scrolledTo(900);
+    scrollTo.mockClear();
+
+    const bar = screen.getByRole('navigation', { name: 'Primary' });
+    await userEvent.click(within(bar).getByRole('link', { name: 'Budget' }));
+    expect(screen.getByRole('heading', { level: 1, name: 'Budget' })).toBeInTheDocument();
+    expect(scrollTo).toHaveBeenLastCalledWith(0, 0);
+  });
+
+  it('puts the screen Back returns to where it was left', async () => {
+    const scrollTo = vi.spyOn(window, 'scrollTo');
+    const router = renderAt('/');
+    scrolledTo(640);
+    const bar = screen.getByRole('navigation', { name: 'Primary' });
+    await userEvent.click(within(bar).getByRole('link', { name: 'Budget' }));
+    scrolledTo(0);
+    scrollTo.mockClear();
+
+    await act(() => router.navigate(-1));
+    expect(screen.getByRole('heading', { level: 1, name: 'Home' })).toBeInTheDocument();
+    expect(scrollTo).toHaveBeenLastCalledWith(0, 640);
   });
 });

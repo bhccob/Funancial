@@ -19,8 +19,8 @@ test('mobile: the bottom bar and the Menu sheet navigate', async ({ page }, test
   await menu.getByRole('link', { name: 'Settings' }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible();
   await expect(menu).toBeHidden();
-  // Closing the sheet hands focus back to the button that opened it.
-  await expect(menuButton).toBeFocused();
+  // The screen chosen takes focus on its name, not the Menu button the sheet handed it back to.
+  await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeFocused();
 });
 
 test('mobile: Escape closes the Menu sheet', async ({ page }, testInfo) => {
@@ -152,4 +152,28 @@ test('Add Expense says to ask first, and asking works with no link', async ({ pa
   await expect(page.getByText(/^Bought /)).toBeVisible();
   await page.getByRole('radio', { name: '4' }).click();
   await expect(page.getByRole('radio', { name: '4' })).toBeChecked();
+});
+
+test('mobile: a new screen opens at its top, and Back returns to where the last was left', async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== 'mobile-chromium', 'mobile layout only');
+  await startFresh(page, '/help');
+  const index = page.getByRole('heading', { level: 1, name: 'Help' });
+  await expect(index).toBeVisible();
+
+  // Low on a page taller than the phone, so a new screen's title would be out of view if the scroll stayed.
+  const last = page.getByRole('main').getByRole('link').last();
+  await last.scrollIntoViewIfNeeded();
+  const left = await page.evaluate(() => window.scrollY);
+  expect(left).toBeGreaterThan(0);
+
+  await last.click();
+  await expect(index).toBeHidden();
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
+  await expect(page.getByRole('main').getByRole('heading', { level: 1 })).toBeFocused();
+
+  await page.goBack();
+  await expect(index).toBeVisible();
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(left);
 });
