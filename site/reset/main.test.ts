@@ -12,6 +12,11 @@ const NO_TOKEN = 'Open the link in your email again to choose a new password.';
 const DONE = 'Your password is changed. Log in on your phone with the new one.';
 const LATER = 'Something went wrong. Try again in a moment.';
 const PASSWORD = 'a brand new password';
+/** What 'ada' and PASSWORD derive, as accountCrypto.test.ts's `independently` computes it. */
+const ADA_KEYS = {
+  newAuthKey: 'lZxv41bid5O0MjkLF1yeGhyvPux4SnnbRdw+3PaAiq4=',
+  kek: 'rVlb6vjMQaTT2CAzWvIHDx4oZlpcOTTaQSp1gApAqCs=',
+};
 
 // The page's own markup, which main.ts finds its parts in.
 const markup = new DOMParser().parseFromString(page, 'text/html').body.innerHTML;
@@ -41,7 +46,7 @@ function fill(first: string, second = first) {
   fireEvent.input(field('Type it again'), { target: { value: second } });
 }
 
-// Choosing a password stretches the key 600,000 times, which a loaded machine can take a while over.
+// Choosing a password runs Argon2id at 64 MiB, which a loaded machine can take a while over.
 configure({ asyncUtilTimeout: 10_000 });
 vi.setConfig({ testTimeout: 20_000 });
 
@@ -158,6 +163,8 @@ describe('the reset page', () => {
     expect(sent.newAuthKey).toBe(keys.authKey);
     expect(sent.kek).toBe(await exportKek(keys.kek));
     expect(atob(sent.kek ?? '')).toHaveLength(32);
+    // And the known answer, from Node's own Argon2id (64 MiB, 3 passes) and HKDF, apart from both.
+    expect(sent).toMatchObject(ADA_KEYS);
     expect(String(init?.body)).not.toContain(PASSWORD);
     expect(String(init?.body)).not.toContain(encodeURIComponent(PASSWORD));
     // And the fields are emptied.

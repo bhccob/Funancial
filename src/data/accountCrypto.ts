@@ -1,3 +1,4 @@
+import { argon2id } from 'hash-wasm';
 import type { DataSnapshot } from '@/domain/snapshot';
 import {
   base64ToBytes,
@@ -15,7 +16,18 @@ import {
  * wrapped data key and sealed copies; the password, `kek` and plaintext never leave the device.
  */
 
-export const KDF_ITERATIONS = 600_000;
+/** Argon2id's cost, memory in KiB. Tests pass cheaper ones; the app and the reset page never do. */
+export type KdfParams = { memorySize: number; iterations: number; parallelism: number };
+
+/**
+ * 64 MiB, 3 passes, one lane (SECURITY.md §4). The server holds `wrappedPw`, which a guess can be
+ * tested against without its scrypt, so this is what each offline guess at a password costs.
+ */
+export const KDF_PARAMS: Readonly<KdfParams> = Object.freeze({
+  memorySize: 65_536,
+  iterations: 3,
+  parallelism: 1,
+});
 
 /** The most a copy may inflate to. Real data is a few MB; this stops a small file filling memory. */
 const MAX_INFLATED_BYTES = 64 * 1024 * 1024;
@@ -45,33 +57,49 @@ export function canonicalUsername(name: string): string {
 }
 
 /**
- * One slow PBKDF2 pass makes `master`; HKDF then splits it into two keys that cannot be turned into
- * each other: `authKey` goes to the server, `kek` stays here. The salt comes from the username so
- * log-in needs no first request. Both inputs are NFKC-normalised first, so a keyboard's choice of
- * accent encoding can't change the keys. HKDF's own salt is left empty, as `master` is already uniform.
+ * Resolves once the browser has painted, so a busy label shows before Argon2id holds this thread
+ * (about a second on a phone). Where no frame comes (a hidden page) it goes on after 100 ms; with no
+ * frames at all (Node) at once.
+ */
+function afterPaint(): Promise<void> {
+  if (typeof requestAnimationFrame !== 'function') return Promise.resolve();
+  return new Promise((resolve) => {
+    const timer = setTimeout(resolve, 100);
+    requestAnimationFrame(() => {
+      clearTimeout(timer);
+      setTimeout(resolve, 0);
+    });
+  });
+}
+
+/**
+ * One slow Argon2id pass makes `master`; HKDF then splits it into two keys that cannot be turned into
+ * each other: `authKey` goes to the server, `kek` stays here. The salt (SHA-256 of the username) comes
+ * from the username so log-in needs no first request. Both inputs are NFKC-normalised first, so a
+ * keyboard's choice of accent encoding can't change the keys. HKDF's own salt is left empty, as
+ * `master` is already uniform. The password must not be empty (hash-wasm refuses one; every form
+ * asks for one).
  */
 export async function deriveAccountKeys(
   username: string,
   password: string,
-  iterations = KDF_ITERATIONS,
+  kdf: KdfParams = KDF_PARAMS,
 ): Promise<{ authKey: string; kek: CryptoKey }> {
-  const salt = await crypto.subtle.digest(
-    'SHA-256',
-    utf8(`funancial-account:${canonicalUsername(username)}`),
+  const salt = new Uint8Array(
+    await crypto.subtle.digest('SHA-256', utf8(`funancial-account:${canonicalUsername(username)}`)),
   );
-  const passKey = await crypto.subtle.importKey(
-    'raw',
-    utf8(password.normalize('NFKC')),
-    'PBKDF2',
-    false,
-    ['deriveBits'],
-  );
-  const master = await crypto.subtle.deriveBits(
-    { name: 'PBKDF2', hash: 'SHA-256', salt, iterations },
-    passKey,
-    256,
-  );
-  const hkdfKey = await crypto.subtle.importKey('raw', master, 'HKDF', false, [
+  await afterPaint();
+  const master = await argon2id({
+    password: utf8(password.normalize('NFKC')),
+    salt,
+    memorySize: kdf.memorySize,
+    iterations: kdf.iterations,
+    parallelism: kdf.parallelism,
+    hashLength: 32,
+    outputType: 'binary',
+  });
+  // A copy, typed as WebCrypto takes it (hash-wasm's type allows a shared buffer).
+  const hkdfKey = await crypto.subtle.importKey('raw', new Uint8Array(master), 'HKDF', false, [
     'deriveBits',
     'deriveKey',
   ]);

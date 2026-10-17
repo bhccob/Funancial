@@ -1,13 +1,16 @@
-import { createHash, createHmac, randomBytes } from 'node:crypto';
+import * as nodeCrypto from 'node:crypto';
+import { createHash, createHmac, hkdfSync, randomBytes } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 // The phone's own module, by relative path: the cross tests below hold the server to its formats.
 import {
   canonicalUsername as phoneCanonical,
   deriveAccountKeys,
   exportKek,
+  KDF_PARAMS,
   newDek,
   unwrapDek,
   wrapDek,
+  type KdfParams,
 } from '../../src/data/accountCrypto';
 import {
   canonicalUsername,
@@ -28,7 +31,10 @@ const T0 = Date.parse('2026-10-17T12:00:00.000Z');
 const MASTER = randomBytes(32);
 const IP = '203.0.113.7';
 const PASSWORD = 'correct horse battery';
-const FAST = 1_000;
+/** Argon2id at its smallest: 8 KiB, one pass. */
+const FAST = { memorySize: 8, iterations: 1, parallelism: 1 };
+// Node's own Argon2id, from Node 24.7 (the engines field allows 22.12, where these checks skip).
+const { argon2Sync } = nodeCrypto as Partial<typeof nodeCrypto>;
 
 let clock = T0;
 const advance = (seconds: number) => {
@@ -977,6 +983,87 @@ describe('secrets', () => {
     expect(failures.filter((r) => r.status === 429).length).toBeGreaterThan(0);
     for (const spy of spies) expect(spy).not.toHaveBeenCalled();
   });
+});
+
+describe('the phone derivation, against an Argon2id apart from its own', () => {
+  /** What accountCrypto.ts describes, with Node's Argon2id (OpenSSL) and HKDF: no hash-wasm, no WebCrypto. */
+  function independently(username: string, password: string, kdf: KdfParams) {
+    const master = argon2Sync!('argon2id', {
+      message: Buffer.from(password.normalize('NFKC')),
+      nonce: createHash('sha256')
+        .update(`funancial-account:${canonicalUsername(username)}`)
+        .digest(),
+      memory: kdf.memorySize,
+      passes: kdf.iterations,
+      parallelism: kdf.parallelism,
+      tagLength: 32,
+    });
+    const split = (info: string) =>
+      Buffer.from(hkdfSync('sha256', master, new Uint8Array(0), info, 32)).toString('base64');
+    return { authKey: split('funancial auth'), kek: split('funancial enc') };
+  }
+  const phone = async (username: string, password: string, kdf?: KdfParams) => {
+    const { authKey, kek } = await deriveAccountKeys(username, password, kdf);
+    return { authKey, kek: await exportKek(kek) };
+  };
+
+  it.runIf(Boolean(argon2Sync))('checks the oracle against RFC 9106 §5.3 first', () => {
+    const tag = argon2Sync!('argon2id', {
+      message: Buffer.alloc(32, 1),
+      nonce: Buffer.alloc(16, 2),
+      secret: Buffer.alloc(8, 3),
+      associatedData: Buffer.alloc(12, 4),
+      memory: 32,
+      passes: 3,
+      parallelism: 4,
+      tagLength: 32,
+    });
+    expect(tag.toString('hex')).toBe(
+      '0d640df58d78766c08c037a34a8b53c9d01ef0452d75b65eb52520e96b01e659',
+    );
+  });
+
+  it.runIf(Boolean(argon2Sync))(
+    "gives the keys Node's Argon2id and HKDF give, with the app's parameters and others",
+    async () => {
+      expect(await phone('Ada.Lovelace', PASSWORD)).toEqual(
+        independently('Ada.Lovelace', PASSWORD, KDF_PARAMS),
+      );
+      const cases: Array<[string, string, KdfParams]> = [
+        ['Ada.Lovelace', PASSWORD, FAST],
+        // An accented name and a ligature in the password (NFKC), and two passes over two lanes.
+        ['JOSE\u0301', '\ufb01 and more words', FAST],
+        ['ada', PASSWORD, { memorySize: 64, iterations: 2, parallelism: 2 }],
+      ];
+      for (const [name, password, kdf] of cases) {
+        expect(await phone(name, password, kdf)).toEqual(independently(name, password, kdf));
+      }
+    },
+  );
+
+  it.runIf(Boolean(argon2Sync))(
+    'gives the known answers the phone, the reset page and the e2e specs are held to',
+    () => {
+      // src/data/accountCrypto.test.ts
+      expect(independently('Ada.Lovelace', PASSWORD, FAST)).toEqual({
+        authKey: 'aarEa9zitUo8HYw0C8xWPUuydJoK5gq1r9gp1dBI5q8=',
+        kek: '3j06rpX21YS4WjUn4IqoOi97HHbSjgyj9f81c0pv41E=',
+      });
+      expect(independently('Ada.Lovelace', PASSWORD, KDF_PARAMS)).toEqual({
+        authKey: 'tvQBDpfBPb0en/81A5fMWJsQQ1eRXW7Wo4jUypYII5s=',
+        kek: 'MlWLwDDry6A3PnLTZHweNzsfv2kdJC8ceUimErkaXiM=',
+      });
+      // site/reset/main.test.ts and tests/e2e/site/reset.spec.ts
+      expect(independently('ada', 'a brand new password', KDF_PARAMS)).toEqual({
+        authKey: 'lZxv41bid5O0MjkLF1yeGhyvPux4SnnbRdw+3PaAiq4=',
+        kek: 'rVlb6vjMQaTT2CAzWvIHDx4oZlpcOTTaQSp1gApAqCs=',
+      });
+      // tests/e2e/account-settings.spec.ts
+      expect(independently('Robin', 'a long enough password', KDF_PARAMS).authKey).toBe(
+        'Vj0qBrtPRpdyMcSA5NoTGNqLuly/M1fklymvThxkE/s=',
+      );
+    },
+  );
 });
 
 describe('with the phone module', () => {

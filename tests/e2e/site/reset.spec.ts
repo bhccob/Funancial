@@ -39,8 +39,10 @@ test('a friend chooses a new password from the emailed link', async ({ page }) =
   const sent = JSON.parse(posts[0]!.body) as Record<string, string>;
   expect(Object.keys(sent).sort()).toEqual(['kek', 'newAuthKey', 'token']);
   expect(sent.token).toBe(TOKEN);
-  expect(sent.newAuthKey).toMatch(/^[A-Za-z0-9+/]{43}=$/);
-  expect(sent.kek).toMatch(/^[A-Za-z0-9+/]{43}=$/);
+  // Argon2id (64 MiB, 3 passes) from the built page's own WASM gives what Node's Argon2id and HKDF
+  // give for ada and this password (`independently` in src/data/accountCrypto.test.ts), as the app does.
+  expect(sent.newAuthKey).toBe('lZxv41bid5O0MjkLF1yeGhyvPux4SnnbRdw+3PaAiq4=');
+  expect(sent.kek).toBe('rVlb6vjMQaTT2CAzWvIHDx4oZlpcOTTaQSp1gApAqCs=');
   expect(posts[0]!.headers['x-funancial-token']).toBeUndefined();
   expect(posts[0]!.body).not.toContain(PASSWORD);
 });

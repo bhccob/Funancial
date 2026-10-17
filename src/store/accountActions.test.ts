@@ -20,7 +20,8 @@ import {
 import { createAppStore } from './appStore';
 
 const ME = { username: 'Robin', email: 'robin@example.com', password: 'a long enough password' };
-const ITERATIONS = 1_000;
+/** Argon2id at its smallest: 8 KiB, one pass. */
+const FAST = { memorySize: 8, iterations: 1, parallelism: 1 };
 
 /** The browser's `online` event, and the app going to the background, which node has neither of. */
 let network = new EventTarget();
@@ -93,7 +94,7 @@ async function follow(
   store: Awaited<ReturnType<typeof freshRealStore>>['store'],
   server = fakeAccountApi(),
 ) {
-  const actions = createAccountActions(store, server.api, platform, { iterations: ITERATIONS });
+  const actions = createAccountActions(store, server.api, platform, { kdf: FAST });
   const stop = actions.start();
   await loaded(actions);
   return { actions, server, stop };
@@ -165,7 +166,7 @@ describe('sign-up', () => {
     );
     expect(JSON.stringify(body)).not.toContain(ME.password);
     // wrappedPw opens with the password's key, to the dek that was sent.
-    const { kek } = await deriveAccountKeys('robin', ME.password, ITERATIONS);
+    const { kek } = await deriveAccountKeys('robin', ME.password, FAST);
     const wrapped = await unwrapDek(body!.wrappedPw as { iv: string; ciphertext: string }, kek);
     expect(wrapped.raw).toBe(body!.dek);
     expect(linkedState(actions)).toMatchObject({ username: 'robin', dek: body!.dek });
@@ -595,7 +596,7 @@ describe('log-in', () => {
     await store.getState().boot();
     expect(store.getState().phase).toBe('welcome');
     const server = fakeAccountApi();
-    const actions = createAccountActions(store, server.api, platform, { iterations: ITERATIONS });
+    const actions = createAccountActions(store, server.api, platform, { kdf: FAST });
     actions.start();
     await server.seed({ username: 'robin', password: ME.password, snapshot: snapshotWith('a') });
 
@@ -915,7 +916,7 @@ describe('a restart or a lock', () => {
 
     const again = createAppStore(deps);
     await again.getState().boot();
-    const next = createAccountActions(again, server.api, platform, { iterations: ITERATIONS });
+    const next = createAccountActions(again, server.api, platform, { kdf: FAST });
     next.start();
     await waitForPuts(server, 2);
     expect(linkedState(next)!.dirty).toBe(false);
@@ -958,7 +959,7 @@ describe('changing the password', () => {
       newAuthKey: string;
       newWrappedPw: { iv: string; ciphertext: string };
     }>;
-    const { kek, authKey } = await deriveAccountKeys('robin', next, ITERATIONS);
+    const { kek, authKey } = await deriveAccountKeys('robin', next, FAST);
     expect(body!.newAuthKey).toBe(authKey);
     expect((await unwrapDek(body!.newWrappedPw, kek)).raw).toBe(linkedState(actions)!.dek);
     expect(JSON.stringify(body)).not.toContain(next);
@@ -1320,7 +1321,7 @@ describe('forgot password', () => {
     await store.getState().boot();
     expect(store.getState().phase).toBe('welcome');
     const server = fakeAccountApi();
-    const actions = createAccountActions(store, server.api, platform, { iterations: ITERATIONS });
+    const actions = createAccountActions(store, server.api, platform, { kdf: FAST });
     await expect(actions.forgot('robin')).resolves.toBeUndefined();
     expect(server.sent('forgot')).toEqual([{ who: 'robin' }]);
   });

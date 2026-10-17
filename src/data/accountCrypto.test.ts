@@ -5,7 +5,7 @@ import {
   canonicalUsername,
   deriveAccountKeys,
   exportKek,
-  KDF_ITERATIONS,
+  KDF_PARAMS,
   newDek,
   openCopy,
   sealCopy,
@@ -16,7 +16,8 @@ import {
 } from './accountCrypto';
 import { base64ToBytes, DecryptError } from './crypto';
 
-const FAST = 1_000;
+/** Argon2id at its smallest: 8 KiB, one pass. */
+const FAST = { memorySize: 8, iterations: 1, parallelism: 1 };
 const PASSWORD = 'correct horse battery';
 
 function sampleSnapshot(): DataSnapshot {
@@ -73,12 +74,38 @@ describe('deriveAccountKeys', () => {
     expect(base64ToBytes(authKey)).toHaveLength(32);
   });
 
-  it('matches an independent PBKDF2 + HKDF derivation (the server and reset page rely on it)', async () => {
-    // Computed with node:crypto: salt = SHA-256("funancial-account:ada.lovelace"), 1000 rounds,
-    // HKDF-SHA256 with an empty salt and the info strings "funancial auth" / "funancial enc".
-    const { authKey, kek } = await deriveAccountKeys('Ada.Lovelace', PASSWORD, FAST);
-    expect(authKey).toBe('ns2z2fd36rzsCVPkdxuBHRdctCl2n16eO4s/MtCbqh4=');
-    expect(await exportKek(kek)).toBe('kpIPt0Avv50QmOuQqXQYgso+QKBmahCQPS0fmjishDE=');
+  // Computed with Node's own Argon2id (OpenSSL's, not hash-wasm's) and node:crypto's HKDF, as
+  // `independently` in api/_lib/accounts.test.ts does again on every run: salt =
+  // SHA-256("funancial-account:ada.lovelace"), HKDF-SHA256 with an empty salt and the info strings
+  // "funancial auth" / "funancial enc".
+  const KNOWN = {
+    fast: {
+      authKey: 'aarEa9zitUo8HYw0C8xWPUuydJoK5gq1r9gp1dBI5q8=',
+      kek: '3j06rpX21YS4WjUn4IqoOi97HHbSjgyj9f81c0pv41E=',
+    },
+    production: {
+      authKey: 'tvQBDpfBPb0en/81A5fMWJsQQ1eRXW7Wo4jUypYII5s=',
+      kek: 'MlWLwDDry6A3PnLTZHweNzsfv2kdJC8ceUimErkaXiM=',
+    },
+  };
+  const keysOf = async ({ authKey, kek }: { authKey: string; kek: CryptoKey }) => ({
+    authKey,
+    kek: await exportKek(kek),
+  });
+
+  it('matches the known answers for Argon2id then HKDF (the server and the reset page rely on them)', async () => {
+    expect(await keysOf(await deriveAccountKeys('Ada.Lovelace', PASSWORD, FAST))).toEqual(
+      KNOWN.fast,
+    );
+    // With no parameters: the ones the app and the reset page use.
+    expect(await keysOf(await deriveAccountKeys('Ada.Lovelace', PASSWORD))).toEqual(
+      KNOWN.production,
+    );
+  });
+
+  it('uses Argon2id at 64 MiB, 3 passes and one lane unless told otherwise (SECURITY.md §4)', () => {
+    expect(KDF_PARAMS).toEqual({ memorySize: 65_536, iterations: 3, parallelism: 1 });
+    expect(Object.isFrozen(KDF_PARAMS)).toBe(true);
   });
 
   it('keeps authKey and kek apart', async () => {
@@ -86,11 +113,26 @@ describe('deriveAccountKeys', () => {
     expect(await exportKek(kek)).not.toBe(authKey);
   });
 
-  it('defaults to 600,000 iterations', async () => {
-    expect(KDF_ITERATIONS).toBe(600_000);
-    const byDefault = await deriveAccountKeys('ada', PASSWORD);
-    const explicit = await deriveAccountKeys('ada', PASSWORD, 600_000);
-    expect(byDefault.authKey).toBe(explicit.authKey);
+  describe('where the page paints', () => {
+    afterEach(() => vi.unstubAllGlobals());
+
+    it('waits for a frame before the slow part, so a busy label shows first', async () => {
+      const frames: FrameRequestCallback[] = [];
+      vi.stubGlobal('requestAnimationFrame', (paint: FrameRequestCallback) => frames.push(paint));
+      let done = false;
+      const derived = deriveAccountKeys('ada', PASSWORD, FAST).then(() => (done = true));
+      await vi.waitFor(() => expect(frames).toHaveLength(1), { interval: 5 });
+      expect(done).toBe(false);
+      frames[0]!(0);
+      await derived;
+    });
+
+    it('goes on without one on a hidden page, where no frame comes', async () => {
+      vi.stubGlobal('requestAnimationFrame', () => 0);
+      expect(await keysOf(await deriveAccountKeys('Ada.Lovelace', PASSWORD, FAST))).toEqual(
+        KNOWN.fast,
+      );
+    });
   });
 });
 

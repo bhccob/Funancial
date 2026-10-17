@@ -79,6 +79,9 @@ test('the Home reminder leads to Settings, where an account is made and then tur
     ['authKey', 'dek', 'email', 'username', 'wrappedPw'].sort(),
   );
   expect(JSON.stringify(signup!.body)).not.toContain(PASSWORD);
+  // Argon2id (64 MiB, 3 passes) from the built app's own WASM gives what Node's Argon2id and HKDF
+  // give for robin and PASSWORD (`independently` in src/data/accountCrypto.test.ts), as the reset page does.
+  expect(signup!.body!.authKey).toBe('Vj0qBrtPRpdyMcSA5NoTGNqLuly/M1fklymvThxkE/s=');
   const [upload] = service.seen.filter((s) => s.route === 'copy' && s.method === 'PUT');
   expect(upload!.auth).toBe('Bearer device-token-1');
   expect(upload!.body).toMatchObject({ baseVersion: 0 });

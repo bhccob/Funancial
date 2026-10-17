@@ -3,7 +3,8 @@ import { createStore, type StoreApi } from 'zustand/vanilla';
 import {
   canonicalUsername,
   deriveAccountKeys,
-  KDF_ITERATIONS,
+  KDF_PARAMS,
+  type KdfParams,
   newDek,
   openCopy,
   sealCopy,
@@ -211,7 +212,7 @@ export function createAccountActions(
   store: StoreApi<AppState>,
   api: AccountApi,
   platform: Pick<Platform, 'onPause'>,
-  { iterations = KDF_ITERATIONS }: { iterations?: number } = {},
+  { kdf = KDF_PARAMS }: { kdf?: KdfParams } = {},
 ) {
   const view = createStore<AccountView>()(() => ({ loaded: false, state: null }));
   const app = () => store.getState();
@@ -447,7 +448,7 @@ export function createAccountActions(
     const address = email.trim();
     const mine = session;
     // Slow on purpose: once per submit.
-    const { authKey, kek } = await deriveAccountKeys(name, password, iterations);
+    const { authKey, kek } = await deriveAccountKeys(name, password, kdf);
     const dek = await newDek();
     const body = {
       username: name,
@@ -523,7 +524,7 @@ export function createAccountActions(
     if (!fresh && !replace && hasData(app().data)) return 'needs-confirm';
 
     const mine = session;
-    const { authKey, kek } = await deriveAccountKeys(name, password, iterations);
+    const { authKey, kek } = await deriveAccountKeys(name, password, kdf);
     const reply = await reach(() => api.logIn({ username: name, authKey }));
     if (reply.status !== 200) throw failed(reply, MESSAGES.wrong);
     const parsed = LoggedIn.safeParse(reply.body);
@@ -584,8 +585,8 @@ export function createAccountActions(
     const problem = passwordProblem(newPassword);
     if (problem) throw new AccountError('invalid', problem);
 
-    const old = await deriveAccountKeys(state.username, oldPassword, iterations);
-    const next = await deriveAccountKeys(state.username, newPassword, iterations);
+    const old = await deriveAccountKeys(state.username, oldPassword, kdf);
+    const next = await deriveAccountKeys(state.username, newPassword, kdf);
     const newWrappedPw = await wrapDek(state.dek, next.kek);
     const reply = await reach(() =>
       api.changePassword(state.deviceToken, {

@@ -128,6 +128,8 @@ function sameText(a: string, b: string) {
   return x.length === y.length && timingSafeEqual(x, y);
 }
 
+// Defence in depth only: `authKey` is already 256 bits out of the phone's Argon2id (64 MiB, 3 passes),
+// which is the memory-hard step and what a guess at the password costs.
 const hashAuth = (authKey: string, salt: Uint8Array) =>
   new Promise<Buffer>((resolve, reject) =>
     scrypt(authKey, salt, 32, { N: 16384, r: 8, p: 1 }, (err, hash) =>

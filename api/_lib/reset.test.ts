@@ -39,7 +39,8 @@ vi.mock('nodemailer', () => ({ default: { createTransport } }));
 const T0 = Date.parse('2026-10-17T12:00:00.000Z');
 const MASTER = randomBytes(32);
 const IP = '203.0.113.7';
-const FAST = 1_000;
+/** Argon2id at its smallest: 8 KiB, one pass. */
+const FAST = { memorySize: 8, iterations: 1, parallelism: 1 };
 const HOUR = 3600;
 const DAY = 24 * HOUR;
 const SUBJECT = 'Choose a new Funancial password';
