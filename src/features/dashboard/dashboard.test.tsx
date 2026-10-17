@@ -1030,12 +1030,13 @@ describe('DashboardScreen with amounts hidden', () => {
   const writtenAs = (minor: number) =>
     [usd(minor), usdWhole(minor)].flatMap((text) => text.match(RUN) ?? []);
 
-  it('has the eye at the top, beside the quests link', () => {
+  it('has the eye on the Available to spend row, and leaves the top line as it was', () => {
     renderDashboard(monthData(), TODAY);
     const eye = screen.getByRole('button', { name: 'Hide amounts' });
+    const row = screen.getByRole('heading', { name: 'Available to spend' }).parentElement;
+    expect(row).toContainElement(eye);
     const quests = screen.getByRole('link', { name: /Open quests$/ });
-    expect(eye.compareDocumentPosition(quests) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
-    expect(eye.parentElement).toBe(quests.parentElement);
+    expect(quests.parentElement).not.toContainElement(eye);
   });
 
   it('shows no amount and four bullets in their place after the eye is pressed', async () => {

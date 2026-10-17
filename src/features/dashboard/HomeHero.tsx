@@ -9,6 +9,7 @@ import { cn } from '@/lib/cn';
 import { formatMonth } from '@/lib/format';
 import { useAmountsHidden } from '@/store/useAmountsHidden';
 import { useMoney } from '@/store/useFinance';
+import { HideAmountsButton } from './HideAmountsButton';
 
 /** The month line's three parts, in the order they are drawn. */
 type Part = { key: string; name: string; amount: number; color: string };
@@ -73,6 +74,9 @@ export function HomeHero({ view, today }: { view: FinanceView; today: LocalDate 
           Available to spend
         </h2>
         <HelpTip pageId="available" label="available to spend" />
+        <span className="ml-auto">
+          <HideAmountsButton />
+        </span>
       </div>
       <p
         className={cn(

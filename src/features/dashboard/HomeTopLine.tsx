@@ -4,7 +4,6 @@ import { Ring } from '@/components/charts/Ring';
 import type { LocalDate } from '@/domain/dates';
 import type { GameView } from '@/domain/game/engine';
 import { formatDay } from '@/lib/format';
-import { HideAmountsButton } from './HideAmountsButton';
 
 export interface HomeTopLineProps {
   name: string | undefined;
@@ -17,7 +16,7 @@ const num = (n: number) => n.toLocaleString();
 
 /**
  * "Hi, Sam · Oct 15" on the left; on the right one link to the quests holding the logging streak,
- * the coins and a ring of the progress through the level, then the eye that hides every amount.
+ * the coins and a ring of the progress through the level.
  */
 export function HomeTopLine({ name, today, game }: HomeTopLineProps) {
   const { level, totals, streaks } = game;
@@ -29,11 +28,10 @@ export function HomeTopLine({ name, today, game }: HomeTopLineProps) {
       : `${num(level.xpIntoLevel)} of ${num(level.xpForNext)} XP`;
 
   return (
-    <div className="mb-[26px] flex items-center gap-3">
+    <div className="mb-[26px] flex items-center justify-between gap-3">
       {/* One line that ends in an ellipsis, so the date is cut before the name; the date does not
-          show below 400px, where it never fits beside the level ring and the eye without squeezing
-          the name. Past that, one that does not quite fit is cut by the ellipsis, ahead of the name. */}
-      <p className="min-w-0 flex-1 truncate text-[15px] font-extrabold">
+          show below 400px, where it never fits beside the level ring without squeezing the name. */}
+      <p className="min-w-0 truncate text-[15px] font-extrabold">
         <span>{name ? `Hi, ${name}` : 'Hi there'}</span>
         <span className="text-muted hidden pl-1 font-bold min-[400px]:inline">
           · {formatDay(today)}
@@ -65,7 +63,6 @@ export function HomeTopLine({ name, today, game }: HomeTopLineProps) {
           </Ring>
         </span>
       </Link>
-      <HideAmountsButton />
     </div>
   );
 }
