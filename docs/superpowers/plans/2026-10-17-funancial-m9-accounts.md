@@ -32,9 +32,12 @@
    - `wrappedServer` is AES-GCM(`SERVER_MASTER_KEY`) over the raw DEK, made on the server. At sign-up the phone sends the raw DEK over TLS once. The spec accepts that the service can unlock data.
 4. **The copy.** It is the snapshot JSON, without any account state, then gzip (`CompressionStream`), then AES-GCM(DEK) with a 12-byte IV, then base64. The server refuses copies whose ciphertext exceeds 1,000,000 bytes, answering 413.
 5. **Device token.** It is 32 random bytes (base64url), and the server stores its SHA-256. A log-in issues a new one, so the old phone's token stops working; that is the takeover.
-6. **Versions.** Each copy has a `version` (an integer from 0). `PUT /api/copy` carries `baseVersion` and succeeds only when `baseVersion === stored version`, otherwise 409. Success returns `version + 1`.
+6. **Versions.** Each copy has a `version` (an integer from 0). `PUT /api/copy` carries `baseVersion` and succeeds only when `baseVersion === stored version`. Success returns `version + 1` (so the first upload, from base 0, stores version 1).
+   - A mismatched base gets 409 `{error:'stale', version}`, and the phone re-bases on any `stale`.
+   - A write already in flight from the same base gets 409 `{error:'busy', version}`, and the phone retries later.
+   - Only 401 means the account moved (Rulings T2-b, T2-d, T2-f).
 7. **Endpoints.** They are flat files, so `vercel.json`'s `api/*.ts` still covers them.
-   - **`POST /api/signup`** takes `{username, email, authKey, dek}` and returns `{deviceToken}`. An initial copy follows via `PUT /api/copy` with `baseVersion` 0.
+   - **`POST /api/signup`** takes `{username, email, authKey, dek, wrappedPw: {iv, ciphertext}}` and returns `{deviceToken}`. `wrappedPw` was added by Ruling T2-a. An initial copy follows via `PUT /api/copy` with `baseVersion` 0.
    - **`POST /api/login`** takes `{username, authKey}`.
      - It returns `{deviceToken, wrappedPw, copy: {iv, ciphertext, version} | null}`.
      - A wrong password and an unknown user both give 401 with the same body.
@@ -58,7 +61,11 @@
 10. **Redis keys.**
     - `acct:u:{username}` holds the account: `{username, email, authHash, authSalt, wrappedPw, wrappedServer, deviceTokenHash, version, createdAt}`.
     - `acct:e:{email}` is a set of usernames.
-    - `acct:c:{username}` holds the copy: `{iv, ciphertext, version, savedAt}`.
+    - `acct:c:{username}` holds the copy: `{iv, ciphertext, version, savedAt, createdAt}`. A copy whose `createdAt` isn't the account's own counts as no copy (Ruling T2-e).
+    - Task 2 also added these keys:
+      - `acct:t:{sha256(token)}`, the username for a Bearer token;
+      - `acct:cl:…`, upload claims with a 60 s TTL.
+    - Each account records a `keyId`, its master-key fingerprint.
     - `acct:r:{sha256(token)}` holds the username, with a 1800 s TTL.
 
     Usernames and emails are stored lower-cased.
