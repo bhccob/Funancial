@@ -10,7 +10,7 @@ const modules = vi.hoisted(() => ({
   copy: ['DELETE', 'OPTIONS', 'PUT'],
   password: ['OPTIONS', 'POST'],
   forgot: ['OPTIONS', 'POST'],
-  reset: ['GET', 'POST'],
+  reset: ['POST'],
 }));
 
 // Each stub answers with who was reached and what query came with it.
@@ -54,9 +54,15 @@ describe('api/[op].ts', () => {
   });
 
   it('still dispatches with a query string, and hands the module the whole request', async () => {
-    const res = await send('GET', '/api/reset?token=x');
+    const res = await send('POST', '/api/signup?from=app');
     expect(res.status).toBe(200);
-    expect(await res.text()).toBe('reset GET?token=x');
+    expect(await res.text()).toBe('signup POST?from=app');
+  });
+
+  it('answers GET /api/reset with 405: a reset token is only ever sent in a body', async () => {
+    const res = await send('GET', '/api/reset?token=x');
+    expect(res.status).toBe(405);
+    expect(await res.text()).toBe('');
   });
 
   it("reads Vercel's op parameter when the function sees its rewritten path", async () => {

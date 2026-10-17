@@ -60,7 +60,12 @@ function clearComplaint() {
 async function open() {
   if (!token) return say(NO_TOKEN);
   try {
-    const res = await fetch(`/api/reset?token=${encodeURIComponent(token)}`);
+    // In the body, never the URL: a request log keeps URLs.
+    const res = await fetch('/api/reset', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token }),
+    });
     if (res.status === 410) return say(EXPIRED);
     const body = (await res.json()) as { username?: unknown };
     if (!res.ok || typeof body.username !== 'string') return say(LATER);

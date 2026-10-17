@@ -4,7 +4,7 @@ import { bearerToken, clientIp, empty, guard, json, readJson } from './http.js';
 import { gmailMailerFromEnv } from './mailer.js';
 import { kvStoreFromEnv } from './store.js';
 
-type Context = { token: string | null; body: unknown; query: URLSearchParams; ip: string };
+type Context = { token: string | null; body: unknown; ip: string };
 
 /** Read at call time; null when the database or the master key (base64 of 32 bytes) is missing. Without Gmail only `forgot` is unavailable. */
 function accountsFromEnv(): Accounts | null {
@@ -56,7 +56,6 @@ export function accountRoute(
       } = await run(accounts, {
         token: bearerToken(req),
         body,
-        query: new URL(req.url).searchParams,
         ip: clientIp(req),
       });
       const res = answer === undefined ? empty(req, status) : json(req, answer, 'no-store', status);

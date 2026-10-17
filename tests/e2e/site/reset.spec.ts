@@ -3,22 +3,28 @@ import { expect, test, type Page } from '@playwright/test';
 const TOKEN = 'T'.repeat(43);
 const PASSWORD = 'a brand new password';
 
-/** Plays the service: `GET /api/reset` names the account, `POST /api/reset` takes the new keys. */
+/**
+ * Plays the service: `POST /api/reset` with `{ token }` names the account, and with the new keys too
+ * takes them. `posts` are the ones with keys; `requests` is every call, as method, URL and body.
+ */
 async function serveReset(page: Page, info: { status: number; body?: object }, change = 204) {
   const posts: Array<{ headers: Record<string, string>; body: string }> = [];
+  const requests: string[] = [];
   await page.route('**/api/reset**', (route) => {
     const request = route.request();
-    if (request.method() === 'POST') {
-      posts.push({ headers: request.headers(), body: request.postData() ?? '' });
+    const body = request.postData() ?? '';
+    requests.push(`${request.method()} ${request.url()} ${body}`);
+    if (body.includes('newAuthKey')) {
+      posts.push({ headers: request.headers(), body });
       return route.fulfill({ status: change });
     }
     return route.fulfill({ status: info.status, json: info.body });
   });
-  return posts;
+  return { posts, requests };
 }
 
 test('a friend chooses a new password from the emailed link', async ({ page }) => {
-  const posts = await serveReset(page, { status: 200, body: { username: 'ada' } });
+  const { posts, requests } = await serveReset(page, { status: 200, body: { username: 'ada' } });
   await page.goto(`/reset?token=${TOKEN}`);
   await expect(page).toHaveTitle('Choose a new password');
   await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', /noindex/);
@@ -45,10 +51,14 @@ test('a friend chooses a new password from the emailed link', async ({ page }) =
   expect(sent.kek).toBe('rVlb6vjMQaTT2CAzWvIHDx4oZlpcOTTaQSp1gApAqCs=');
   expect(posts[0]!.headers['x-funancial-token']).toBeUndefined();
   expect(posts[0]!.body).not.toContain(PASSWORD);
+
+  // Whose link it was went as a POST body too: no request to the service had the token in its URL.
+  expect(requests[0]).toBe(`POST ${new URL('/api/reset', page.url())} {"token":"${TOKEN}"}`);
+  for (const request of requests) expect(request.split(' ')[1]).not.toContain(TOKEN);
 });
 
 test('asks for a password of 10 characters that is typed twice', async ({ page }) => {
-  const posts = await serveReset(page, { status: 200, body: { username: 'ada' } });
+  const { posts } = await serveReset(page, { status: 200, body: { username: 'ada' } });
   await page.goto(`/reset?token=${TOKEN}`);
   await page.getByLabel('New password').fill('too short');
   await page.getByLabel('Type it again').fill('too short');

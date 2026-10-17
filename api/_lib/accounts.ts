@@ -126,6 +126,7 @@ const copyBody = z.strictObject({
 // A username or an email address; only an address has an "@".
 const forgotBody = z.strictObject({ who: z.union([email, username]) });
 // The token is checked apart: any that is not a live link's is answered as an expired one (410).
+const resetInfoBody = z.strictObject({ token: z.unknown() });
 const resetBody = z.strictObject({ token: z.unknown(), newAuthKey: key32, kek: key32 });
 const passwordBody = z.strictObject({
   oldAuthKey: key32,
@@ -649,8 +650,11 @@ export function createAccounts({ store, masterKey, now, mailer, waitUntil }: Acc
       return { status: 200, body: { ok: true } };
     },
 
-    /** Whose account a link is for, so the reset page can derive the right keys; 410 for any link that isn't live. */
-    async resetInfo(token: unknown, ip: string): Promise<Result> {
+    /** Whose account a link (`{ token }`) is for, so the reset page can derive the right keys; 410 for any link that isn't live. */
+    async resetInfo(body: unknown, ip: string): Promise<Result> {
+      const parsed = resetInfoBody.safeParse(body);
+      if (!parsed.success) return badRequest();
+      const { token } = parsed.data;
       if (typeof token !== 'string' || !TOKEN.test(token)) return gone();
       const over = await throttle('reset:ip', ip, 20, HOUR);
       if (over) return over;

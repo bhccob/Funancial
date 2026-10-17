@@ -267,7 +267,7 @@ describe('forgot', () => {
     // Each link opens its own account.
     const names = [];
     for (const m of mail.sent) {
-      const info = await accounts.resetInfo(tokenIn(m.text), IP);
+      const info = await accounts.resetInfo({ token: tokenIn(m.text) }, IP);
       names.push(out<{ username: string }>(info).username);
     }
     expect(names.sort()).toEqual(['ada', 'grace']);
@@ -522,9 +522,12 @@ describe('resetInfo', () => {
     const { accounts, mail } = setup();
     await join(accounts);
     const token = await linkFor(accounts, mail);
-    expect(await accounts.resetInfo(token, IP)).toEqual({ status: 200, body: { username: 'ada' } });
+    expect(await accounts.resetInfo({ token }, IP)).toEqual({
+      status: 200,
+      body: { username: 'ada' },
+    });
     // Asking does not use the link up.
-    expect((await accounts.resetInfo(token, IP)).status).toBe(200);
+    expect((await accounts.resetInfo({ token }, IP)).status).toBe(200);
   });
 
   it('gives 410 after 30 minutes', async () => {
@@ -532,9 +535,9 @@ describe('resetInfo', () => {
     await join(accounts);
     const token = await linkFor(accounts, mail);
     advance(1799);
-    expect((await accounts.resetInfo(token, IP)).status).toBe(200);
+    expect((await accounts.resetInfo({ token }, IP)).status).toBe(200);
     advance(2);
-    expect(await accounts.resetInfo(token, IP)).toEqual(GONE);
+    expect(await accounts.resetInfo({ token }, IP)).toEqual(GONE);
     expect(await accounts.reset({ token, newAuthKey: b64(32), kek: b64(32) }, IP)).toEqual(GONE);
   });
 
@@ -545,14 +548,30 @@ describe('resetInfo', () => {
     expect(await accounts.reset({ token, newAuthKey: b64(32), kek: b64(32) }, IP)).toEqual({
       status: 204,
     });
-    expect(await accounts.resetInfo(token, IP)).toEqual(GONE);
+    expect(await accounts.resetInfo({ token }, IP)).toEqual(GONE);
+  });
+
+  it('refuses a body that is not { token } with 400, and still names the account for one that is', async () => {
+    const { accounts, mail } = setup();
+    await join(accounts);
+    const token = await linkFor(accounts, mail);
+    for (const body of [{ token, extra: 1 }, { token, username: 'grace' }, token, null, [token]]) {
+      expect(await accounts.resetInfo(body, IP)).toEqual({
+        status: 400,
+        body: { error: 'bad request' },
+      });
+    }
+    expect(await accounts.resetInfo({ token }, IP)).toEqual({
+      status: 200,
+      body: { username: 'ada' },
+    });
   });
 
   it('gives 410 for a token nobody was given, and for anything that is not a token', async () => {
     const { accounts } = setup();
     await join(accounts);
     const bad: unknown[] = [randomBytes(32).toString('base64url'), 'short', '', null, undefined, 7];
-    for (const token of bad) expect(await accounts.resetInfo(token, IP)).toEqual(GONE);
+    for (const token of bad) expect(await accounts.resetInfo({ token }, IP)).toEqual(GONE);
   });
 
   it('gives 410 when the account has been deleted', async () => {
@@ -560,7 +579,7 @@ describe('resetInfo', () => {
     const { token: device } = await join(accounts);
     const token = await linkFor(accounts, mail);
     expect(await accounts.deleteAccount(device)).toEqual({ status: 204 });
-    expect(await accounts.resetInfo(token, IP)).toEqual(GONE);
+    expect(await accounts.resetInfo({ token }, IP)).toEqual(GONE);
     expect(await accounts.reset({ token, newAuthKey: b64(32), kek: b64(32) }, IP)).toEqual(GONE);
   });
 
@@ -574,7 +593,7 @@ describe('resetInfo', () => {
     expect(again.res.status).toBe(200);
     const before = JSON.stringify(store.dump()['acct:u:ada']);
 
-    expect(await accounts.resetInfo(token, IP)).toEqual(GONE);
+    expect(await accounts.resetInfo({ token }, IP)).toEqual(GONE);
     expect(await accounts.reset({ token, newAuthKey: b64(32), kek: b64(32) }, IP)).toEqual(GONE);
     expect(JSON.stringify(store.dump()['acct:u:ada'])).toBe(before);
     expect((await logIn(accounts, again.authKey)).status).toBe(200);
@@ -584,13 +603,13 @@ describe('resetInfo', () => {
     const { accounts, mail } = setup();
     await join(accounts);
     const token = await linkFor(accounts, mail);
-    for (let i = 0; i < 20; i++) expect((await accounts.resetInfo(token, IP)).status).toBe(200);
-    expect(await accounts.resetInfo(token, IP)).toEqual({
+    for (let i = 0; i < 20; i++) expect((await accounts.resetInfo({ token }, IP)).status).toBe(200);
+    expect(await accounts.resetInfo({ token }, IP)).toEqual({
       status: 429,
       body: { error: 'too many attempts' },
       retryAfter: HOUR,
     });
-    expect((await accounts.resetInfo(token, '198.51.100.2')).status).toBe(200);
+    expect((await accounts.resetInfo({ token }, '198.51.100.2')).status).toBe(200);
   });
 });
 
@@ -763,7 +782,7 @@ describe('reset', () => {
 
     // Named as the setup problem it is, not taken for an expired link (the tag needs the key too).
     const wrongKey = createAccounts({ store, masterKey: randomBytes(32), now: () => clock });
-    await expect(wrongKey.resetInfo(token, IP)).rejects.toBeInstanceOf(MasterKeyMismatch);
+    await expect(wrongKey.resetInfo({ token }, IP)).rejects.toBeInstanceOf(MasterKeyMismatch);
     await expect(
       wrongKey.reset({ token, newAuthKey: b64(32), kek: b64(32) }, IP),
     ).rejects.toBeInstanceOf(MasterKeyMismatch);
@@ -805,12 +824,12 @@ describe('reset', () => {
     const first = await linkFor(accounts, mail);
     const second = await linkFor(accounts, mail);
     expect(second).not.toBe(first);
-    expect((await accounts.resetInfo(first, IP)).status).toBe(200);
+    expect((await accounts.resetInfo({ token: first }, IP)).status).toBe(200);
 
     expect(await accounts.reset({ token: second, newAuthKey: b64(32), kek: b64(32) }, IP)).toEqual({
       status: 204,
     });
-    expect(await accounts.resetInfo(first, IP)).toEqual(GONE);
+    expect(await accounts.resetInfo({ token: first }, IP)).toEqual(GONE);
     expect(await accounts.reset({ token: first, newAuthKey: b64(32), kek: b64(32) }, IP)).toEqual(
       GONE,
     );
@@ -827,7 +846,7 @@ describe('reset', () => {
     });
     expect(changed).toEqual({ status: 204 });
 
-    expect(await accounts.resetInfo(link, IP)).toEqual(GONE);
+    expect(await accounts.resetInfo({ token: link }, IP)).toEqual(GONE);
     expect(await accounts.reset({ token: link, newAuthKey: b64(32), kek: b64(32) }, IP)).toEqual(
       GONE,
     );
@@ -838,7 +857,7 @@ describe('reset', () => {
     const { authKey } = await join(accounts);
     const link = await linkFor(accounts, mail);
     expect((await logIn(accounts, authKey)).status).toBe(200);
-    expect((await accounts.resetInfo(link, IP)).status).toBe(200);
+    expect((await accounts.resetInfo({ token: link }, IP)).status).toBe(200);
   });
 
   it('limits attempts: the 21st in an hour is 429, from that address only', async () => {
@@ -953,14 +972,17 @@ describe('the database alone unlocks no copy', () => {
       await forge(() => tagOf(TAG_KEY, sha('another token'), fields)), // another link's tag
     ];
     for (const token of forged) {
-      expect(await accounts.resetInfo(token, IP)).toEqual(GONE);
+      expect(await accounts.resetInfo({ token }, IP)).toEqual(GONE);
       expect(await accounts.reset({ token, newAuthKey: b64(32), kek: b64(32) }, IP)).toEqual(GONE);
     }
     expect(JSON.stringify(store.dump()['acct:u:ada'])).toBe(before);
 
     // Only the master key's derived tag key makes a link the service honours.
     const real = await forge((hash) => tagOf(TAG_KEY, hash, fields));
-    expect(await accounts.resetInfo(real, IP)).toEqual({ status: 200, body: { username: 'ada' } });
+    expect(await accounts.resetInfo({ token: real }, IP)).toEqual({
+      status: 200,
+      body: { username: 'ada' },
+    });
   });
 
   it("can't unlock a copy by changing an account's email in the store and asking for a link", async () => {
@@ -970,7 +992,7 @@ describe('the database alone unlocks no copy', () => {
     const account = store.dump()['acct:u:ada'] as Account;
     await store.set('acct:u:ada', { ...account, email: 'mallory@example.com' });
     // A link mailed to the real address dies with the change, like an expired one.
-    expect(await accounts.resetInfo(genuine, IP)).toEqual(GONE);
+    expect(await accounts.resetInfo({ token: genuine }, IP)).toEqual(GONE);
     expect(await accounts.reset({ token: genuine, newAuthKey: b64(32), kek: b64(32) }, IP)).toEqual(
       GONE,
     );
@@ -1147,7 +1169,7 @@ describe('account writes are compare-and-set', () => {
 
     // The link was made for a password that has since changed, so it is dead.
     expect(await reset).toEqual(GONE);
-    expect(await accounts.resetInfo(link, IP)).toEqual(GONE);
+    expect(await accounts.resetInfo({ token: link }, IP)).toEqual(GONE);
     expect(Object.keys(store.dump()).filter((k) => k.startsWith('acct:ru:'))).toEqual([]);
     // The change stands; the reset's password was never written.
     expect((await logIn(accounts, fresh.authKey)).status).toBe(401);
@@ -1284,7 +1306,7 @@ describe('account writes are compare-and-set', () => {
       ).toEqual({ status: 204 });
       expect((await logIn(accounts, fresh.authKey)).status).toBe(200);
       expect((await logIn(accounts, oldKey)).status).toBe(401);
-      expect(await accounts.resetInfo(link, IP)).toEqual(GONE);
+      expect(await accounts.resetInfo({ token: link }, IP)).toEqual(GONE);
     });
   });
 });
@@ -1307,8 +1329,8 @@ describe('secrets', () => {
     const results: Result[] = [
       await accounts.forgot({ who: 7 }, IP),
       await accounts.forgot({ who: 'nobody' }, IP),
-      await accounts.resetInfo(guess, IP),
-      await accounts.resetInfo('short', IP),
+      await accounts.resetInfo({ token: guess }, IP),
+      await accounts.resetInfo({ token: 'short' }, IP),
       await accounts.reset({ token: guess, newAuthKey: authKey, kek }, IP),
       await accounts.reset({ token, newAuthKey: 'x', kek }, IP),
       await accounts.reset({ token, newAuthKey: authKey, kek: 'x' }, IP),
@@ -1318,9 +1340,9 @@ describe('secrets', () => {
     });
     results.push(
       await accounts.reset({ token, newAuthKey: authKey, kek }, IP),
-      await accounts.resetInfo(token, IP),
+      await accounts.resetInfo({ token }, IP),
     );
-    for (let i = 0; i < 20; i++) results.push(await accounts.resetInfo(guess, IP));
+    for (let i = 0; i < 20; i++) results.push(await accounts.resetInfo({ token: guess }, IP));
 
     expect(results.some((r) => r.status === 429)).toBe(true);
     const seen = JSON.stringify(results);
@@ -1439,12 +1461,12 @@ describe('the routes', () => {
     expect((await call('POST', '/api/signup', account(), shared)).status).toBe(200);
   });
 
-  it('/api/reset needs no shared token, GET or POST; every other account route still does', async () => {
+  it('/api/reset needs no shared token, to ask or to reset; every other account route still does', async () => {
     const token = await aLink();
 
     // No X-Funancial-Token at all, and the service has none configured either.
     vi.stubEnv('FUNANCIAL_ACCESS_TOKEN', '');
-    const info = await call('GET', `/api/reset?token=${token}`);
+    const info = await call('POST', '/api/reset', { token });
     expect(info.status).toBe(200);
     expect(info.headers.get('Cache-Control')).toBe('no-store');
     expect(await info.json()).toEqual({ username: 'ada' });
@@ -1458,7 +1480,7 @@ describe('the routes', () => {
     expect(await done.text()).toBe('');
 
     vi.stubEnv('FUNANCIAL_ACCESS_TOKEN', TOKEN);
-    const used = await call('GET', `/api/reset?token=${token}`);
+    const used = await call('POST', '/api/reset', { token });
     expect(used.status).toBe(410);
     expect(await used.text()).toBe('{"error":"gone"}');
     for (const path of ['/api/signup', '/api/forgot']) {
@@ -1467,16 +1489,26 @@ describe('the routes', () => {
   });
 
   it('/api/reset answers 410 for a missing or unknown token, and 400 for a body it does not take', async () => {
-    for (const path of ['/api/reset', '/api/reset?token=', `/api/reset?token=${b64(32)}`]) {
-      const res = await call('GET', path);
-      expect(res.status, path).toBe(410);
-    }
-    const res = await call('POST', '/api/reset', 'not json');
-    expect(res.status).toBe(400);
-    // A body that is not one the page sends: no token to call expired.
-    expect(await call('POST', '/api/reset', {})).toMatchObject({ status: 400 });
-    expect(await call('POST', '/api/reset', null)).toMatchObject({ status: 400 });
     const keys = { newAuthKey: b64(32), kek: b64(32) };
+    for (const body of [
+      { token: '' },
+      { token: null },
+      { token: b64(32) },
+      { ...keys, token: 7 },
+    ]) {
+      expect(await call('POST', '/api/reset', body), JSON.stringify(body)).toMatchObject({
+        status: 410,
+      });
+    }
+    // Bodies the page never sends: not JSON, not an object, no token, half the keys, an unknown field.
+    for (const body of ['not json', null, [b64(32)], {}, keys, { token: b64(32), kek: keys.kek }]) {
+      expect(await call('POST', '/api/reset', body), JSON.stringify(body)).toMatchObject({
+        status: 400,
+      });
+    }
+    expect(await call('POST', '/api/reset', { token: b64(32), extra: 1 })).toMatchObject({
+      status: 400,
+    });
     expect(await call('POST', '/api/reset', { ...keys, token: b64(32) })).toMatchObject({
       status: 410,
     });
@@ -1485,11 +1517,27 @@ describe('the routes', () => {
     });
   });
 
+  it('GET /api/reset is gone: 405 with no body, and the token in its URL is never looked at', async () => {
+    const token = await aLink();
+    vi.mocked(kvStoreFromEnv).mockClear();
+    for (const path of [`/api/reset?token=${token}`, '/api/reset']) {
+      const res = await call('GET', path);
+      expect(res.status, path).toBe(405);
+      expect(await res.text()).toBe('');
+    }
+    expect(kvStoreFromEnv).not.toHaveBeenCalled();
+    // The link still works: asking about it by GET used none of it up.
+    expect(await (await call('POST', '/api/reset', { token })).json()).toEqual({ username: 'ada' });
+  });
+
   it('/api/reset counts attempts by address: Retry-After on the 21st', async () => {
     const send = (ip: string) =>
-      call('GET', `/api/reset?token=${randomBytes(32).toString('base64url')}`, undefined, {
-        'X-Forwarded-For': ip,
-      });
+      call(
+        'POST',
+        '/api/reset',
+        { token: randomBytes(32).toString('base64url') },
+        { 'X-Forwarded-For': ip },
+      );
     for (let i = 0; i < 20; i++) expect((await send('203.0.113.9')).status).toBe(410);
     const limited = await send('203.0.113.9');
     expect(limited.status).toBe(429);
@@ -1529,18 +1577,18 @@ describe('the routes', () => {
       await call('POST', '/api/forgot', { who: 7 }, shared),
       await call('POST', '/api/forgot', 'not json', shared),
       await call('POST', '/api/forgot', { who: 'ada' }, { 'X-Funancial-Token': 'x' }),
-      await call('GET', `/api/reset?token=${guess}`),
+      await call('POST', '/api/reset', { token: guess }),
       await call('POST', '/api/reset', { token: guess, newAuthKey, kek }),
       await call('POST', '/api/reset', { token, newAuthKey: 'x', kek }),
       await call('POST', '/api/reset', '{"token":'),
       await call('POST', '/api/reset', 'x'.repeat(1_500_001)),
     ];
-    for (let i = 0; i < 21; i++) failures.push(await call('GET', `/api/reset?token=${guess}`));
+    for (let i = 0; i < 21; i++) failures.push(await call('POST', '/api/reset', { token: guess }));
     // And the service not set up.
     vi.mocked(kvStoreFromEnv).mockReturnValue(null);
     failures.push(
       await call('POST', '/api/forgot', { who: 'ada' }, shared),
-      await call('GET', `/api/reset?token=${token}`),
+      await call('POST', '/api/reset', { token }),
       await call('POST', '/api/reset', { token, newAuthKey, kek }),
     );
 
@@ -1582,7 +1630,7 @@ describe('the routes', () => {
 
     const results = [
       await call('POST', '/api/forgot', { who: 'ada' }, shared),
-      await call('GET', `/api/reset?token=${token}`),
+      await call('POST', '/api/reset', { token }),
       await call('POST', '/api/reset', { token, newAuthKey: b64(32), kek: b64(32) }),
     ];
     for (const res of results) {

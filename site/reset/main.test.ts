@@ -39,7 +39,11 @@ async function open(search = `?token=${TOKEN}`) {
 
 const field = (label: string) => screen.getByLabelText(label);
 const submit = () => screen.getByRole('button', { name: /password/i });
-const posts = () => fetchMock.mock.calls.filter(([, init]) => init?.method === 'POST');
+/** A request's JSON body; `{}` for one with none. */
+const bodyOf = (init?: RequestInit) =>
+  JSON.parse(String(init?.body ?? '{}')) as Record<string, string>;
+/** The calls that sent new keys; asking whose link it is sends the token alone. */
+const changes = () => fetchMock.mock.calls.filter(([, init]) => 'newAuthKey' in bodyOf(init));
 
 function fill(first: string, second = first) {
   fireEvent.input(field('New password'), { target: { value: first } });
@@ -54,7 +58,7 @@ beforeEach(() => {
   info = { status: 200, body: { username: 'ada' } };
   change = { status: 204 };
   fetchMock.mockReset().mockImplementation(async (_url, init) => {
-    const answer = init?.method === 'POST' ? change : info;
+    const answer = 'newAuthKey' in bodyOf(init) ? change : info;
     if (answer instanceof Error) throw answer;
     return reply(answer);
   });
@@ -73,8 +77,11 @@ describe('the reset page', () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [url, init] = fetchMock.mock.calls[0] ?? [];
-    expect(url).toBe(`/api/reset?token=${TOKEN}`);
-    expect(init?.headers).toBeUndefined();
+    // The token goes in a POST body, never in a URL a request log could keep.
+    expect(url).toBe('/api/reset');
+    expect(init?.method).toBe('POST');
+    expect(init?.headers).toEqual({ 'Content-Type': 'application/json' });
+    expect(bodyOf(init)).toEqual({ token: TOKEN });
     expect(field('New password')).toHaveAttribute('type', 'password');
     expect(field('Type it again')).toHaveAttribute('type', 'password');
     expect(field('New password')).toHaveFocus();
@@ -83,15 +90,16 @@ describe('the reset page', () => {
 
   it('takes the token out of the address bar once it has read it, before asking about it', async () => {
     let seen = '';
-    fetchMock.mockImplementation(async (url) => {
+    fetchMock.mockImplementation(async (_url, init) => {
       seen = location.search;
-      return reply(String(url).includes(TOKEN) ? (info as Answer) : { status: 410 });
+      return reply(bodyOf(init).token === TOKEN ? (info as Answer) : { status: 410 });
     });
     await open();
     await screen.findByText('Choose a new password for ada');
 
-    // The request carried it; the address bar no longer does (nor does history).
-    expect(fetchMock.mock.calls[0]?.[0]).toBe(`/api/reset?token=${TOKEN}`);
+    // The request's body carried it; the address bar no longer does (nor does history), nor any URL.
+    expect(bodyOf(fetchMock.mock.calls[0]?.[1])).toEqual({ token: TOKEN });
+    expect(fetchMock.mock.calls.map(([url]) => String(url)).join()).not.toContain(TOKEN);
     expect(seen).toBe('');
     expect(location.pathname).toBe('/reset');
     expect(location.search).toBe('');
@@ -113,7 +121,7 @@ describe('the reset page', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('Use at least 10 characters.');
     expect(field('New password')).toHaveAttribute('aria-invalid', 'true');
     expect(field('New password')).toHaveFocus();
-    expect(posts()).toHaveLength(0);
+    expect(changes()).toHaveLength(0);
   });
 
   it('takes a password of exactly 10 characters', async () => {
@@ -132,7 +140,7 @@ describe('the reset page', () => {
 
     expect(screen.getByRole('alert')).toHaveTextContent("The two passwords don't match.");
     expect(field('Type it again')).toHaveAttribute('aria-invalid', 'true');
-    expect(posts()).toHaveLength(0);
+    expect(changes()).toHaveLength(0);
 
     fireEvent.input(field('Type it again'), { target: { value: PASSWORD } });
     expect(screen.getByRole('alert', { hidden: true })).not.toBeVisible();
@@ -149,8 +157,8 @@ describe('the reset page', () => {
     expect(await screen.findByText(DONE)).toBeVisible();
     expect(screen.queryByLabelText('New password')).not.toBeVisible();
 
-    expect(posts()).toHaveLength(1);
-    const [url, init] = posts()[0] ?? [];
+    expect(changes()).toHaveLength(1);
+    const [url, init] = changes()[0] ?? [];
     expect(url).toBe('/api/reset');
     // Only what the service needs: no shared token.
     expect(init?.headers).toEqual({ 'Content-Type': 'application/json' });
@@ -183,7 +191,7 @@ describe('the reset page', () => {
     fireEvent.submit(submit().closest('form')!);
 
     expect(await screen.findByText(DONE)).toBeVisible();
-    expect(posts()).toHaveLength(1);
+    expect(changes()).toHaveLength(1);
   });
 
   it('says the link has expired when the service says 410', async () => {
@@ -241,7 +249,7 @@ describe('the reset page', () => {
     change = { status: 204 };
     fireEvent.click(submit());
     expect(await screen.findByText(DONE)).toBeVisible();
-    expect(posts()).toHaveLength(3);
+    expect(changes()).toHaveLength(3);
   });
 });
 
