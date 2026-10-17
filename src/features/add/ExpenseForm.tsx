@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Dialog } from '@/components/ui/Dialog';
 import { MoneyField } from '@/components/ui/MoneyField';
+import { RadioGroup } from '@/components/ui/RadioGroup';
 import { Select } from '@/components/ui/Select';
 import { TextField } from '@/components/ui/TextField';
 import { limitMessage } from '@/domain/alerts';
@@ -147,11 +148,11 @@ export function ExpenseForm({
         error={errors.amount}
         autoFocus={!expense}
       />
-      <Select
-        variant="line"
-        label="Category"
+      {/* Chips, one tap each, as before: eight underline tabs would wrap badly. */}
+      <RadioGroup<Category>
+        legend="Category"
         value={category}
-        onChange={(v) => setCategory(v as Category)}
+        onChange={setCategory}
         options={CATEGORY_OPTIONS}
       />
       <DateField

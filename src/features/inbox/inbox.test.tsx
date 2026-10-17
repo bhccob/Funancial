@@ -125,15 +125,19 @@ describe('InboxScreen', () => {
     expect(actions.markAllRead).toHaveBeenCalledOnce();
   });
 
-  it('has nothing to mark when everything is read, and says so on New', () => {
+  it('has nothing to mark when everything is read, and says so on New, not as if none came', async () => {
     const readBefore = '2026-10-14T08:00:00.000Z';
     renderInbox(inboxData({ readBefore, read: [] }));
     expect(screen.getByRole('button', { name: 'New (0)' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Mark all as read' })).not.toBeInTheDocument();
-    expect(
-      screen.getByText('Nothing here yet. Reminders you miss will show up here.'),
-    ).toBeInTheDocument();
+    expect(screen.getByText('No new reminders.')).toBeInTheDocument();
+    expect(screen.queryByText(/Nothing here yet/)).not.toBeInTheDocument();
     expect(screen.queryAllByRole('link')).toHaveLength(0);
+
+    // They are all still there to read again.
+    await userEvent.click(screen.getByRole('button', { name: 'All' }));
+    expect(screen.queryByText('No new reminders.')).not.toBeInTheDocument();
+    expect(rows()).toHaveLength(8);
   });
 
   it('says so when no reminder has come due yet, on both tabs', async () => {

@@ -120,10 +120,12 @@ test('add an expense with the keyboard alone', async ({ page }) => {
   await expectFocusShown(page, 'the Amount field');
   await page.keyboard.type('12.50');
 
-  const category = page.getByLabel('Category');
-  await tabTo(page, category);
-  await page.keyboard.type('Fun');
-  await expect(category).toHaveValue('entertainment');
+  // Category is chips, radios too: Tab lands on the chosen one (Food) and the arrows move it.
+  await tabTo(page, page.getByRole('radio', { name: 'Food', exact: true }));
+  // Transport, Rent, Utilities, Fun.
+  for (let step = 0; step < 4; step++) await page.keyboard.press('ArrowRight');
+  await expect(page.getByRole('radio', { name: 'Fun', exact: true })).toBeChecked();
+  await expectFocusShown(page, 'the Category chips');
 
   // Paid with is tabs, still radios: Tab lands on the choice and the arrows move it.
   const cash = page.getByRole('radio', { name: 'Cash' });

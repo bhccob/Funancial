@@ -2,6 +2,7 @@ import { fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes, type InitialEntry } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { CATEGORY_OPTIONS } from '@/features/shared/categories';
 import { Toaster } from '@/components/ui/Toaster';
 import { periodRange } from '@/domain/periods';
 import type { LimitStatus } from '@/domain/budget';
@@ -74,7 +75,7 @@ describe('Add expense', () => {
     expect(screen.getByRole('heading', { level: 1, name: 'Add' })).toBeInTheDocument();
     expect(screen.getByLabelText('Amount')).toHaveFocus();
     await userEvent.type(screen.getByLabelText('Amount'), '12.50');
-    await userEvent.selectOptions(screen.getByLabelText('Category'), 'Food');
+    await userEvent.click(screen.getByRole('radio', { name: 'Food' }));
     expect(screen.getByLabelText('Date')).toHaveValue(TODAY);
     await save();
 
@@ -94,7 +95,7 @@ describe('Add expense', () => {
   it('records a credit card purchase against that card', async () => {
     renderAdd();
     await userEvent.type(screen.getByLabelText('Amount'), '40');
-    await userEvent.selectOptions(screen.getByLabelText('Category'), 'Fun');
+    await userEvent.click(screen.getByRole('radio', { name: 'Fun' }));
     await userEvent.click(screen.getByRole('radio', { name: 'Visa' }));
     await userEvent.selectOptions(screen.getByLabelText('Repeats'), 'Monthly');
     await save();
@@ -173,7 +174,7 @@ describe('Add expense from a buy check', () => {
   it('has the item in the note, the price and the category, ready to save', async () => {
     renderAdd(fromCheck(bought));
     expect(screen.getByLabelText('Amount')).toHaveValue('249.00');
-    expect(screen.getByLabelText('Category')).toHaveValue('entertainment');
+    expect(screen.getByRole('radio', { name: 'Fun' })).toBeChecked();
     expect(screen.getByLabelText('Note')).toHaveValue('Noise-cancelling headphones');
 
     await save();
@@ -195,7 +196,7 @@ describe('Add expense from a buy check', () => {
     await userEvent.click(screen.getByRole('radio', { name: 'Expense' }));
 
     expect(screen.getByLabelText('Amount')).toHaveValue('249.00');
-    expect(screen.getByLabelText('Category')).toHaveValue('entertainment');
+    expect(screen.getByRole('radio', { name: 'Fun' })).toBeChecked();
     expect(screen.getByLabelText('Note')).toHaveValue('Noise-cancelling headphones');
     expect(screen.queryByRole('link', { name: ASK_FIRST })).not.toBeInTheDocument();
   });
@@ -242,7 +243,7 @@ describe('Add expense from a buy check', () => {
     renderAdd(fromCheck(bought));
     await userEvent.clear(screen.getByLabelText('Amount'));
     await userEvent.type(screen.getByLabelText('Amount'), '199');
-    await userEvent.selectOptions(screen.getByLabelText('Category'), 'Shopping');
+    await userEvent.click(screen.getByRole('radio', { name: 'Shopping' }));
     await save();
     expect(actions.addExpense).toHaveBeenCalledWith(
       expect.objectContaining({ amount: 199_00, category: 'shopping' }),
@@ -265,7 +266,7 @@ describe('Add expense from a buy check', () => {
   ])('starts empty for a prefill of %s', (_, prefill) => {
     renderAdd(fromCheck(prefill));
     expect(screen.getByLabelText('Amount')).toHaveValue('');
-    expect(screen.getByLabelText('Category')).toHaveValue('food');
+    expect(screen.getByRole('radio', { name: 'Food' })).toBeChecked();
     expect(screen.getByLabelText('Note')).toHaveValue('');
   });
 });
@@ -312,20 +313,30 @@ describe('the Add forms in the line style', () => {
 
   it('has line fields, a larger amount and underline tabs for an expense', async () => {
     renderAdd();
-    for (const label of ['Amount', 'Date', 'Note', 'Category', 'Repeats']) {
+    for (const label of ['Amount', 'Date', 'Note', 'Repeats']) {
       const field = screen.getByLabelText(label);
       expect(field, label).toHaveClass(...LINE);
       expect(field, label).not.toHaveClass('rounded-md');
     }
     expect(screen.getByLabelText('Amount')).toHaveClass('text-[20px]');
     expect(screen.getByLabelText('Date')).toHaveClass('text-base');
-    // The type switch and Paid with are underline tabs, still radios; Category is a select now.
+    // The type switch and Paid with are underline tabs, still radios.
     expect(tab('Expense')).toHaveClass('border-b-2', 'border-text');
     expect(tab('Income')).toHaveClass('border-transparent');
     expect(tabsOf('Paid with')).toEqual(['Cash', 'Debit card', 'Visa', 'Other']);
     expect(tab('Cash')).toHaveClass('border-b-2', 'border-text');
-    expect(screen.queryByRole('radio', { name: 'Food' })).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Paid with')).not.toBeInTheDocument();
+  });
+
+  it('has Category as one-tap chips, not a select and not underline tabs', () => {
+    renderAdd();
+    // All eight at once, as before: one tap, nothing to open.
+    expect(tabsOf('Category')).toEqual(CATEGORY_OPTIONS.map((o) => o.label));
+    expect(screen.queryByLabelText('Category')).not.toBeInTheDocument();
+    // Chips in a well, the chosen one raised; eight underline tabs would wrap badly.
+    expect(tab('Food')).toHaveClass('bg-overlay', 'rounded-[10px]', 'min-h-11');
+    expect(tab('Food')).not.toHaveClass('border-b-2');
+    expect(tab('Fun')).not.toHaveClass('bg-overlay');
   });
 
   it('says what paying with a card does, under the tabs', async () => {

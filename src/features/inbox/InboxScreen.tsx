@@ -53,7 +53,14 @@ export function InboxScreen() {
 
       {shown.length === 0 ? (
         <div className="mt-4">
-          <EmptyState title="Nothing here yet. Reminders you miss will show up here." />
+          {/* Only New can be empty while All has some: they are all read. */}
+          <EmptyState
+            title={
+              items.length > 0
+                ? 'No new reminders.'
+                : 'Nothing here yet. Reminders you miss will show up here.'
+            }
+          />
         </div>
       ) : (
         <ul className="mt-2">

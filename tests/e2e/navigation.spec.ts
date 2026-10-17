@@ -144,7 +144,7 @@ test('Add Expense says to ask first, and asking works with no link', async ({ pa
   await page.getByRole('button', { name: 'I bought it' }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Add' })).toBeVisible();
   await expect(page.getByLabel('Amount')).toHaveValue('249.00');
-  await expect(page.getByLabel('Category').locator('option:checked')).toHaveText('Shopping');
+  await expect(page.getByRole('radio', { name: 'Shopping', exact: true })).toBeChecked();
   await expect(page.getByLabel('Note')).toHaveValue('Noise-cancelling headphones');
 
   // Back on the answer, what was bought can be rated.
