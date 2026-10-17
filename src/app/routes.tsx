@@ -6,6 +6,7 @@ import { AnswerScreen } from '@/features/buy/AnswerScreen';
 import { BuyScreen } from '@/features/buy/BuyScreen';
 import { DashboardScreen } from '@/features/dashboard/DashboardScreen';
 import { FreezeScreen } from '@/features/freeze/FreezeScreen';
+import { DebtsScreen } from '@/features/goals/DebtsScreen';
 import { GoalsScreen } from '@/features/goals/GoalsScreen';
 import { HelpPage } from '@/features/help/HelpPage';
 import { HelpScreen } from '@/features/help/HelpScreen';
@@ -39,6 +40,7 @@ export const APP_ROUTES: AppRoute[] = [
   { path: '/subscriptions', element: <SubscriptionsScreen /> },
   { path: '/freeze', element: <FreezeScreen /> },
   { path: '/goals', element: <GoalsScreen /> },
+  { path: '/debts', element: <DebtsScreen /> },
   { path: '/history', element: <HistoryScreen /> },
   { path: '/shop', element: <ShopScreen /> },
   { path: '/inbox', element: <InboxScreen /> },

@@ -25,6 +25,11 @@ export function useMenuSubtitles(): Record<string, string> {
   const target = goals.reduce((sum, g) => sum + g.target, 0);
   // Rounded down, as the Goals screen does, so a goal never reads as done before it is.
   const percent = target > 0 ? Math.floor((saved * 100) / target) : 0;
+  // One of them is named; two or more are "cards and loans", as the page is.
+  const debtCount =
+    debts.length > 1
+      ? `${debts.length} cards and loans`
+      : plural(debts.length, cards ? 'card' : 'loan');
 
   // What is inside: the subscriptions with what they cost, then the credit cards.
   const billsLine = [
@@ -37,6 +42,7 @@ export function useMenuSubtitles(): Record<string, string> {
   return {
     '/subscriptions': billsLine || 'None yet',
     '/goals': goals.length > 0 ? `${plural(goals.length, 'goal')} · ${percent}% saved` : 'None yet',
+    '/debts': debts.length > 0 ? `${debtCount} · ${money(view.debtTotal)}` : 'None yet',
     '/history': 'Every entry, searchable',
     '/freeze': view.activeFreeze
       ? `Active until ${formatDay(view.activeFreeze.end)}`

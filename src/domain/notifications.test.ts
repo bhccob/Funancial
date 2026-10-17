@@ -319,7 +319,7 @@ describe('upcomingReminders', () => {
         at: '2026-10-19T09:00',
         title: 'Visa payment due in 2 days',
         body: `${money(230_00)} to pay.`,
-        route: '/goals',
+        route: '/debts',
       },
     ]);
   });

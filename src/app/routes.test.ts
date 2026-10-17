@@ -5,6 +5,8 @@ import { AnswerScreen } from '@/features/buy/AnswerScreen';
 import { BuyScreen } from '@/features/buy/BuyScreen';
 import { HelpPage } from '@/features/help/HelpPage';
 import { HelpScreen } from '@/features/help/HelpScreen';
+import { DebtsScreen } from '@/features/goals/DebtsScreen';
+import { GoalsScreen } from '@/features/goals/GoalsScreen';
 import { InboxScreen } from '@/features/inbox/InboxScreen';
 import { HoldingPage } from '@/features/invest/HoldingPage';
 import { InvestScreen } from '@/features/invest/InvestScreen';
@@ -25,6 +27,7 @@ it('routes every spec screen', () => {
       '/budget',
       '/buy',
       '/buy/:id',
+      '/debts',
       '/freeze',
       '/goals',
       '/help',
@@ -92,4 +95,11 @@ it('serves Help from its own screens: the index and a page', () => {
 it('serves the Inbox from its own screen, not a placeholder', () => {
   const inbox = APP_ROUTES.find((r) => r.path === '/inbox');
   expect(isValidElement(inbox?.element) && inbox.element.type).toBe(InboxScreen);
+});
+
+it('serves goals and debts from their own screens', () => {
+  const goals = APP_ROUTES.find((r) => r.path === '/goals');
+  expect(isValidElement(goals?.element) && goals.element.type).toBe(GoalsScreen);
+  const debts = APP_ROUTES.find((r) => r.path === '/debts');
+  expect(isValidElement(debts?.element) && debts.element.type).toBe(DebtsScreen);
 });

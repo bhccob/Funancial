@@ -134,7 +134,7 @@ function cardBills({ data, prefs, today, lastDay, money }: Context): Reminder[] 
         at: moment(addDays(due, -2), MORNING),
         title: `${bill.name} payment due in 2 days`,
         body: `${money(bill.amount)} to pay.`,
-        route: '/goals',
+        route: '/debts',
       });
       due = nextDueDate(addDays(due, 1), dueDay);
     }

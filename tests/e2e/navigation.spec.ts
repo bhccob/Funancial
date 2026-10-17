@@ -177,3 +177,25 @@ test('mobile: a new screen opens at its top, and Back returns to where the last 
   await expect(index).toBeVisible();
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(left);
 });
+
+test('mobile: the Menu opens Goals and Debts as two pages', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'mobile-chromium', 'mobile layout only');
+  await startFresh(page);
+  const menuButton = page
+    .getByRole('navigation', { name: 'Primary' })
+    .getByRole('button', { name: 'Menu' });
+  const menu = page.getByRole('dialog', { name: 'Menu' });
+
+  await menuButton.click();
+  await menu.getByRole('link', { name: /^Goals/ }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Goals' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Add goal' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Add card' })).toHaveCount(0);
+
+  await menuButton.click();
+  await menu.getByRole('link', { name: /^Debts/ }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Debts' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Add card' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Add loan' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Add goal' })).toHaveCount(0);
+});

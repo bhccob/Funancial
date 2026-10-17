@@ -9,6 +9,7 @@ import { formatMoney } from '@/domain/money';
 import { emptySnapshot, type DataSnapshot } from '@/domain/snapshot';
 import { topDialog } from '@/lib/dialogStack';
 import { formatDay } from '@/lib/format';
+import { useAmountsHidden } from '@/store/useAmountsHidden';
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
 import { INBOX_NOW, inboxData } from '@/test/inboxData';
 import {
@@ -199,6 +200,46 @@ describe('Menu sheet', () => {
     expect(row(await openMenu(), 'Bills & cards')).toHaveTextContent(/^Bills & cards1 card$/);
   });
 
+  describe('Debts row', () => {
+    afterEach(() => useAmountsHidden.setState({ hidden: false }));
+
+    const owing = () => {
+      const data = emptySnapshot();
+      data.tables.profile.push(makeProfile({ currency: 'USD' }));
+      data.tables.debt.push(
+        makeDebt({ kind: 'credit_card', openingBalance: 230_00 }),
+        makeDebt({ kind: 'loan', openingBalance: 1_000_00 }),
+      );
+      return data;
+    };
+
+    it('says how many cards and loans there are, and what they come to', async () => {
+      renderAt('/', owing());
+      const sheet = await openMenu();
+      expect(row(sheet, 'Debts')).toHaveTextContent(`2 cards and loans · ${usd(1_230_00)}`);
+      expect(row(sheet, 'Debts')).toHaveAttribute('href', '/debts');
+    });
+
+    it('names the one card or loan there is', async () => {
+      const card = emptySnapshot();
+      card.tables.debt.push(makeDebt({ kind: 'credit_card', openingBalance: 230_00 }));
+      renderAt('/', card);
+      expect(row(await openMenu(), 'Debts')).toHaveTextContent(`1 card · ${usd(230_00)}`);
+      cleanup();
+
+      const loan = emptySnapshot();
+      loan.tables.debt.push(makeDebt({ kind: 'loan', openingBalance: 1_000_00 }));
+      renderAt('/', loan);
+      expect(row(await openMenu(), 'Debts')).toHaveTextContent(`1 loan · ${usd(1_000_00)}`);
+    });
+
+    it('hides the total with the eye', async () => {
+      useAmountsHidden.setState({ hidden: true });
+      renderAt('/', owing());
+      expect(row(await openMenu(), 'Debts')).toHaveTextContent('2 cards and loans · ••••');
+    });
+  });
+
   it('shows the level the player has reached on the Quests row', async () => {
     const data = emptySnapshot();
     data.tables.ledger.push(makeLedgerEntry({ coins: 0, xp: levelStart(3) }));
@@ -212,6 +253,7 @@ describe('Menu sheet', () => {
     const sheet = await openMenu();
     expect(row(sheet, 'Bills & cards')).toHaveTextContent('None yet');
     expect(row(sheet, 'Goals')).toHaveTextContent('None yet');
+    expect(row(sheet, 'Debts')).toHaveTextContent('None yet');
     expect(row(sheet, 'Salary freeze')).toHaveTextContent('None right now');
     expect(row(sheet, 'Shop')).toHaveTextContent('0 coins to spend');
   });
@@ -315,7 +357,7 @@ describe('Menu sheet', () => {
       within(money)
         .getAllByRole('link')
         .map((a) => a.getAttribute('href')),
-    ).toEqual(['/subscriptions', '/goals', '/history', '/freeze', '/buy']);
+    ).toEqual(['/subscriptions', '/goals', '/debts', '/history', '/freeze', '/buy']);
 
     await userEvent.click(row(sheet, 'Buy it\\?'));
     expect(screen.getByRole('heading', { level: 1, name: 'Should I buy it?' })).toBeInTheDocument();
@@ -408,20 +450,20 @@ describe('sidebar', () => {
     );
   });
 
-  it('marks the current screen', () => {
-    renderAt('/goals');
+  it.each([
+    ['/goals', 'Goals'],
+    ['/debts', 'Debts'],
+  ])('marks %s as the current screen', (path, name) => {
+    renderAt(path);
     const sidebar = screen.getByRole('navigation', { name: 'All sections' });
-    expect(within(sidebar).getByRole('link', { name: 'Goals' })).toHaveAttribute(
-      'aria-current',
-      'page',
-    );
+    expect(within(sidebar).getByRole('link', { name })).toHaveAttribute('aria-current', 'page');
   });
 });
 
 describe('menu items', () => {
   it('has the two groups in order, with a fixed chip colour that holds 3:1 against a white icon', () => {
     expect(MENU_GROUPS.map((g) => [g.title, g.items.length])).toEqual([
-      ['Your money', 5],
+      ['Your money', 6],
       ['You', 6],
     ]);
     const luminance = (hex: string) => {

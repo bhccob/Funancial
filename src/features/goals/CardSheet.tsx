@@ -21,7 +21,7 @@ function Fact({ label, value }: { label: string; value: string }) {
 
 /**
  * What a credit card means for you, in plain words, with Pay and Edit one tap away. Open while
- * `debtId` names a card; the pay and edit dialogs are the Goals & debts ones, stacked over it.
+ * `debtId` names a card; the pay and edit dialogs are the Debts page's, stacked over it.
  */
 export function CardSheet({ debtId, onClose }: { debtId: string | null; onClose(): void }) {
   const today = useToday();

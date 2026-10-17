@@ -84,7 +84,7 @@ test('card spending becomes a bill until the card is paid', async ({ page }) => 
   await start(page);
   await expect(available(page)).toContainText('$6,000.00');
 
-  await page.goto('/goals');
+  await page.goto('/debts');
   await page.getByRole('button', { name: 'Add card' }).click();
   const add = page.getByRole('dialog', { name: 'Add a card' });
   await add.getByLabel('Name').fill('Visa');
@@ -96,7 +96,7 @@ test('card spending becomes a bill until the card is paid', async ({ page }) => 
   await addExpense(page, { amount: '50', category: 'Shopping', paidWith: 'Visa' });
   await expect(available(page)).toContainText('$5,950.00');
 
-  await page.goto('/goals');
+  await page.goto('/debts');
   const visa = page.getByRole('listitem').filter({ hasText: 'Visa' });
   await expect(visa).toContainText('$50.00');
   await visa.getByRole('button', { name: 'Pay card' }).click();

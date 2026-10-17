@@ -1,15 +1,17 @@
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import type { ReactElement } from 'react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Toaster } from '@/components/ui/Toaster';
 import { formatMoney } from '@/domain/money';
-import { emptySnapshot } from '@/domain/snapshot';
+import { emptySnapshot, type DataSnapshot } from '@/domain/snapshot';
 import { formatDate } from '@/lib/format';
 import { toastStore } from '@/lib/toast';
 import { useAmountsHidden } from '@/store/useAmountsHidden';
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
 import { makeDebt, makeGoal, makeProfile, makeTransaction } from '@/test/fixtures';
+import { DebtsScreen } from './DebtsScreen';
 import { GoalsScreen } from './GoalsScreen';
 
 const actions = vi.hoisted(() => ({
@@ -35,7 +37,8 @@ beforeEach(() => {
   Object.values(actions).forEach((a) => a.mockClear());
 });
 
-function renderGoals() {
+/** A goal, a card and a loan: each page must show its own and none of the other's. */
+function filledData(): DataSnapshot {
   const data = emptySnapshot();
   data.tables.profile.push(makeProfile({ openingDate: '2026-10-01' }));
   data.tables.goal.push(
@@ -79,14 +82,21 @@ function renderGoals() {
       debtId: 'loan-1',
     }),
   );
+  return data;
+}
+
+function renderPage(page: ReactElement, data: DataSnapshot = filledData()) {
   renderWithStore(
     <MemoryRouter>
-      <GoalsScreen />
+      {page}
       <Toaster />
     </MemoryRouter>,
     createStubStore({ data, today: TODAY }),
   );
 }
+
+const renderGoals = (data?: DataSnapshot) => renderPage(<GoalsScreen />, data);
+const renderDebts = (data?: DataSnapshot) => renderPage(<DebtsScreen />, data);
 
 const row = (name: string) => {
   const item = screen.getByText(name).closest('li');
@@ -95,9 +105,26 @@ const row = (name: string) => {
 };
 
 describe('Goals', () => {
+  it('shows the goals and none of the debts', () => {
+    renderGoals();
+    expect(screen.getByRole('heading', { level: 1, name: 'Goals' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Add goal' })).toBeInTheDocument();
+    expect(screen.getByText('New bike')).toBeInTheDocument();
+    for (const gone of ['Visa', 'Car loan']) expect(screen.queryByText(gone)).toBeNull();
+    for (const gone of ['Add card', 'Add loan']) {
+      expect(screen.queryByRole('button', { name: gone })).toBeNull();
+    }
+    expect(screen.queryByRole('heading', { name: 'Debts' })).toBeNull();
+  });
+
+  it('says so when there are no goals, and still offers to add one', () => {
+    renderGoals(emptySnapshot());
+    expect(screen.getByText('No goals yet')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Add goal' })).toBeInTheDocument();
+  });
+
   it('shows progress and what to save each month to make the deadline', () => {
     renderGoals();
-    expect(screen.getByRole('heading', { level: 1, name: 'Goals & debts' })).toBeInTheDocument();
     const bike = row('New bike');
     expect(bike.getByText(`${usd(450_00)} of ${usd(1_200_00)}`)).toBeInTheDocument();
     expect(
@@ -138,8 +165,28 @@ describe('Goals', () => {
 });
 
 describe('Debts', () => {
+  it('shows the cards and loans with Add card and Add loan, and none of the goals', () => {
+    renderDebts();
+    expect(screen.getByRole('heading', { level: 1, name: 'Debts' })).toBeInTheDocument();
+    for (const name of ['Add card', 'Add loan']) {
+      expect(screen.getByRole('button', { name })).toBeInTheDocument();
+    }
+    for (const name of ['Visa', 'Car loan']) expect(screen.getByText(name)).toBeInTheDocument();
+    expect(screen.queryByText('New bike')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Add goal' })).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'Goals' })).toBeNull();
+  });
+
+  it('says so when there are no cards or loans, and still offers to add them', () => {
+    renderDebts(emptySnapshot());
+    expect(screen.getByText('No cards or loans')).toBeInTheDocument();
+    for (const name of ['Add card', 'Add loan']) {
+      expect(screen.getByRole('button', { name })).toBeInTheDocument();
+    }
+  });
+
   it('shows card use and due day, and a loan payoff bar', () => {
-    renderGoals();
+    renderDebts();
     expect(row('Visa').getByText('23% of limit · Due on the 21st')).toBeInTheDocument();
     expect(row('Visa').getByText(usd(230_00))).toBeInTheDocument();
     expect(row('Car loan').getByRole('progressbar', { name: 'Car loan paid off' })).toHaveAttribute(
@@ -149,7 +196,7 @@ describe('Debts', () => {
   });
 
   it('pays the card balance from cash by default', async () => {
-    renderGoals();
+    renderDebts();
     await userEvent.click(row('Visa').getByRole('button', { name: 'Pay card' }));
     const dialog = screen.getByRole('dialog', { name: 'Pay Visa' });
     expect(within(dialog).getByLabelText('Amount')).toHaveValue('230.00');
@@ -159,7 +206,7 @@ describe('Debts', () => {
 
   it('explains when a card with history cannot be deleted', async () => {
     actions.deleteDebt.mockRejectedValueOnce(new Error(HISTORY));
-    renderGoals();
+    renderDebts();
     await userEvent.click(row('Visa').getByRole('button', { name: 'Edit Visa' }));
     const dialog = screen.getByRole('dialog', { name: 'Edit card' });
     await userEvent.click(within(dialog).getByRole('button', { name: 'Delete' }));
@@ -171,17 +218,21 @@ describe('Debts', () => {
 describe('with amounts hidden', () => {
   afterEach(() => useAmountsHidden.setState({ hidden: false }));
 
-  it('hides the rows but not what a form is editing', async () => {
+  it('hides the goal rows but not what a form is editing', async () => {
     useAmountsHidden.setState({ hidden: true });
     renderGoals();
     expect(row('New bike').getByText('•••• of ••••')).toBeInTheDocument();
-    expect(row('Visa').getByText('••••')).toBeInTheDocument();
 
     await userEvent.click(row('New bike').getByRole('button', { name: 'Edit New bike' }));
     const goal = screen.getByRole('dialog', { name: 'Edit goal' });
     expect(within(goal).getByLabelText('Target')).toHaveValue('1,200.00');
     expect(within(goal).getByLabelText('Saved so far')).toHaveValue('450.00');
-    await userEvent.click(within(goal).getByRole('button', { name: 'Cancel' }));
+  });
+
+  it('hides the debt rows but not what a form is paying', async () => {
+    useAmountsHidden.setState({ hidden: true });
+    renderDebts();
+    expect(row('Visa').getByText('••••')).toBeInTheDocument();
 
     await userEvent.click(row('Visa').getByRole('button', { name: 'Pay card' }));
     const pay = screen.getByRole('dialog', { name: 'Pay Visa' });
@@ -208,7 +259,7 @@ describe('the goal and debt dialogs in the line style', () => {
   });
 
   it('has line fields and a line select for a card', async () => {
-    renderGoals();
+    renderDebts();
     await userEvent.click(screen.getByRole('button', { name: 'Add card' }));
     const dialog = screen.getByRole('dialog', { name: 'Add a card' });
     lineFields(dialog, [
@@ -222,7 +273,7 @@ describe('the goal and debt dialogs in the line style', () => {
   });
 
   it('has line fields for a loan', async () => {
-    renderGoals();
+    renderDebts();
     await userEvent.click(screen.getByRole('button', { name: 'Add loan' }));
     lineFields(screen.getByRole('dialog', { name: 'Add a loan' }), [
       'Name',
@@ -239,7 +290,7 @@ describe('the goal and debt dialogs in the line style', () => {
   });
 
   it('has a line amount and underline tabs when paying a card', async () => {
-    renderGoals();
+    renderDebts();
     await userEvent.click(row('Visa').getByRole('button', { name: 'Pay card' }));
     const dialog = screen.getByRole('dialog', { name: 'Pay Visa' });
     lineFields(dialog, ['Amount']);

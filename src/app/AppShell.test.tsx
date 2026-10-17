@@ -75,7 +75,7 @@ describe('AppShell', () => {
       within(screen.getByRole('dialog', { name: 'Menu' })).getByRole('link', { name: /^Goals/ }),
     );
 
-    const goals = screen.getByRole('heading', { level: 1, name: 'Goals & debts' });
+    const goals = screen.getByRole('heading', { level: 1, name: 'Goals' });
     expect(menu).not.toHaveFocus();
     expect(goals).toHaveFocus();
   });
