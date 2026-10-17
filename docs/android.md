@@ -1,7 +1,7 @@
 # Funancial on an Android phone
 
 This puts the app on your own phone over a USB cable, and lets the phone reload as you edit. It is a
-debug build for personal use. Signed release builds come later.
+debug build for personal use. Signed release builds for friends are in `docs/release.md`.
 
 You need: a Windows computer with Node 24, an Android phone, and a USB cable that carries data.
 

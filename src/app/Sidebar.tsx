@@ -11,7 +11,7 @@ function SidebarLink({ path, label, icon: Icon, soon }: NavTarget & { soon?: boo
       end={path === '/'}
       className={({ isActive }) =>
         cn(
-          'flex min-h-10 items-center gap-2.5 rounded-md px-2.5 text-[14.5px] font-semibold',
+          'flex min-h-11 items-center gap-2.5 rounded-md px-2.5 text-[14.5px] font-semibold',
           isActive ? 'bg-surface-2 text-text' : 'text-muted hover:text-text',
         )
       }

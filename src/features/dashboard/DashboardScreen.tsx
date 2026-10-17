@@ -10,6 +10,7 @@ import { useAction } from '@/lib/useAction';
 import { useApp } from '@/store/AppStoreProvider';
 import { useFinanceActions, useFinanceView, useMoney, useToday } from '@/store/useFinance';
 import { useGameView } from '@/store/useGame';
+import { AccountReminder } from './AccountReminder';
 import { BillsSection } from './BillsSection';
 import { ConfirmSalaryDialog } from './ConfirmSalaryDialog';
 import { GoalsSection } from './GoalsSection';
@@ -87,6 +88,7 @@ export function DashboardScreen() {
           </Banner>
         )}
         <ReminderBanner />
+        <AccountReminder />
       </div>
 
       <HomeHero view={view} today={today} />

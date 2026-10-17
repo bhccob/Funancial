@@ -162,7 +162,7 @@ describe('SubscriptionsScreen', () => {
       target: { value: '2026-11-02' },
     });
     await userEvent.selectOptions(within(dialog).getByLabelText('Category'), 'Health');
-    await userEvent.selectOptions(within(dialog).getByLabelText('Paid with'), 'Visa');
+    await userEvent.click(within(dialog).getByRole('radio', { name: 'Visa' }));
     await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
     expect(actions.saveSubscription).toHaveBeenCalledWith({
       name: 'FitHub Gym',
@@ -181,9 +181,45 @@ describe('SubscriptionsScreen', () => {
     await userEvent.click(screen.getByRole('menuitem', { name: 'Edit' }));
     const dialog = screen.getByRole('dialog', { name: 'Edit subscription' });
     expect(within(dialog).getByLabelText('Name')).toHaveValue('Cloud Drive');
-    expect(within(dialog).getByLabelText('Paid with')).toHaveValue('card:card-1');
+    expect(within(dialog).getByRole('radio', { name: 'Visa' })).toBeChecked();
     expect(within(dialog).getByText('Past charges stay in your history.')).toBeInTheDocument();
     await userEvent.click(within(dialog).getByRole('button', { name: 'Delete' }));
     expect(actions.deleteSubscription).toHaveBeenCalledWith('sub-cloud');
+  });
+});
+
+describe('the subscription dialog in the line style', () => {
+  it('has line fields, underline tabs for the cycle and for paid with', async () => {
+    renderSubs();
+    await userEvent.click(screen.getByRole('button', { name: 'Add' }));
+    const dialog = screen.getByRole('dialog', { name: 'Add a subscription' });
+    for (const label of ['Name', 'Amount', 'Next renewal', 'Category']) {
+      expect(within(dialog).getByLabelText(label), label).toHaveClass('border-b', 'font-extrabold');
+      expect(within(dialog).getByLabelText(label), label).not.toHaveClass('rounded-md');
+    }
+    const tabs = (legend: string) =>
+      within(within(dialog).getByRole('group', { name: legend }))
+        .getAllByRole('radio')
+        .map((r) => r.closest('label')?.textContent);
+    expect(tabs('Cycle')).toEqual(['Weekly', 'Monthly', 'Quarterly', 'Yearly']);
+    expect(within(dialog).getByText('Monthly')).toHaveClass('border-b-2', 'border-text');
+    expect(tabs('Paid with')).toEqual(['Cash', 'Debit card', 'Visa', 'Other']);
+    expect(within(dialog).getByText('Debit card')).toHaveClass('border-b-2', 'border-text');
+  });
+
+  it('saves the cycle that was picked', async () => {
+    renderSubs();
+    await userEvent.click(screen.getByRole('button', { name: 'Add' }));
+    const dialog = screen.getByRole('dialog', { name: 'Add a subscription' });
+    await userEvent.type(within(dialog).getByLabelText('Name'), 'Newsletter');
+    await userEvent.type(within(dialog).getByLabelText('Amount'), '5');
+    fireEvent.change(within(dialog).getByLabelText('Next renewal'), {
+      target: { value: '2026-11-02' },
+    });
+    await userEvent.click(within(dialog).getByRole('radio', { name: 'Yearly' }));
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+    expect(actions.saveSubscription).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'Newsletter', cycle: 'yearly' }),
+    );
   });
 });

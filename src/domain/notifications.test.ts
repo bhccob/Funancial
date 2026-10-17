@@ -1,5 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
+  makeBuyAsk,
+  makeBuyDecision,
   makeDebt,
   makeDividend,
   makeExpense,
@@ -11,6 +13,7 @@ import {
 } from '@/test/fixtures';
 import { localDateTime } from './dates';
 import type {
+  BuyDecision,
   Debt,
   Dividend,
   Expense,
@@ -18,10 +21,18 @@ import type {
   Income,
   ReminderSettings,
   SalaryFreeze,
+  Settings,
   Subscription,
 } from './entities';
 import { formatMoney } from './money';
-import { upcomingReminders, type Reminder } from './notifications';
+import {
+  inboxItems,
+  pastReminders,
+  REMINDER_AREA,
+  upcomingReminders,
+  type Reminder,
+  type ReminderKind,
+} from './notifications';
 import { emptySnapshot, type DataSnapshot } from './snapshot';
 
 /** Node's global, which the app's TypeScript config does not include: the time-zone check needs it. */
@@ -40,6 +51,7 @@ const ONLY: Partial<ReminderSettings> = {
   reviews: false,
   backup: false,
   dividends: false,
+  buyIt: false,
 };
 
 type Setup = {
@@ -49,6 +61,9 @@ type Setup = {
   weekStartsOn?: 0 | 1;
   lastBackupAt?: string | null;
   onboardedAt?: string | null;
+  /** When the profile was made: long before `NOW`, unless a test is about the days before it. */
+  profileSince?: string;
+  inbox?: Settings['inbox'];
   subscriptions?: Subscription[];
   debts?: Debt[];
   expenses?: Expense[];
@@ -56,15 +71,22 @@ type Setup = {
   freezes?: SalaryFreeze[];
   holdings?: Holding[];
   dividends?: Dividend[];
+  decisions?: BuyDecision[];
 };
 
 function build(setup: Setup = {}): DataSnapshot {
   const data = emptySnapshot();
-  data.tables.profile = [makeProfile({ onboardedAt: setup.onboardedAt ?? null })];
+  data.tables.profile = [
+    makeProfile({
+      onboardedAt: setup.onboardedAt ?? null,
+      createdAt: setup.profileSince ?? '2026-01-01T09:00:00.000Z',
+    }),
+  ];
   data.tables.settings = [
     makeSettings({
       weekStartsOn: setup.weekStartsOn ?? 1,
       lastBackupAt: setup.lastBackupAt ?? null,
+      ...(setup.inbox ? { inbox: setup.inbox } : {}),
       reminders: {
         ...makeSettings().reminders,
         enabled: true,
@@ -80,6 +102,7 @@ function build(setup: Setup = {}): DataSnapshot {
   data.tables.salaryFreeze = setup.freezes ?? [];
   data.tables.holding = setup.holdings ?? [];
   data.tables.dividend = setup.dividends ?? [];
+  data.tables.buyDecision = setup.decisions ?? [];
   return data;
 }
 
@@ -555,9 +578,74 @@ describe('upcomingReminders', () => {
     expect(upcomingReminders(data, NOW)[0]?.body).toBe('Confirm it when it arrives.');
   });
 
+  describe('Buy it? decisions', () => {
+    const waiting = makeBuyDecision({
+      id: 'dec-wait',
+      status: 'waiting',
+      remindOn: '2026-10-20',
+      ask: makeBuyAsk({ item: 'Kettle' }),
+    });
+    const bought = makeBuyDecision({
+      id: 'dec-bought',
+      status: 'bought',
+      boughtOn: '2026-10-10',
+      ask: makeBuyAsk({ item: 'Headphones' }),
+    });
+    const on = (...decisions: BuyDecision[]) =>
+      upcomingReminders(build({ reminders: { buyIt: true }, decisions }), NOW);
+
+    it('brings a waiting decision back on its remind day at 09:00', () => {
+      expect(on(waiting)).toEqual([
+        {
+          key: 'buy-wait:dec-wait:2026-10-20',
+          kind: 'buy-wait',
+          at: '2026-10-20T09:00',
+          title: 'Still want it? Kettle',
+          body: 'You chose to wait. See your check again.',
+          route: '/buy/dec-wait',
+        },
+      ]);
+    });
+
+    it('asks 14 days after buying whether it was worth it, until it is rated', () => {
+      expect(on(bought)).toEqual([
+        {
+          key: 'buy-usage:dec-bought',
+          kind: 'buy-usage',
+          at: '2026-10-24T09:00',
+          title: 'Was Headphones worth it?',
+          body: 'Rate it, and your next check takes it into account.',
+          route: '/buy/dec-bought',
+        },
+      ]);
+      expect(on({ ...bought, usage: 4 })).toEqual([]);
+    });
+
+    it('stays quiet with the switch off', () => {
+      const data = build({ reminders: { buyIt: false }, decisions: [waiting, bought] });
+      expect(upcomingReminders(data, NOW)).toEqual([]);
+    });
+
+    it('reminds only for a waiting decision with a day, and a bought one with a date', () => {
+      const others = [
+        makeBuyDecision({ status: 'open', remindOn: '2026-10-20', boughtOn: '2026-10-10' }),
+        makeBuyDecision({ status: 'skipped', remindOn: '2026-10-20', boughtOn: '2026-10-10' }),
+        makeBuyDecision({ status: 'bought', remindOn: '2026-10-20', boughtOn: null }),
+        makeBuyDecision({ status: 'waiting', remindOn: null, boughtOn: '2026-10-10' }),
+        // Bought after waiting: only the question about use is left.
+        { ...bought, id: 'dec-after', remindOn: '2026-10-20' },
+      ];
+      expect(keys(on(...others))).toEqual(['buy-usage:dec-after']);
+    });
+  });
+
   it('honours each switch', () => {
     const setup = {
       all: true,
+      decisions: [
+        makeBuyDecision({ id: 'dec-wait', status: 'waiting', remindOn: '2026-10-20' }),
+        makeBuyDecision({ id: 'dec-bought', status: 'bought', boughtOn: '2026-10-10' }),
+      ],
       lastBackupAt: noon('2026-10-07'),
       subscriptions: [makeSubscription({ id: 'sub-tv', nextRenewal: '2026-10-20' })],
       freezes: [freeze()],
@@ -567,6 +655,8 @@ describe('upcomingReminders', () => {
     const everything = upcomingReminders(build(setup), NOW);
     expect(kinds(everything)).toEqual([
       'backup',
+      'buy-usage',
+      'buy-wait',
       'card-due',
       'daily-log',
       'dividend-ex',
@@ -589,6 +679,7 @@ describe('upcomingReminders', () => {
     expect(dropped({ reviews: false })).toEqual(['monthly-review', 'weekly-review']);
     expect(dropped({ backup: false })).toEqual(['backup']);
     expect(dropped({ dividends: false })).toEqual(['dividend-ex', 'dividend-pay']);
+    expect(dropped({ buyIt: false })).toEqual(['buy-usage', 'buy-wait']);
   });
 
   it('keeps the nearest 60 within 30 days, all after now', () => {
@@ -620,6 +711,293 @@ describe('upcomingReminders', () => {
     const week = upcomingReminders(data, NOW, { horizonDays: 7 });
     expect(week.at(-1)?.at).toBe('2026-10-20T20:00');
     expect(upcomingReminders(data, NOW, { limit: 2 })).toHaveLength(2);
+  });
+});
+
+describe('pastReminders', () => {
+  const past = (setup: Setup, days?: number, now = NOW) => pastReminders(build(setup), now, days);
+
+  /** One occasion of every kind the inbox keeps, each already past at `NOW`. */
+  const lately = {
+    all: true,
+    decisions: [
+      makeBuyDecision({ id: 'dec-wait', status: 'waiting', remindOn: '2026-10-12' }),
+      makeBuyDecision({ id: 'dec-bought', status: 'bought', boughtOn: '2026-09-28' }),
+    ],
+    lastBackupAt: noon('2026-10-01'),
+    subscriptions: [makeSubscription({ id: 'sub-tv', nextRenewal: '2026-10-15' })],
+    freezes: [freeze({ start: '2026-10-05', end: '2026-10-09' })],
+    holdings: [payer({ nextExDate: '2026-10-10', nextPayDate: '2026-10-12' })],
+    ...visa({ dueDay: 16 }),
+  };
+
+  it('is what the rules planned for the last 30 days, newest first, with the master switch off', () => {
+    const data = build({
+      reminders: { enabled: false, freeze: true },
+      freezes: [freeze({ start: '2026-10-12', end: '2026-10-13' })],
+    });
+    expect(upcomingReminders(data, NOW)).toEqual([]);
+    expect(pastReminders(data, NOW)).toEqual([
+      {
+        key: 'freeze-end:freeze-1',
+        kind: 'freeze-end',
+        at: '2026-10-13T09:00',
+        title: 'Salary freeze ends today',
+        body: 'Your expected pay goes back to normal.',
+        route: '/freeze',
+      },
+      {
+        key: 'freeze-start:freeze-1',
+        kind: 'freeze-start',
+        at: '2026-10-12T09:00',
+        title: 'Salary freeze starts today',
+        body: 'Expected pay is lower while it lasts. Bills still apply.',
+        route: '/freeze',
+      },
+    ]);
+  });
+
+  it('covers the 30 days up to now, both ends in, and nothing later', () => {
+    const freezes = [
+      freeze({ id: 'a', start: '2026-09-13', end: '2026-09-14' }), // 09:00, before the window's 10:00
+      freeze({ id: 'b', start: '2026-09-15', end: '2026-10-14' }),
+      freeze({ id: 'c', start: '2026-10-14', end: '2026-10-15' }), // ends tomorrow: not yet
+    ];
+    expect(keys(past({ reminders: { freeze: true }, freezes }))).toEqual([
+      'freeze-start:c',
+      'freeze-end:b',
+      'freeze-start:b',
+    ]);
+
+    // At 09:00 the window starts at 09:00 a month back, and a moment equal to now is past, not upcoming.
+    const nine = '2026-10-14T09:00';
+    const data = build({ reminders: { freeze: true }, freezes });
+    expect(keys(pastReminders(data, nine))).toEqual([
+      'freeze-start:c',
+      'freeze-end:b',
+      'freeze-start:b',
+      'freeze-end:a',
+    ]);
+    expect(keys(upcomingReminders(data, nine))).toEqual(['freeze-end:c']);
+  });
+
+  it('takes a shorter window', () => {
+    const reviews = { reminders: { reviews: true } };
+    expect(keys(past(reviews))).toEqual([
+      'week:2026-10-11',
+      'week:2026-10-04',
+      'month:2026-09-30',
+      'week:2026-09-27',
+      'week:2026-09-20',
+    ]);
+    expect(keys(past(reviews, 7))).toEqual(['week:2026-10-11']);
+  });
+
+  it('does not look back past the moment the profile was made', () => {
+    const reviews = { reminders: { reviews: true } };
+    expect(keys(past({ ...reviews, profileSince: noon('2026-10-02') }))).toEqual([
+      'week:2026-10-11',
+      'week:2026-10-04',
+    ]);
+    // Made on Sunday the 4th at 19:00, an hour after that evening's check-in.
+    const since = localDateTime('2026-10-04T19:00').toISOString();
+    expect(keys(past({ ...reviews, profileSince: since }))).toEqual(['week:2026-10-11']);
+  });
+
+  it('is empty for a brand-new profile, whatever else is in the data', () => {
+    const madeNow = localDateTime(NOW).toISOString();
+    expect(past({ ...lately, profileSince: madeNow })).toEqual([]);
+    // Made at 09:00 it holds what came due since: this morning's renewal and card reminders.
+    const earlier = localDateTime('2026-10-14T09:00').toISOString();
+    expect(keys(past({ ...lately, profileSince: earlier }))).toEqual([
+      'renewal:sub-tv:2026-10-15',
+      'card:card-visa:2026-10-16',
+    ]);
+  });
+
+  it('is empty before there is a profile and settings', () => {
+    expect(pastReminders(emptySnapshot(), NOW)).toEqual([]);
+    const noProfile = build({ reminders: { reviews: true } });
+    noProfile.tables.profile = [];
+    expect(pastReminders(noProfile, NOW)).toEqual([]);
+  });
+
+  it('keeps every kind the inbox shows, and never the daily nudge or the backup', () => {
+    const everything = past(lately);
+    expect(kinds(everything)).toEqual([
+      'buy-usage',
+      'buy-wait',
+      'card-due',
+      'dividend-ex',
+      'dividend-pay',
+      'freeze-end',
+      'freeze-start',
+      'monthly-review',
+      'renewal',
+      'weekly-review',
+    ]);
+
+    // This morning's nudge (09:00 is before now) fired, and is still left out.
+    const morning = { ...lately, reminders: { dailyTime: '09:00' } };
+    expect(past(morning).some((r) => r.key.startsWith('daily:'))).toBe(false);
+  });
+
+  it('honours each switch', () => {
+    const everything = kinds(past(lately));
+    const without = (off: Partial<ReminderSettings>) => kinds(past({ ...lately, reminders: off }));
+    const dropped = (off: Partial<ReminderSettings>) =>
+      everything.filter((k) => !without(off).includes(k));
+
+    expect(dropped({ bills: false })).toEqual(['card-due', 'renewal']);
+    expect(dropped({ freeze: false })).toEqual(['freeze-end', 'freeze-start']);
+    expect(dropped({ reviews: false })).toEqual(['monthly-review', 'weekly-review']);
+    expect(dropped({ dividends: false })).toEqual(['dividend-ex', 'dividend-pay']);
+    expect(dropped({ buyIt: false })).toEqual(['buy-usage', 'buy-wait']);
+    expect(dropped({ dailyLog: false, backup: false })).toEqual([]);
+  });
+
+  it('keeps one reminder for a key, the newest', () => {
+    const freezes = [
+      freeze({ id: 'f', start: '2026-10-01', end: '2026-10-02' }),
+      freeze({ id: 'f', start: '2026-10-08', end: '2026-10-09' }),
+    ];
+    const got = past({ reminders: { freeze: true }, freezes });
+    expect(got.map((r) => [r.key, r.at])).toEqual([
+      ['freeze-end:f', '2026-10-09T09:00'],
+      ['freeze-start:f', '2026-10-08T09:00'],
+    ]);
+  });
+
+  it('sorts newest first, and by key within a moment', () => {
+    const got = past(lately);
+    expect(got.map((r) => r.at)).toEqual(
+      got
+        .map((r) => r.at)
+        .sort()
+        .reverse(),
+    );
+    const sameMoment = got.filter((r) => r.at === '2026-10-12T09:00').map((r) => r.key);
+    expect(sameMoment.length).toBeGreaterThan(1);
+    expect(sameMoment).toEqual([...sameMoment].sort().reverse());
+  });
+
+  it('shares no reminder with the upcoming ones: each moment is one or the other', () => {
+    const before = past(lately);
+    const after = upcomingReminders(build(lately), NOW);
+    expect(after.length).toBeGreaterThan(0);
+    expect(keys(before).filter((k) => keys(after).includes(k))).toEqual([]);
+    for (const r of before) expect(r.at <= NOW).toBe(true);
+    for (const r of after) expect(r.at > NOW).toBe(true);
+  });
+
+  // The rules plan ahead from a stored "next" date, so they can name only the occasion of the next
+  // date a subscription, a card or a dividend has. What follows pins what that gives, and that
+  // nothing is made up for the days before it.
+  describe('what a rule can only see ahead', () => {
+    it('lists a renewal from its reminder until the charge is made, and never an older one', () => {
+      const subscriptions = [
+        // Renews tomorrow: its reminder was this morning.
+        makeSubscription({ id: 'sub-due', nextRenewal: '2026-10-15' }),
+        // Charged on the 12th, so its date moved on: the reminder before that cannot be found again.
+        makeSubscription({ id: 'sub-charged', nextRenewal: '2026-11-12' }),
+        // Renews the day after: its reminder is tomorrow.
+        makeSubscription({ id: 'sub-later', nextRenewal: '2026-10-16' }),
+      ];
+      expect(keys(past({ reminders: { bills: true }, subscriptions }))).toEqual([
+        'renewal:sub-due:2026-10-15',
+      ]);
+    });
+
+    it('lists a card bill from two days before it is due, and nothing once that has passed', () => {
+      const card = (dueDay: number | null) =>
+        keys(past({ reminders: { bills: true }, ...visa({ dueDay }) }));
+      expect(card(16)).toEqual(['card:card-visa:2026-10-16']);
+      expect(card(21)).toEqual([]);
+      expect(card(10)).toEqual([]);
+      // With no due day the bill is "due" every day: not a reminder that ever fired.
+      expect(card(null)).toEqual([]);
+    });
+
+    it('lists the dates the price service gave, until the payout is confirmed or skipped', () => {
+      const given = [payer({ nextExDate: '2026-10-10', nextPayDate: '2026-10-12' })];
+      const on = (dividends: Dividend[] = []) =>
+        keys(past({ reminders: { dividends: true }, holdings: given, dividends }));
+      expect(on()).toEqual(['dividend-pay:ko:2026-10-12', 'dividend-ex:ko:2026-10-12']);
+      expect(on([makeDividend({ holdingId: 'ko', expectedPayDate: '2026-10-12' })])).toEqual([]);
+
+      // An ex-date the service listed as gone has no pay date of its own: only the ex-day's reminder.
+      const history = [{ date: '2026-10-02', amount: 1.25 }];
+      const listed = [payer({ history, nextExDate: '2026-11-10', nextPayDate: '2026-11-20' })];
+      expect(
+        past({ reminders: { dividends: true }, holdings: listed }).map((r) => [r.kind, r.at]),
+      ).toEqual([['dividend-ex', '2026-10-01T09:00']]);
+    });
+
+    it('lists a Buy it? reminder only while the decision is still waiting or unrated', () => {
+      const decisions = [
+        makeBuyDecision({ id: 'w', status: 'waiting', remindOn: '2026-10-12' }),
+        makeBuyDecision({
+          id: 'bought',
+          status: 'bought',
+          boughtOn: '2026-10-13',
+          remindOn: '2026-10-12',
+        }),
+        makeBuyDecision({ id: 'b', status: 'bought', boughtOn: '2026-09-28' }),
+        makeBuyDecision({ id: 'rated', status: 'bought', boughtOn: '2026-09-28', usage: 4 }),
+      ];
+      expect(keys(past({ reminders: { buyIt: true }, decisions }))).toEqual([
+        'buy-wait:w:2026-10-12',
+        'buy-usage:b',
+      ]);
+    });
+  });
+});
+
+describe('inboxItems', () => {
+  const reviews = { reminders: { reviews: true } };
+
+  it('is the past reminders, each with whether it was read', () => {
+    const data = build(reviews);
+    expect(inboxItems(data, NOW)).toEqual(
+      pastReminders(data, NOW).map((r) => ({ ...r, read: false })),
+    );
+    expect(inboxItems(data, NOW)).toHaveLength(5);
+  });
+
+  it('reads one by its key, and all of them up to a moment', () => {
+    const readBefore = localDateTime('2026-09-30T18:00').toISOString();
+    const data = build({ ...reviews, inbox: { readBefore, read: ['week:2026-10-11'] } });
+    expect(inboxItems(data, NOW).map((i) => [i.key, i.read])).toEqual([
+      ['week:2026-10-11', true],
+      ['week:2026-10-04', false],
+      ['month:2026-09-30', true],
+      ['week:2026-09-27', true],
+      ['week:2026-09-20', true],
+    ]);
+  });
+
+  it('is empty before there is a profile and settings', () => {
+    expect(inboxItems(emptySnapshot(), NOW)).toEqual([]);
+  });
+});
+
+describe('REMINDER_AREA', () => {
+  it('names the area of every kind', () => {
+    const area: Record<ReminderKind, string> = {
+      renewal: 'Subscriptions',
+      'card-due': 'Cards',
+      'freeze-start': 'Salary freeze',
+      'freeze-end': 'Salary freeze',
+      'weekly-review': 'Budget',
+      'monthly-review': 'Budget',
+      'dividend-ex': 'Invest',
+      'dividend-pay': 'Invest',
+      'buy-wait': 'Buy it?',
+      'buy-usage': 'Buy it?',
+      'daily-log': 'Today',
+      backup: 'Backup',
+    };
+    expect(REMINDER_AREA).toEqual(area);
   });
 });
 

@@ -63,13 +63,20 @@ export type HistoryResponse = {
 /** Live prices need a token; without one the app never asks. */
 export const marketConfigured = (): boolean => Boolean(import.meta.env.VITE_FUNANCIAL_API_TOKEN);
 
+/** The price service's address for a route and its query. */
+export const serviceUrl = (route: string, params: Record<string, string>): string =>
+  `${import.meta.env.VITE_FUNANCIAL_API_URL ?? ''}/api/${route}?${new URLSearchParams(params)}`;
+
+/** A GET of one of its addresses with the token, ending after 10 s. The caller reads the status. */
+export const serviceFetch = (url: string): Promise<Response> =>
+  fetch(url, {
+    headers: { 'X-Funancial-Token': import.meta.env.VITE_FUNANCIAL_API_TOKEN ?? '' },
+    signal: AbortSignal.timeout(10_000),
+  });
+
 async function get<T>(route: string, params: Record<string, string>): Promise<T> {
   try {
-    const base = import.meta.env.VITE_FUNANCIAL_API_URL ?? '';
-    const res = await fetch(`${base}/api/${route}?${new URLSearchParams(params)}`, {
-      headers: { 'X-Funancial-Token': import.meta.env.VITE_FUNANCIAL_API_TOKEN ?? '' },
-      signal: AbortSignal.timeout(10_000),
-    });
+    const res = await serviceFetch(serviceUrl(route, params));
     if (!res.ok) throw new Error(`The price service answered ${res.status}`);
     return (await res.json()) as T;
   } catch {
@@ -111,7 +118,17 @@ export const fetchSearch = (q: string) => get<SearchResponse>('search', { q });
 export const fetchHistory = (symbol: string, from: LocalDate) =>
   get<HistoryResponse>('history', { symbol: symbol.toUpperCase(), from });
 
-/** What the invest actions need from the price service; tests hand them a fake. */
+/** What a product page gave: a price in major units, a currency code, and the page's own name. */
+export type ExtractResponse = {
+  name: string | null;
+  price: number | null;
+  currency: string | null;
+};
+
+/** Only the link goes out, and only when the person pastes one; nothing else about them does. */
+export const fetchExtract = (url: string) => get<ExtractResponse>('extract', { url });
+
+/** What the actions need from the price service; tests hand them a fake. */
 export const market = {
   fetchQuotes,
   fetchProfile,
@@ -120,5 +137,6 @@ export const market = {
   fetchFx,
   fetchSearch,
   fetchHistory,
+  fetchExtract,
 };
 export type Market = typeof market;

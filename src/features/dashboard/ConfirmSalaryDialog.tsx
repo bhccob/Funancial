@@ -29,8 +29,9 @@ function ConfirmForm({ income, onDone }: { income: Income; onDone(): void }) {
   }
 
   return (
-    <form className="flex flex-col gap-4" onSubmit={submit} noValidate>
+    <form className="flex flex-col gap-5" onSubmit={submit} noValidate>
       <MoneyField
+        variant="line"
         label="Amount received"
         currency={currency}
         value={amount}

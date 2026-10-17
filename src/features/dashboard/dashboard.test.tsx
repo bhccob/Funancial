@@ -11,6 +11,8 @@ import { emptySnapshot, type DataSnapshot } from '@/domain/snapshot';
 import { applyRecords, dueGenerated } from '@/domain/sync';
 import { formatDay, formatMonth, formatMonthShort, formatWeekday } from '@/lib/format';
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
+import { fakeAccount, withAccount } from '@/test/fakeAccount';
+import { expectHelpTip } from '@/test/helpTip';
 import { fakeNotifier, onPhone, type FakeNotifier } from '@/test/fakeNotifier';
 import {
   localIso,
@@ -304,13 +306,15 @@ describe('DashboardScreen hero', () => {
     expect(within(hero).getByText(usdWhole(284_99))).toBeInTheDocument();
     expect(within(hero).getByText('bills to come')).toBeInTheDocument();
     expect(within(hero).queryByText('left in limit')).not.toBeInTheDocument();
-    expect(within(hero).getAllByRole('button')).toHaveLength(2);
+    // The segments only: the "?" beside the title is a button too.
+    expect(within(hero).getAllByRole('button', { name: /: / })).toHaveLength(2);
   });
 
   it('draws only the track when nothing is spent or due', () => {
     renderDashboard(emptySnapshot(), TODAY);
     const hero = region('Available to spend');
-    expect(within(hero).queryAllByRole('button')).toHaveLength(0);
+    // No segments; only the "?" beside the title is a button.
+    expect(within(hero).queryAllByRole('button', { name: /: / })).toHaveLength(0);
     expect(within(hero).getByText(`spent in ${october}`)).toBeInTheDocument();
     expect(within(hero).getByText('bills to come')).toBeInTheDocument();
     expect(within(hero).getAllByText(usdWhole(0))).toHaveLength(2);
@@ -326,11 +330,19 @@ describe('DashboardScreen actions', () => {
       '/add?type=income',
     );
     expect(screen.getByRole('link', { name: 'Goals' })).toHaveAttribute('href', '/goals');
-    // The Last 7 days section links to the history too; the action comes first.
-    const [history] = screen.getAllByRole('link', { name: 'History' });
-    expect(history).toHaveAttribute('href', '/history');
-    expect(history).toHaveTextContent('History');
-    expect(history!.querySelector('svg.lucide-clock')).toBeInTheDocument();
+    const buy = screen.getByRole('link', { name: 'Buy it?' });
+    expect(buy).toHaveAttribute('href', '/buy');
+    expect(buy.querySelector('svg.lucide-shopping-bag')).toBeInTheDocument();
+  });
+
+  it("gives History's place to Buy it?; History stays one tap away in Last 7 days", () => {
+    renderDashboard(emptySnapshot(), TODAY);
+    expect(screen.getAllByRole('link', { name: 'History' })).toHaveLength(1);
+    expect(within(region('Last 7 days')).getByRole('link', { name: 'History' })).toHaveAttribute(
+      'href',
+      '/history',
+    );
+    expect(document.querySelector('svg.lucide-clock')).not.toBeInTheDocument();
   });
 
   it('makes each a 56px round icon with its word under it, and fills the first', () => {
@@ -738,6 +750,16 @@ describe('DashboardScreen salary and freeze', () => {
     expect(actions.confirmIncome).toHaveBeenCalledWith('salary-2026-10', 270968);
   });
 
+  it('confirms the salary on a line field', async () => {
+    const today = '2026-10-25';
+    renderDashboard(applyRecords(sal.data, dueGenerated(sal.data, today)), today);
+    await userEvent.click(screen.getByRole('button', { name: `Confirm ${october} salary` }));
+    const dialog = screen.getByRole('dialog', { name: 'Confirm salary' });
+    const amount = within(dialog).getByLabelText('Amount received');
+    expect(amount).toHaveClass('border-b', 'font-extrabold');
+    expect(amount).not.toHaveClass('rounded-md');
+  });
+
   it('lets a salary that never came be marked as not arrived', async () => {
     const today = '2026-10-25';
     renderDashboard(applyRecords(sal.data, dueGenerated(sal.data, today)), today);
@@ -908,5 +930,74 @@ describe('DashboardScreen quests', () => {
       'checkIn',
       expect.objectContaining({ id: 'checkin:no-spend:2026-10-14', kind: 'no-spend' }),
     );
+  });
+});
+
+describe('DashboardScreen help tips', () => {
+  it('explains Available to spend, beside its title', async () => {
+    renderDashboard(monthData(), TODAY);
+    await expectHelpTip(region('Available to spend'), 'available to spend', 'available');
+  });
+
+  it('sets the "?" 4px after the Available to spend title', () => {
+    renderDashboard(monthData(), TODAY);
+    const tip = within(region('Available to spend')).getByRole('button', {
+      name: 'What is available to spend?',
+    });
+    expect(tip.parentElement).toHaveClass('gap-1');
+  });
+
+  it('leaves the month line to its own taps', async () => {
+    renderDashboard(monthData(), TODAY);
+    const hero = region('Available to spend');
+    await userEvent.click(
+      within(hero).getByRole('button', { name: 'What is available to spend?' }),
+    );
+    await userEvent.keyboard('{Escape}');
+    await userEvent.click(
+      within(hero).getByRole('button', { name: `Bills still to come: ${usdWhole(284_99)}` }),
+    );
+    expect(within(hero).getByText('Bills still to come')).toBeInTheDocument();
+  });
+
+  it('explains limits once, on the Limits title and not on each ring', async () => {
+    renderDashboard(monthData(), TODAY);
+    const limits = region('Limits');
+    expect(within(limits).getAllByRole('button', { name: /^What is/ })).toHaveLength(1);
+    await expectHelpTip(limits, 'a limit', 'limits');
+  });
+
+  it('explains Net worth, beside its title', async () => {
+    renderDashboard(monthData(), TODAY);
+    await expectHelpTip(region('Net worth'), 'net worth', 'net-worth');
+  });
+});
+
+describe('DashboardScreen account reminder', () => {
+  const ASK = 'Make an account so you can move to a new phone and keep everything.';
+
+  function renderWithAccount(namespace: 'real' | 'demo' = 'real') {
+    localStorage.clear();
+    return renderWithStore(
+      withAccount(
+        fakeAccount(),
+        <MemoryRouter>
+          <DashboardScreen />
+        </MemoryRouter>,
+      ),
+      createStubStore({ data: monthData(), namespace, today: '2026-10-14' }),
+    );
+  }
+
+  it('asks a real-data install without an account, once', async () => {
+    renderWithAccount();
+    expect(screen.getByText(ASK)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Not now' }));
+    expect(screen.queryByText(ASK)).not.toBeInTheDocument();
+  });
+
+  it('never asks in the demo', () => {
+    renderWithAccount('demo');
+    expect(screen.queryByText(ASK)).not.toBeInTheDocument();
   });
 });

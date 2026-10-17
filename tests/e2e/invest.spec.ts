@@ -170,6 +170,51 @@ test('with the price service down, Invest shows the last prices and says so', as
   await expect(page.getByRole('region', { name: 'Portfolio value' })).toContainText('$14,852.81');
 });
 
+// A 1x1 PNG, the logo the mocked price service gives every company.
+const PIXEL = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
+  'base64',
+);
+
+test("the pie stands each holding's logo outside its ring, and every list starts with one", async ({
+  page,
+}) => {
+  const logoRequests: string[] = [];
+  await page.route('**/api/**', (route) => {
+    const request = route.request();
+    if (!request.url().includes('/api/logo')) {
+      return route.fulfill({ status: 502, json: { error: 'upstream' } });
+    }
+    logoRequests.push(new URL(request.url()).searchParams.get('symbol') ?? '');
+    // An <img> sends no token; the app fetches the picture itself and must send it.
+    return request.headers()['x-funancial-token'] === TOKEN
+      ? route.fulfill({ contentType: 'image/png', body: PIXEL })
+      : route.fulfill({ status: 401, json: { error: 'unauthorized' } });
+  });
+  await startDemo(page);
+  await page.goto('/invest');
+
+  const pie = page.getByRole('group', { name: 'All holdings' });
+  const labels = pie.locator('[data-label]');
+  await expect(labels).toHaveCount(4);
+  // Four holdings: four on the pie, four in the legend, four in the rows, from four requests.
+  await expect(page.locator('[data-logo] img')).toHaveCount(12);
+  expect(logoRequests.sort()).toEqual(['AAPL', 'ASML', 'KO', 'VWRL']);
+  expect((await pie.locator('svg').first().boundingBox())?.width).toBe(220);
+
+  // Each label is on the screen, and the page does not scroll sideways to reach one.
+  const width = page.viewportSize()!.width;
+  for (const box of await labels.evaluateAll((els) =>
+    els.map((el) => el.getBoundingClientRect().toJSON() as { left: number; right: number }),
+  )) {
+    expect(box.left).toBeGreaterThanOrEqual(0);
+    expect(box.right).toBeLessThanOrEqual(width);
+  }
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+    width,
+  );
+});
+
 test('a holding opens on its own page with a price chart, and Edit saves back to it', async ({
   page,
 }) => {
@@ -344,4 +389,26 @@ test('selling part of a holding shows in History, and deleting it there gives th
   await expect(page.getByRole('group', { name: 'ETFs' })).toBeVisible();
   await expect(page.getByRole('button', { name: /^VWRL, / })).toHaveCount(1);
   await expect(page.getByRole('button', { name: /^AAPL, / })).toHaveCount(0);
+});
+
+test('mobile: tapping an Allocation chip keeps your place on the page', async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== 'mobile-chromium', 'mobile layout only');
+  await page.route('**/api/**', (route) =>
+    route.fulfill({ status: 502, json: { error: 'upstream' } }),
+  );
+  await startDemo(page);
+  await page.goto('/invest');
+
+  // The chips are brought to the top of the screen, so a jump to the page's top would put the pie out of sight.
+  const choices = page.getByRole('group', { name: 'Allocation' });
+  await choices.evaluate((el) => el.scrollIntoView({ block: 'start' }));
+  const before = await page.evaluate(() => window.scrollY);
+  expect(before).toBeGreaterThan(0);
+
+  await choices.getByRole('button', { name: 'Stocks' }).click();
+  await expect(page).toHaveURL(/\?pie=stocks$/);
+  await expect(page.getByRole('group', { name: 'Stocks' })).toBeVisible();
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(before);
 });

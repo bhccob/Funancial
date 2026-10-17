@@ -8,10 +8,11 @@ import { cn } from '@/lib/cn';
  */
 export const lineLabel = 'text-muted text-[13px] font-bold';
 
-/** The value of a line field: 16px extra-bold on a 44px row, its line danger while it has an error. */
-export const lineInput = (error: boolean) =>
+/** The value of a line field: 16px (or 20px, `large`) extra-bold on a 44px row, its line danger while it has an error. */
+export const lineInput = (error: boolean, large = false) =>
   cn(
-    'text-text placeholder:text-muted h-11 w-full min-w-0 border-b bg-transparent px-0 text-base font-extrabold tabular-nums placeholder:font-semibold focus:outline-none',
+    'text-text placeholder:text-muted h-11 w-full min-w-0 border-b bg-transparent px-0 font-extrabold tabular-nums placeholder:font-semibold focus:outline-none',
+    large ? 'text-[20px]' : 'text-base',
     error ? 'border-danger focus:border-b-2' : 'border-border focus:border-text focus:border-b-2',
   );
 

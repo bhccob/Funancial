@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex, nofollow" />
+    <!-- The link carries a one-use token: no page it could lead to learns it. -->
+    <meta name="referrer" content="no-referrer" />
+    <title>Choose a new password</title>
+    <noscript>
+      <style>
+        /* Without scripts it would say "Checking your link…" for ever. */
+        #reset-status {
+          display: none;
+        }
+      </style>
+    </noscript>
+    <style>
+      /* On top of the download page's look (site/get/page.css): one card, and the app's line fields. */
+      .reset {
+        display: grid;
+        place-content: center;
+        justify-items: center;
+        gap: 24px;
+        min-height: 100vh;
+        padding: 48px 24px;
+      }
+
+      .reset h1 {
+        font-size: clamp(36px, 8vw, 48px);
+      }
+
+      .card {
+        display: grid;
+        gap: 20px;
+        width: min(100%, 420px);
+        padding: 28px 24px;
+        border-radius: var(--radius-lg);
+        background: var(--color-surface);
+        box-shadow: var(--shadow-float);
+      }
+
+      .card h2 {
+        font-size: 24px;
+        line-height: 1.15;
+      }
+
+      .card form {
+        display: grid;
+        gap: 20px;
+      }
+
+      .message {
+        font-size: 18px;
+        font-weight: 700;
+      }
+
+      .field {
+        display: grid;
+        gap: 2px;
+      }
+
+      .field label {
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--page-muted);
+      }
+
+      /* A hairline under the value. It turns ink and 2px on focus: that line is the focus indicator. */
+      .field input {
+        box-sizing: border-box;
+        width: 100%;
+        min-width: 0;
+        height: 44px;
+        padding: 0;
+        border: 0;
+        border-bottom: 1px solid var(--color-border-strong);
+        background: transparent;
+        color: var(--color-text);
+        font: inherit;
+        font-size: 16px;
+        font-weight: 800;
+      }
+
+      .field input:focus {
+        outline: none;
+        border-bottom: 2px solid var(--color-text);
+      }
+
+      .field input[aria-invalid='true'] {
+        border-bottom-color: var(--color-danger);
+      }
+
+      .error {
+        font-size: 14px;
+        font-weight: 700;
+        color: var(--color-danger);
+      }
+
+      .card .btn {
+        width: 100%;
+        cursor: pointer;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="blob blob-1" aria-hidden="true"></div>
+    <div class="blob blob-2" aria-hidden="true"></div>
+    <div class="blob blob-3" aria-hidden="true"></div>
+    <main class="reset">
+      <h1>Funancial</h1>
+      <section class="card">
+        <p class="message" id="reset-status" role="status">Checking your link…</p>
+        <form id="reset-form" novalidate hidden>
+          <h2 id="reset-title"></h2>
+          <div class="field">
+            <label for="reset-password">New password</label>
+            <input
+              id="reset-password"
+              type="password"
+              autocomplete="new-password"
+              aria-describedby="reset-error"
+            />
+          </div>
+          <div class="field">
+            <label for="reset-again">Type it again</label>
+            <input
+              id="reset-again"
+              type="password"
+              autocomplete="new-password"
+              aria-describedby="reset-error"
+            />
+          </div>
+          <p class="error" id="reset-error" role="alert" hidden></p>
+          <button class="btn" id="reset-submit" type="submit">Change password</button>
+        </form>
+        <noscript><p class="message">Turn on JavaScript to choose a new password.</p></noscript>
+      </section>
+    </main>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

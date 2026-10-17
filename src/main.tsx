@@ -11,8 +11,11 @@ import { initTheme } from '@/lib/theme';
 import { createAndroidPlatform } from '@/platform/android';
 import { PlatformProvider } from '@/platform/PlatformProvider';
 import { createWebPlatform } from '@/platform/web';
+import { accountApi } from '@/services/account';
+import { createAccountActions } from '@/store/accountActions';
 import { createAppStore } from '@/store/appStore';
 import { AppStoreProvider } from '@/store/AppStoreProvider';
+import { AccountProvider } from '@/store/useAccount';
 import '@/styles/index.css';
 
 async function start(root: ReactRoot) {
@@ -34,6 +37,10 @@ async function start(root: ReactRoot) {
     biometric: platform.biometric,
   });
 
+  // Keeps the locked copy of the data up to date for a phone with an account; does nothing for one without.
+  const account = createAccountActions(appStore, accountApi, platform);
+  account.start();
+
   // Another tab changed data: reload it. If it replaced, re-keyed or deleted the data, start over.
   tabChannel().subscribe((m) => {
     if (m.reason === 'data') void appStore.getState().refresh();
@@ -53,7 +60,9 @@ async function start(root: ReactRoot) {
     <StrictMode>
       <PlatformProvider platform={platform}>
         <AppStoreProvider store={appStore}>
-          <Root />
+          <AccountProvider actions={account}>
+            <Root />
+          </AccountProvider>
         </AppStoreProvider>
       </PlatformProvider>
     </StrictMode>,

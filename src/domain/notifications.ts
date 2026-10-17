@@ -1,5 +1,5 @@
 import { nextDueDate, upcomingBills } from './budget';
-import { addDays, toLocalDate, type LocalDate } from './dates';
+import { addDays, formatLocalDateTime, localDateTime, toLocalDate, type LocalDate } from './dates';
 import { expectedPayouts } from './dividends';
 import type { Profile, ReminderSettings, Settings } from './entities';
 import { isLoggedExpense } from './game/activity';
@@ -18,7 +18,9 @@ export type ReminderKind =
   | 'monthly-review'
   | 'backup'
   | 'dividend-ex'
-  | 'dividend-pay';
+  | 'dividend-pay'
+  | 'buy-wait'
+  | 'buy-usage';
 
 export type Reminder = {
   /** Stable for the same occasion, so a reminder can be replaced or cancelled by key. */
@@ -40,6 +42,7 @@ const BACKUP_TIME = '19:00';
 const BACKUP_EVERY_DAYS = 7;
 /** An ex-date reminder comes before its payout pays, so payouts are looked for this far past the horizon. */
 const PAY_LAG_DAYS = 60;
+const USAGE_ASK_AFTER_DAYS = 14;
 const DIVIDENDS_ROUTE = '/invest?tab=dividends';
 
 type Context = {
@@ -50,6 +53,8 @@ type Context = {
   /** The local day of `now`. */
   today: LocalDate;
   now: string;
+  /** The first day a reminder can fall on. Rules that go through the days start here. */
+  firstDay: LocalDate;
   /** The last day a reminder can fall on. Rules stop looking past it. */
   lastDay: LocalDate;
   money: (minor: number) => string;
@@ -118,6 +123,9 @@ function cardBills({ data, prefs, today, lastDay, money }: Context): Reminder[] 
   for (const bill of upcomingBills(data, today)) {
     if (bill.kind !== 'card') continue;
     const dueDay = data.tables.debt.find((d) => d.id === bill.refId)?.dueDay ?? null;
+    // With no due day every day is "due", so there is no day to remind before. It never fired: its
+    // "2 days before" was always already past, and the inbox would show one new row a day.
+    if (dueDay === null) continue;
     let due = bill.date;
     while (addDays(due, -2) <= lastDay) {
       out.push({
@@ -128,8 +136,6 @@ function cardBills({ data, prefs, today, lastDay, money }: Context): Reminder[] 
         body: `${money(bill.amount)} to pay.`,
         route: '/goals',
       });
-      // With no due day every day is "due", so there is no month to step to.
-      if (dueDay === null) break;
       due = nextDueDate(addDays(due, 1), dueDay);
     }
   }
@@ -159,10 +165,10 @@ function freezes({ data, prefs }: Context): Reminder[] {
 }
 
 /** A weekly check-in on each week's last day, or the monthly review when that day also ends the month. */
-function reviews({ prefs, settings, today, lastDay }: Context): Reminder[] {
+function reviews({ prefs, settings, firstDay, lastDay }: Context): Reminder[] {
   if (!prefs.reviews) return [];
   const out: Reminder[] = [];
-  for (const d of eachDay(today, lastDay)) {
+  for (const d of eachDay(firstDay, lastDay)) {
     if (d === endOfMonth(d)) {
       out.push({
         key: `month:${d}`,
@@ -213,12 +219,12 @@ function backups({ profile, settings, prefs, today, now, lastDay }: Context): Re
 }
 
 /** The day before each known ex-date, and each known pay date, at 09:00. */
-function dividends({ data, profile, prefs, today, lastDay, money }: Context): Reminder[] {
+function dividends({ data, profile, prefs, today, firstDay, lastDay, money }: Context): Reminder[] {
   if (!prefs.dividends) return [];
   const payouts = expectedPayouts(
     data,
     profile.currency,
-    today,
+    firstDay,
     addDays(lastDay, PAY_LAG_DAYS),
     today,
   );
@@ -252,7 +258,65 @@ function dividends({ data, profile, prefs, today, lastDay, money }: Context): Re
   });
 }
 
-const RULES: Rule[] = [dailyLog, renewals, cardBills, freezes, reviews, backups, dividends];
+/** A waiting decision on the day it was set to come back, and a purchase 14 days on, if still unrated. */
+function buyIt({ data, prefs }: Context): Reminder[] {
+  if (!prefs.buyIt) return [];
+  return data.tables.buyDecision.flatMap((d): Reminder[] => {
+    const route = `/buy/${d.id}`;
+    if (d.status === 'waiting' && d.remindOn) {
+      return [
+        {
+          key: `buy-wait:${d.id}:${d.remindOn}`,
+          kind: 'buy-wait',
+          at: moment(d.remindOn, MORNING),
+          title: `Still want it? ${d.ask.item}`,
+          body: 'You chose to wait. See your check again.',
+          route,
+        },
+      ];
+    }
+    if (d.status === 'bought' && d.boughtOn && d.usage === null) {
+      return [
+        {
+          key: `buy-usage:${d.id}`,
+          kind: 'buy-usage',
+          at: moment(addDays(d.boughtOn, USAGE_ASK_AFTER_DAYS), MORNING),
+          title: `Was ${d.ask.item} worth it?`,
+          body: 'Rate it, and your next check takes it into account.',
+          route,
+        },
+      ];
+    }
+    return [];
+  });
+}
+
+const RULES: Rule[] = [dailyLog, renewals, cardBills, freezes, reviews, backups, dividends, buyIt];
+
+/** What the rules plan for a context's days. Each caller keeps the moments that suit its window. */
+const plan = (ctx: Context): Reminder[] => RULES.flatMap((rule) => rule(ctx));
+
+function contextFor(
+  data: DataSnapshot,
+  now: string,
+  firstDay: LocalDate,
+  lastDay: LocalDate,
+): Context | null {
+  const profile = data.tables.profile[0];
+  const settings = data.tables.settings[0];
+  if (!profile || !settings) return null;
+  return {
+    data,
+    profile,
+    settings,
+    prefs: settings.reminders,
+    today: now.slice(0, 10),
+    now,
+    firstDay,
+    lastDay,
+    money: (minor) => formatMoney(minor, profile.currency),
+  };
+}
 
 const byTimeThenKey = (a: Reminder, b: Reminder) =>
   a.at < b.at ? -1 : a.at > b.at ? 1 : a.key < b.key ? -1 : a.key > b.key ? 1 : 0;
@@ -267,27 +331,85 @@ export function upcomingReminders(
   now: string,
   opts: { horizonDays?: number; limit?: number } = {},
 ): Reminder[] {
-  const profile = data.tables.profile[0];
-  const settings = data.tables.settings[0];
-  if (!profile || !settings?.reminders.enabled) return [];
-
-  const horizonDays = opts.horizonDays ?? DEFAULT_HORIZON_DAYS;
   const today = now.slice(0, 10);
-  const ctx: Context = {
+  const ctx = contextFor(
     data,
-    profile,
-    settings,
-    prefs: settings.reminders,
-    today,
     now,
-    lastDay: addDays(today, horizonDays),
-    money: (minor) => formatMoney(minor, profile.currency),
-  };
+    today,
+    addDays(today, opts.horizonDays ?? DEFAULT_HORIZON_DAYS),
+  );
+  if (!ctx?.prefs.enabled) return [];
+
   // The same wall-clock time `horizonDays` later: "within 30 days" means 30 days, not 30 dates.
   const horizonEnd = moment(ctx.lastDay, now.slice(11));
 
-  return RULES.flatMap((rule) => rule(ctx))
+  return plan(ctx)
     .filter((r) => r.at > now && r.at <= horizonEnd)
     .sort(byTimeThenKey)
     .slice(0, opts.limit ?? DEFAULT_LIMIT);
+}
+
+/** Kinds the inbox leaves out: a nightly nudge and a weekly one are noise to catch up on. */
+const NOT_IN_INBOX: ReadonlySet<ReminderKind> = new Set(['daily-log', 'backup']);
+
+/**
+ * The reminders that came due in the `days` up to `now` (inclusive, so the complement of
+ * `upcomingReminders`), newest first, one per key: the same rules, run for the days behind. They
+ * are what the rules plan from the data as it is now, so the master switch does not matter, the
+ * per-kind ones do, and nothing from before the profile was made is listed.
+ *
+ * A rule that plans ahead from a stored "next" date (a subscription's renewal, a card's due day, a
+ * dividend's announced dates) can only name that next occasion. Its reminder is listed from its
+ * moment until the charge, the due day or the payout moves the date on; an occasion before that is
+ * gone from the data and is not made up. A card with no due day has no occasion at all.
+ */
+export function pastReminders(
+  data: DataSnapshot,
+  now: string,
+  days = DEFAULT_HORIZON_DAYS,
+): Reminder[] {
+  const today = now.slice(0, 10);
+  const profile = data.tables.profile[0];
+  if (!profile) return [];
+  // The same wall-clock time `days` earlier, as the horizon is counted; and not before the profile.
+  const windowStart = moment(addDays(today, -days), now.slice(11));
+  const madeAt = formatLocalDateTime(new Date(profile.createdAt));
+  const from = windowStart > madeAt ? windowStart : madeAt;
+  const ctx = contextFor(data, now, from.slice(0, 10), today);
+  if (!ctx) return [];
+
+  const seen = new Set<string>();
+  return plan(ctx)
+    .filter((r) => r.at >= from && r.at <= now && !NOT_IN_INBOX.has(r.kind))
+    .sort((a, b) => byTimeThenKey(b, a))
+    .filter((r) => !seen.has(r.key) && seen.add(r.key));
+}
+
+/** Which part of the app a reminder is about, for the inbox row. */
+export const REMINDER_AREA: Record<ReminderKind, string> = {
+  renewal: 'Subscriptions',
+  'card-due': 'Cards',
+  'freeze-start': 'Salary freeze',
+  'freeze-end': 'Salary freeze',
+  'weekly-review': 'Budget',
+  'monthly-review': 'Budget',
+  'dividend-ex': 'Invest',
+  'dividend-pay': 'Invest',
+  'buy-wait': 'Buy it?',
+  'buy-usage': 'Buy it?',
+  'daily-log': 'Today',
+  backup: 'Backup',
+};
+
+export type InboxItem = Reminder & { read: boolean };
+
+/** The inbox's reminders, each marked read by its key or by falling before `readBefore`. */
+export function inboxItems(data: DataSnapshot, now: string): InboxItem[] {
+  const inbox = data.tables.settings[0]?.inbox;
+  const readBefore = inbox?.readBefore ? Date.parse(inbox.readBefore) : -Infinity;
+  const read = new Set(inbox?.read);
+  return pastReminders(data, now).map((r) => ({
+    ...r,
+    read: read.has(r.key) || localDateTime(r.at).getTime() <= readBefore,
+  }));
 }

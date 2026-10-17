@@ -1,7 +1,8 @@
 import { fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter, Route, Routes } from 'react-router';
+import { MemoryRouter, Route, Routes, type InitialEntry } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { CATEGORY_OPTIONS } from '@/features/shared/categories';
 import { Toaster } from '@/components/ui/Toaster';
 import { periodRange } from '@/domain/periods';
 import type { LimitStatus } from '@/domain/budget';
@@ -44,10 +45,16 @@ beforeEach(() => {
   actions.addIncome.mockReset().mockResolvedValue({});
 });
 
-function renderAdd(path = '/add', tone: Settings['warningTone'] = 'motivational') {
+function renderAdd(
+  path: InitialEntry = '/add',
+  tone: Settings['warningTone'] = 'motivational',
+  cards = ['Visa'],
+) {
   const data = emptySnapshot();
   data.tables.settings.push(makeSettings({ warningTone: tone }));
-  data.tables.debt.push(makeDebt({ id: 'card-1', name: 'Visa', kind: 'credit_card' }));
+  cards.forEach((name, i) =>
+    data.tables.debt.push(makeDebt({ id: `card-${i + 1}`, name, kind: 'credit_card' })),
+  );
   return renderWithStore(
     <MemoryRouter initialEntries={[path]}>
       <Routes>
@@ -89,7 +96,7 @@ describe('Add expense', () => {
     renderAdd();
     await userEvent.type(screen.getByLabelText('Amount'), '40');
     await userEvent.click(screen.getByRole('radio', { name: 'Fun' }));
-    await userEvent.selectOptions(screen.getByLabelText('Paid with'), 'Visa');
+    await userEvent.click(screen.getByRole('radio', { name: 'Visa' }));
     await userEvent.selectOptions(screen.getByLabelText('Repeats'), 'Monthly');
     await save();
     expect(actions.addExpense).toHaveBeenCalledWith(
@@ -144,6 +151,126 @@ describe('Add expense', () => {
   });
 });
 
+describe('Add expense from a buy check', () => {
+  const fromCheck = (prefill: unknown) => ({ pathname: '/add', state: { prefill } });
+  const bought = {
+    item: 'Noise-cancelling headphones',
+    amount: 249_00,
+    category: 'entertainment',
+    paymentMethod: 'cash',
+    cardId: null,
+  };
+  const ASK_FIRST = "Haven't bought it yet? Ask first →";
+
+  it('offers to ask first, on an expense and not on income', async () => {
+    renderAdd();
+    expect(screen.getByRole('link', { name: ASK_FIRST })).toHaveAttribute('href', '/buy');
+    await userEvent.click(screen.getByRole('radio', { name: 'Income' }));
+    expect(screen.queryByRole('link', { name: ASK_FIRST })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('radio', { name: 'Expense' }));
+    expect(screen.getByRole('link', { name: ASK_FIRST })).toBeInTheDocument();
+  });
+
+  it('has the item in the note, the price and the category, ready to save', async () => {
+    renderAdd(fromCheck(bought));
+    expect(screen.getByLabelText('Amount')).toHaveValue('249.00');
+    expect(screen.getByRole('radio', { name: 'Fun' })).toBeChecked();
+    expect(screen.getByLabelText('Note')).toHaveValue('Noise-cancelling headphones');
+
+    await save();
+    expect(actions.addExpense).toHaveBeenCalledWith({
+      amount: 249_00,
+      category: 'entertainment',
+      date: TODAY,
+      note: 'Noise-cancelling headphones',
+      paymentMethod: 'cash',
+      cardId: null,
+      repeat: null,
+    });
+  });
+
+  it('keeps what was bought when the type is switched to Income and back', async () => {
+    renderAdd(fromCheck(bought));
+    await userEvent.click(screen.getByRole('radio', { name: 'Income' }));
+    expect(screen.getByLabelText('Label')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('radio', { name: 'Expense' }));
+
+    expect(screen.getByLabelText('Amount')).toHaveValue('249.00');
+    expect(screen.getByRole('radio', { name: 'Fun' })).toBeChecked();
+    expect(screen.getByLabelText('Note')).toHaveValue('Noise-cancelling headphones');
+    expect(screen.queryByRole('link', { name: ASK_FIRST })).not.toBeInTheDocument();
+  });
+
+  it('opens on the card the person said they would pay with, and saves it', async () => {
+    renderAdd(fromCheck({ ...bought, paymentMethod: 'credit_card', cardId: 'card-1' }));
+    expect(screen.getByRole('radio', { name: 'Visa' })).toBeChecked();
+    await save();
+    expect(actions.addExpense).toHaveBeenCalledWith(
+      expect.objectContaining({ paymentMethod: 'credit_card', cardId: 'card-1' }),
+    );
+  });
+
+  it('opens on the way to pay it was asked with, when that is not a card', () => {
+    renderAdd(fromCheck({ ...bought, paymentMethod: 'debit' }));
+    expect(screen.getByRole('radio', { name: 'Debit card' })).toBeChecked();
+  });
+
+  it('opens on the second card it was asked with when Paid with is a select', async () => {
+    // Two cards make five ways to pay, so Paid with is a select, not tabs.
+    renderAdd(
+      fromCheck({ ...bought, paymentMethod: 'credit_card', cardId: 'card-2' }),
+      'motivational',
+      ['Visa', 'Amex'],
+    );
+    expect(screen.queryByRole('group', { name: 'Paid with' })).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Paid with')).toHaveValue('card:card-2');
+    await save();
+    expect(actions.addExpense).toHaveBeenCalledWith(
+      expect.objectContaining({ paymentMethod: 'credit_card', cardId: 'card-2' }),
+    );
+  });
+
+  it('opens on Cash when the card it names has been deleted', async () => {
+    renderAdd(fromCheck({ ...bought, paymentMethod: 'credit_card', cardId: 'gone' }));
+    expect(screen.getByRole('radio', { name: 'Cash' })).toBeChecked();
+    await save();
+    expect(actions.addExpense).toHaveBeenCalledWith(
+      expect.objectContaining({ paymentMethod: 'cash', cardId: null }),
+    );
+  });
+
+  it('can still be changed before it is saved', async () => {
+    renderAdd(fromCheck(bought));
+    await userEvent.clear(screen.getByLabelText('Amount'));
+    await userEvent.type(screen.getByLabelText('Amount'), '199');
+    await userEvent.click(screen.getByRole('radio', { name: 'Shopping' }));
+    await save();
+    expect(actions.addExpense).toHaveBeenCalledWith(
+      expect.objectContaining({ amount: 199_00, category: 'shopping' }),
+    );
+  });
+
+  it('does not ask whether to buy what was just bought', () => {
+    renderAdd(fromCheck(bought));
+    expect(screen.queryByRole('link', { name: ASK_FIRST })).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ['nothing', undefined],
+    ['text', 'Headphones'],
+    ['an unknown category', { ...bought, category: 'yachts' }],
+    ['an unknown way to pay', { ...bought, paymentMethod: 'barter' }],
+    ['an amount of nothing', { ...bought, amount: 0 }],
+    ['a fractional amount', { ...bought, amount: 12.5 }],
+    ['an item that is not text', { ...bought, item: 5 }],
+  ])('starts empty for a prefill of %s', (_, prefill) => {
+    renderAdd(fromCheck(prefill));
+    expect(screen.getByLabelText('Amount')).toHaveValue('');
+    expect(screen.getByRole('radio', { name: 'Food' })).toBeChecked();
+    expect(screen.getByLabelText('Note')).toHaveValue('');
+  });
+});
+
 describe('Add income', () => {
   it('opens on income from the link and saves a salary', async () => {
     renderAdd('/add?type=income');
@@ -168,10 +295,88 @@ describe('Add income', () => {
     await userEvent.type(screen.getByLabelText('Amount'), '50');
     await userEvent.click(screen.getByRole('radio', { name: 'Extra' }));
     expect(screen.getByLabelText('Label')).toHaveValue('Extra income');
-    await userEvent.selectOptions(screen.getByLabelText('Goes to'), 'Savings');
+    await userEvent.click(screen.getByRole('radio', { name: 'Savings' }));
     await save();
     expect(actions.addIncome).toHaveBeenCalledWith(
       expect.objectContaining({ source: 'extra', label: 'Extra income', bucket: 'savings' }),
     );
+  });
+});
+
+describe('the Add forms in the line style', () => {
+  const LINE = ['border-b', 'font-extrabold'];
+  const tab = (name: string) => screen.getByText(name);
+  const tabsOf = (legend: string) =>
+    within(screen.getByRole('group', { name: legend }))
+      .getAllByRole('radio')
+      .map((r) => r.closest('label')?.textContent);
+
+  it('has line fields, a larger amount and underline tabs for an expense', async () => {
+    renderAdd();
+    for (const label of ['Amount', 'Date', 'Note', 'Repeats']) {
+      const field = screen.getByLabelText(label);
+      expect(field, label).toHaveClass(...LINE);
+      expect(field, label).not.toHaveClass('rounded-md');
+    }
+    expect(screen.getByLabelText('Amount')).toHaveClass('text-[20px]');
+    expect(screen.getByLabelText('Date')).toHaveClass('text-base');
+    // The type switch and Paid with are underline tabs, still radios.
+    expect(tab('Expense')).toHaveClass('border-b-2', 'border-text');
+    expect(tab('Income')).toHaveClass('border-transparent');
+    expect(tabsOf('Paid with')).toEqual(['Cash', 'Debit card', 'Visa', 'Other']);
+    expect(tab('Cash')).toHaveClass('border-b-2', 'border-text');
+    expect(screen.queryByLabelText('Paid with')).not.toBeInTheDocument();
+  });
+
+  it('has Category as one-tap chips, not a select and not underline tabs', () => {
+    renderAdd();
+    // All eight at once, as before: one tap, nothing to open.
+    expect(tabsOf('Category')).toEqual(CATEGORY_OPTIONS.map((o) => o.label));
+    expect(screen.queryByLabelText('Category')).not.toBeInTheDocument();
+    // Chips in a well, the chosen one raised; eight underline tabs would wrap badly.
+    expect(tab('Food')).toHaveClass('bg-overlay', 'rounded-[10px]', 'min-h-11');
+    expect(tab('Food')).not.toHaveClass('border-b-2');
+    expect(tab('Fun')).not.toHaveClass('bg-overlay');
+  });
+
+  it('says what paying with a card does, under the tabs', async () => {
+    renderAdd();
+    const hint = 'Adds to the card balance. Paying the card later moves the cash.';
+    expect(screen.queryByText(hint)).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('radio', { name: 'Visa' }));
+    expect(screen.getByRole('group', { name: 'Paid with' })).toHaveAccessibleDescription(hint);
+  });
+
+  it.each([
+    ['no card', [], ['Cash', 'Debit card', 'Other']],
+    ['one card', ['Visa'], ['Cash', 'Debit card', 'Visa', 'Other']],
+  ])('has Paid with as tabs with %s', (_, cards, labels) => {
+    renderAdd('/add', 'motivational', cards);
+    expect(tabsOf('Paid with')).toEqual(labels);
+  });
+
+  it('keeps Paid with a line select once there are more than four ways to pay', async () => {
+    renderAdd('/add', 'motivational', ['Visa', 'Amex']);
+    const select = screen.getByLabelText('Paid with');
+    expect(select).toHaveClass(...LINE);
+    expect(screen.queryByRole('group', { name: 'Paid with' })).not.toBeInTheDocument();
+    await userEvent.selectOptions(select, 'Amex');
+    await userEvent.type(screen.getByLabelText('Amount'), '9');
+    await save();
+    expect(actions.addExpense).toHaveBeenCalledWith(
+      expect.objectContaining({ paymentMethod: 'credit_card', cardId: 'card-2' }),
+    );
+  });
+
+  it('has line fields and underline tabs for income', () => {
+    renderAdd('/add?type=income');
+    for (const label of ['Amount', 'Label', 'Date', 'Note']) {
+      expect(screen.getByLabelText(label), label).toHaveClass(...LINE);
+    }
+    expect(screen.getByLabelText('Amount')).toHaveClass('text-base');
+    expect(tabsOf('Source')).toEqual(['Salary', 'Extra']);
+    expect(tabsOf('Goes to')).toEqual(['Cash', 'Savings']);
+    expect(tab('Salary')).toHaveClass('border-b-2', 'border-text');
+    expect(tab('Cash')).toHaveClass('border-b-2', 'border-text');
   });
 });

@@ -6,13 +6,16 @@ import { RadioGroup } from '@/components/ui/RadioGroup';
 import { Select } from '@/components/ui/Select';
 import { TextField } from '@/components/ui/TextField';
 import { limitMessage } from '@/domain/alerts';
-import { categoryLabel, type LimitStatus } from '@/domain/budget';
-import { CategorySchema, type Category, type Cycle, type Expense } from '@/domain/entities';
+import type { LimitStatus } from '@/domain/budget';
+import type { Category, Cycle, Expense } from '@/domain/entities';
 import { toast } from '@/lib/toast';
 import { useAction } from '@/lib/useAction';
 import { useApp } from '@/store/AppStoreProvider';
+import type { BuyPrefill } from '@/store/buyActions';
 import type { ExpenseInput } from '@/store/financeActions';
 import { useCurrency, useFinanceActions, useToday } from '@/store/useFinance';
+import { CATEGORY_OPTIONS } from '@/features/shared/categories';
+import { PaidWithField } from '@/features/shared/PaidWithField';
 import {
   isCardChoice,
   paidWithValue,
@@ -22,8 +25,6 @@ import {
 import { DateField } from './DateField';
 import { pastDateProblem } from './pastDate';
 
-const CATEGORY_OPTIONS = CategorySchema.options.map((c) => ({ value: c, label: categoryLabel(c) }));
-
 const REPEAT_OPTIONS = [
   { value: 'none', label: "Doesn't repeat" },
   { value: 'weekly', label: 'Weekly' },
@@ -32,27 +33,42 @@ const REPEAT_OPTIONS = [
   { value: 'yearly', label: 'Yearly' },
 ];
 
-/** Adds an expense, or edits `expense` when given (no repeat, no limit check, plus Delete). */
-export function ExpenseForm({ onDone, expense }: { onDone(): void; expense?: Expense }) {
+/**
+ * Adds an expense, or edits `expense` when given (no repeat, no limit check, plus Delete). A new
+ * one can start from `prefill`: what a purchase check says was bought.
+ */
+export function ExpenseForm({
+  onDone,
+  expense,
+  prefill,
+}: {
+  onDone(): void;
+  expense?: Expense;
+  prefill?: BuyPrefill;
+}) {
   const actions = useFinanceActions();
   const currency = useCurrency();
   const today = useToday();
   const tone = useApp((s) => s.data.tables.settings[0]?.warningTone ?? 'motivational');
   const run = useAction();
 
-  const [amount, setAmount] = useState<number | null>(expense?.amount ?? null);
-  const [category, setCategory] = useState<Category>(expense?.category ?? 'food');
-  const [date, setDate] = useState(expense?.date ?? today);
-  const [paidWith, setPaidWith] = useState(
-    expense ? paidWithValue(expense.paymentMethod, expense.cardId) : 'cash',
+  const [amount, setAmount] = useState<number | null>(expense?.amount ?? prefill?.amount ?? null);
+  const [category, setCategory] = useState<Category>(
+    expense?.category ?? prefill?.category ?? 'food',
   );
-  const [note, setNote] = useState(expense?.note ?? '');
+  const [date, setDate] = useState(expense?.date ?? today);
+  const paidWithOptions = usePaidWithOptions();
+  const [paidWith, setPaidWith] = useState(() => {
+    if (expense) return paidWithValue(expense.paymentMethod, expense.cardId);
+    const asked = prefill ? paidWithValue(prefill.paymentMethod, prefill.cardId) : 'cash';
+    // A card deleted since the ask is no longer one to pick.
+    return paidWithOptions.some((o) => o.value === asked) ? asked : 'cash';
+  });
+  const [note, setNote] = useState(expense?.note ?? prefill?.item ?? '');
   const [repeat, setRepeat] = useState('none');
   const [errors, setErrors] = useState<{ amount?: string; date?: string }>({});
   const [crossing, setCrossing] = useState<LimitStatus[] | null>(null);
   const [busy, setBusy] = useState(false);
-
-  const paidWithOptions = usePaidWithOptions();
 
   function fields(): Omit<ExpenseInput, 'repeat'> {
     return { amount: amount ?? 0, category, date, note: note.trim(), ...parsePaidWith(paidWith) };
@@ -120,6 +136,8 @@ export function ExpenseForm({ onDone, expense }: { onDone(): void; expense?: Exp
   return (
     <form className="flex flex-col gap-5" onSubmit={submit} noValidate>
       <MoneyField
+        variant="line"
+        large
         label="Amount"
         currency={currency}
         value={amount}
@@ -130,6 +148,7 @@ export function ExpenseForm({ onDone, expense }: { onDone(): void; expense?: Exp
         error={errors.amount}
         autoFocus={!expense}
       />
+      {/* Chips, one tap each, as before: eight underline tabs would wrap badly. */}
       <RadioGroup<Category>
         legend="Category"
         value={category}
@@ -137,6 +156,7 @@ export function ExpenseForm({ onDone, expense }: { onDone(): void; expense?: Exp
         options={CATEGORY_OPTIONS}
       />
       <DateField
+        variant="line"
         value={date}
         today={today}
         error={errors.date}
@@ -145,11 +165,9 @@ export function ExpenseForm({ onDone, expense }: { onDone(): void; expense?: Exp
           setErrors((x) => ({ ...x, date: undefined }));
         }}
       />
-      <Select
-        label="Paid with"
+      <PaidWithField
         value={paidWith}
         onChange={setPaidWith}
-        options={paidWithOptions}
         hint={
           isCardChoice(paidWith)
             ? 'Adds to the card balance. Paying the card later moves the cash.'
@@ -157,6 +175,7 @@ export function ExpenseForm({ onDone, expense }: { onDone(): void; expense?: Exp
         }
       />
       <TextField
+        variant="line"
         label="Note"
         autoComplete="off"
         value={note}
@@ -164,6 +183,7 @@ export function ExpenseForm({ onDone, expense }: { onDone(): void; expense?: Exp
       />
       {!expense && (
         <Select
+          variant="line"
           label="Repeats"
           value={repeat}
           onChange={setRepeat}

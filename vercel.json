@@ -1,1 +1,31 @@
-{ "functions": { "api/*.ts": { "maxDuration": 10 } } }
+{
+  "buildCommand": "npm run site:build",
+  "outputDirectory": "site-dist",
+  "functions": { "api/*.ts": { "maxDuration": 10 } },
+  "redirects": [{ "source": "/", "destination": "/get", "permanent": false }],
+  "headers": [
+    { "source": "/(.*)", "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }] },
+    {
+      "source": "/reset",
+      "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
+    },
+    {
+      "source": "/reset/",
+      "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
+    },
+    {
+      "source": "/get/latest.json",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-cache" },
+        { "key": "Access-Control-Allow-Origin", "value": "*" }
+      ]
+    },
+    {
+      "source": "/get/test/latest.json",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-cache" },
+        { "key": "Access-Control-Allow-Origin", "value": "*" }
+      ]
+    }
+  ]
+}

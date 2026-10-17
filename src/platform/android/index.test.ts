@@ -9,9 +9,12 @@ const app = vi.hoisted(() => ({
   handlers: {} as Record<string, Handler>,
   remove: vi.fn(async () => {}),
   addListener: vi.fn(),
+  getInfo: vi.fn(),
 }));
 
-vi.mock('@capacitor/app', () => ({ App: { addListener: app.addListener } }));
+vi.mock('@capacitor/app', () => ({
+  App: { addListener: app.addListener, getInfo: app.getInfo },
+}));
 vi.mock('./sqlite', () => ({ capacitorSqlDriver: async () => ({}) }));
 vi.mock('./shell', () => ({ installShell: vi.fn(async () => {}) }));
 
@@ -36,6 +39,24 @@ describe('createAndroidPlatform', () => {
     expect(platform.notifier?.replace).toBeTypeOf('function');
     expect(installShell).toHaveBeenCalledTimes(1);
   });
+
+  it("reads the installed build's number as the code and its version as the name", async () => {
+    app.getInfo.mockResolvedValue({ build: '8', version: '0.8' });
+
+    await expect((await createAndroidPlatform()).appVersion()).resolves.toEqual({
+      code: 8,
+      name: '0.8',
+    });
+  });
+
+  it.each(['', 'x', '0', '-1', '8.5'])(
+    'has no app version when the build number is %j, rather than a made-up one',
+    async (build) => {
+      app.getInfo.mockResolvedValue({ build, version: '0.8' });
+
+      await expect((await createAndroidPlatform()).appVersion()).resolves.toBeNull();
+    },
+  );
 
   it.each([
     ['onResume', 'resume'],

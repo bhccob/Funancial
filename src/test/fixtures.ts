@@ -1,7 +1,10 @@
 import { addDays, toLocalDate, type LocalDate } from '@/domain/dates';
 import {
   defaultSettings,
+  type AboutYou,
   type BudgetLimit,
+  type BuyAsk,
+  type BuyDecision,
   type Challenge,
   type CheckIn,
   type Debt,
@@ -269,6 +272,66 @@ export function makeSale(overrides: Partial<Sale> = {}): Sale {
     soldOn: today(),
     to: 'cash',
     restore: null,
+    ...overrides,
+  };
+}
+
+export function makeBuyAsk(overrides: Partial<BuyAsk> = {}): BuyAsk {
+  return {
+    item: 'Headphones',
+    price: 100_00,
+    quantity: 1,
+    category: 'entertainment',
+    urgency: 'want',
+    howSoon: 'month',
+    payWith: 'debit',
+    cardId: null,
+    link: null,
+    why: null,
+    ...overrides,
+  };
+}
+
+export function makeBuyDecision(overrides: Partial<BuyDecision> = {}): BuyDecision {
+  return {
+    id: newId(),
+    ...stamp(),
+    ask: makeBuyAsk(),
+    facts: {
+      total: 100_00,
+      categoryAfter: null,
+      overallAfter: null,
+      overBy: 0,
+      availableAfter: 400_00,
+      emergencyBefore: null,
+      emergencyAfter: null,
+      goalDelay: null,
+      requiresDebt: false,
+      resetsOn: null,
+    },
+    rulesMeter: 50,
+    rulesVerdict: 'wait',
+    meter: 50,
+    verdict: 'wait',
+    confidence: 'low',
+    guards: { capAtWait: false, reasons: [] },
+    notes: [],
+    status: 'open',
+    remindOn: null,
+    boughtOn: null,
+    usage: null,
+    ...overrides,
+  };
+}
+
+export function makeAboutYou(overrides: Partial<AboutYou> = {}): AboutYou {
+  return {
+    id: 'about',
+    ...stamp(),
+    situation: '',
+    matters: '',
+    overspend: [],
+    protectGoalId: null,
     ...overrides,
   };
 }

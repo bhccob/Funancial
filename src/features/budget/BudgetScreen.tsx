@@ -99,6 +99,7 @@ export function BudgetScreen() {
           </h2>
           <div className="mt-3.5 mb-[18px] flex justify-center">
             <Donut
+              label="Spending by category"
               slices={slices}
               size={240}
               thickness={22}

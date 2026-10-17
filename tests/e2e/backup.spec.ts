@@ -24,7 +24,7 @@ test('backup → leave demo → restore round-trip', async ({ page }) => {
     .getByRole('button', { name: 'Leave demo' })
     .click();
   await expect(page.getByRole('button', { name: 'Try with demo money' })).toBeVisible();
-  await page.getByRole('button', { name: 'Start with my real data' }).click();
+  await page.getByRole('button', { name: 'Create an account' }).click();
   await onboard(page);
   await page.goto('/settings');
   await expect(page.getByText('No entries yet.')).toBeVisible();

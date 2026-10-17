@@ -1,7 +1,7 @@
-import { fireEvent, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createMemoryRouter, RouterProvider } from 'react-router';
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SalaryFreeze } from '@/domain/entities';
 import { levelStart } from '@/domain/game/levels';
 import { newId, nowIso } from '@/domain/ids';
@@ -10,6 +10,7 @@ import { emptySnapshot, type DataSnapshot } from '@/domain/snapshot';
 import { topDialog } from '@/lib/dialogStack';
 import { formatDay } from '@/lib/format';
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
+import { INBOX_NOW, inboxData } from '@/test/inboxData';
 import { makeGoal, makeLedgerEntry, makeProfile, makeSubscription } from '@/test/fixtures';
 import { MENU_GROUPS } from './menu';
 import { appRouteObjects } from './router';
@@ -63,6 +64,19 @@ async function openMenu() {
 /** The row's text, e.g. "Goals2 goals · 33% saved". */
 const row = (sheet: HTMLElement, label: string) =>
   within(sheet).getByRole('link', { name: new RegExp(`^${label}`) });
+
+describe('sidebar', () => {
+  it('has links that are 44px tall', () => {
+    renderAt('/');
+    const sidebar = screen.getByRole('navigation', { name: 'All sections' });
+    // The Add expense button above them is 48px (a medium button); the rows are nav links.
+    const rows = within(sidebar)
+      .getAllByRole('link')
+      .filter((link) => link.textContent !== 'Add expense');
+    expect(rows.length).toBeGreaterThan(10);
+    for (const link of rows) expect(link, link.textContent ?? '').toHaveClass('min-h-11');
+  });
+});
 
 describe('bottom bar', () => {
   it('shows Home, Budget, Invest and Menu in the bar, and Quests first in the Menu', async () => {
@@ -122,7 +136,7 @@ describe('bottom bar', () => {
 });
 
 describe('Menu sheet', () => {
-  it('opens the Menu sheet with three groups and live subtitles', async () => {
+  it('opens the Menu sheet with two groups and live subtitles', async () => {
     renderAt('/', liveData());
     const sheet = await openMenu();
 
@@ -130,7 +144,7 @@ describe('Menu sheet', () => {
       within(sheet)
         .getAllByRole('heading', { level: 3 })
         .map((h) => h.textContent),
-    ).toEqual(['Your money', 'Coming next', 'You']);
+    ).toEqual(['Your money', 'You']);
     expect(
       within(sheet)
         .getAllByRole('link')
@@ -145,8 +159,9 @@ describe('Menu sheet', () => {
     );
     expect(row(sheet, 'Buy it\\?')).toHaveTextContent('Ask before you spend');
     expect(row(sheet, 'Quests')).toHaveTextContent('Level 1');
+    expect(row(sheet, 'About you')).toHaveTextContent('What the buy check knows');
     expect(row(sheet, 'Shop')).toHaveTextContent('130 coins to spend');
-    expect(row(sheet, 'Inbox')).toHaveTextContent('Your notices');
+    expect(row(sheet, 'Inbox')).toHaveTextContent(/^Inbox$/);
     expect(row(sheet, 'Help')).toHaveTextContent('How everything works');
     expect(row(sheet, 'Settings')).toHaveTextContent('Lock, backups, reminders');
   });
@@ -208,15 +223,37 @@ describe('Menu sheet', () => {
     expect(row(sheet, 'Shop')).toHaveTextContent('0 coins to spend');
   });
 
+  describe('Inbox row', () => {
+    beforeEach(() => vi.useFakeTimers({ toFake: ['Date'], now: INBOX_NOW }));
+    afterEach(() => vi.useRealTimers());
+
+    it('says how many reminders are new', async () => {
+      renderAt('/', inboxData({ readBefore: null, read: ['week:2026-10-11'] }));
+      const sheet = await openMenu();
+      expect(row(sheet, 'Inbox')).toHaveTextContent('Inbox7 new');
+    });
+
+    it('says nothing when there are none, whether none came due or all were read', async () => {
+      renderAt('/');
+      const sheet = await openMenu();
+      expect(row(sheet, 'Inbox')).toHaveTextContent(/^Inbox$/);
+      cleanup();
+
+      renderAt('/', inboxData({ readBefore: '2026-10-14T09:00:00.000Z', read: [] }));
+      expect(row(await openMenu(), 'Inbox')).toHaveTextContent(/^Inbox$/);
+    });
+  });
+
   it('marks soon items', async () => {
     renderAt('/');
     const sheet = await openMenu();
-    expect(row(sheet, 'Buy it\\?')).toHaveTextContent('Soon');
-    expect(row(sheet, 'Inbox')).toHaveTextContent('Soon');
+    expect(row(sheet, 'Buy it\\?')).not.toHaveTextContent('Soon');
+    expect(row(sheet, 'Inbox')).not.toHaveTextContent('Soon');
+    expect(row(sheet, 'Help')).not.toHaveTextContent('Soon');
     expect(row(sheet, 'Quests')).not.toHaveTextContent('Soon');
     expect(row(sheet, 'Subscriptions')).not.toHaveTextContent('Soon');
     expect(row(sheet, 'Settings')).not.toHaveTextContent('Soon');
-    expect(within(sheet).getAllByText('Soon')).toHaveLength(
+    expect(within(sheet).queryAllByText('Soon')).toHaveLength(
       MENU_GROUPS.flatMap((g) => g.items).filter((i) => i.soon).length,
     );
   });
@@ -226,6 +263,53 @@ describe('Menu sheet', () => {
     const sheet = await openMenu();
     await userEvent.click(row(sheet, 'Settings'));
     expect(screen.getByRole('heading', { level: 1, name: 'Settings' })).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Menu' })).not.toBeInTheDocument();
+  });
+
+  it('opens Help from the Menu, with its pages listed', async () => {
+    renderAt('/');
+    const sheet = await openMenu();
+    await userEvent.click(row(sheet, 'Help'));
+    expect(screen.getByRole('heading', { level: 1, name: 'Help' })).toBeInTheDocument();
+    expect(screen.getByRole('searchbox', { name: 'Search help' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /^Available to spend/ })).toHaveAttribute(
+      'href',
+      '/help/available',
+    );
+    expect(screen.queryByRole('dialog', { name: 'Menu' })).not.toBeInTheDocument();
+  });
+
+  it('lists Buy it? under Your money, after Salary freeze, and opens the Ask form', async () => {
+    renderAt('/');
+    const sheet = await openMenu();
+    const money = within(sheet).getByRole('heading', {
+      level: 3,
+      name: 'Your money',
+    }).parentElement!;
+    expect(
+      within(money)
+        .getAllByRole('link')
+        .map((a) => a.getAttribute('href')),
+    ).toEqual(['/subscriptions', '/goals', '/history', '/freeze', '/buy']);
+
+    await userEvent.click(row(sheet, 'Buy it\\?'));
+    expect(screen.getByRole('heading', { level: 1, name: 'Should I buy it?' })).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Menu' })).not.toBeInTheDocument();
+  });
+
+  it('lists About you under You, right after Quests, and opens it', async () => {
+    renderAt('/');
+    const sheet = await openMenu();
+    const you = within(sheet).getByRole('heading', { level: 3, name: 'You' }).parentElement!;
+    expect(
+      within(you)
+        .getAllByRole('link')
+        .map((a) => a.getAttribute('href'))
+        .slice(0, 3),
+    ).toEqual(['/quests', '/about-you', '/shop']);
+
+    await userEvent.click(row(sheet, 'About you'));
+    expect(screen.getByRole('heading', { level: 1, name: 'About you' })).toBeInTheDocument();
     expect(screen.queryByRole('dialog', { name: 'Menu' })).not.toBeInTheDocument();
   });
 
@@ -290,9 +374,13 @@ describe('sidebar', () => {
   it('tags the soon items', () => {
     renderAt('/');
     const sidebar = screen.getByRole('navigation', { name: 'All sections' });
-    expect(within(sidebar).getByRole('link', { name: /^Buy it/ })).toHaveTextContent('Soon');
+    expect(within(sidebar).getByRole('link', { name: /^Buy it/ })).not.toHaveTextContent('Soon');
     expect(within(sidebar).getByRole('link', { name: /^Settings/ })).not.toHaveTextContent('Soon');
-    expect(within(sidebar).getAllByText('Soon')).toHaveLength(3);
+    expect(within(sidebar).getByRole('link', { name: /^Help/ })).not.toHaveTextContent('Soon');
+    expect(within(sidebar).getByRole('link', { name: /^Inbox/ })).not.toHaveTextContent('Soon');
+    expect(within(sidebar).queryAllByText('Soon')).toHaveLength(
+      MENU_GROUPS.flatMap((g) => g.items).filter((i) => i.soon).length,
+    );
   });
 
   it('marks the current screen', () => {
@@ -306,11 +394,10 @@ describe('sidebar', () => {
 });
 
 describe('menu items', () => {
-  it('has the three groups in order, with a fixed chip colour that holds 3:1 against a white icon', () => {
+  it('has the two groups in order, with a fixed chip colour that holds 3:1 against a white icon', () => {
     expect(MENU_GROUPS.map((g) => [g.title, g.items.length])).toEqual([
-      ['Your money', 4],
-      ['Coming next', 1],
-      ['You', 5],
+      ['Your money', 5],
+      ['You', 6],
     ]);
     const luminance = (hex: string) => {
       const [r, g, b] = [1, 3, 5].map((i) => {
@@ -319,7 +406,10 @@ describe('menu items', () => {
       }) as [number, number, number];
       return 0.2126 * r + 0.7152 * g + 0.0722 * b;
     };
-    for (const { label, color } of MENU_GROUPS.flatMap((g) => g.items)) {
+    const items = MENU_GROUPS.flatMap((g) => g.items);
+    const about = items.find((i) => i.path === '/about-you')!;
+    expect(items.filter((i) => i.color === about.color)).toEqual([about]); // a colour of its own
+    for (const { label, color } of items) {
       expect(1.05 / (luminance(color) + 0.05), label).toBeGreaterThanOrEqual(3);
     }
   });

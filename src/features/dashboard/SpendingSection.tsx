@@ -56,7 +56,7 @@ export function SpendingSection({ expenses, today, weekStartsOn }: SpendingSecti
             aria-pressed={on}
             onClick={() => choose(id)}
             className={cn(
-              '-my-3 min-h-11 px-0.5 text-sm font-extrabold',
+              '-my-3 min-h-11 min-w-11 px-0.5 text-sm font-extrabold',
               on ? 'text-text' : 'text-muted',
             )}
           >
@@ -74,6 +74,7 @@ export function SpendingSection({ expenses, today, weekStartsOn }: SpendingSecti
       {slices.length > 0 ? (
         <div className="flex items-center gap-[18px]">
           <Donut
+            label="Spending by category"
             slices={slices}
             size={150}
             thickness={18}

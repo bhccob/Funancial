@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { RouterProvider } from 'react-router/dom';
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
 import { Toaster } from '@/components/ui/Toaster';
@@ -36,23 +36,30 @@ function UnlockedApp() {
     // Onboarding ends on the Dashboard, not on a screen an earlier session (say, demo) left open.
     if (needsOnboarding) void getAppRouter().navigate('/', { replace: true });
   }, [needsOnboarding]);
-  if (needsOnboarding) return <OnboardingWizard />;
+  // Saving the profile ends onboarding, but the last step ("You're all set") is still to be seen.
+  const [finishing, setFinishing] = useState(false);
+  if (needsOnboarding || finishing) return <OnboardingWizard onFinishing={setFinishing} />;
   return <RouterProvider router={getAppRouter()} />;
 }
 
 function Phase() {
   const phase = useApp((s) => s.phase);
+  // Log in makes the vault, then restores the account's copy into it: the app is "unlocked" for a
+  // moment with nothing in it (which would show setup), so Log in keeps its screen until it is done.
+  const [loggingIn, setLoggingIn] = useState(false);
   switch (phase) {
     case 'booting':
       return <BootSplash />;
     case 'unavailable':
       return <StorageUnavailable />;
+    case 'updateNeeded':
+      return <StorageUnavailable newer />;
     case 'welcome':
-      return <WelcomeScreen />;
+      return <WelcomeScreen onHold={setLoggingIn} />;
     case 'locked':
       return <LockScreen />;
     case 'unlocked':
-      return <UnlockedApp />;
+      return loggingIn ? <WelcomeScreen onHold={setLoggingIn} /> : <UnlockedApp />;
   }
 }
 

@@ -81,6 +81,7 @@ function FreezeForm({ profile, freezes }: { profile: Profile; freezes: SalaryFre
     <form className="flex flex-col gap-5" onSubmit={submit} noValidate>
       <div className="grid gap-5 sm:grid-cols-2">
         <TextField
+          variant="line"
           label="From"
           type="date"
           value={from}
@@ -91,6 +92,7 @@ function FreezeForm({ profile, freezes }: { profile: Profile; freezes: SalaryFre
           }}
         />
         <TextField
+          variant="line"
           label="To"
           type="date"
           min={from || undefined}
@@ -103,6 +105,7 @@ function FreezeForm({ profile, freezes }: { profile: Profile; freezes: SalaryFre
         />
       </div>
       <RadioGroup<Mode>
+        variant="underline"
         legend="Lost pay"
         value={mode}
         onChange={setMode}
@@ -113,6 +116,7 @@ function FreezeForm({ profile, freezes }: { profile: Profile; freezes: SalaryFre
       />
       {mode === 'manual' && (
         <MoneyField
+          variant="line"
           label="Amount lost"
           currency={currency}
           value={amount}

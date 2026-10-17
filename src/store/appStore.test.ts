@@ -6,6 +6,7 @@ import { WrongSecretError } from '@/data/keys';
 import type { SyncMessage } from '@/lib/broadcast';
 import type { SafeStorage } from '@/lib/safeStorage';
 import { buildDemoSnapshot } from '@/data/demoSeed';
+import { CURRENT_SCHEMA_VERSION } from '@/domain/snapshot';
 import { makeExpense, makeSubscription } from '@/test/fixtures';
 import { memoryStorage } from '@/test/memoryStorage';
 import { createAppStore, type AppDeps } from './appStore';
@@ -81,11 +82,13 @@ describe('first run', () => {
           reviews: true,
           backup: true,
           dividends: true,
+          buyIt: true,
           prompted: false,
         },
         cosmetics: { theme: 'theme-violet', avatar: 'avatar-sprout', frame: 'frame-none' },
         investCurrency: null,
         investFx: null,
+        inbox: { readBefore: null, read: [] },
       },
     ]);
   });
@@ -552,6 +555,62 @@ describe('a sync failure while opening', () => {
   });
 });
 
+describe('data saved by a newer version', () => {
+  /** What is stored: a write re-encrypts every row it touches, so equal rows mean no write. */
+  async function stored(deps: AppDeps) {
+    const backend = await deps.storage.open('real');
+    const state = {
+      version: await backend.meta.get('dataVersion'),
+      rows: await backend.records.all(),
+    };
+    await backend.close();
+    return state;
+  }
+
+  async function newerData(deps: AppDeps) {
+    const backend = await deps.storage.open('real');
+    await backend.meta.put('dataVersion', CURRENT_SCHEMA_VERSION + 1);
+    await backend.close();
+    return stored(deps);
+  }
+
+  it('opens nothing on boot, writes nothing, and says an update is needed', async () => {
+    const { deps, store } = await freshStore();
+    await store.getState().put('expense', makeExpense({ id: 'e1' }));
+    const before = await newerData(deps);
+
+    const again = await reboot(deps);
+    expect(again.getState().phase).toBe('updateNeeded');
+    expect(again.getState().data.tables.expense).toEqual([]);
+    await expect(again.getState().put('expense', makeExpense())).rejects.toThrow();
+    expect(await stored(deps)).toEqual(before);
+  });
+
+  it('stops after the right PIN too, instead of failing the unlock', async () => {
+    const { deps, store } = await freshStore();
+    await store.getState().setSecret('2468', 'pin');
+    const before = await newerData(deps);
+
+    const again = await reboot(deps);
+    expect(again.getState().phase).toBe('locked');
+    expect(await again.getState().unlock('2468')).toBe('ok');
+    expect(again.getState().phase).toBe('updateNeeded');
+    expect(again.getState().data.tables.expense).toEqual([]);
+    expect(await stored(deps)).toEqual(before);
+  });
+
+  it('stops on a refresh that finds it, with the data it shows gone', async () => {
+    const { deps, store } = await freshStore();
+    await store.getState().put('expense', makeExpense({ id: 'e1' }));
+    const before = await newerData(deps);
+
+    await store.getState().refresh();
+    expect(store.getState().phase).toBe('updateNeeded');
+    expect(store.getState().data.tables.expense).toEqual([]);
+    expect(await stored(deps)).toEqual(before);
+  });
+});
+
 describe('closing storage', () => {
   it('logs a backend that fails to close instead of hiding it', async () => {
     const backend = memoryStorage();
@@ -573,5 +632,135 @@ describe('closing storage', () => {
     } finally {
       logged.mockRestore();
     }
+  });
+});
+
+describe('the data-change signal', () => {
+  it('is heard once for a write, a removal, a restore and a batch, and not for nothing', async () => {
+    const { store } = await freshStore();
+    const heard = vi.fn();
+    store.getState().onDataChange(heard);
+
+    await store.getState().put('expense', makeExpense({ id: 'e1' }));
+    expect(heard).toHaveBeenCalledTimes(1);
+    await store.getState().putMany([
+      { table: 'expense', record: makeExpense({ id: 'e2' }) },
+      { table: 'expense', record: makeExpense({ id: 'e3' }) },
+    ]);
+    expect(heard).toHaveBeenCalledTimes(2);
+    await store.getState().remove('expense', 'e1');
+    expect(heard).toHaveBeenCalledTimes(3);
+    const { text } = await store.getState().createBackup('correct horse');
+    await store.getState().restoreBackup(text, 'correct horse');
+    expect(heard).toHaveBeenCalledTimes(4);
+    await store.getState().putMany([]);
+    expect(heard).toHaveBeenCalledTimes(4);
+  });
+
+  it('is not heard for opening the data, and stops once unsubscribed', async () => {
+    const { deps, store } = await freshStore();
+    const heard = vi.fn();
+    const stop = store.getState().onDataChange(heard);
+    const again = createAppStore(deps);
+    again.getState().onDataChange(heard);
+    await again.getState().boot();
+    expect(heard).not.toHaveBeenCalled();
+
+    stop();
+    await store.getState().put('expense', makeExpense({ id: 'e1' }));
+    expect(heard).not.toHaveBeenCalled();
+  });
+
+  it('does not let a failing listener fail the write', async () => {
+    const { store } = await freshStore();
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    store.getState().onDataChange(() => {
+      throw new Error('boom');
+    });
+    const after = vi.fn();
+    store.getState().onDataChange(after);
+    await store.getState().put('expense', makeExpense({ id: 'e1' }));
+    expect(store.getState().data.tables.expense.map((e) => e.id)).toEqual(['e1']);
+    expect(after).toHaveBeenCalledTimes(1);
+    expect(error).toHaveBeenCalled();
+    error.mockRestore();
+  });
+});
+
+describe('private values', () => {
+  const secret = { token: 'tok-1234567890', dek: 'AbCdEf+/123=' };
+
+  async function metaOf(deps: AppDeps) {
+    const backend = await deps.storage.open('real');
+    try {
+      return await backend.meta.get<unknown>('funancial.account');
+    } finally {
+      await backend.close();
+    }
+  }
+
+  it('are kept encrypted in the metadata and read back, also after a restart', async () => {
+    const { deps, store } = await freshStore();
+    expect(await store.getState().getPrivate('funancial.account')).toBeNull();
+    await store.getState().putPrivate('funancial.account', secret);
+    expect(await store.getState().getPrivate('funancial.account')).toEqual(secret);
+
+    const stored = await metaOf(deps);
+    expect(stored).toEqual({ iv: expect.any(String), data: expect.any(String) });
+    expect(JSON.stringify(stored)).not.toContain('tok-1234567890');
+    expect(await (await reboot(deps)).getState().getPrivate('funancial.account')).toEqual(secret);
+  });
+
+  it('are in no snapshot, backup or export', async () => {
+    const { store } = await freshStore();
+    await store.getState().putPrivate('funancial.account', secret);
+    await store.getState().put('expense', makeExpense({ id: 'e1' }));
+    const { text } = await store.getState().createBackup('correct horse');
+    for (const out of [
+      JSON.stringify(store.getState().data),
+      text,
+      store.getState().exportPlain().text,
+    ]) {
+      expect(out).not.toContain('tok-1234567890');
+      expect(out).not.toContain('funancial.account');
+    }
+  });
+
+  it('are bound to their name: moved under another, they do not open', async () => {
+    const { deps, store } = await freshStore();
+    await store.getState().putPrivate('funancial.account', secret);
+    const backend = await deps.storage.open('real');
+    await backend.meta.put('other', await backend.meta.get('funancial.account'));
+    await backend.close();
+    await expect(store.getState().getPrivate('other')).rejects.toThrow('Could not decrypt data');
+  });
+
+  it('can be deleted', async () => {
+    const { deps, store } = await freshStore();
+    await store.getState().putPrivate('funancial.account', secret);
+    await store.getState().deletePrivate('funancial.account');
+    expect(await store.getState().getPrivate('funancial.account')).toBeNull();
+    expect(await metaOf(deps)).toBeUndefined();
+  });
+
+  it('are refused for demo money, and while locked', async () => {
+    const { store } = await freshStore();
+    await store.getState().setSecret('2468', 'pin');
+    store.getState().lock();
+    await expect(store.getState().getPrivate('funancial.account')).rejects.toThrow(
+      'Funancial is locked',
+    );
+    await store.getState().unlock('2468');
+    await store.getState().startDemo();
+    await expect(store.getState().putPrivate('funancial.account', secret)).rejects.toThrow(
+      "Demo data can't keep an account.",
+    );
+  });
+
+  it('go with delete all data', async () => {
+    const { deps, store } = await freshStore();
+    await store.getState().putPrivate('funancial.account', secret);
+    await store.getState().deleteAllData();
+    expect(await metaOf(deps)).toBeUndefined();
   });
 });

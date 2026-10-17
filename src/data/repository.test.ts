@@ -1,6 +1,13 @@
-import { afterEach, describe, expect, it } from 'vitest';
-import { CURRENT_SCHEMA_VERSION, emptySnapshot } from '@/domain/snapshot';
-import { makeExpense, makeGoal, makeSettings, makeSubscription } from '@/test/fixtures';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { CURRENT_SCHEMA_VERSION, emptySnapshot, SchemaVersionError } from '@/domain/snapshot';
+import {
+  makeAboutYou,
+  makeBuyDecision,
+  makeExpense,
+  makeGoal,
+  makeSettings,
+  makeSubscription,
+} from '@/test/fixtures';
 import { memoryStorage } from '@/test/memoryStorage';
 import { decryptRecord, encryptRecord, generateDataKey } from './crypto';
 import { dexieStorage, type Namespace } from './db';
@@ -37,6 +44,21 @@ describe('repository over IndexedDB', () => {
     const row = await storedRow(backend, 'expense', 'e1');
     expect(new TextDecoder().decode(row!.ciphertext)).not.toContain('secret coffee');
     expect((await repo.loadAll()).snapshot.tables.expense[0]?.note).toBe('secret coffee');
+  });
+
+  it('stores buy decisions and the About you record like any other table', async () => {
+    const backend = await testBackend();
+    const repo = createRepository(backend, await generateDataKey());
+    const decision = makeBuyDecision({ id: 'b1', status: 'waiting' });
+    const about = makeAboutYou({ situation: 'private' });
+    await repo.put('buyDecision', decision);
+    await repo.put('aboutYou', about);
+
+    const row = await storedRow(backend, 'aboutYou', 'about');
+    expect(new TextDecoder().decode(row!.ciphertext)).not.toContain('private');
+    const { tables } = (await repo.loadAll()).snapshot;
+    expect(tables.buyDecision).toEqual([decision]);
+    expect(tables.aboutYou).toEqual([about]);
   });
 
   it('refuses to store an invalid record', async () => {
@@ -219,6 +241,55 @@ describe('repository: older schema versions', () => {
     });
     expect(reminders.enabled).toBe(false);
     expect(await backend.meta.get('dataVersion')).toBe(CURRENT_SCHEMA_VERSION);
+  });
+
+  it('upgrades v7 settings rows on load: Buy it? on, an empty inbox, and the new version stored', async () => {
+    const backend = await testBackend();
+    const key = await generateDataKey();
+    const current = makeSettings();
+    const v7: Record<string, unknown> = { ...current };
+    delete v7.inbox;
+    const reminders: Record<string, unknown> = { ...current.reminders };
+    delete reminders.buyIt;
+    v7.reminders = reminders;
+    await backend.records.write(
+      [
+        {
+          table: 'settings',
+          id: 'settings',
+          updatedAt: current.updatedAt,
+          ...(await encryptRecord(key, 'settings:settings', v7)),
+        },
+      ],
+      { replace: false },
+    );
+    await backend.meta.put('dataVersion', 7);
+
+    const { snapshot, skipped } = await createRepository(backend, key).loadAll();
+    expect(skipped).toEqual([]);
+    const upgraded = { ...current, inbox: { readBefore: null, read: [] } };
+    expect(snapshot.tables.settings).toEqual([upgraded]);
+    expect(await backend.meta.get('dataVersion')).toBe(CURRENT_SCHEMA_VERSION);
+    const row = await storedRow(backend, 'settings', 'settings');
+    expect(await decryptRecord(key, 'settings:settings', row!)).toEqual(upgraded);
+  });
+
+  it('refuses data a newer version saved, before reading or writing anything', async () => {
+    // An older build installed over a newer one would drop what it does not know on its next write.
+    const backend = await testBackend();
+    const repo = createRepository(backend, await createVault(backend.meta));
+    await repo.put('settings', makeSettings());
+    const newer = CURRENT_SCHEMA_VERSION + 1;
+    await backend.meta.put('dataVersion', newer);
+    const before = await backend.records.all();
+    const read = vi.spyOn(backend.records, 'all');
+    const write = vi.spyOn(backend.records, 'write');
+
+    await expect(repo.loadAll()).rejects.toBeInstanceOf(SchemaVersionError);
+    expect(read).not.toHaveBeenCalled();
+    expect(write).not.toHaveBeenCalled();
+    expect(await backend.meta.get('dataVersion')).toBe(newer);
+    expect(await backend.records.all()).toEqual(before);
   });
 
   it('putMany removes records in the same write, and none when a record is invalid', async () => {

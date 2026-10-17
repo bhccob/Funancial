@@ -14,6 +14,7 @@ export default defineConfig([
     '.superpowers',
     'design',
     'android',
+    'site-dist',
   ]),
   {
     files: ['**/*.{ts,tsx}'],
@@ -32,7 +33,7 @@ export default defineConfig([
     },
   },
   {
-    files: ['*.config.ts', 'api/**/*.ts', 'tests/e2e/**/*.ts'],
+    files: ['*.config.ts', 'site/*.config.ts', 'api/**/*.ts', 'tests/e2e/**/*.ts'],
     languageOptions: { globals: globals.node },
   },
 ]);

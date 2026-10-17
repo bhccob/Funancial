@@ -1,5 +1,36 @@
 apply plugin: 'com.android.application'
 
+// The release key: android/keystore.properties (git-ignored; storeFile, storePassword, keyAlias,
+// keyPassword) is made by the owner, see docs/release.md. keystoreProblem says why that file
+// cannot sign, or is null when it can. Only a release task fails on it (see whenReady below):
+// a missing, unreadable or incomplete file must never stop a debug build.
+def keystoreFile = rootProject.file('keystore.properties')
+def keystoreProps = new Properties()
+def keystoreProblem = null
+if (!keystoreFile.exists()) {
+    keystoreProblem = 'does not exist'
+} else {
+    try {
+        // Read as UTF-8, dropping a BOM. A UTF-16 file (PowerShell's > ) reads as no keys at all.
+        keystoreProps.load(new StringReader(keystoreFile.getText('UTF-8').replaceFirst('^﻿', '')))
+    } catch (Exception e) {
+        keystoreProblem = "cannot be read (${e.message})"
+    }
+    def missing = ['storeFile', 'storePassword', 'keyAlias', 'keyPassword'].findAll {
+        !keystoreProps.getProperty(it)?.trim()
+    }
+    if (keystoreProblem == null && missing) {
+        keystoreProblem = "has no ${missing.join(', ')} (saved as UTF-16, or a key misspelled?)"
+    } else if (keystoreProblem == null && !file(keystoreProps.getProperty('storeFile')).exists()) {
+        keystoreProblem = "names a storeFile that does not exist: ${keystoreProps.getProperty('storeFile')} (use forward slashes)"
+    }
+}
+gradle.taskGraph.whenReady { graph ->
+    if (keystoreProblem != null && graph.allTasks.any { it.project == project && it.name.contains('Release') }) {
+        throw new GradleException("Cannot sign the release build: android/keystore.properties ${keystoreProblem}. See docs/release.md.")
+    }
+}
+
 android {
     namespace = "io.github.bhccob.funancial"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -7,8 +38,8 @@ android {
         applicationId "io.github.bhccob.funancial"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        versionCode 8
+        versionName "0.8"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -16,8 +47,19 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        release {
+            if (keystoreProblem == null) {
+                storeFile file(keystoreProps.getProperty('storeFile'))
+                storePassword keystoreProps.getProperty('storePassword')
+                keyAlias keystoreProps.getProperty('keyAlias')
+                keyPassword keystoreProps.getProperty('keyPassword')
+            }
+        }
+    }
     buildTypes {
         release {
+            if (keystoreProblem == null) signingConfig signingConfigs.release
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }

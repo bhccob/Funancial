@@ -1,13 +1,18 @@
 import type { ReactNode } from 'react';
 import { AddScreen } from '@/features/add/AddScreen';
 import { BudgetScreen } from '@/features/budget/BudgetScreen';
+import { AboutYouScreen } from '@/features/buy/AboutYouScreen';
+import { AnswerScreen } from '@/features/buy/AnswerScreen';
+import { BuyScreen } from '@/features/buy/BuyScreen';
 import { DashboardScreen } from '@/features/dashboard/DashboardScreen';
 import { FreezeScreen } from '@/features/freeze/FreezeScreen';
 import { GoalsScreen } from '@/features/goals/GoalsScreen';
+import { HelpPage } from '@/features/help/HelpPage';
+import { HelpScreen } from '@/features/help/HelpScreen';
 import { HistoryScreen } from '@/features/history/HistoryScreen';
+import { InboxScreen } from '@/features/inbox/InboxScreen';
 import { HoldingPage } from '@/features/invest/HoldingPage';
 import { InvestScreen } from '@/features/invest/InvestScreen';
-import { PlaceholderScreen } from '@/features/placeholder/PlaceholderScreen';
 import { QuestsScreen } from '@/features/quests/QuestsScreen';
 import { ShopScreen } from '@/features/shop/ShopScreen';
 import { SubscriptionsScreen } from '@/features/subscriptions/SubscriptionsScreen';
@@ -22,24 +27,23 @@ export interface AppRoute {
   element: ReactNode;
 }
 
-function placeholder(path: string, title: string): AppRoute {
-  return { path, element: <PlaceholderScreen title={title} /> };
-}
-
 export const APP_ROUTES: AppRoute[] = [
   { path: '/', element: <DashboardScreen /> },
   { path: '/budget', element: <BudgetScreen /> },
   { path: '/invest', element: <InvestScreen /> },
   { path: '/invest/holding/:id', element: <HoldingPage /> },
-  placeholder('/buy', 'Should I Buy It?'),
+  { path: '/buy', element: <BuyScreen /> },
+  { path: '/buy/:id', element: <AnswerScreen /> },
   { path: '/quests', element: <QuestsScreen /> },
+  { path: '/about-you', element: <AboutYouScreen /> },
   { path: '/subscriptions', element: <SubscriptionsScreen /> },
   { path: '/freeze', element: <FreezeScreen /> },
   { path: '/goals', element: <GoalsScreen /> },
   { path: '/history', element: <HistoryScreen /> },
   { path: '/shop', element: <ShopScreen /> },
-  placeholder('/inbox', 'Inbox'),
-  placeholder('/help', 'Help'),
+  { path: '/inbox', element: <InboxScreen /> },
+  { path: '/help', element: <HelpScreen /> },
+  { path: '/help/:id', element: <HelpPage /> },
   { path: '/settings', element: <SettingsScreen /> },
   { path: '/add', element: <AddScreen /> },
 ];

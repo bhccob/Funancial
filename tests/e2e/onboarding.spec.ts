@@ -1,10 +1,11 @@
 import { expect, test } from '@playwright/test';
-import { onboard } from './helpers';
+import { onboard, skipAccount } from './helpers';
 
 test('a new user sets up money, salary and a PIN, then lands on Home', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('button', { name: 'Start with my real data' }).click();
+  await page.getByRole('button', { name: 'Create an account' }).click();
   await expect(page.getByText('Step 1 of 6')).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'Create your account' })).toBeVisible();
   await onboard(page, {
     cash: '1,000',
     savings: '5000',
@@ -22,6 +23,21 @@ test('a new user sets up money, salary and a PIN, then lands on Home', async ({ 
   await expect(page.getByRole('heading', { level: 1, name: 'Home' })).toBeVisible();
 });
 
+test('Back on the first step returns to Welcome, where the demo can still be tried', async ({
+  page,
+}) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Create an account' }).click();
+  await expect(page.getByText('Step 1 of 6')).toBeVisible();
+  await page.getByRole('button', { name: 'Back' }).click();
+  await expect(page.getByRole('button', { name: 'Create an account' })).toBeVisible();
+
+  // The empty data the tap made is gone, so a reload stays on Welcome rather than in setup.
+  await page.reload();
+  await page.getByRole('button', { name: 'Try with demo money' }).click();
+  await expect(page.getByText("You're exploring with demo money")).toBeVisible();
+});
+
 test.describe('in the Netherlands', () => {
   // The time zone is the location signal, even on an English (US) phone.
   test.use({ timezoneId: 'Europe/Amsterdam' });
@@ -30,9 +46,8 @@ test.describe('in the Netherlands', () => {
     page,
   }) => {
     await page.goto('/');
-    await page.getByRole('button', { name: 'Start with my real data' }).click();
-    await page.getByRole('checkbox', { name: 'I understand' }).check();
-    await page.getByRole('button', { name: 'Next' }).click();
+    await page.getByRole('button', { name: 'Create an account' }).click();
+    await skipAccount(page);
     await expect(page.getByLabel('Currency')).toHaveValue('EUR');
     await page.getByLabel('Currency').selectOption('GBP');
     await expect(page.getByLabel('Currency')).toHaveValue('GBP');
@@ -41,8 +56,9 @@ test.describe('in the Netherlands', () => {
 
 test('onboarding survives a reload part-way through', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('button', { name: 'Start with my real data' }).click();
-  await page.getByRole('checkbox', { name: 'I understand' }).check();
+  await page.getByRole('button', { name: 'Create an account' }).click();
+  await skipAccount(page);
+  await expect(page.getByText('Step 2 of 6')).toBeVisible();
   await page.reload();
-  await expect(page.getByRole('heading', { level: 1, name: 'Before we start' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'Create your account' })).toBeVisible();
 });

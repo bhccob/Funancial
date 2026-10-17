@@ -34,6 +34,8 @@ export interface Platform {
    * `cb` never runs, not even for an event that was already on its way.
    */
   onResume(cb: () => void): () => void;
+  /** The installed build's number and name: `null` on the web, which has no installed build. */
+  appVersion(): Promise<{ code: number; name: string } | null>;
   /** Fingerprint or face unlock, where the device has it: `null` on the web. */
   biometric: BiometricVault | null;
   /** Reminders that arrive while the app is closed, where the phone can schedule them: `null` on the web. */

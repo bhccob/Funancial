@@ -42,6 +42,28 @@ it('explains an amount it cannot read', async () => {
   expect(field).toHaveAttribute('aria-invalid', 'true');
 });
 
+it('announces an amount it cannot read as soon as it appears, and takes it away when fixed', async () => {
+  render(<Harness onValue={() => {}} />);
+  const field = screen.getByLabelText('Amount');
+  await userEvent.type(field, 'abc');
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  await userEvent.tab();
+  expect(screen.getByRole('alert')).toHaveTextContent('Enter an amount like 12.50');
+  // The field still names its error, for the next time it is focused.
+  expect(field).toHaveAccessibleDescription('Enter an amount like 12.50');
+  await userEvent.type(field, '5');
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+});
+
+it('announces an error its form hands it, but not its hint', () => {
+  const props = { label: 'Amount', currency: 'USD', value: null, onChange: () => {} };
+  const { rerender } = render(<MoneyField {...props} hint="Optional." />);
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  rerender(<MoneyField {...props} hint="Optional." error="Enter an amount like 12.50" />);
+  expect(screen.getByRole('alert')).toHaveTextContent('Enter an amount like 12.50');
+  expect(screen.getByText('Optional.')).not.toHaveAttribute('role');
+});
+
 it('shows the currency symbol and starts from a given value', () => {
   render(<MoneyField label="Balance" currency="EUR" value={123456} onChange={() => {}} />);
   expect(screen.getByLabelText('Balance')).toHaveValue('1,234.56');

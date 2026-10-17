@@ -32,6 +32,7 @@ export function WeekSection({ expenses, today, weekTotal }: WeekSectionProps) {
   return (
     <Section title="Last 7 days" action={<SectionLink to="/history">History</SectionLink>}>
       <DayBars
+        label="Spending per day"
         days={days}
         selected={selected}
         onSelect={setSelected}

@@ -1,5 +1,6 @@
 import { Ring } from '@/components/charts/Ring';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { HelpTip } from '@/components/ui/HelpTip';
 import { EmptyLink, Section, SectionLink } from '@/components/ui/Section';
 import { limitLabel, type LimitLevel, type LimitStatus } from '@/domain/budget';
 import { useMoney } from '@/store/useFinance';
@@ -18,7 +19,11 @@ export function LimitsSection({ limits }: { limits: LimitStatus[] }) {
   const shown = limits.slice(0, 3);
 
   return (
-    <Section title="Limits" action={<SectionLink to="/budget">Budget</SectionLink>}>
+    <Section
+      title="Limits"
+      help={<HelpTip pageId="limits" label="a limit" />}
+      action={<SectionLink to="/budget">Budget</SectionLink>}
+    >
       {shown.length > 0 ? (
         <ul className="grid grid-cols-3 gap-2">
           {shown.map(({ limit, remaining, pct, level }) => {

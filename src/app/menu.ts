@@ -12,6 +12,7 @@ import {
   Target,
   Trophy,
   TrendingUp,
+  UserRound,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -48,25 +49,17 @@ export const MENU_GROUPS: MenuGroup[] = [
       { path: '/goals', label: 'Goals', icon: Target, color: '#128a60' },
       { path: '/history', label: 'History', icon: Clock, color: '#d9541e' },
       { path: '/freeze', label: 'Salary freeze', icon: Snowflake, color: '#4458d6' },
+      { path: '/buy', label: 'Buy it?', icon: ShoppingBag, color: '#c43b6a' },
     ],
-  },
-  {
-    title: 'Coming next',
-    items: [{ path: '/buy', label: 'Buy it?', icon: ShoppingBag, color: '#c43b6a', soon: true }],
   },
   {
     title: 'You',
     items: [
       { path: '/quests', label: 'Quests', icon: Trophy, color: '#b86e00' },
+      { path: '/about-you', label: 'About you', icon: UserRound, color: '#0e7490' },
       { path: '/shop', label: 'Shop', icon: Store, color: '#6b46f5' },
-      { path: '/inbox', label: 'Inbox', icon: Inbox, color: '#3b82c4', soon: true },
-      {
-        path: '/help',
-        label: 'Help',
-        icon: CircleQuestionMark,
-        color: '#128a60',
-        soon: true,
-      },
+      { path: '/inbox', label: 'Inbox', icon: Inbox, color: '#3b82c4' },
+      { path: '/help', label: 'Help', icon: CircleQuestionMark, color: '#128a60' },
       { path: '/settings', label: 'Settings', icon: Settings, color: '#5b6270' },
     ],
   },

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Dialog } from '@/components/ui/Dialog';
 import { Select } from '@/components/ui/Select';
+import { lineLabel } from '@/components/ui/lineField';
 import { minorDigits } from '@/domain/money';
 import { currencyOptions } from '@/features/shared/currencies';
 import { useAction } from '@/lib/useAction';
@@ -55,10 +56,10 @@ export function CurrencyRow({ current }: { current: string }) {
   }
 
   return (
-    <div className="flex items-center justify-between gap-4">
-      <div className="min-w-0">
-        <p className="text-sm font-bold">Currency</p>
-        <p className="text-muted truncate">{currentLabel}</p>
+    <div className="border-border flex items-center justify-between gap-4 border-b">
+      <div className="flex min-w-0 flex-col gap-0.5">
+        <p className={lineLabel}>Currency</p>
+        <p className="truncate text-base font-extrabold">{currentLabel}</p>
       </div>
       <Button
         ref={changeButton}
@@ -80,6 +81,7 @@ export function CurrencyRow({ current }: { current: string }) {
         }
       >
         <Select
+          variant="line"
           label="New currency"
           value=""
           onChange={(code) => code && setNext(code)}

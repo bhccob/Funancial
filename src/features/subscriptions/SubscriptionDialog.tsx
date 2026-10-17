@@ -2,16 +2,17 @@ import { useState, type FormEvent } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Dialog } from '@/components/ui/Dialog';
 import { MoneyField } from '@/components/ui/MoneyField';
+import { RadioGroup } from '@/components/ui/RadioGroup';
 import { Select } from '@/components/ui/Select';
 import { TextField } from '@/components/ui/TextField';
-import { categoryLabel } from '@/domain/budget';
-import { CategorySchema, type Category, type Cycle, type Subscription } from '@/domain/entities';
-import { parsePaidWith, paidWithValue, usePaidWithOptions } from '@/features/shared/paidWith';
+import type { Category, Cycle, Subscription } from '@/domain/entities';
+import { CATEGORY_OPTIONS } from '@/features/shared/categories';
+import { PaidWithField } from '@/features/shared/PaidWithField';
+import { parsePaidWith, paidWithValue } from '@/features/shared/paidWith';
 import { useAction } from '@/lib/useAction';
 import { useCurrency, useFinanceActions, useToday } from '@/store/useFinance';
 
-const CATEGORY_OPTIONS = CategorySchema.options.map((c) => ({ value: c, label: categoryLabel(c) }));
-const CYCLE_OPTIONS = [
+const CYCLE_OPTIONS: Array<{ value: Cycle; label: string }> = [
   { value: 'weekly', label: 'Weekly' },
   { value: 'monthly', label: 'Monthly' },
   { value: 'quarterly', label: 'Quarterly' },
@@ -24,7 +25,6 @@ function SubscriptionForm({ sub, onDone }: { sub: Subscription | null; onDone():
   const { saveSubscription, deleteSubscription } = useFinanceActions();
   const currency = useCurrency();
   const today = useToday();
-  const paidWithOptions = usePaidWithOptions();
   const run = useAction();
 
   const [name, setName] = useState(sub?.name ?? '');
@@ -82,8 +82,9 @@ function SubscriptionForm({ sub, onDone }: { sub: Subscription | null; onDone():
   }
 
   return (
-    <form className="flex flex-col gap-4" onSubmit={submit} noValidate>
+    <form className="flex flex-col gap-5" onSubmit={submit} noValidate>
       <TextField
+        variant="line"
         label="Name"
         autoComplete="off"
         value={name}
@@ -91,19 +92,22 @@ function SubscriptionForm({ sub, onDone }: { sub: Subscription | null; onDone():
         onChange={(e) => setName(e.target.value)}
       />
       <MoneyField
+        variant="line"
         label="Amount"
         currency={currency}
         value={amount}
         onChange={setAmount}
         error={errors.amount}
       />
-      <Select
-        label="Cycle"
+      <RadioGroup<Cycle>
+        variant="underline"
+        legend="Cycle"
         value={cycle}
-        onChange={(v) => setCycle(v as Cycle)}
+        onChange={setCycle}
         options={CYCLE_OPTIONS}
       />
       <TextField
+        variant="line"
         label="Next renewal"
         type="date"
         min={today}
@@ -112,12 +116,13 @@ function SubscriptionForm({ sub, onDone }: { sub: Subscription | null; onDone():
         onChange={(e) => setNextRenewal(e.target.value)}
       />
       <Select
+        variant="line"
         label="Category"
         value={category}
         onChange={(v) => setCategory(v as Category)}
         options={CATEGORY_OPTIONS}
       />
-      <Select label="Paid with" value={paidWith} onChange={setPaidWith} options={paidWithOptions} />
+      <PaidWithField value={paidWith} onChange={setPaidWith} />
       {sub && (
         <div className="border-border flex flex-wrap items-center gap-x-3 gap-y-1 border-t pt-4">
           <Button variant="danger-ghost" size="sm" disabled={busy} onClick={remove}>

@@ -43,7 +43,31 @@ describe('Switch', () => {
   });
 });
 
+describe('Switch contrast', () => {
+  it('draws the off track in the muted text colour, 3:1 against the page, not the faint border colour', () => {
+    const { rerender } = render(<Switch label="Daily" checked={false} onChange={() => {}} />);
+    const sw = screen.getByRole('switch', { name: 'Daily' });
+    expect(sw).toHaveClass('bg-muted');
+    expect(sw).not.toHaveClass('bg-border-strong');
+    rerender(<Switch label="Daily" checked onChange={() => {}} />);
+    expect(screen.getByRole('switch', { name: 'Daily' })).toHaveClass('bg-primary');
+  });
+});
+
 describe('Select', () => {
+  it('announces its error when it appears', () => {
+    const props = {
+      label: 'Kind',
+      value: 'a',
+      onChange: () => {},
+      options: [{ value: 'a', label: 'A' }],
+    };
+    const { rerender } = render(<Select {...props} />);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    rerender(<Select {...props} error="Choose one." />);
+    expect(screen.getByRole('alert')).toHaveTextContent('Choose one.');
+  });
+
   it('is labelled and reports the chosen value', async () => {
     const onChange = vi.fn();
     render(
@@ -107,6 +131,13 @@ describe('Menu', () => {
     await userEvent.click(screen.getByRole('menuitem', { name: 'Edit' }));
     expect(onEdit).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+  });
+
+  it('keeps the focus ring on its items, which the page-wide ring draws', async () => {
+    render(<Menu label="Actions" items={[{ label: 'Edit', onSelect: vi.fn() }]} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Actions' }));
+    // The item's own highlight (a 1.1:1 grey) is not a focus indicator; the outline is.
+    expect(screen.getByRole('menuitem', { name: 'Edit' })).not.toHaveClass('focus:outline-none');
   });
 
   it('moves with the arrow keys and closes on Escape, back on its button', async () => {

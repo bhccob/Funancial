@@ -75,6 +75,7 @@ export const ReminderSettingsSchema = z.object({
   reviews: z.boolean(),
   backup: z.boolean(),
   dividends: z.boolean(),
+  buyIt: z.boolean(),
   /** Set once the person has been asked about reminders, so the ask is not repeated. */
   prompted: z.boolean(),
 });
@@ -87,6 +88,16 @@ export const CosmeticsSchema = z.object({
   frame: z.string().min(1),
 });
 export type Cosmetics = z.infer<typeof CosmeticsSchema>;
+
+/**
+ * What the inbox has been told is read: every reminder up to `readBefore` ("Mark all as read"), and
+ * the keys read one by one since, at most 200 of them (the store drops the oldest).
+ */
+export const InboxSchema = z.object({
+  readBefore: IsoTimestampSchema.nullable(),
+  read: z.array(z.string()),
+});
+export type Inbox = z.infer<typeof InboxSchema>;
 
 export const SettingsSchema = z.object({
   ...base,
@@ -117,6 +128,7 @@ export const SettingsSchema = z.object({
       asOf: IsoTimestampSchema,
     })
     .nullable(),
+  inbox: InboxSchema,
 });
 export type Settings = z.infer<typeof SettingsSchema>;
 export type AutoLockMinutes = Settings['autoLockMinutes'];
@@ -139,11 +151,13 @@ export function defaultSettings(now: string): Settings {
       reviews: true,
       backup: true,
       dividends: true,
+      buyIt: true,
       prompted: false,
     },
     cosmetics: { theme: 'theme-violet', avatar: 'avatar-sprout', frame: 'frame-none' },
     investCurrency: null,
     investFx: null,
+    inbox: { readBefore: null, read: [] },
   };
 }
 
@@ -433,3 +447,101 @@ export const SaleSchema = z.object({
   restore: HoldingSchema.nullable(),
 });
 export type Sale = z.infer<typeof SaleSchema>;
+
+export const VerdictSchema = z.enum(['buy', 'wait', 'cheaper', 'skip']);
+export type Verdict = z.infer<typeof VerdictSchema>;
+
+/** The dearest single item an ask takes: 10,000,000.00 in a currency with two decimals. */
+export const MAX_ASK_PRICE = 1_000_000_000;
+
+/** "Should I buy it?": what the person asks about. `price` is for one item, in minor units. */
+export const BuyAskSchema = z.object({
+  item: z.string().min(1).max(80),
+  price: PositiveMoney.max(MAX_ASK_PRICE),
+  quantity: z.number().int().min(1).max(99),
+  category: CategorySchema,
+  urgency: z.enum(['need', 'want', 'treat']),
+  howSoon: z.enum(['today', 'month', 'norush']),
+  payWith: PaymentMethodSchema,
+  cardId: z.string().min(1).nullable(),
+  link: z.string().max(2048).nullable(),
+  /** Optional reason, kept on the phone and echoed back in the notes. */
+  why: z.string().max(200).nullable(),
+});
+export type BuyAsk = z.infer<typeof BuyAskSchema>;
+
+const LimitAfterSchema = z.object({
+  limit: PositiveMoney,
+  spentAfter: NonNegativeMoney,
+  pct: z.number().int().nonnegative(),
+});
+
+/** What the rules engine finds out about an ask, from the totals alone. */
+export const FactsSchema = z.object({
+  /** Price times quantity. */
+  total: PositiveMoney,
+  categoryAfter: LimitAfterSchema.nullable(),
+  overallAfter: LimitAfterSchema.nullable(),
+  /** The most the purchase takes any limit over, 0 when none. */
+  overBy: NonNegativeMoney,
+  availableAfter: Money,
+  /** Months the emergency fund covers; null without spending history. */
+  emergencyBefore: z.number().nonnegative().nullable(),
+  emergencyAfter: z.number().nonnegative().nullable(),
+  goalDelay: z.object({ name: z.string(), days: z.number().int().nonnegative() }).nullable(),
+  requiresDebt: z.boolean(),
+  /** First day of the next period of the limit the purchase is furthest over; null when none is. */
+  resetsOn: LocalDateSchema.nullable(),
+});
+export type Facts = z.infer<typeof FactsSchema>;
+
+export const ConfidenceSchema = z.enum(['low', 'medium', 'high']);
+export type Confidence = z.infer<typeof ConfidenceSchema>;
+
+/** A meter reading: a whole number from 0 (skip it) to 100 (buy it). */
+const MeterSchema = z.number().int().min(0).max(100);
+
+/**
+ * One ask and what came of it. `rulesMeter` and `rulesVerdict` are what the rules said at ask time;
+ * `meter`, `verdict` and `confidence` are the answer shown, which always comes from the rules too.
+ */
+export const BuyDecisionSchema = z.object({
+  ...base,
+  ask: BuyAskSchema,
+  facts: FactsSchema,
+  rulesMeter: MeterSchema,
+  rulesVerdict: VerdictSchema,
+  meter: MeterSchema,
+  verdict: VerdictSchema,
+  confidence: ConfidenceSchema,
+  /** Why the meter was held at Wait, as it was when asked: the answer shows these, not a recount. */
+  guards: z.object({ capAtWait: z.boolean(), reasons: z.array(z.string()) }),
+  /** The lines under the answer: how About you shaped it, and the person's own words. */
+  notes: z.array(z.string()),
+  status: z.enum(['open', 'waiting', 'bought', 'skipped']),
+  /** The day to ask again, for a decision to wait. */
+  remindOn: LocalDateSchema.nullable(),
+  boughtOn: LocalDateSchema.nullable(),
+  /** How much the thing was used, 1 (not at all) to 5 (a lot), once the person has said. */
+  usage: z.literal([1, 2, 3, 4, 5]).nullable(),
+});
+export type BuyDecision = z.infer<typeof BuyDecisionSchema>;
+
+const tooLong = 'Keep it to 500 characters or fewer';
+
+/**
+ * What the person chose to tell the rules about themselves: the one record, `id: 'about'`.
+ * `overspend` lists the categories they tend to overspend on, each once; `protectGoalId` is the
+ * goal a purchase should not slip, or null.
+ */
+export const AboutYouSchema = z.object({
+  ...base,
+  id: z.literal('about'),
+  situation: z.string().max(500, tooLong),
+  matters: z.string().max(500, tooLong),
+  overspend: z
+    .array(CategorySchema)
+    .refine((xs) => new Set(xs).size === xs.length, 'Pick each category once'),
+  protectGoalId: z.string().min(1).nullable(),
+});
+export type AboutYou = z.infer<typeof AboutYouSchema>;

@@ -49,6 +49,9 @@ export const BADGE_REWARDS: Record<BadgeId, Reward> = {
   'first-dividend': { xp: 100, coins: 25 },
   'dividend-collector': { xp: 150, coins: 40 },
   'passive-income-pro': { xp: 200, coins: 50 },
+  'smart-shopper': { xp: 100, coins: 25 },
+  'impulse-controller': { xp: 150, coins: 40 },
+  'budget-defender': { xp: 150, coins: 40 },
 };
 
 export const CHALLENGE_REWARDS: Record<ChallengeKind, Reward> = {

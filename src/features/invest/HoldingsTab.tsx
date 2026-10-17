@@ -1,11 +1,15 @@
 import { Plus } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
+import { sliceColors } from '@/components/charts/colors';
 import { Donut, DonutLegend } from '@/components/charts/Donut';
 import { Button } from '@/components/ui/Button';
+import { CompanyLogo, LogoDisc } from '@/components/ui/CompanyLogo';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { HelpTip } from '@/components/ui/HelpTip';
 import { Section } from '@/components/ui/Section';
 import { underlineTab } from '@/components/ui/underlineTab';
+import type { Slice } from '@/domain/charts';
 import type { Holding } from '@/domain/entities';
 import {
   allocation,
@@ -42,6 +46,12 @@ function HoldingItem({ row }: { row: HoldingRow }) {
         to={`/invest/holding/${holding.id}`}
         className="flex min-h-14 w-full items-center gap-3 py-2.5 text-left"
       >
+        <CompanyLogo
+          symbol={holding.symbol}
+          name={holding.name}
+          color="var(--color-border-strong)"
+          size={28}
+        />
         <span className="flex min-w-0 flex-1 flex-col">
           <span className="truncate text-[15px] font-extrabold">
             {holding.symbol} · {holding.name}
@@ -70,8 +80,9 @@ function HoldingItem({ row }: { row: HoldingRow }) {
 }
 
 /**
- * One pie of these holdings (by holding, the biggest five and the rest as Other), 180px wide with
- * each share on it, and its legend full width under it, both showing each share.
+ * One pie of these holdings (by holding, the biggest five and the rest as Other), 220px wide with
+ * each holding's logo and share just outside its slice, and its legend full width under it, every
+ * row starting with its logo and showing its share. Other's logo is a grey +N, N holdings folded in.
  */
 function PieBlock({ rows, label }: { rows: HoldingRow[]; label: string }) {
   const { formatConverted: money } = useInvestMoney();
@@ -79,15 +90,34 @@ function PieBlock({ rows, label }: { rows: HoldingRow[]; label: string }) {
   const slices = useMemo(() => allocation(rows), [rows]);
   const whole = (minor: number) => money(minor, { whole: true });
   const total = slices.reduce((sum, s) => sum + s.amount, 0);
+  const colors = sliceColors(slices);
+  const holdings = new Map(rows.map((r) => [r.holding.id, r.holding]));
+  const folded =
+    rows.filter((r) => r.value !== null).length - slices.filter((s) => s.key !== 'other').length;
+  const logo = (slice: Slice, i: number, size: number) => {
+    const holding = holdings.get(slice.key);
+    return holding ? (
+      <CompanyLogo symbol={holding.symbol} name={holding.name} color={colors[i]!} size={size} />
+    ) : (
+      <LogoDisc color={colors[i]!} size={size} logo="other">
+        {`+${folded}`}
+      </LogoDisc>
+    );
+  };
 
   return (
     <div role="group" aria-label={label}>
       <div className="flex justify-center">
         <Donut
+          label="Value by holding"
           slices={slices}
-          size={180}
-          thickness={18}
-          showPercent
+          size={220}
+          thickness={22}
+          outsideLabels={slices.map((slice, i) => ({
+            key: slice.key,
+            logo: logo(slice, i, 18),
+            text: `${Math.round((slice.amount / total) * 100)}%`,
+          }))}
           formatAmount={(minor) => money(minor)}
           idle={{ value: whole(total), label }}
           selected={selected}
@@ -97,6 +127,7 @@ function PieBlock({ rows, label }: { rows: HoldingRow[]; label: string }) {
       <DonutLegend
         slices={slices}
         showPercent
+        logos={Object.fromEntries(slices.map((slice, i) => [slice.key, logo(slice, i, 24)]))}
         formatAmount={whole}
         selected={selected}
         onSelect={setSelected}
@@ -145,7 +176,8 @@ export function HoldingsTab({ refresh }: { refresh(): Promise<void> }) {
         else next.delete('pie');
         return next;
       },
-      { replace: true },
+      // Same screen: the page stays where it is, so the pie that changes stays in view.
+      { replace: true, preventScrollReset: true },
     );
   }
 
@@ -165,6 +197,7 @@ export function HoldingsTab({ refresh }: { refresh(): Promise<void> }) {
       ) : (
         <Section
           title="Portfolio value"
+          help={<HelpTip pageId="investments" label="portfolio value" />}
           action={
             <Button
               size="sm"

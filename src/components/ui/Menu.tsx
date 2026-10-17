@@ -87,7 +87,8 @@ export function Menu({ label, items }: { label: string; items: MenuItem[] }) {
                 item.onSelect();
               }}
               className={cn(
-                'hover:bg-surface-2 focus:bg-surface-2 rounded-[8px] px-3 py-2.5 text-left text-sm font-semibold focus:outline-none',
+                // The page-wide focus ring is drawn inside the item, which has no room outside it.
+                'hover:bg-surface-2 focus:bg-surface-2 rounded-[8px] px-3 py-2.5 text-left text-sm font-semibold focus-visible:-outline-offset-2',
                 item.danger && 'text-danger',
               )}
             >

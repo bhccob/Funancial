@@ -1,5 +1,6 @@
 import { useId, useState } from 'react';
 import { MonthLine } from '@/components/charts/MonthLine';
+import { HelpTip } from '@/components/ui/HelpTip';
 import { monthLine } from '@/domain/charts';
 import type { LocalDate } from '@/domain/dates';
 import { monthKey } from '@/domain/periods';
@@ -58,9 +59,12 @@ export function HomeHero({ view, today }: { view: FinanceView; today: LocalDate 
 
   return (
     <section aria-labelledby={labelId}>
-      <h2 id={labelId} className="text-muted text-sm font-bold">
-        Available to spend
-      </h2>
+      <div className="flex items-center gap-1">
+        <h2 id={labelId} className="text-muted text-sm font-bold">
+          Available to spend
+        </h2>
+        <HelpTip pageId="available" label="available to spend" />
+      </div>
       <p
         className={cn(
           'mt-1.5 leading-[1.05] font-extrabold tracking-[-0.045em] tabular-nums',
@@ -72,6 +76,7 @@ export function HomeHero({ view, today }: { view: FinanceView; today: LocalDate 
       {/* The line is 6px tall with a 44px tap area, so it keeps 20px clear above and below. */}
       <div className="mt-6">
         <MonthLine
+          label="This month's money"
           segments={parts.map((p) => ({
             key: p.key,
             label: `${p.name}: ${whole(p.amount)}`,

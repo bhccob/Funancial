@@ -14,6 +14,8 @@ export interface MoneyFieldProps {
   id?: string;
   /** `line` is the lighter field of the Invest forms: the label over the value, a hairline under it. */
   variant?: FieldVariant;
+  /** Shows the amount at 20px instead of 16px; only the `line` variant has it. */
+  large?: boolean;
 }
 
 const UNREADABLE = 'Enter an amount like 12.50';
@@ -29,6 +31,7 @@ export function MoneyField({
   autoFocus,
   id,
   variant = 'box',
+  large = false,
 }: MoneyFieldProps) {
   const autoId = useId();
   const inputId = id ?? autoId;
@@ -49,7 +52,8 @@ export function MoneyField({
         <span
           aria-hidden
           className={cn(
-            'text-muted pointer-events-none absolute inset-y-0 flex items-center text-base font-semibold',
+            'text-muted pointer-events-none absolute inset-y-0 flex items-center font-semibold',
+            line && large ? 'text-[20px]' : 'text-base',
             line ? 'left-0' : 'left-3',
           )}
         >
@@ -83,7 +87,7 @@ export function MoneyField({
           }}
           className={
             line
-              ? lineInput(!!shownError)
+              ? lineInput(!!shownError, large)
               : cn(
                   'text-text h-11 w-full rounded-md border bg-transparent pr-3 text-base font-semibold tabular-nums',
                   shownError ? 'border-danger' : 'border-border-strong',
@@ -97,7 +101,7 @@ export function MoneyField({
         </p>
       )}
       {shownError && (
-        <p id={errorId} className="text-danger text-sm font-semibold">
+        <p id={errorId} role="alert" className="text-danger text-sm font-semibold">
           {shownError}
         </p>
       )}

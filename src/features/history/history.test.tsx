@@ -149,6 +149,11 @@ describe('HistoryScreen', () => {
     expect(actions.addExpense).not.toHaveBeenCalled();
   });
 
+  it('gives each delete button the 44px a touch target needs', () => {
+    renderHistory();
+    expect(row('Side gig').getByRole('button', { name: 'Delete Side gig' })).toHaveClass('size-11');
+  });
+
   it('deletes an income after asking', async () => {
     renderHistory();
     const gig = bal?.data.tables.income.find((i) => i.label === 'Side gig');
@@ -267,5 +272,20 @@ describe('HistoryScreen', () => {
     await userEvent.click(within(dialog).getByRole('radio', { name: 'Savings' }));
     await userEvent.type(within(dialog).getByLabelText('Actual balance'), '5500');
     expect(within(dialog).getByText('Already matches.')).toBeInTheDocument();
+  });
+});
+
+describe('the actual balance dialog in the line style', () => {
+  it('has a line amount and underline tabs for the balance', async () => {
+    renderHistory();
+    await userEvent.click(screen.getByRole('button', { name: 'Set actual balance' }));
+    const dialog = screen.getByRole('dialog', { name: 'Set actual balance' });
+    expect(within(dialog).getByLabelText('Actual balance')).toHaveClass(
+      'border-b',
+      'font-extrabold',
+    );
+    expect(within(dialog).getByLabelText('Actual balance')).not.toHaveClass('rounded-md');
+    expect(within(dialog).getByText('Cash')).toHaveClass('border-b-2', 'border-text');
+    expect(within(dialog).getByText('Savings')).toHaveClass('border-transparent');
   });
 });

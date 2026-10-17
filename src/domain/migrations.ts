@@ -66,6 +66,21 @@ const STEPS: Record<number, Step> = {
   // The sale table is new, so it has no old rows to upgrade and no other record changes: a snapshot
   // without it gets an empty one from the schema. The step stays so the version number has one.
   7: {},
+  // The buyDecision and aboutYou tables are new, so a snapshot without them gets empty ones from the
+  // schema. Spelled out like step 3: the Buy it? reminder starts on.
+  8: {
+    settings: (r) =>
+      typeof r.reminders === 'object' && r.reminders !== null && !('buyIt' in r.reminders)
+        ? { ...r, reminders: { ...r.reminders, buyIt: true } }
+        : r,
+  },
+  // Spelled out like step 3: nothing is read yet. A phone still on v7 runs step 8 first, then this.
+  9: {
+    settings: (r) =>
+      typeof r.inbox === 'object' && r.inbox !== null
+        ? r
+        : { ...r, inbox: { readBefore: null, read: [] } },
+  },
 };
 
 export const LATEST_VERSION = Math.max(1, ...Object.keys(STEPS).map(Number));

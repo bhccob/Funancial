@@ -34,8 +34,9 @@ function GoalForm({ goal, onDone }: { goal: Goal; onDone(): void }) {
   }
 
   return (
-    <form className="flex flex-col gap-4" onSubmit={submit} noValidate>
+    <form className="flex flex-col gap-5" onSubmit={submit} noValidate>
       <MoneyField
+        variant="line"
         label="Amount"
         currency={currency}
         value={amount}
@@ -87,8 +88,9 @@ function DebtForm({ debt, balance, onDone }: { debt: Debt; balance: number; onDo
   }
 
   return (
-    <form className="flex flex-col gap-4" onSubmit={submit} noValidate>
+    <form className="flex flex-col gap-5" onSubmit={submit} noValidate>
       <MoneyField
+        variant="line"
         label="Amount"
         currency={currency}
         value={amount}
@@ -100,6 +102,7 @@ function DebtForm({ debt, balance, onDone }: { debt: Debt; balance: number; onDo
         hint={`You owe ${money(balance)}.`}
       />
       <RadioGroup<'cash' | 'savings'>
+        variant="underline"
         legend="From"
         value={from}
         onChange={setFrom}

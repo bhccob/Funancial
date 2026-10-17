@@ -11,7 +11,7 @@ function localDate(offsetDays = 0): string {
 
 async function start(page: Page) {
   await page.goto('/');
-  await page.getByRole('button', { name: 'Start with my real data' }).click();
+  await page.getByRole('button', { name: 'Create an account' }).click();
   await onboard(page, { cash: '1000', savings: '5000', salary: { amount: '4200', payDay: '25' } });
 }
 
@@ -22,7 +22,7 @@ async function addExpense(
   await page.goto('/add');
   await page.getByLabel('Amount', { exact: true }).fill(opts.amount);
   if (opts.category) await page.getByRole('radio', { name: opts.category, exact: true }).click();
-  if (opts.paidWith) await page.getByLabel('Paid with').selectOption({ label: opts.paidWith });
+  if (opts.paidWith) await page.getByRole('radio', { name: opts.paidWith, exact: true }).click();
   if (opts.note) await page.getByLabel('Note', { exact: true }).fill(opts.note);
   if (opts.repeat) await page.getByLabel('Repeats').selectOption({ label: opts.repeat });
   await page.getByRole('button', { name: 'Save', exact: true }).click();

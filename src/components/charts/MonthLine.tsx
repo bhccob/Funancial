@@ -11,16 +11,18 @@ export interface MonthLineSegment {
 }
 
 export interface MonthLineProps {
+  /** What the line shows: the name of the group of segments for screen readers. */
+  label: string;
   segments: MonthLineSegment[];
   selected: string | null;
   onSelect(key: string | null): void;
 }
 
-export function MonthLine({ segments, selected, onSelect }: MonthLineProps) {
+export function MonthLine({ label, segments, selected, onSelect }: MonthLineProps) {
   const shown = segments.filter((s) => s.amount > 0);
   if (shown.length === 0) return <div aria-hidden="true" className="bg-track h-1.5 rounded-full" />;
   return (
-    <div className="flex h-1.5 gap-[3px]">
+    <div role="group" aria-label={label} className="flex h-1.5 gap-[3px]">
       {shown.map((segment) => (
         <button
           key={segment.key}

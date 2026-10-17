@@ -1,5 +1,11 @@
 import { isValidElement } from 'react';
 import { expect, it } from 'vitest';
+import { AboutYouScreen } from '@/features/buy/AboutYouScreen';
+import { AnswerScreen } from '@/features/buy/AnswerScreen';
+import { BuyScreen } from '@/features/buy/BuyScreen';
+import { HelpPage } from '@/features/help/HelpPage';
+import { HelpScreen } from '@/features/help/HelpScreen';
+import { InboxScreen } from '@/features/inbox/InboxScreen';
 import { HoldingPage } from '@/features/invest/HoldingPage';
 import { InvestScreen } from '@/features/invest/InvestScreen';
 import { ShopScreen } from '@/features/shop/ShopScreen';
@@ -14,12 +20,15 @@ it('routes every spec screen', () => {
   expect(APP_ROUTES.map((r) => r.path).sort()).toEqual(
     [
       '/',
+      '/about-you',
       '/add',
       '/budget',
       '/buy',
+      '/buy/:id',
       '/freeze',
       '/goals',
       '/help',
+      '/help/:id',
       '/history',
       '/inbox',
       '/invest',
@@ -59,4 +68,28 @@ it('serves Invest from its own screen, and has no separate Dividends or News rou
 it("serves a holding's own page from /invest/holding/:id", () => {
   const holding = APP_ROUTES.find((r) => r.path === '/invest/holding/:id');
   expect(isValidElement(holding?.element) && holding.element.type).toBe(HoldingPage);
+});
+
+it('serves Buy it? from its own screens: the Ask form and list, and an answer', () => {
+  const ask = APP_ROUTES.find((r) => r.path === '/buy');
+  expect(isValidElement(ask?.element) && ask.element.type).toBe(BuyScreen);
+  const answer = APP_ROUTES.find((r) => r.path === '/buy/:id');
+  expect(isValidElement(answer?.element) && answer.element.type).toBe(AnswerScreen);
+});
+
+it('serves About you from its own screen', () => {
+  const about = APP_ROUTES.find((r) => r.path === '/about-you');
+  expect(isValidElement(about?.element) && about.element.type).toBe(AboutYouScreen);
+});
+
+it('serves Help from its own screens: the index and a page', () => {
+  const index = APP_ROUTES.find((r) => r.path === '/help');
+  expect(isValidElement(index?.element) && index.element.type).toBe(HelpScreen);
+  const page = APP_ROUTES.find((r) => r.path === '/help/:id');
+  expect(isValidElement(page?.element) && page.element.type).toBe(HelpPage);
+});
+
+it('serves the Inbox from its own screen, not a placeholder', () => {
+  const inbox = APP_ROUTES.find((r) => r.path === '/inbox');
+  expect(isValidElement(inbox?.element) && inbox.element.type).toBe(InboxScreen);
 });

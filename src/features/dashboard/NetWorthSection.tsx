@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { Sparkline } from '@/components/charts/Sparkline';
+import { HelpTip } from '@/components/ui/HelpTip';
 import { Section } from '@/components/ui/Section';
 import { netWorthChangeThisMonth, netWorthSeries } from '@/domain/charts';
 import type { LocalDate } from '@/domain/dates';
@@ -41,7 +42,11 @@ export function NetWorthSection({ data, view, today }: NetWorthSectionProps) {
   ];
 
   return (
-    <Section title="Net worth" action={changeText}>
+    <Section
+      title="Net worth"
+      help={<HelpTip pageId="net-worth" label="net worth" />}
+      action={changeText}
+    >
       <p className="text-[34px] leading-tight font-extrabold tracking-[-0.035em] tabular-nums">
         {money(view.netWorth)}
       </p>

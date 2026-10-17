@@ -1,6 +1,8 @@
 import { z } from 'zod';
 import {
+  AboutYouSchema,
   BudgetLimitSchema,
+  BuyDecisionSchema,
   ChallengeSchema,
   CheckInSchema,
   DebtSchema,
@@ -38,6 +40,8 @@ export const TABLES = [
   'holding',
   'dividend',
   'sale',
+  'buyDecision',
+  'aboutYou',
 ] as const;
 export type TableName = (typeof TABLES)[number];
 
@@ -59,19 +63,21 @@ export const SCHEMAS = {
   holding: HoldingSchema,
   dividend: DividendSchema,
   sale: SaleSchema,
+  buyDecision: BuyDecisionSchema,
+  aboutYou: AboutYouSchema,
 } satisfies Record<TableName, z.ZodType>;
 
 export type EntityMap = { [K in TableName]: z.infer<(typeof SCHEMAS)[K]> };
 export type EntityOf<T extends TableName> = EntityMap[T];
 
-export const CURRENT_SCHEMA_VERSION = 7;
+export const CURRENT_SCHEMA_VERSION = 9;
 
 /** One record tagged with its table, for batch writes. */
 export type TableRecord = { [K in TableName]: { table: K; record: EntityOf<K> } }[TableName];
 /** Names one stored record, to remove it. */
 export type RecordKey = { table: TableName; id: string };
 
-const SINGLETONS = new Set<TableName>(['profile', 'settings']);
+const SINGLETONS = new Set<TableName>(['profile', 'settings', 'aboutYou']);
 
 function table<T extends z.ZodType<{ id: string }>>(name: TableName, schema: T) {
   return z
@@ -103,6 +109,9 @@ export const SnapshotSchema = z.object({
     dividend: table('dividend', DividendSchema).default([]),
     // Added in v7.
     sale: table('sale', SaleSchema).default([]),
+    // Added in v8.
+    buyDecision: table('buyDecision', BuyDecisionSchema).default([]),
+    aboutYou: table('aboutYou', AboutYouSchema).default([]),
   }),
 });
 
@@ -132,6 +141,8 @@ export function emptySnapshot(): DataSnapshot {
       holding: [],
       dividend: [],
       sale: [],
+      buyDecision: [],
+      aboutYou: [],
     },
   };
 }

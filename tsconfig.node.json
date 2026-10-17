@@ -16,11 +16,13 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
-    "noUncheckedIndexedAccess": true
+    "noUncheckedIndexedAccess": true,
+    "paths": { "@/*": ["./src/*"] }
   },
   "include": [
     "vite.config.ts",
     "vitest.config.ts",
+    "site/vite.config.ts",
     "playwright.config.ts",
     "capacitor.config.ts",
     "api",
