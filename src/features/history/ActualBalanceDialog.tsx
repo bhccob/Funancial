@@ -44,8 +44,9 @@ function ActualBalanceForm({ onDone }: { onDone(): void }) {
   }
 
   return (
-    <form className="flex flex-col gap-4" onSubmit={submit} noValidate>
+    <form className="flex flex-col gap-5" onSubmit={submit} noValidate>
       <RadioGroup<Which>
+        variant="underline"
         legend="Which balance"
         value={which}
         onChange={setWhich}
@@ -56,6 +57,7 @@ function ActualBalanceForm({ onDone }: { onDone(): void }) {
       />
       <p className="text-sm font-semibold tabular-nums">{`Funancial thinks: ${money(computed)}`}</p>
       <MoneyField
+        variant="line"
         label="Actual balance"
         currency={currency}
         value={actual}

@@ -9,6 +9,7 @@ import { RadioGroup } from './RadioGroup';
 import { Select } from './Select';
 import { ShareStepper } from './ShareStepper';
 import { TextField } from './TextField';
+import { underlineTab } from './underlineTab';
 
 describe('the line variant of the fields', () => {
   it('is a small muted label over the value, with a hairline under it and no box', () => {
@@ -107,6 +108,23 @@ describe('the line variant of the fields', () => {
     expect(input).toHaveClass('border-danger');
   });
 
+  it('shows a larger amount when asked', () => {
+    render(
+      <MoneyField
+        variant="line"
+        large
+        label="Amount"
+        currency="USD"
+        value={null}
+        onChange={() => {}}
+      />,
+    );
+    const input = screen.getByLabelText('Amount');
+    expect(input).toHaveClass('text-[20px]', 'font-extrabold', 'h-11');
+    expect(input).not.toHaveClass('text-base');
+    expect(screen.getByText(currencySymbol('USD'))).toHaveClass('text-[20px]');
+  });
+
   it('is a select too', () => {
     render(
       <Select
@@ -143,6 +161,97 @@ describe('RadioGroup as underline tabs', () => {
     expect(screen.getByText('Cash')).toHaveClass('border-transparent', 'text-muted');
     await userEvent.click(screen.getByRole('radio', { name: 'Cash' }));
     expect(onChange).toHaveBeenCalledWith('cash');
+  });
+
+  it('says a hint under the choices, which describes the group', () => {
+    render(
+      <RadioGroup
+        variant="underline"
+        legend="Paid with"
+        value="visa"
+        onChange={() => {}}
+        options={[{ value: 'visa', label: 'Visa' }]}
+        hint="Adds to the card balance."
+      />,
+    );
+    expect(screen.getByRole('group', { name: 'Paid with' })).toHaveAccessibleDescription(
+      'Adds to the card balance.',
+    );
+    expect(screen.getByText('Adds to the card balance.')).toHaveClass('text-muted', 'text-sm');
+  });
+});
+
+describe('underline tabs as a tap target', () => {
+  const options = (n: number) =>
+    ['One', 'Two', 'Three', 'Four', 'Five'].slice(0, n).map((label) => ({ value: label, label }));
+  const group = (n: number) =>
+    render(
+      <RadioGroup
+        variant="underline"
+        legend="Pick"
+        value="One"
+        onChange={() => {}}
+        options={options(n)}
+      />,
+    );
+
+  it('keeps each tab at least 44px wide, its label centred, so a short word like Cash is easy to hit', () => {
+    group(2);
+    expect(screen.getByText('One')).toHaveClass('min-w-11', 'min-h-11', 'justify-center');
+    expect(underlineTab(false)).toContain('min-w-11');
+  });
+
+  it('puts 20px between up to three tabs, and 12px between more, so four fit a dialog row', () => {
+    const { unmount } = group(3);
+    expect(screen.getByText('One').parentElement).toHaveClass('gap-x-5');
+    expect(screen.getByText('One').parentElement).not.toHaveClass('gap-x-3');
+    unmount();
+    group(4);
+    expect(screen.getByText('One').parentElement).toHaveClass('gap-x-3');
+    expect(screen.getByText('One').parentElement).not.toHaveClass('gap-x-5');
+  });
+
+  it('makes the boxed choices 44px tall', () => {
+    render(<RadioGroup legend="Show" value="One" onChange={() => {}} options={options(2)} />);
+    expect(screen.getByText('Two')).toHaveClass('min-h-11');
+  });
+});
+
+describe('errors that appear after the person leaves a field are announced', () => {
+  const one = [{ value: 'a', label: 'A' }];
+
+  it('has the group error of a RadioGroup as an alert, and its hint as plain text', () => {
+    const { rerender } = render(
+      <RadioGroup
+        variant="underline"
+        legend="Pick"
+        value="a"
+        onChange={() => {}}
+        options={one}
+        hint="Choose one."
+      />,
+    );
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    rerender(
+      <RadioGroup
+        variant="underline"
+        legend="Pick"
+        value="a"
+        onChange={() => {}}
+        options={one}
+        hint="Choose one."
+        error="Pick one."
+      />,
+    );
+    expect(screen.getByRole('alert')).toHaveTextContent('Pick one.');
+    expect(screen.getByText('Choose one.')).not.toHaveAttribute('role');
+  });
+
+  it('has the error of a ShareStepper as an alert', () => {
+    const { rerender } = render(<ShareStepper label="Shares" value="" onChange={() => {}} />);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    rerender(<ShareStepper label="Shares" value="" onChange={() => {}} error="Enter how many." />);
+    expect(screen.getByRole('alert')).toHaveTextContent('Enter how many.');
   });
 });
 

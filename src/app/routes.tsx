@@ -7,10 +7,12 @@ import { BuyScreen } from '@/features/buy/BuyScreen';
 import { DashboardScreen } from '@/features/dashboard/DashboardScreen';
 import { FreezeScreen } from '@/features/freeze/FreezeScreen';
 import { GoalsScreen } from '@/features/goals/GoalsScreen';
+import { HelpPage } from '@/features/help/HelpPage';
+import { HelpScreen } from '@/features/help/HelpScreen';
 import { HistoryScreen } from '@/features/history/HistoryScreen';
+import { InboxScreen } from '@/features/inbox/InboxScreen';
 import { HoldingPage } from '@/features/invest/HoldingPage';
 import { InvestScreen } from '@/features/invest/InvestScreen';
-import { PlaceholderScreen } from '@/features/placeholder/PlaceholderScreen';
 import { QuestsScreen } from '@/features/quests/QuestsScreen';
 import { ShopScreen } from '@/features/shop/ShopScreen';
 import { SubscriptionsScreen } from '@/features/subscriptions/SubscriptionsScreen';
@@ -23,10 +25,6 @@ import { SettingsScreen } from '@/features/settings/SettingsScreen';
 export interface AppRoute {
   path: string;
   element: ReactNode;
-}
-
-function placeholder(path: string, title: string): AppRoute {
-  return { path, element: <PlaceholderScreen title={title} /> };
 }
 
 export const APP_ROUTES: AppRoute[] = [
@@ -43,8 +41,9 @@ export const APP_ROUTES: AppRoute[] = [
   { path: '/goals', element: <GoalsScreen /> },
   { path: '/history', element: <HistoryScreen /> },
   { path: '/shop', element: <ShopScreen /> },
-  placeholder('/inbox', 'Inbox'),
-  placeholder('/help', 'Help'),
+  { path: '/inbox', element: <InboxScreen /> },
+  { path: '/help', element: <HelpScreen /> },
+  { path: '/help/:id', element: <HelpPage /> },
   { path: '/settings', element: <SettingsScreen /> },
   { path: '/add', element: <AddScreen /> },
 ];

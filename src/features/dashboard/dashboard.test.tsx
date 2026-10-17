@@ -11,6 +11,7 @@ import { emptySnapshot, type DataSnapshot } from '@/domain/snapshot';
 import { applyRecords, dueGenerated } from '@/domain/sync';
 import { formatDay, formatMonth, formatMonthShort, formatWeekday } from '@/lib/format';
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
+import { expectHelpTip } from '@/test/helpTip';
 import { fakeNotifier, onPhone, type FakeNotifier } from '@/test/fakeNotifier';
 import {
   localIso,
@@ -304,13 +305,15 @@ describe('DashboardScreen hero', () => {
     expect(within(hero).getByText(usdWhole(284_99))).toBeInTheDocument();
     expect(within(hero).getByText('bills to come')).toBeInTheDocument();
     expect(within(hero).queryByText('left in limit')).not.toBeInTheDocument();
-    expect(within(hero).getAllByRole('button')).toHaveLength(2);
+    // The segments only: the "?" beside the title is a button too.
+    expect(within(hero).getAllByRole('button', { name: /: / })).toHaveLength(2);
   });
 
   it('draws only the track when nothing is spent or due', () => {
     renderDashboard(emptySnapshot(), TODAY);
     const hero = region('Available to spend');
-    expect(within(hero).queryAllByRole('button')).toHaveLength(0);
+    // No segments; only the "?" beside the title is a button.
+    expect(within(hero).queryAllByRole('button', { name: /: / })).toHaveLength(0);
     expect(within(hero).getByText(`spent in ${october}`)).toBeInTheDocument();
     expect(within(hero).getByText('bills to come')).toBeInTheDocument();
     expect(within(hero).getAllByText(usdWhole(0))).toHaveLength(2);
@@ -746,6 +749,16 @@ describe('DashboardScreen salary and freeze', () => {
     expect(actions.confirmIncome).toHaveBeenCalledWith('salary-2026-10', 270968);
   });
 
+  it('confirms the salary on a line field', async () => {
+    const today = '2026-10-25';
+    renderDashboard(applyRecords(sal.data, dueGenerated(sal.data, today)), today);
+    await userEvent.click(screen.getByRole('button', { name: `Confirm ${october} salary` }));
+    const dialog = screen.getByRole('dialog', { name: 'Confirm salary' });
+    const amount = within(dialog).getByLabelText('Amount received');
+    expect(amount).toHaveClass('border-b', 'font-extrabold');
+    expect(amount).not.toHaveClass('rounded-md');
+  });
+
   it('lets a salary that never came be marked as not arrived', async () => {
     const today = '2026-10-25';
     renderDashboard(applyRecords(sal.data, dueGenerated(sal.data, today)), today);
@@ -916,5 +929,45 @@ describe('DashboardScreen quests', () => {
       'checkIn',
       expect.objectContaining({ id: 'checkin:no-spend:2026-10-14', kind: 'no-spend' }),
     );
+  });
+});
+
+describe('DashboardScreen help tips', () => {
+  it('explains Available to spend, beside its title', async () => {
+    renderDashboard(monthData(), TODAY);
+    await expectHelpTip(region('Available to spend'), 'available to spend', 'available');
+  });
+
+  it('sets the "?" 4px after the Available to spend title', () => {
+    renderDashboard(monthData(), TODAY);
+    const tip = within(region('Available to spend')).getByRole('button', {
+      name: 'What is available to spend?',
+    });
+    expect(tip.parentElement).toHaveClass('gap-1');
+  });
+
+  it('leaves the month line to its own taps', async () => {
+    renderDashboard(monthData(), TODAY);
+    const hero = region('Available to spend');
+    await userEvent.click(
+      within(hero).getByRole('button', { name: 'What is available to spend?' }),
+    );
+    await userEvent.keyboard('{Escape}');
+    await userEvent.click(
+      within(hero).getByRole('button', { name: `Bills still to come: ${usdWhole(284_99)}` }),
+    );
+    expect(within(hero).getByText('Bills still to come')).toBeInTheDocument();
+  });
+
+  it('explains limits once, on the Limits title and not on each ring', async () => {
+    renderDashboard(monthData(), TODAY);
+    const limits = region('Limits');
+    expect(within(limits).getAllByRole('button', { name: /^What is/ })).toHaveLength(1);
+    await expectHelpTip(limits, 'a limit', 'limits');
+  });
+
+  it('explains Net worth, beside its title', async () => {
+    renderDashboard(monthData(), TODAY);
+    await expectHelpTip(region('Net worth'), 'net worth', 'net-worth');
   });
 });

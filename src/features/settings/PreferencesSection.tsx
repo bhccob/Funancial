@@ -1,6 +1,5 @@
 import { RadioGroup } from '@/components/ui/RadioGroup';
 import { Section } from '@/components/ui/Section';
-import { Select } from '@/components/ui/Select';
 import { limitMessage } from '@/domain/alerts';
 import type { LimitStatus } from '@/domain/budget';
 import type { Settings } from '@/domain/entities';
@@ -41,9 +40,10 @@ export function PreferencesSection() {
   return (
     <Section title="Preferences">
       <div className="flex max-w-xl flex-col gap-5">
-        <Select
-          label="Week starts on"
-          value={String(weekStartsOn)}
+        <RadioGroup<'1' | '0'>
+          variant="underline"
+          legend="Week starts on"
+          value={weekStartsOn === 0 ? '0' : '1'}
           onChange={(v) => void run(() => updateSettings({ weekStartsOn: v === '0' ? 0 : 1 }))}
           options={[
             { value: '1', label: 'Monday' },
@@ -52,6 +52,7 @@ export function PreferencesSection() {
         />
         <div className="flex flex-col gap-2">
           <RadioGroup<Tone>
+            variant="underline"
             legend="Warning style"
             value={tone}
             onChange={(v) => void run(() => updateSettings({ warningTone: v }))}

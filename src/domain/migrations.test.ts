@@ -19,9 +19,10 @@ const v1Sub = {
 };
 
 // Migrating a settings record all the way up also runs step 6, which adds Invest's currency and rate,
-// and step 8, which turns the Buy it? reminder on.
+// step 8, which turns the Buy it? reminder on, and step 9, which adds an empty inbox.
 const invest = { investCurrency: null, investFx: null };
 const buyIt = { buyIt: true };
+const inbox = { inbox: { readBefore: null, read: [] } };
 
 it('has a step up to the current schema version', () => {
   expect(LATEST_VERSION).toBe(CURRENT_SCHEMA_VERSION);
@@ -90,12 +91,14 @@ describe('v3 settings', () => {
       reminders: upgraded,
       cosmetics,
       ...invest,
+      ...inbox,
     });
     expect(migrateRecord('settings', v2Settings, 1)).toEqual({
       ...v2Settings,
       reminders: upgraded,
       cosmetics,
       ...invest,
+      ...inbox,
     });
   });
 
@@ -106,6 +109,7 @@ describe('v3 settings', () => {
       reminders: { ...chosen, dividends: true, ...buyIt },
       cosmetics,
       ...invest,
+      ...inbox,
     });
   });
 
@@ -145,6 +149,7 @@ describe('v4 game data', () => {
       reminders: { ...v3Settings.reminders, dividends: true, ...buyIt },
       cosmetics: defaultCosmetics,
       ...invest,
+      ...inbox,
     });
   });
 
@@ -155,6 +160,7 @@ describe('v4 game data', () => {
       reminders: { ...v3Settings.reminders, dividends: true, ...buyIt },
       cosmetics: chosen,
       ...invest,
+      ...inbox,
     });
   });
 
@@ -209,6 +215,7 @@ describe('v5 investments', () => {
       ...v4Settings,
       reminders: { ...v4Settings.reminders, dividends: true, ...buyIt },
       ...invest,
+      ...inbox,
     });
   });
 
@@ -218,6 +225,7 @@ describe('v5 investments', () => {
       ...chosen,
       reminders: { ...chosen.reminders, ...buyIt },
       ...invest,
+      ...inbox,
     });
   });
 
@@ -263,6 +271,7 @@ describe('v6 Invest currency', () => {
       ...v5Settings,
       reminders: { ...v5Settings.reminders, ...buyIt },
       ...invest,
+      ...inbox,
     });
   });
 
@@ -275,6 +284,7 @@ describe('v6 Invest currency', () => {
     expect(migrateRecord('settings', chosen, 5)).toEqual({
       ...chosen,
       reminders: { ...chosen.reminders, ...buyIt },
+      ...inbox,
     });
   });
 
@@ -346,12 +356,13 @@ describe('v8 buy decisions and About you', () => {
     expect(migrateRecord('settings', v7Settings, 7)).toEqual({
       ...v7Settings,
       reminders: { ...v7Settings.reminders, buyIt: true },
+      ...inbox,
     });
   });
 
   it('keeps a Buy it? choice that is already there', () => {
     const chosen = { ...v7Settings, reminders: { ...v7Settings.reminders, buyIt: false } };
-    expect(migrateRecord('settings', chosen, 7)).toEqual(chosen);
+    expect(migrateRecord('settings', chosen, 7)).toEqual({ ...chosen, ...inbox });
   });
 
   it('gives every settings record its own reminders object', () => {
@@ -365,6 +376,71 @@ describe('v8 buy decisions and About you', () => {
     const row = { id: 'h1', symbol: 'KO' };
     for (const table of ['holding', 'profile', 'transaction', 'buyDecision', 'aboutYou'] as const) {
       expect(migrateRecord(table, row, 7)).toEqual(row);
+    }
+  });
+});
+
+describe('v9 inbox', () => {
+  // Step 9 adds the read state; the owner's phone holds v7 data, which the next build upgrades past 8.
+  const v8Settings = {
+    id: 'settings',
+    createdAt: '2026-10-01T09:00:00.000Z',
+    updatedAt: '2026-10-01T09:00:00.000Z',
+    weekStartsOn: 1,
+    warningTone: 'motivational',
+    autoLockMinutes: 5,
+    lastBackupAt: null,
+    reminders: {
+      enabled: true,
+      dailyLog: true,
+      dailyTime: '07:30',
+      bills: true,
+      freeze: true,
+      reviews: true,
+      backup: true,
+      dividends: false,
+      buyIt: false,
+      prompted: true,
+    },
+    cosmetics: { theme: 'theme-forest', avatar: 'avatar-fox', frame: 'frame-gold' },
+    investCurrency: 'USD',
+    investFx: { currency: 'USD', rate: 1.1, asOf: '2026-10-14T09:00:00.000Z' },
+  };
+
+  it('adds an inbox with nothing read to v8 settings and keeps everything else', () => {
+    expect(migrateRecord('settings', v8Settings, 8)).toEqual({ ...v8Settings, ...inbox });
+  });
+
+  it('keeps an inbox that is already there', () => {
+    const read = { inbox: { readBefore: '2026-10-14T09:00:00.000Z', read: ['week:2026-10-11'] } };
+    expect(migrateRecord('settings', { ...v8Settings, ...read }, 8)).toEqual({
+      ...v8Settings,
+      ...read,
+    });
+  });
+
+  it('upgrades v7 settings all the way: the Buy it? reminder on, and the inbox', () => {
+    const reminders: Record<string, unknown> = { ...v8Settings.reminders };
+    delete reminders.buyIt;
+    const v7 = { ...v8Settings, reminders };
+    expect(migrateRecord('settings', v7, 7)).toEqual({
+      ...v8Settings,
+      reminders: { ...reminders, buyIt: true },
+      ...inbox,
+    });
+  });
+
+  it('gives every settings record its own inbox', () => {
+    const a = migrateRecord('settings', v8Settings, 8) as { inbox: { read: string[] } };
+    const b = migrateRecord('settings', v8Settings, 8) as { inbox: { read: string[] } };
+    expect(a.inbox).not.toBe(b.inbox);
+    expect(a.inbox.read).not.toBe(b.inbox.read);
+  });
+
+  it('leaves every other record as it was', () => {
+    const row = { id: 'h1', symbol: 'KO' };
+    for (const table of ['holding', 'profile', 'buyDecision', 'aboutYou'] as const) {
+      expect(migrateRecord(table, row, 8)).toEqual(row);
     }
   });
 });

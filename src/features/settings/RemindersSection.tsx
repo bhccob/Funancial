@@ -88,6 +88,7 @@ export function RemindersSection({ notifier }: { notifier: Notifier }) {
           onChange={(v) => save({ dailyLog: v })}
         />
         <Select
+          variant="line"
           label="At"
           value={r.dailyTime}
           options={times.map((t) => ({ value: t, label: t }))}

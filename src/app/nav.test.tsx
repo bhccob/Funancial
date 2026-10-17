@@ -1,7 +1,7 @@
-import { fireEvent, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createMemoryRouter, RouterProvider } from 'react-router';
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SalaryFreeze } from '@/domain/entities';
 import { levelStart } from '@/domain/game/levels';
 import { newId, nowIso } from '@/domain/ids';
@@ -10,6 +10,7 @@ import { emptySnapshot, type DataSnapshot } from '@/domain/snapshot';
 import { topDialog } from '@/lib/dialogStack';
 import { formatDay } from '@/lib/format';
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
+import { INBOX_NOW, inboxData } from '@/test/inboxData';
 import { makeGoal, makeLedgerEntry, makeProfile, makeSubscription } from '@/test/fixtures';
 import { MENU_GROUPS } from './menu';
 import { appRouteObjects } from './router';
@@ -63,6 +64,19 @@ async function openMenu() {
 /** The row's text, e.g. "Goals2 goals · 33% saved". */
 const row = (sheet: HTMLElement, label: string) =>
   within(sheet).getByRole('link', { name: new RegExp(`^${label}`) });
+
+describe('sidebar', () => {
+  it('has links that are 44px tall', () => {
+    renderAt('/');
+    const sidebar = screen.getByRole('navigation', { name: 'All sections' });
+    // The Add expense button above them is 48px (a medium button); the rows are nav links.
+    const rows = within(sidebar)
+      .getAllByRole('link')
+      .filter((link) => link.textContent !== 'Add expense');
+    expect(rows.length).toBeGreaterThan(10);
+    for (const link of rows) expect(link, link.textContent ?? '').toHaveClass('min-h-11');
+  });
+});
 
 describe('bottom bar', () => {
   it('shows Home, Budget, Invest and Menu in the bar, and Quests first in the Menu', async () => {
@@ -147,7 +161,7 @@ describe('Menu sheet', () => {
     expect(row(sheet, 'Quests')).toHaveTextContent('Level 1');
     expect(row(sheet, 'About you')).toHaveTextContent('What the buy check knows');
     expect(row(sheet, 'Shop')).toHaveTextContent('130 coins to spend');
-    expect(row(sheet, 'Inbox')).toHaveTextContent('Your notices');
+    expect(row(sheet, 'Inbox')).toHaveTextContent(/^Inbox$/);
     expect(row(sheet, 'Help')).toHaveTextContent('How everything works');
     expect(row(sheet, 'Settings')).toHaveTextContent('Lock, backups, reminders');
   });
@@ -209,15 +223,37 @@ describe('Menu sheet', () => {
     expect(row(sheet, 'Shop')).toHaveTextContent('0 coins to spend');
   });
 
+  describe('Inbox row', () => {
+    beforeEach(() => vi.useFakeTimers({ toFake: ['Date'], now: INBOX_NOW }));
+    afterEach(() => vi.useRealTimers());
+
+    it('says how many reminders are new', async () => {
+      renderAt('/', inboxData({ readBefore: null, read: ['week:2026-10-11'] }));
+      const sheet = await openMenu();
+      expect(row(sheet, 'Inbox')).toHaveTextContent('Inbox7 new');
+    });
+
+    it('says nothing when there are none, whether none came due or all were read', async () => {
+      renderAt('/');
+      const sheet = await openMenu();
+      expect(row(sheet, 'Inbox')).toHaveTextContent(/^Inbox$/);
+      cleanup();
+
+      renderAt('/', inboxData({ readBefore: '2026-10-14T09:00:00.000Z', read: [] }));
+      expect(row(await openMenu(), 'Inbox')).toHaveTextContent(/^Inbox$/);
+    });
+  });
+
   it('marks soon items', async () => {
     renderAt('/');
     const sheet = await openMenu();
     expect(row(sheet, 'Buy it\\?')).not.toHaveTextContent('Soon');
-    expect(row(sheet, 'Inbox')).toHaveTextContent('Soon');
+    expect(row(sheet, 'Inbox')).not.toHaveTextContent('Soon');
+    expect(row(sheet, 'Help')).not.toHaveTextContent('Soon');
     expect(row(sheet, 'Quests')).not.toHaveTextContent('Soon');
     expect(row(sheet, 'Subscriptions')).not.toHaveTextContent('Soon');
     expect(row(sheet, 'Settings')).not.toHaveTextContent('Soon');
-    expect(within(sheet).getAllByText('Soon')).toHaveLength(
+    expect(within(sheet).queryAllByText('Soon')).toHaveLength(
       MENU_GROUPS.flatMap((g) => g.items).filter((i) => i.soon).length,
     );
   });
@@ -227,6 +263,19 @@ describe('Menu sheet', () => {
     const sheet = await openMenu();
     await userEvent.click(row(sheet, 'Settings'));
     expect(screen.getByRole('heading', { level: 1, name: 'Settings' })).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Menu' })).not.toBeInTheDocument();
+  });
+
+  it('opens Help from the Menu, with its pages listed', async () => {
+    renderAt('/');
+    const sheet = await openMenu();
+    await userEvent.click(row(sheet, 'Help'));
+    expect(screen.getByRole('heading', { level: 1, name: 'Help' })).toBeInTheDocument();
+    expect(screen.getByRole('searchbox', { name: 'Search help' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /^Available to spend/ })).toHaveAttribute(
+      'href',
+      '/help/available',
+    );
     expect(screen.queryByRole('dialog', { name: 'Menu' })).not.toBeInTheDocument();
   });
 
@@ -327,7 +376,11 @@ describe('sidebar', () => {
     const sidebar = screen.getByRole('navigation', { name: 'All sections' });
     expect(within(sidebar).getByRole('link', { name: /^Buy it/ })).not.toHaveTextContent('Soon');
     expect(within(sidebar).getByRole('link', { name: /^Settings/ })).not.toHaveTextContent('Soon');
-    expect(within(sidebar).getAllByText('Soon')).toHaveLength(2);
+    expect(within(sidebar).getByRole('link', { name: /^Help/ })).not.toHaveTextContent('Soon');
+    expect(within(sidebar).getByRole('link', { name: /^Inbox/ })).not.toHaveTextContent('Soon');
+    expect(within(sidebar).queryAllByText('Soon')).toHaveLength(
+      MENU_GROUPS.flatMap((g) => g.items).filter((i) => i.soon).length,
+    );
   });
 
   it('marks the current screen', () => {

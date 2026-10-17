@@ -6,6 +6,7 @@ import { WrongSecretError } from '@/data/keys';
 import type { SyncMessage } from '@/lib/broadcast';
 import type { SafeStorage } from '@/lib/safeStorage';
 import { buildDemoSnapshot } from '@/data/demoSeed';
+import { CURRENT_SCHEMA_VERSION } from '@/domain/snapshot';
 import { makeExpense, makeSubscription } from '@/test/fixtures';
 import { memoryStorage } from '@/test/memoryStorage';
 import { createAppStore, type AppDeps } from './appStore';
@@ -87,6 +88,7 @@ describe('first run', () => {
         cosmetics: { theme: 'theme-violet', avatar: 'avatar-sprout', frame: 'frame-none' },
         investCurrency: null,
         investFx: null,
+        inbox: { readBefore: null, read: [] },
       },
     ]);
   });
@@ -550,6 +552,62 @@ describe('a sync failure while opening', () => {
     expect(failingSync).toHaveBeenCalled();
     expect(again.getState().phase).toBe('unlocked');
     expect(again.getState().data.tables.expense.map((e) => e.id)).toEqual(['e1']);
+  });
+});
+
+describe('data saved by a newer version', () => {
+  /** What is stored: a write re-encrypts every row it touches, so equal rows mean no write. */
+  async function stored(deps: AppDeps) {
+    const backend = await deps.storage.open('real');
+    const state = {
+      version: await backend.meta.get('dataVersion'),
+      rows: await backend.records.all(),
+    };
+    await backend.close();
+    return state;
+  }
+
+  async function newerData(deps: AppDeps) {
+    const backend = await deps.storage.open('real');
+    await backend.meta.put('dataVersion', CURRENT_SCHEMA_VERSION + 1);
+    await backend.close();
+    return stored(deps);
+  }
+
+  it('opens nothing on boot, writes nothing, and says an update is needed', async () => {
+    const { deps, store } = await freshStore();
+    await store.getState().put('expense', makeExpense({ id: 'e1' }));
+    const before = await newerData(deps);
+
+    const again = await reboot(deps);
+    expect(again.getState().phase).toBe('updateNeeded');
+    expect(again.getState().data.tables.expense).toEqual([]);
+    await expect(again.getState().put('expense', makeExpense())).rejects.toThrow();
+    expect(await stored(deps)).toEqual(before);
+  });
+
+  it('stops after the right PIN too, instead of failing the unlock', async () => {
+    const { deps, store } = await freshStore();
+    await store.getState().setSecret('2468', 'pin');
+    const before = await newerData(deps);
+
+    const again = await reboot(deps);
+    expect(again.getState().phase).toBe('locked');
+    expect(await again.getState().unlock('2468')).toBe('ok');
+    expect(again.getState().phase).toBe('updateNeeded');
+    expect(again.getState().data.tables.expense).toEqual([]);
+    expect(await stored(deps)).toEqual(before);
+  });
+
+  it('stops on a refresh that finds it, with the data it shows gone', async () => {
+    const { deps, store } = await freshStore();
+    await store.getState().put('expense', makeExpense({ id: 'e1' }));
+    const before = await newerData(deps);
+
+    await store.getState().refresh();
+    expect(store.getState().phase).toBe('updateNeeded');
+    expect(store.getState().data.tables.expense).toEqual([]);
+    expect(await stored(deps)).toEqual(before);
   });
 });
 

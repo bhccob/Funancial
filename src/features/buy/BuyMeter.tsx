@@ -1,4 +1,4 @@
-import { zone, type Zone } from '@/domain/advisor';
+import { BUY_FROM, WAIT_FROM, zone, type Zone } from '@/domain/advisor';
 
 const ZONE_NAME: Record<Zone, string> = { skip: 'Skip', wait: 'Wait', buy: 'Buy' };
 
@@ -11,11 +11,11 @@ const at = (v: number) => {
   const a = Math.PI * (1 - v / 100);
   return `${(C + R * Math.cos(a)).toFixed(2)} ${(C - R * Math.sin(a)).toFixed(2)}`;
 };
-// Skip is 0–33, Wait 34–66, Buy 67–100: each zone's arc ends halfway to the next, with a hairline gap.
+// Each zone's arc ends halfway to the next one's first reading (Wait starts at WAIT_FROM, Buy at BUY_FROM), with a hairline gap.
 const ARCS: Array<{ zone: Zone; from: number; to: number; color: string }> = [
-  { zone: 'skip', from: 0, to: 33.5, color: 'var(--color-danger)' },
-  { zone: 'wait', from: 33.5, to: 66.5, color: 'var(--color-warning)' },
-  { zone: 'buy', from: 66.5, to: 100, color: 'var(--color-accent)' },
+  { zone: 'skip', from: 0, to: WAIT_FROM - 0.5, color: 'var(--color-danger)' },
+  { zone: 'wait', from: WAIT_FROM - 0.5, to: BUY_FROM - 0.5, color: 'var(--color-warning)' },
+  { zone: 'buy', from: BUY_FROM - 0.5, to: 100, color: 'var(--color-accent)' },
 ];
 
 /**

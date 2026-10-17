@@ -23,6 +23,7 @@ import {
   type SearchResponse,
 } from '@/services/market';
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
+import { expectHelpTip } from '@/test/helpTip';
 import { makeDividend, makeHolding, makeProfile, makeSale } from '@/test/fixtures';
 import { FUTURE } from '@/store/financeActions';
 import { SOLD_NO_REINVEST, UNKNOWN_SYMBOL } from '@/store/investActions';
@@ -257,6 +258,12 @@ describe('Holdings tab', () => {
       ),
     ).toBeInTheDocument();
     expect(screen.getByText('Prices delayed · not financial advice')).toBeInTheDocument();
+  });
+
+  it('explains the portfolio value, beside its title, and leaves the Add pill where it was', async () => {
+    renderInvest(portfolioData());
+    await expectHelpTip(region('Portfolio value'), 'portfolio value', 'investments');
+    expect(screen.getAllByRole('button', { name: 'Add a holding' })).toHaveLength(1);
   });
 
   it('has one add button, a compact primary pill in the Portfolio value row, that opens the add dialog', async () => {
@@ -1458,6 +1465,18 @@ describe('Dividends tab', () => {
     expect(screen.getByText(formatMonthYear('2026-03')).parentElement).toHaveTextContent(
       `${formatMonthYear('2026-03')} · ${usd(346_30)}`,
     );
+  });
+
+  it('asks for a due payout on line fields and underline tabs', async () => {
+    renderDividends(dividendData(), true);
+    await userEvent.click(within(region('Due')).getByRole('button', { name: 'Confirm' }));
+    const dialog = screen.getByRole('dialog', { name: 'Confirm VWRL dividend' });
+    for (const label of ['Amount received', 'Date']) {
+      expect(within(dialog).getByLabelText(label), label).toHaveClass('border-b', 'font-extrabold');
+      expect(within(dialog).getByLabelText(label), label).not.toHaveClass('rounded-md');
+    }
+    expect(within(dialog).getByText('Cash')).toHaveClass('border-b-2', 'border-text');
+    expect(within(dialog).getByText('Reinvest')).toHaveClass('border-transparent');
   });
 
   it('confirms a due payout into reinvest and it leaves the list', async () => {

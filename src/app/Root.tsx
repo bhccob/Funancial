@@ -47,6 +47,8 @@ function Phase() {
       return <BootSplash />;
     case 'unavailable':
       return <StorageUnavailable />;
+    case 'updateNeeded':
+      return <StorageUnavailable newer />;
     case 'welcome':
       return <WelcomeScreen />;
     case 'locked':

@@ -13,6 +13,8 @@ const LABEL_ROOM_X = 28;
 const LABEL_ROOM_Y = 16;
 
 export interface DonutProps {
+  /** What the donut shows ("Spending by category"): the name of its list of slices for screen readers. */
+  label: string;
   slices: Slice[];
   size: number;
   thickness: number;
@@ -28,6 +30,7 @@ export interface DonutProps {
 }
 
 export function Donut({
+  label,
   slices,
   size,
   thickness,
@@ -162,7 +165,7 @@ export function Donut({
           {chosen ? `${chosen.label} · ${pct(chosen)}%` : idle.label}
         </span>
       </div>
-      <ul className="sr-only">
+      <ul aria-label={label} className="sr-only">
         {drawn.map((slice, i) => (
           <li key={slice.key}>
             <button

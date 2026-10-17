@@ -22,7 +22,7 @@ async function addExpense(
   await page.goto('/add');
   await page.getByLabel('Amount', { exact: true }).fill(opts.amount);
   if (opts.category) await page.getByRole('radio', { name: opts.category, exact: true }).click();
-  if (opts.paidWith) await page.getByLabel('Paid with').selectOption({ label: opts.paidWith });
+  if (opts.paidWith) await page.getByRole('radio', { name: opts.paidWith, exact: true }).click();
   if (opts.note) await page.getByLabel('Note', { exact: true }).fill(opts.note);
   if (opts.repeat) await page.getByLabel('Repeats').selectOption({ label: opts.repeat });
   await page.getByRole('button', { name: 'Save', exact: true }).click();

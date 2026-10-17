@@ -55,7 +55,8 @@ export function InvestScreen() {
   ].filter((line): line is string => Boolean(line));
 
   function choose(id: TabId) {
-    setParams(id === 'holdings' ? {} : { tab: id }, { replace: true });
+    // Same screen: the page stays where it is.
+    setParams(id === 'holdings' ? {} : { tab: id }, { replace: true, preventScrollReset: true });
   }
 
   function onKeyDown(e: KeyboardEvent) {

@@ -1,5 +1,6 @@
 import { useId, useMemo, useState } from 'react';
 import { sliceColors } from '@/components/charts/colors';
+import { HelpTip } from '@/components/ui/HelpTip';
 import { Section } from '@/components/ui/Section';
 import { profitAndLoss } from '@/domain/sales';
 import { cn } from '@/lib/cn';
@@ -44,13 +45,14 @@ export function ProfitAndLoss() {
   return (
     <Section
       title="Profit & loss · all time"
+      help={<HelpTip pageId="investments" label="profit & loss" />}
       action={
         <button
           type="button"
           aria-expanded={shown}
           aria-controls={bodyId}
           onClick={toggle}
-          className="-my-3 inline-flex min-h-11 items-center px-1"
+          className="-my-3 inline-flex min-h-11 min-w-11 items-center justify-center px-1"
         >
           {shown ? 'Hide' : 'Show'}
         </button>

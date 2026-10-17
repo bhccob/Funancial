@@ -62,9 +62,10 @@ function SecretForm({ target, current, onDone }: FormProps) {
   }
 
   return (
-    <form className="flex flex-col gap-4" onSubmit={submit} noValidate>
+    <form className="flex flex-col gap-5" onSubmit={submit} noValidate>
       {needsCurrent && (
         <TextField
+          variant="line"
           label={`Current ${NAMES[current as SecretKind]}`}
           type="password"
           inputMode={numeric(current)}
@@ -78,6 +79,7 @@ function SecretForm({ target, current, onDone }: FormProps) {
       {target !== 'none' && (
         <>
           <TextField
+            variant="line"
             label={`New ${NAMES[target]}`}
             type="password"
             inputMode={numeric(target)}
@@ -89,6 +91,7 @@ function SecretForm({ target, current, onDone }: FormProps) {
             onChange={(e) => setNext(e.target.value)}
           />
           <TextField
+            variant="line"
             label={`Confirm ${NAMES[target]}`}
             type="password"
             inputMode={numeric(target)}

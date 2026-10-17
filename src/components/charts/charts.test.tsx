@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Slice } from '@/domain/charts';
@@ -25,6 +25,7 @@ function donut(props: Partial<React.ComponentProps<typeof Donut>> = {}) {
   const onSelect = vi.fn();
   const view = render(
     <Donut
+      label="Spending by category"
       slices={SLICES}
       size={150}
       thickness={18}
@@ -107,6 +108,7 @@ describe('Donut', () => {
     expect(screen.getByText('$1,875')).toBeInTheDocument();
     rerender(
       <Donut
+        label="Spending by category"
         slices={SLICES}
         size={150}
         thickness={18}
@@ -156,6 +158,76 @@ describe('Donut', () => {
     const { container } = donut({ slices: [{ key: 'food', label: 'Food', amount: 0 }] });
     expect(container.querySelectorAll('circle')).toHaveLength(1);
     expect(container.innerHTML).not.toContain('NaN');
+  });
+});
+
+describe('Charts have a name and their figures as text', () => {
+  it('names the donut, whose slices are a list of their label, amount and share', () => {
+    donut();
+    const list = screen.getByRole('list', { name: 'Spending by category' });
+    expect(
+      within(list)
+        .getAllByRole('button')
+        .map((b) => b.getAttribute('aria-label')),
+    ).toEqual(['Rent, $1,200.00, 64%', 'Food, $500.00, 27%', 'Other, $175.00, 9%']);
+  });
+
+  it('names the day bars as a group, each bar reading its day and amount', () => {
+    render(
+      <DayBars
+        label="Spending per day"
+        days={[
+          { label: 'Fri', amount: 2410, isToday: false },
+          { label: 'Today', amount: 0, isToday: true },
+        ]}
+        selected={null}
+        onSelect={() => {}}
+        formatAmount={formatAmount}
+      />,
+    );
+    const group = screen.getByRole('group', { name: 'Spending per day' });
+    expect(within(group).getByRole('button', { name: 'Fri: $24.10' })).toBeInTheDocument();
+    expect(within(group).getByRole('button', { name: 'Today: $0.00' })).toBeInTheDocument();
+  });
+
+  it('names the month line as a group, each segment reading its label and amount', () => {
+    render(
+      <MonthLine
+        label="This month"
+        segments={[
+          { key: 'spent', label: 'Spent so far: $18.00', amount: 1800, color: 'red' },
+          { key: 'left', label: 'Left: $82.00', amount: 8200, color: 'blue' },
+        ]}
+        selected={null}
+        onSelect={() => {}}
+      />,
+    );
+    const group = screen.getByRole('group', { name: 'This month' });
+    expect(within(group).getAllByRole('button')).toHaveLength(2);
+  });
+
+  it('gives a ring, a sparkline and a price line a name for screen readers', () => {
+    render(
+      <>
+        <Ring value={40} size={40} thickness={5} color="red" label="Food: 40% used" />
+        <Sparkline values={[1, 2]} height={40} color="red" label="Net worth over 30 days" />
+      </>,
+    );
+    expect(screen.getByRole('img', { name: 'Food: 40% used' })).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'Net worth over 30 days' })).toBeInTheDocument();
+  });
+
+  it('keeps the day bars 44px wide where seven fit a phone, with no gap between their taps', () => {
+    render(
+      <DayBars
+        label="Spending per day"
+        days={[{ label: 'Fri', amount: 1, isToday: false }]}
+        selected={null}
+        onSelect={() => {}}
+        formatAmount={formatAmount}
+      />,
+    );
+    expect(screen.getByRole('group', { name: 'Spending per day' })).not.toHaveClass('gap-3.5');
   });
 });
 
@@ -316,12 +388,14 @@ describe('MonthLine', () => {
   it('selects a segment by label, and clears it when tapped again', async () => {
     const onSelect = vi.fn();
     const { rerender } = render(
-      <MonthLine segments={segments} selected={null} onSelect={onSelect} />,
+      <MonthLine label="This month" segments={segments} selected={null} onSelect={onSelect} />,
     );
     await userEvent.click(screen.getByRole('button', { name: 'Bills still to come: $547.81' }));
     expect(onSelect).toHaveBeenLastCalledWith('bills');
 
-    rerender(<MonthLine segments={segments} selected="bills" onSelect={onSelect} />);
+    rerender(
+      <MonthLine label="This month" segments={segments} selected="bills" onSelect={onSelect} />,
+    );
     expect(screen.getByRole('button', { name: 'Bills still to come: $547.81' })).toHaveAttribute(
       'aria-pressed',
       'true',
@@ -331,13 +405,16 @@ describe('MonthLine', () => {
   });
 
   it('sizes each segment by its amount', () => {
-    render(<MonthLine segments={segments} selected={null} onSelect={() => {}} />);
+    render(
+      <MonthLine label="This month" segments={segments} selected={null} onSelect={() => {}} />,
+    );
     expect(screen.getByRole('button', { name: /Spent so far/ }).style.flexGrow).toBe('188436');
   });
 
   it('keeps a tiny segment wide enough to tap beside a huge one', () => {
     render(
       <MonthLine
+        label="This month"
         segments={[
           { key: 'spent', label: 'Spent so far: $2,600', amount: 260000, color: 'red' },
           { key: 'bills', label: 'Bills still to come: $16', amount: 1600, color: 'blue' },
@@ -354,6 +431,7 @@ describe('MonthLine', () => {
   it('shows the track only when nothing is left to show', () => {
     render(
       <MonthLine
+        label="This month"
         segments={[{ key: 'spent', label: 'Spent so far: $0.00', amount: 0, color: 'red' }]}
         selected={null}
         onSelect={() => {}}
@@ -373,14 +451,30 @@ describe('DayBars', () => {
 
   it('selects a day bar by label', async () => {
     const onSelect = vi.fn();
-    render(<DayBars days={days} selected={null} onSelect={onSelect} formatAmount={formatAmount} />);
+    render(
+      <DayBars
+        label="Spending per day"
+        days={days}
+        selected={null}
+        onSelect={onSelect}
+        formatAmount={formatAmount}
+      />,
+    );
     await userEvent.click(screen.getByRole('button', { name: 'Sat: $88.45' }));
     expect(onSelect).toHaveBeenLastCalledWith(1);
   });
 
   it('clears the selection when the selected day is tapped again', async () => {
     const onSelect = vi.fn();
-    render(<DayBars days={days} selected={1} onSelect={onSelect} formatAmount={formatAmount} />);
+    render(
+      <DayBars
+        label="Spending per day"
+        days={days}
+        selected={1}
+        onSelect={onSelect}
+        formatAmount={formatAmount}
+      />,
+    );
     const sat = screen.getByRole('button', { name: 'Sat: $88.45' });
     expect(sat).toHaveAttribute('aria-pressed', 'true');
     await userEvent.click(sat);
@@ -388,7 +482,15 @@ describe('DayBars', () => {
   });
 
   it('scales bars to the busiest day, with a 6px minimum, and fills today and the selection', () => {
-    render(<DayBars days={days} selected={0} onSelect={() => {}} formatAmount={formatAmount} />);
+    render(
+      <DayBars
+        label="Spending per day"
+        days={days}
+        selected={0}
+        onSelect={() => {}}
+        formatAmount={formatAmount}
+      />,
+    );
     const bar = (name: string) =>
       screen.getByRole('button', { name }).firstElementChild as HTMLElement;
     expect(bar('Sat: $88.45').style.height).toBe('100px');
@@ -402,6 +504,7 @@ describe('DayBars', () => {
   it('keeps every bar at the minimum, without NaN, in a quiet week', () => {
     render(
       <DayBars
+        label="Spending per day"
         days={days.map((d) => ({ ...d, amount: 0 }))}
         selected={null}
         onSelect={() => {}}

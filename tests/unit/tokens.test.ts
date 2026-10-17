@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 const css = readFileSync('src/styles/tokens.css', 'utf8');
-import { expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 it('defines the Pro Ledger tokens', () => {
   expect(css).toContain('--color-accent-text: #007a55');
@@ -139,4 +139,82 @@ it('keeps every banner tone readable on both ends of its gradient, light and dar
 it('leaves the danger colour off the danger banner: it is under 4.5:1 on the light gradient', () => {
   const light = declarations('@theme static');
   expect(contrast(light['--color-danger']!, light['--color-danger-from']!)).toBeLessThan(4.5);
+});
+
+/** Light, and dark (which overrides only the tokens it lists), as the app resolves them. */
+const MODES = (() => {
+  const light = declarations('@theme static');
+  return [
+    { name: 'light', t: light },
+    { name: 'dark', t: { ...light, ...declarations(":root[data-theme='dark']") } },
+  ] as const;
+})();
+
+/** Every background text sits on: the page, a section, a chip or card well, a dialog or toast. */
+const SURFACES = ['--color-bg', '--color-surface', '--color-surface-2', '--color-overlay'] as const;
+
+/** Tokens used for text on a surface. Body-size text needs 4.5:1 (WCAG 1.4.3). */
+const TEXT_TOKENS = [
+  '--color-text',
+  '--color-text-muted',
+  '--color-accent-text',
+  '--color-xp-text',
+  '--color-success',
+  '--color-warning',
+  '--color-danger',
+] as const;
+
+describe.each(MODES)('contrast in the $name theme', ({ t }) => {
+  const token = (name: string) => {
+    const value = t[name];
+    if (value === undefined) throw new Error(`No ${name}`);
+    return value;
+  };
+
+  it.each(TEXT_TOKENS)('keeps %s at 4.5:1 or better on every surface it sits on', (fg) => {
+    for (const surface of SURFACES) {
+      expect(contrast(token(fg), token(surface)), `${fg} on ${surface}`).toBeGreaterThanOrEqual(
+        4.5,
+      );
+    }
+  });
+
+  it.each([
+    ['--color-primary-contrast', '--color-primary'],
+    ['--color-xp-contrast', '--color-xp-text'],
+    // The danger button's label: white is under 3:1 on the light red of the dark theme.
+    ['--color-danger-contrast', '--color-danger'],
+  ])('keeps the text %s at 4.5:1 or better on its fill %s', (fg, fill) => {
+    expect(contrast(token(fg), token(fill))).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it('keeps the focus ring and the XP bar at 3:1 or better (UI marks, WCAG 1.4.11)', () => {
+    for (const surface of SURFACES) {
+      expect(contrast(token('--color-focus'), token(surface)), surface).toBeGreaterThanOrEqual(3);
+    }
+    expect(contrast(token('--color-xp'), token('--color-bg'))).toBeGreaterThanOrEqual(3);
+    expect(contrast(token('--color-xp'), token('--color-track'))).toBeGreaterThanOrEqual(3);
+  });
+
+  it('keeps an off switch visible: its track on the page, and its knob on the track, at 3:1', () => {
+    // The track is the muted text colour, the knob the colour of text on a primary button.
+    expect(contrast(token('--color-text-muted'), token('--color-bg'))).toBeGreaterThanOrEqual(3);
+    expect(
+      contrast(token('--color-primary-contrast'), token('--color-text-muted')),
+    ).toBeGreaterThanOrEqual(3);
+  });
+});
+
+it('keeps the white icon on each Menu row colour at 3:1 or better, in both themes', async () => {
+  const { MENU_GROUPS } = await import('../../src/app/menu');
+  for (const { title, items } of MENU_GROUPS) {
+    for (const { label, color } of items) {
+      expect(contrast('#ffffff', color), `${title} / ${label}`).toBeGreaterThanOrEqual(3);
+    }
+  }
+});
+
+it('gives the danger button a label colour of its own, white on light and ink on dark', () => {
+  expect(declarations('@theme static')['--color-danger-contrast']).toBe('#ffffff');
+  expect(declarations(":root[data-theme='dark']")['--color-danger-contrast']).toBe('#0c0c0e');
 });

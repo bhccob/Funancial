@@ -23,7 +23,7 @@ const variants: Record<ButtonVariant, string> = {
   // A secondary button for a gradient card: the page colour, part see-through, so its edge shows.
   banner: 'border border-border-strong bg-bg/60 text-text hover:bg-bg',
   ghost: 'bg-transparent text-text hover:bg-surface-2',
-  danger: 'bg-danger text-white hover:opacity-90',
+  danger: 'bg-danger text-danger-contrast hover:opacity-90',
   'danger-ghost': 'bg-transparent text-danger hover:bg-surface-2',
 };
 

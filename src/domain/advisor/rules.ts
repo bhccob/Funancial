@@ -2,11 +2,8 @@ import { categoryLabel } from '../budget';
 import type { LocalDate } from '../dates';
 import type { AboutYou, BuyAsk, Facts, Verdict } from '../entities';
 import { monthlyToReach } from '../goals';
-import { baselineMeter, confidenceOf, zone, type Confidence } from './meter';
+import { baselineMeter, confidenceOf, GUARD_CAP, zone, type Confidence } from './meter';
 import type { AdvisorSnapshot } from './snapshot';
-
-/** The most a guard lets the meter reach: the top of the wait zone. */
-const WAIT_CAP = 66;
 
 export type Analysis = {
   facts: Facts;
@@ -135,7 +132,7 @@ export function analyse(
 
   const overspends = about?.overspend.includes(ask.category) ?? false;
   const baseline = baselineMeter(snapshot, ask, facts, { overspends, protectedGoal });
-  const meter = capAtWait ? Math.min(baseline, WAIT_CAP) : baseline;
+  const meter = capAtWait ? Math.min(baseline, GUARD_CAP) : baseline;
 
   // Waiting, and 60% of the price would sit inside every limit: a cheaper one would do.
   const fitsAtSixtyPercent = limits.every((l) => l.spent * 10 + total * 6 <= l.limit * 10);

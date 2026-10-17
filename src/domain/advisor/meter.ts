@@ -4,11 +4,16 @@ import type { AdvisorSnapshot } from './snapshot';
 export type Zone = 'skip' | 'wait' | 'buy';
 export type { Confidence };
 
-/** Skip 0–33, wait 34–66, buy 67–100. */
+/** Where the wait and buy zones begin: skip 0–33, wait 34–66, buy 67–100. Help draws its table from these. */
+export const WAIT_FROM = 34;
+export const BUY_FROM = 67;
+/** The most a guard lets the meter reach: the top of the wait zone. */
+export const GUARD_CAP = BUY_FROM - 1;
+
 export function zone(meter: number): Zone {
   const m = Math.round(meter);
   // Compared upwards, so a NaN falls through to skip and never lands in Buy.
-  return m >= 67 ? 'buy' : m >= 34 ? 'wait' : 'skip';
+  return m >= BUY_FROM ? 'buy' : m >= WAIT_FROM ? 'wait' : 'skip';
 }
 
 /** How sure the meter is: far from the middle, sure. */

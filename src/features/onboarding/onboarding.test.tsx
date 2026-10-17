@@ -271,3 +271,56 @@ describe('OnboardingWizard', () => {
     expect(actions.completeOnboarding).not.toHaveBeenCalled();
   });
 });
+
+describe('OnboardingWizard in the line style', () => {
+  const isLine = (el: HTMLElement, label: string) => {
+    expect(el, label).toHaveClass('border-b', 'font-extrabold');
+    expect(el, label).not.toHaveClass('rounded-md');
+  };
+
+  it('has line fields on every step', async () => {
+    renderWithStore(<OnboardingWizard />);
+    await passIntro();
+    for (const label of ['Currency', 'What should we call you?']) {
+      isLine(screen.getByLabelText(label), label);
+    }
+    await next();
+    for (const label of ['Cash & checking', 'Savings']) {
+      isLine(screen.getByLabelText(label), label);
+    }
+    await fillBalances('0', '0');
+    for (const label of ['Monthly take-home pay', 'Pay day']) {
+      isLine(screen.getByLabelText(label), label);
+    }
+  });
+
+  it('has line fields in the card form', async () => {
+    renderWithStore(<OnboardingWizard />);
+    await passIntro();
+    await next();
+    await fillBalances('0', '0');
+    await userEvent.click(screen.getByRole('switch', { name: "I don't have a regular salary" }));
+    await next();
+    await userEvent.click(screen.getByRole('button', { name: 'Add a card' }));
+    for (const label of ['Card name', 'Current balance', 'Credit limit', 'Due day']) {
+      isLine(screen.getByLabelText(label), label);
+    }
+  });
+
+  it('has underline tabs for the lock, with line fields under them', async () => {
+    renderWithStore(<OnboardingWizard />);
+    await passIntro();
+    await next();
+    await fillBalances('0', '0');
+    await userEvent.click(screen.getByRole('switch', { name: "I don't have a regular salary" }));
+    await next();
+    await next();
+    expect(screen.getByText('No lock')).toHaveClass('border-b-2', 'border-text');
+    expect(screen.getByText('PIN')).toHaveClass('border-transparent');
+    expect(screen.getByText('No lock').closest('div')).not.toHaveClass('bg-surface-2');
+    await userEvent.click(screen.getByRole('radio', { name: 'PIN' }));
+    for (const label of ['Choose a PIN', 'Confirm PIN']) {
+      isLine(screen.getByLabelText(label), label);
+    }
+  });
+});

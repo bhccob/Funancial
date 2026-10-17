@@ -76,8 +76,9 @@ function DebtForm({ kind, debt, onDone }: DebtTarget & { onDone(): void }) {
   }
 
   return (
-    <form className="flex flex-col gap-4" onSubmit={submit} noValidate>
+    <form className="flex flex-col gap-5" onSubmit={submit} noValidate>
       <TextField
+        variant="line"
         label="Name"
         autoComplete="off"
         value={name}
@@ -85,6 +86,7 @@ function DebtForm({ kind, debt, onDone }: DebtTarget & { onDone(): void }) {
         onChange={(e) => setName(e.target.value)}
       />
       <MoneyField
+        variant="line"
         label={debt ? 'Balance when added' : 'Current balance'}
         currency={currency}
         value={balance}
@@ -97,6 +99,7 @@ function DebtForm({ kind, debt, onDone }: DebtTarget & { onDone(): void }) {
         }
       />
       <TextField
+        variant="line"
         label="Interest rate %"
         inputMode="decimal"
         autoComplete="off"
@@ -105,6 +108,7 @@ function DebtForm({ kind, debt, onDone }: DebtTarget & { onDone(): void }) {
         onChange={(e) => setRate(e.target.value)}
       />
       <MoneyField
+        variant="line"
         label="Minimum payment"
         currency={currency}
         value={minimum}
@@ -113,13 +117,20 @@ function DebtForm({ kind, debt, onDone }: DebtTarget & { onDone(): void }) {
       {card && (
         <>
           <MoneyField
+            variant="line"
             label="Credit limit"
             currency={currency}
             value={limit}
             onChange={setLimit}
             hint="Optional."
           />
-          <Select label="Due day" value={dueDay} onChange={setDueDay} options={DAY_OPTIONS} />
+          <Select
+            variant="line"
+            label="Due day"
+            value={dueDay}
+            onChange={setDueDay}
+            options={DAY_OPTIONS}
+          />
           <Switch label="Pay in full each month" checked={payInFull} onChange={setPayInFull} />
         </>
       )}

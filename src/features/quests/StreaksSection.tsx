@@ -49,7 +49,7 @@ function StreakRow({ streak }: { streak: StreakView }) {
           <span>{`Freezes: ${streak.tokens}`}</span>
           <Link
             to="/shop"
-            className="text-accent-text font-semibold underline-offset-4 hover:underline"
+            className="text-accent-text -my-3 inline-flex min-h-11 items-center font-semibold underline-offset-4 hover:underline"
           >
             Get freezes
           </Link>

@@ -4,6 +4,7 @@ import { Link, useSearchParams } from 'react-router';
 import { Donut, DonutLegend } from '@/components/charts/Donut';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { HelpTip } from '@/components/ui/HelpTip';
 import { Section } from '@/components/ui/Section';
 import { underlineTab } from '@/components/ui/underlineTab';
 import type { Holding } from '@/domain/entities';
@@ -84,6 +85,7 @@ function PieBlock({ rows, label }: { rows: HoldingRow[]; label: string }) {
     <div role="group" aria-label={label}>
       <div className="flex justify-center">
         <Donut
+          label="Value by holding"
           slices={slices}
           size={180}
           thickness={18}
@@ -145,7 +147,8 @@ export function HoldingsTab({ refresh }: { refresh(): Promise<void> }) {
         else next.delete('pie');
         return next;
       },
-      { replace: true },
+      // Same screen: the page stays where it is, so the pie that changes stays in view.
+      { replace: true, preventScrollReset: true },
     );
   }
 
@@ -165,6 +168,7 @@ export function HoldingsTab({ refresh }: { refresh(): Promise<void> }) {
       ) : (
         <Section
           title="Portfolio value"
+          help={<HelpTip pageId="investments" label="portfolio value" />}
           action={
             <Button
               size="sm"

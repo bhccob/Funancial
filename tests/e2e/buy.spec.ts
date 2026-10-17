@@ -122,7 +122,7 @@ test('I bought it opens Add Expense with the item, amount, category and card fil
   await expect(page.getByLabel('Note', { exact: true })).toHaveValue('Concert VIP pass');
   await expect(page.getByRole('radio', { name: 'Fun', exact: true })).toBeChecked();
   // The card the ask said it would be paid with, not Cash.
-  await expect(page.getByLabel('Paid with').locator('option:checked')).toHaveText('Demo Visa');
+  await expect(page.getByRole('radio', { name: 'Demo Visa' })).toBeChecked();
 });
 
 test('when the link cannot be read it says so and Ask still works', async ({ page }) => {

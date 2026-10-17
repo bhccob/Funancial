@@ -70,7 +70,7 @@ export const SCHEMAS = {
 export type EntityMap = { [K in TableName]: z.infer<(typeof SCHEMAS)[K]> };
 export type EntityOf<T extends TableName> = EntityMap[T];
 
-export const CURRENT_SCHEMA_VERSION = 8;
+export const CURRENT_SCHEMA_VERSION = 9;
 
 /** One record tagged with its table, for batch writes. */
 export type TableRecord = { [K in TableName]: { table: K; record: EntityOf<K> } }[TableName];

@@ -274,3 +274,18 @@ describe('HistoryScreen', () => {
     expect(within(dialog).getByText('Already matches.')).toBeInTheDocument();
   });
 });
+
+describe('the actual balance dialog in the line style', () => {
+  it('has a line amount and underline tabs for the balance', async () => {
+    renderHistory();
+    await userEvent.click(screen.getByRole('button', { name: 'Set actual balance' }));
+    const dialog = screen.getByRole('dialog', { name: 'Set actual balance' });
+    expect(within(dialog).getByLabelText('Actual balance')).toHaveClass(
+      'border-b',
+      'font-extrabold',
+    );
+    expect(within(dialog).getByLabelText('Actual balance')).not.toHaveClass('rounded-md');
+    expect(within(dialog).getByText('Cash')).toHaveClass('border-b-2', 'border-text');
+    expect(within(dialog).getByText('Savings')).toHaveClass('border-transparent');
+  });
+});

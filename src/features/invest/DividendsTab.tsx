@@ -199,6 +199,7 @@ export function DividendsTab() {
         </div>
         <div className="mt-5">
           <DayBars
+            label={dir === 'next' ? 'Expected dividends per month' : 'Dividends received per month'}
             days={months}
             selected={selected}
             onSelect={setSelected}

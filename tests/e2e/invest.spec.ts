@@ -345,3 +345,25 @@ test('selling part of a holding shows in History, and deleting it there gives th
   await expect(page.getByRole('button', { name: /^VWRL, / })).toHaveCount(1);
   await expect(page.getByRole('button', { name: /^AAPL, / })).toHaveCount(0);
 });
+
+test('mobile: tapping an Allocation chip keeps your place on the page', async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== 'mobile-chromium', 'mobile layout only');
+  await page.route('**/api/**', (route) =>
+    route.fulfill({ status: 502, json: { error: 'upstream' } }),
+  );
+  await startDemo(page);
+  await page.goto('/invest');
+
+  // The chips are brought to the top of the screen, so a jump to the page's top would put the pie out of sight.
+  const choices = page.getByRole('group', { name: 'Allocation' });
+  await choices.evaluate((el) => el.scrollIntoView({ block: 'start' }));
+  const before = await page.evaluate(() => window.scrollY);
+  expect(before).toBeGreaterThan(0);
+
+  await choices.getByRole('button', { name: 'Stocks' }).click();
+  await expect(page).toHaveURL(/\?pie=stocks$/);
+  await expect(page.getByRole('group', { name: 'Stocks' })).toBeVisible();
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(before);
+});

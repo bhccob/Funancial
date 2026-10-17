@@ -1,4 +1,5 @@
 import { Menu } from 'lucide-react';
+import type { Ref } from 'react';
 import { NavLink } from 'react-router';
 import { cn } from '@/lib/cn';
 import { BUDGET, HOME, INVEST, type NavTarget } from './menu';
@@ -20,10 +21,12 @@ function BarLink({ path, label, icon: Icon }: NavTarget) {
 export function BottomBar({
   menuOpen,
   onMenu,
+  menuRef,
   className,
 }: {
   menuOpen: boolean;
   onMenu(): void;
+  menuRef?: Ref<HTMLButtonElement>;
   className?: string;
 }) {
   return (
@@ -38,6 +41,7 @@ export function BottomBar({
       <BarLink {...BUDGET} />
       <BarLink {...INVEST} />
       <button
+        ref={menuRef}
         type="button"
         aria-haspopup="dialog"
         aria-expanded={menuOpen}

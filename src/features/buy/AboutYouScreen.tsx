@@ -169,7 +169,7 @@ export function AboutYouScreen() {
               })}
             </div>
             {errors.overspend && (
-              <p id={overspendErrorId} className="text-danger text-sm font-semibold">
+              <p id={overspendErrorId} role="alert" className="text-danger text-sm font-semibold">
                 {errors.overspend}
               </p>
             )}

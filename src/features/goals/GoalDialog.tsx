@@ -57,8 +57,9 @@ function GoalForm({ goal, onDone }: { goal: Goal | null; onDone(): void }) {
   }
 
   return (
-    <form className="flex flex-col gap-4" onSubmit={submit} noValidate>
+    <form className="flex flex-col gap-5" onSubmit={submit} noValidate>
       <TextField
+        variant="line"
         label="Name"
         autoComplete="off"
         value={name}
@@ -66,6 +67,7 @@ function GoalForm({ goal, onDone }: { goal: Goal | null; onDone(): void }) {
         onChange={(e) => setName(e.target.value)}
       />
       <RadioGroup<Kind>
+        variant="underline"
         legend="Kind"
         value={kind}
         onChange={setKind}
@@ -76,6 +78,7 @@ function GoalForm({ goal, onDone }: { goal: Goal | null; onDone(): void }) {
         ]}
       />
       <MoneyField
+        variant="line"
         label="Target"
         currency={currency}
         value={target}
@@ -83,6 +86,7 @@ function GoalForm({ goal, onDone }: { goal: Goal | null; onDone(): void }) {
         error={errors.target}
       />
       <MoneyField
+        variant="line"
         label="Saved so far"
         currency={currency}
         value={saved}
@@ -90,6 +94,7 @@ function GoalForm({ goal, onDone }: { goal: Goal | null; onDone(): void }) {
         hint="Already in your savings. Changing it doesn't move money."
       />
       <TextField
+        variant="line"
         label="Deadline"
         type="date"
         hint="Optional."

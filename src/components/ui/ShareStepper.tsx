@@ -93,7 +93,7 @@ export function ShareStepper({
         </StepButton>
       </div>
       {error && (
-        <p id={errorId} className="text-danger mt-1 text-sm font-semibold">
+        <p id={errorId} role="alert" className="text-danger mt-1 text-sm font-semibold">
           {error}
         </p>
       )}

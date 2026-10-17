@@ -119,7 +119,7 @@ export function SubscriptionsScreen() {
                           aria-pressed={pressed}
                           onClick={() => void run(() => setSubscriptionAudit(sub.id, next))}
                           className={cn(
-                            'h-8 rounded-full border px-3 text-xs font-bold',
+                            'h-11 rounded-full border px-4 text-xs font-bold',
                             pressed
                               ? 'bg-primary text-primary-contrast border-transparent'
                               : 'border-border-strong text-muted hover:text-text',

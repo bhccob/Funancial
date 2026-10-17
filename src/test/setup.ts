@@ -18,4 +18,8 @@ if (typeof window !== 'undefined') {
       this.dispatchEvent(new Event('close'));
     };
   }
+
+  // jsdom has no layout, so its scrollTo only logs "not implemented" on every route change.
+  // A spec that cares about the scroll spies on it.
+  window.scrollTo = () => {};
 }

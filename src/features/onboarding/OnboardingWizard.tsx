@@ -59,6 +59,7 @@ function CardForm({
   return (
     <div className="border-border flex flex-col gap-4 border-y py-5">
       <TextField
+        variant="line"
         label="Card name"
         autoFocus
         autoComplete="off"
@@ -66,6 +67,7 @@ function CardForm({
         onChange={(e) => setName(e.target.value)}
       />
       <MoneyField
+        variant="line"
         label="Current balance"
         currency={currency}
         value={balance}
@@ -73,13 +75,20 @@ function CardForm({
         hint="What you owe on it today."
       />
       <MoneyField
+        variant="line"
         label="Credit limit"
         currency={currency}
         value={creditLimit}
         onChange={setCreditLimit}
         hint="Optional."
       />
-      <Select label="Due day" value={dueDay} onChange={setDueDay} options={DAY_OPTIONS} />
+      <Select
+        variant="line"
+        label="Due day"
+        value={dueDay}
+        onChange={setDueDay}
+        options={DAY_OPTIONS}
+      />
       <Switch label="I pay it in full each month" checked={payInFull} onChange={setPayInFull} />
       <div className="flex gap-2">
         <Button
@@ -226,8 +235,15 @@ export function OnboardingWizard() {
     case 2:
       body = (
         <>
-          <Select label="Currency" value={currency} onChange={changeCurrency} options={options} />
+          <Select
+            variant="line"
+            label="Currency"
+            value={currency}
+            onChange={changeCurrency}
+            options={options}
+          />
           <TextField
+            variant="line"
             label="What should we call you?"
             hint="Optional."
             autoComplete="given-name"
@@ -241,8 +257,20 @@ export function OnboardingWizard() {
       body = (
         <>
           <p className="text-muted">Rough numbers are fine. You can correct them anytime.</p>
-          <MoneyField label="Cash & checking" currency={currency} value={cash} onChange={setCash} />
-          <MoneyField label="Savings" currency={currency} value={savings} onChange={setSavings} />
+          <MoneyField
+            variant="line"
+            label="Cash & checking"
+            currency={currency}
+            value={cash}
+            onChange={setCash}
+          />
+          <MoneyField
+            variant="line"
+            label="Savings"
+            currency={currency}
+            value={savings}
+            onChange={setSavings}
+          />
         </>
       );
       break;
@@ -253,6 +281,7 @@ export function OnboardingWizard() {
           {!noSalary && (
             <>
               <MoneyField
+                variant="line"
                 label="Monthly take-home pay"
                 currency={currency}
                 value={salary}
@@ -260,6 +289,7 @@ export function OnboardingWizard() {
                 hint="What actually lands in your account."
               />
               <Select
+                variant="line"
                 label="Pay day"
                 value={payDay}
                 onChange={setPayDay}
@@ -326,6 +356,7 @@ export function OnboardingWizard() {
             in Settings.
           </p>
           <RadioGroup<LockChoice>
+            variant="underline"
             legend="Lock"
             value={lock}
             onChange={(v) => {
@@ -343,6 +374,7 @@ export function OnboardingWizard() {
           {lock !== 'none' && (
             <>
               <TextField
+                variant="line"
                 label={`Choose a ${LOCK_NAMES[lock]}`}
                 type="password"
                 inputMode={lock === 'pin' ? 'numeric' : undefined}
@@ -353,6 +385,7 @@ export function OnboardingWizard() {
                 onChange={(e) => setSecretText(e.target.value)}
               />
               <TextField
+                variant="line"
                 label={`Confirm ${LOCK_NAMES[lock]}`}
                 type="password"
                 inputMode={lock === 'pin' ? 'numeric' : undefined}

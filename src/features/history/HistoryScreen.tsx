@@ -8,7 +8,6 @@ import { RadioGroup } from '@/components/ui/RadioGroup';
 import { Select } from '@/components/ui/Select';
 import { categoryLabel } from '@/domain/budget';
 import {
-  CategorySchema,
   type Bucket,
   type Category,
   type Dividend,
@@ -19,6 +18,7 @@ import {
 } from '@/domain/entities';
 import { monthKey } from '@/domain/periods';
 import { ExpenseForm } from '@/features/add/ExpenseForm';
+import { CATEGORY_OPTIONS } from '@/features/shared/categories';
 import { paidWithLabel } from '@/features/shared/paidWith';
 import { formatDate, formatMonthYear, formatShares } from '@/lib/format';
 import { useAction } from '@/lib/useAction';
@@ -45,10 +45,7 @@ const BUCKET: Record<Bucket, string> = {
   passive: 'Passive income',
 };
 
-const CATEGORY_OPTIONS = [
-  { value: 'all', label: 'All categories' },
-  ...CategorySchema.options.map((c) => ({ value: c, label: categoryLabel(c) })),
-];
+const CATEGORY_FILTER = [{ value: 'all', label: 'All categories' }, ...CATEGORY_OPTIONS];
 
 const SHOWS: Record<Show, Array<Entry['kind']> | null> = {
   all: null,
@@ -324,7 +321,7 @@ export function HistoryScreen() {
             label="Category"
             value={category}
             onChange={(v) => setCategory(v as 'all' | Category)}
-            options={CATEGORY_OPTIONS}
+            options={CATEGORY_FILTER}
             className="sm:w-48"
           />
         )}

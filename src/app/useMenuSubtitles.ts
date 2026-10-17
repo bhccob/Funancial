@@ -2,6 +2,7 @@ import { formatDay } from '@/lib/format';
 import { useApp } from '@/store/AppStoreProvider';
 import { useFinanceView, useMoney } from '@/store/useFinance';
 import { useGameView } from '@/store/useGame';
+import { useInboxItems } from '@/store/useInbox';
 
 const plural = (n: number, noun: string) => `${n} ${noun}${n === 1 ? '' : 's'}`;
 
@@ -15,6 +16,7 @@ export function useMenuSubtitles(): Record<string, string> {
   const game = useGameView();
   const coins = Math.max(0, game.totals.coins);
   const level = game.level.level;
+  const unread = useInboxItems().filter((i) => !i.read).length;
 
   const active = subscriptions.filter((s) => s.status === 'active').length;
   const saved = goals.reduce((sum, g) => sum + g.current, 0);
@@ -34,7 +36,8 @@ export function useMenuSubtitles(): Record<string, string> {
     '/quests': `Level ${level}`,
     '/about-you': 'What the buy check knows',
     '/shop': `${plural(coins, 'coin')} to spend`,
-    '/inbox': 'Your notices',
+    // Nothing under the name when there is nothing new.
+    '/inbox': unread > 0 ? `${unread} new` : '',
     '/help': 'How everything works',
     '/settings': 'Lock, backups, reminders',
   };

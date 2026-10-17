@@ -15,6 +15,7 @@ import type { BuyPrefill } from '@/store/buyActions';
 import type { ExpenseInput } from '@/store/financeActions';
 import { useCurrency, useFinanceActions, useToday } from '@/store/useFinance';
 import { CATEGORY_OPTIONS } from '@/features/shared/categories';
+import { PaidWithField } from '@/features/shared/PaidWithField';
 import {
   isCardChoice,
   paidWithValue,
@@ -135,6 +136,8 @@ export function ExpenseForm({
   return (
     <form className="flex flex-col gap-5" onSubmit={submit} noValidate>
       <MoneyField
+        variant="line"
+        large
         label="Amount"
         currency={currency}
         value={amount}
@@ -145,6 +148,7 @@ export function ExpenseForm({
         error={errors.amount}
         autoFocus={!expense}
       />
+      {/* Chips, one tap each, as before: eight underline tabs would wrap badly. */}
       <RadioGroup<Category>
         legend="Category"
         value={category}
@@ -152,6 +156,7 @@ export function ExpenseForm({
         options={CATEGORY_OPTIONS}
       />
       <DateField
+        variant="line"
         value={date}
         today={today}
         error={errors.date}
@@ -160,11 +165,9 @@ export function ExpenseForm({
           setErrors((x) => ({ ...x, date: undefined }));
         }}
       />
-      <Select
-        label="Paid with"
+      <PaidWithField
         value={paidWith}
         onChange={setPaidWith}
-        options={paidWithOptions}
         hint={
           isCardChoice(paidWith)
             ? 'Adds to the card balance. Paying the card later moves the cash.'
@@ -172,6 +175,7 @@ export function ExpenseForm({
         }
       />
       <TextField
+        variant="line"
         label="Note"
         autoComplete="off"
         value={note}
@@ -179,6 +183,7 @@ export function ExpenseForm({
       />
       {!expense && (
         <Select
+          variant="line"
           label="Repeats"
           value={repeat}
           onChange={setRepeat}

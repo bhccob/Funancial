@@ -9,7 +9,7 @@
   --color-surface-2: #f2f2f5;
   --color-overlay: #ffffff;
   --color-text: #0d0d0f;
-  --color-text-muted: #6f6f78;
+  --color-text-muted: #6d6d76;
   --color-border: #ebebef;
   --color-border-strong: #d9d9df;
   --color-track: #ececf1;
@@ -21,8 +21,10 @@
   --color-xp-text: #6b46f5;
   --color-xp-contrast: #ffffff;
   --color-success: #007a55;
-  --color-warning: #a35f00;
-  --color-danger: #d1373d;
+  --color-warning: #a15d00;
+  --color-danger: #cb343a;
+  /* The label of a danger button: white on the dark red, ink on the light red of the dark theme. */
+  --color-danger-contrast: #ffffff;
   /* Soft tints for the two sides of a bar (below / above break-even). Fills only, never text. */
   --color-danger-soft: #f5d9da;
   --color-success-soft: #d2eadf;
@@ -89,6 +91,7 @@
   --color-success: #2ee6a6;
   --color-warning: #f2a93b;
   --color-danger: #ff6b6f;
+  --color-danger-contrast: #0c0c0e;
   --color-danger-soft: #3d2326;
   --color-success-soft: #143a2e;
   --color-focus: #9d85ff;

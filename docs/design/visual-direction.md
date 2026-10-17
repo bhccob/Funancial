@@ -32,7 +32,7 @@ History: this replaces "D · Pro Ledger" (chosen 2026-10-14), which the owner fo
 ## Tokens
 
 Defined in `src/styles/tokens.css` (light in `@theme static`, dark under `:root[data-theme='dark']`).
-Contrast figures are text on the page background; all text pairs meet WCAG AA 4.5:1.
+Contrast figures are text on the page background. `tests/unit/tokens.test.ts` checks every text token on all four surfaces (page, section, chip well, dialog), light and dark, at WCAG AA 4.5:1, and the marks (focus ring, XP bar, off switch) at 3:1.
 
 | Token | Light | Dark | Use |
 | --- | --- | --- | --- |
@@ -41,7 +41,7 @@ Contrast figures are text on the page background; all text pairs meet WCAG AA 4.
 | `--color-surface-2` | `#f2f2f5` | `#1a1a1f` | Chips, segmented controls, active nav, inputs, dialogs' inner wells |
 | `--color-overlay` | `#ffffff` | `#16161a` | Dialogs, the Menu sheet, toasts |
 | `--color-text` | `#0d0d0f` | `#f4f4f6` | Body, numbers |
-| `--color-text-muted` | `#6f6f78` | `#9a9aa6` | Secondary text (4.9:1 / 6.9:1) |
+| `--color-text-muted` | `#6d6d76` | `#9a9aa6` | Secondary text (5.1:1 / 7.0:1; 4.6:1 on a chip well) |
 | `--color-border` | `#ebebef` | `#202026` | Hairline dividers between sections |
 | `--color-border-strong` | `#d9d9df` | `#2e2e36` | Input and secondary-button outlines |
 | `--color-track` | `#ececf1` | `#232329` | Progress tracks |
@@ -52,8 +52,9 @@ Contrast figures are text on the page background; all text pairs meet WCAG AA 4.
 | `--color-xp` | `#7c5cff` | `#9d85ff` | Game layer fills: XP bar, level chip |
 | `--color-xp-text` | `#6b46f5` | `#9d85ff` | XP/reward text (5.5:1) |
 | `--color-success` | `#007a55` | `#2ee6a6` | Gains, completed |
-| `--color-warning` | `#a35f00` | `#f2a93b` | Limit ≥ 80% (5.0:1 light) |
-| `--color-danger` | `#d1373d` | `#ff6b6f` | Limit ≥ 100%, destructive (4.8:1 light) |
+| `--color-warning` | `#a15d00` | `#f2a93b` | Limit ≥ 80% (5.2:1 light) |
+| `--color-danger` | `#cb343a` | `#ff6b6f` | Limit ≥ 100%, destructive (5.1:1 light) |
+| `--color-danger-contrast` | `#ffffff` | `#0c0c0e` | Label on a danger button (white is 2.8:1 on the dark theme's red) |
 | `--color-danger-soft` | `#f5d9da` | `#3d2326` | Fill for the losing side of a bar (below break-even); never text |
 | `--color-success-soft` | `#d2eadf` | `#143a2e` | Fill for the winning side of a bar (above break-even); never text |
 | `--color-focus` | `#7c5cff` | `#9d85ff` | Focus ring (2px + 2px offset) |

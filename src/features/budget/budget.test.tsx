@@ -366,3 +366,26 @@ describe('BudgetScreen', () => {
     expect(actions.saveLimit).not.toHaveBeenCalled();
   });
 });
+
+describe('the limit dialog in the line style', () => {
+  it('has line fields and underline tabs, and every category', async () => {
+    renderBudget();
+    const dialog = await openNewLimit();
+    await userEvent.click(within(dialog).getByRole('radio', { name: 'One category' }));
+    const category = within(dialog).getByLabelText('Category');
+    expect(category).toHaveClass('border-b', 'font-extrabold');
+    expect(category).not.toHaveClass('rounded-md');
+    expect(
+      within(category)
+        .getAllByRole('option')
+        .map((o) => o.textContent),
+    ).toEqual(['Food', 'Transport', 'Rent', 'Utilities', 'Fun', 'Health', 'Shopping', 'Other']);
+    const limit = within(dialog).getByLabelText('Limit');
+    expect(limit).toHaveClass('border-b', 'font-extrabold');
+    expect(limit).not.toHaveClass('rounded-md');
+    // Applies to and Period are underline tabs, still radios.
+    expect(within(dialog).getByText('One category')).toHaveClass('border-b-2', 'border-text');
+    expect(within(dialog).getByText('Overall')).toHaveClass('border-transparent');
+    expect(within(dialog).getByText('Monthly')).toHaveClass('border-b-2', 'border-text');
+  });
+});
