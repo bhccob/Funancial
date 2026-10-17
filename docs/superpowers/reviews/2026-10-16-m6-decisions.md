@@ -17,10 +17,9 @@
   - the demo and e2e.
 - **Whole-branch review (Opus):** ready with fixes, no Critical findings. One fix wave closed four items, and the scoped re-review was clean.
 - **Final gate at acf028d:** 2124 unit tests passing; typecheck and lint clean; e2e 70 passed, 8 skipped (mobile-only specs on the desktop project).
-- **Task 10 is still open and needs you:**
-  - deploy the link reader (`npx vercel --prod`) and live-check it;
-  - install on the phone;
-  - run the checklist: a real ask with a pasted link, About you, Remind me then I bought it, and Ask in airplane mode.
+- **Task 10, done on 2026-10-17:**
+  - The link reader is deployed to production (https://funancial.vercel.app). Live check: a real Allbirds product link read as "Men's Wool Runner", $110; a private address was refused (400); a call without the token was refused (401).
+  - M6 was installed on the owner's phone over M5, and the owner ran the checklist (a pasted link, About you, Remind me then I bought it, Ask in airplane mode): "everything works on the phone".
 
 ## How it works now, in plain words
 
