@@ -10,16 +10,20 @@ You need the computer set up for Android builds first (Java 21 and `JAVA_HOME`, 
 ## 1. Create the release key (once, by the owner)
 
 Claude never handles the password. You create the key and choose its password yourself. In
-PowerShell, with your Windows user name in place of `<you>`:
+PowerShell:
 
 ```powershell
-keytool -genkeypair -v -keystore C:\Users\<you>\funancial-release.jks -alias funancial -keyalg RSA -keysize 4096 -validity 36500
+& "$env:JAVA_HOME\bin\keytool" -genkeypair -v -keystore "$env:USERPROFILE\funancial-release.jks" -alias funancial -keyalg RSA -keysize 4096 -validity 36500
 ```
 
-`keytool` comes with Java 21 (`%JAVA_HOME%\bin\keytool`). It asks for a password and for some
-details about you; type a long password and keep it in your password manager.
+`JAVA_HOME` is the Java 21 JDK you set up in [docs/android.md](android.md); `keytool` is in its `bin`
+folder. It asks for a password and for some details about you; type a long password and keep it in
+your password manager. The key file lands in your user folder
+(`C:\Users\<you>\funancial-release.jks`), outside the repo.
 
-Then create `android\keystore.properties` with these four lines (the file is git-ignored):
+Then create `android\keystore.properties` with these four lines (the file is git-ignored). Save it
+with Notepad as UTF-8, not with PowerShell's `>` or `Out-File`, which can write a format Gradle
+cannot read:
 
 ```properties
 storeFile=C:/Users/<you>/funancial-release.jks
@@ -30,9 +34,12 @@ keyPassword=<the password you typed>
 
 - Write `storeFile` with forward slashes. In a `.properties` file a backslash is an escape, so
   `C:\Users\...` is read wrongly.
+- If the password contains a backslash, write each `\` as `\\` in this file, or pick a password
+  without one.
 - `keyPassword` is the same password as `storePassword`.
-- The `.jks` file lives outside the repo, and `*.jks`, `*.keystore` and `keystore.properties` are
-  git-ignored in any case.
+- If this file is missing or wrong, only release builds fail, with a message that names it. Your own
+  debug builds (`npm run android:run`) never read it.
+- `*.jks`, `*.keystore` and `keystore.properties` are git-ignored in any case.
 
 ## 2. Back up the key (the same day)
 
@@ -55,8 +62,23 @@ versionCode 9
 versionName "0.9"
 ```
 
-Android refuses an install whose `versionCode` is lower than the installed one, and the release script
-refuses a `versionCode` that is not higher than the one in the published `latest.json`.
+Android refuses an install whose `versionCode` is lower than the installed one. The release script
+refuses a `versionCode` that is not higher than the published one, and a `versionName` that is the
+same, because friends would be told "Version 0.8 is ready" while already on 0.8.
+
+"Published" here means the `site/public/get/latest.json` on this computer (`site/public/get/test/` for
+the test channel), not the live site:
+
+- To rebuild a version you built but never deployed, delete that `latest.json` or raise the version.
+- On a new computer that file is not there, so the guard cannot see what friends have. Fetch it from
+  the live site first:
+
+  ```powershell
+  New-Item -ItemType Directory -Force site\public\get
+  curl.exe -o site\public\get\latest.json https://funancial.vercel.app/get/latest.json
+  ```
+
+  (There is nothing to fetch before the first release.)
 
 ## 4. Build the release
 
@@ -69,15 +91,20 @@ The notes are shown to friends in the update banner (1 to 500 characters). The s
 1. checks that `android\keystore.properties` exists (if not, it prints the `keytool` command and the
    four lines above, and stops);
 2. reads the version from `android/app/build.gradle`;
-3. stops if the published `latest.json` already has this `versionCode` or a higher one;
+3. stops if the published `latest.json` already has this `versionCode` or a higher one, or this
+   `versionName`;
 4. runs `npm run build` as a release build (it still reads `.env.local`, so the app has its price
-   service key), then `npx cap sync android`, then Gradle `assembleRelease`;
+   service key), then `npx cap sync android`, then Gradle `assembleRelease` (after deleting the last
+   `app-release.apk`, so an old one can never be mistaken for the new one);
 5. copies the APK to `site/public/get/funancial-<versionName>.apk`;
-6. writes `site/public/get/latest.json` with the APK's address, SHA-256 and size.
+6. writes `site/public/get/latest.json` with the APK's address, SHA-256 and size;
+7. runs a plain `npm run build` and `npx cap sync android` again, without the release settings (see
+   "Your own phone").
 
 `--channel test` does the same into `site/public/get/test/` and bakes the test address
 (`https://funancial.vercel.app/get/test/latest.json`) into the app. It is for trying an update on an
-emulator before the real release.
+emulator before the real release. When the test is over, delete the `site/public/get/test/` folder,
+so it does not ship with the live deploys.
 
 The update address is permanent: every release app checks
 `https://funancial.vercel.app/get/latest.json`, so never rename or delete the Vercel project.
@@ -89,15 +116,20 @@ npx vercel build --prod
 npx vercel deploy --prebuilt --prod
 ```
 
-The APK and `latest.json` are git-ignored local files that a build on Vercel would not see, so the site is built
-here and uploaded as it is. Older `funancial-*.apk` files stay in `site/public/get` and are uploaded
-again each time; delete the ones nobody needs before you build.
+The APK and `latest.json` are git-ignored local files that a build on Vercel would not see, so the
+site is built here and uploaded as it is. Older `funancial-*.apk` files stay in `site/public/get` and
+are uploaded again each time; delete the ones nobody needs before you build.
 
 ## Your own phone
 
 Your own phone stays on `npm run android:run` debug builds. A debug build is signed with a different
 key, so installing a release over it (or the other way round) fails, and uninstalling to get past
 that wipes the app's data. Release builds are for friends; a debug build never checks for updates.
+
+The release build puts the update check into `dist/` and the Android project's assets. So the
+release script finishes by building the web app again without it and copying that into the Android
+project, and an install from Android Studio on your phone is then a plain build too. If that last
+step fails, run `npm run android:sync` before installing on your phone.
 
 ## Before 2027: Google's developer verification
 

@@ -3,7 +3,7 @@
 // docs/release.md.
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
@@ -16,12 +16,13 @@ const ANDROID_DIR = join(ROOT, 'android');
 
 /** What the owner is told when `android/keystore.properties` is missing: no password in it. */
 export const KEYSTORE_HELP = `android/keystore.properties is missing, so there is no release key to sign with.
-Create the key once, outside the repo. keytool asks you for a password, so type one there:
+Create the key once, outside the repo. In PowerShell (JAVA_HOME is the Java 21 from docs/android.md),
+keytool asks you for a password, so type one there:
 
-  keytool -genkeypair -v -keystore C:\\Users\\<you>\\funancial-release.jks -alias funancial -keyalg RSA -keysize 4096 -validity 36500
+  & "$env:JAVA_HOME\\bin\\keytool" -genkeypair -v -keystore "$env:USERPROFILE\\funancial-release.jks" -alias funancial -keyalg RSA -keysize 4096 -validity 36500
 
-Then save these four lines as android/keystore.properties. Use forward slashes in storeFile, and
-the same password twice:
+Then save these four lines as android/keystore.properties, with Notepad as UTF-8 (not PowerShell's >).
+Use forward slashes in storeFile, and the same password twice:
 
   storeFile=C:/Users/<you>/funancial-release.jks
   storePassword=<the password you typed>
@@ -99,11 +100,26 @@ export function buildLatest({ code, name, notes, origin, channel, apkFile, sha25
  * Throws if `existing`, the latest.json already published, is not older than `code`.
  * @param {Latest | null} existing
  * @param {number} code
+ * @param {string} [name] the new versionName, which must differ too: the banner says "Version {name}"
  */
-export function refuseUnlessNewer(existing, code) {
+export function refuseUnlessNewer(existing, code, name) {
   if (existing && existing.versionCode >= code) {
     throw new Error(`Version ${code} is not newer than the published ${existing.versionCode}.`);
   }
+  if (existing && name !== undefined && existing.versionName === name) {
+    throw new Error(`Version name ${name} is already published; raise versionName too.`);
+  }
+}
+
+/**
+ * The environment for a web build: with `updateUrl` a release build that checks for updates there,
+ * without it a debug-safe build that never does, whatever the shell had set.
+ * @param {Record<string, string | undefined>} base
+ * @param {string} [updateUrl]
+ */
+export function webBuildEnv(base, updateUrl) {
+  const { VITE_RELEASE: _release, VITE_UPDATE_URL: _url, ...rest } = base;
+  return updateUrl ? { ...rest, VITE_RELEASE: '1', VITE_UPDATE_URL: updateUrl } : rest;
 }
 
 /**
@@ -154,23 +170,26 @@ function release() {
   );
   const notes = checkMeta({ code, name, notes: values.notes });
   const dir = join(ROOT, releaseDir(channel));
-  refuseUnlessNewer(readLatest(dir), code);
+  refuseUnlessNewer(readLatest(dir), code, name);
   requireJava();
 
   const updateUrl = `${ORIGIN}/${channel === 'test' ? 'get/test' : 'get'}/latest.json`;
   // The shell runs npm (a .cmd file on Windows); .env.local still feeds the build its keys.
-  const env = { ...process.env, VITE_RELEASE: '1', VITE_UPDATE_URL: updateUrl };
+  const env = webBuildEnv(process.env, updateUrl);
   run('The web build', 'npm run build', [], { cwd: ROOT, shell: true, env });
   run('Copying the web build into the Android project', 'npx cap sync android', [], {
     cwd: ROOT,
     shell: true,
   });
+  // Gradle writes to the same place every time. Without this, a build that fails to sign could
+  // leave the last release's APK there to be picked up as this one.
+  const built = join(ANDROID_DIR, 'app', 'build', 'outputs', 'apk', 'release', 'app-release.apk');
+  rmSync(built, { force: true });
   const gradle = gradleCommand(process.platform);
   run('The Gradle release build', gradle.command, [...gradle.args, 'assembleRelease'], {
     cwd: ANDROID_DIR,
   });
 
-  const built = join(ANDROID_DIR, 'app', 'build', 'outputs', 'apk', 'release', 'app-release.apk');
   if (!existsSync(built)) {
     fail(
       `Gradle finished but ${built} is missing. Is the release build signed (keystore.properties)?`,
@@ -194,9 +213,25 @@ function release() {
   });
   writeFileSync(join(dir, 'latest.json'), `${JSON.stringify(latest, null, 2)}\n`);
 
+  // The release flags are now in dist/ and the Android assets. Leave a plain build there, so an
+  // install from Android Studio on the owner's phone cannot carry the update check.
+  const done = `Built ${apkFile} (versionCode ${code}) for the ${channel} channel in ${releaseDir(channel)}.`;
+  const plain = webBuildEnv(process.env);
+  run(
+    `${done} The plain web rebuild (run \`npm run android:sync\` before installing on your own phone)`,
+    'npm run build',
+    [],
+    { cwd: ROOT, shell: true, env: plain },
+  );
+  run('Copying that plain web build into the Android project', 'npx cap sync android', [], {
+    cwd: ROOT,
+    shell: true,
+  });
+
   console.log(
-    `Built ${apkFile} (versionCode ${code}) for the ${channel} channel in ${releaseDir(channel)}.\n` +
-      `sha256 ${sha256}\nNothing is deployed: see docs/release.md for that, after the owner's OK.`,
+    `${done}\nsha256 ${sha256}\n` +
+      'The web build and the Android assets were rebuilt without the release flags, so installs on your own phone never check for updates.\n' +
+      "Nothing is deployed: see docs/release.md for that, after the owner's OK.",
   );
 }
 

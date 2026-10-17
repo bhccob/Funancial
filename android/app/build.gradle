@@ -1,10 +1,35 @@
 apply plugin: 'com.android.application'
 
 // The release key: android/keystore.properties (git-ignored; storeFile, storePassword, keyAlias,
-// keyPassword) is made by the owner, see docs/release.md. Without it release builds stay unsigned.
+// keyPassword) is made by the owner, see docs/release.md. keystoreProblem says why that file
+// cannot sign, or is null when it can. Only a release task fails on it (see whenReady below):
+// a missing, unreadable or incomplete file must never stop a debug build.
 def keystoreFile = rootProject.file('keystore.properties')
 def keystoreProps = new Properties()
-if (keystoreFile.exists()) keystoreFile.withInputStream { keystoreProps.load(it) }
+def keystoreProblem = null
+if (!keystoreFile.exists()) {
+    keystoreProblem = 'does not exist'
+} else {
+    try {
+        // Read as UTF-8, dropping a BOM. A UTF-16 file (PowerShell's > ) reads as no keys at all.
+        keystoreProps.load(new StringReader(keystoreFile.getText('UTF-8').replaceFirst('^﻿', '')))
+    } catch (Exception e) {
+        keystoreProblem = "cannot be read (${e.message})"
+    }
+    def missing = ['storeFile', 'storePassword', 'keyAlias', 'keyPassword'].findAll {
+        !keystoreProps.getProperty(it)?.trim()
+    }
+    if (keystoreProblem == null && missing) {
+        keystoreProblem = "has no ${missing.join(', ')} (saved as UTF-16, or a key misspelled?)"
+    } else if (keystoreProblem == null && !file(keystoreProps.getProperty('storeFile')).exists()) {
+        keystoreProblem = "names a storeFile that does not exist: ${keystoreProps.getProperty('storeFile')} (use forward slashes)"
+    }
+}
+gradle.taskGraph.whenReady { graph ->
+    if (keystoreProblem != null && graph.allTasks.any { it.project == project && it.name.contains('Release') }) {
+        throw new GradleException("Cannot sign the release build: android/keystore.properties ${keystoreProblem}. See docs/release.md.")
+    }
+}
 
 android {
     namespace = "io.github.bhccob.funancial"
@@ -24,7 +49,7 @@ android {
     }
     signingConfigs {
         release {
-            if (keystoreFile.exists()) {
+            if (keystoreProblem == null) {
                 storeFile file(keystoreProps.getProperty('storeFile'))
                 storePassword keystoreProps.getProperty('storePassword')
                 keyAlias keystoreProps.getProperty('keyAlias')
@@ -34,7 +59,7 @@ android {
     }
     buildTypes {
         release {
-            if (keystoreFile.exists()) signingConfig signingConfigs.release
+            if (keystoreProblem == null) signingConfig signingConfigs.release
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
