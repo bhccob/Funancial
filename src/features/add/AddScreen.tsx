@@ -42,6 +42,8 @@ export function AddScreen() {
           onChange={(v) =>
             setParams(v === 'income' ? { type: 'income' } : {}, {
               replace: true,
+              // Same screen: the page stays where it is.
+              preventScrollReset: true,
               state: location.state,
             })
           }

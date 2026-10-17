@@ -147,7 +147,8 @@ export function HoldingsTab({ refresh }: { refresh(): Promise<void> }) {
         else next.delete('pie');
         return next;
       },
-      { replace: true },
+      // Same screen: the page stays where it is, so the pie that changes stays in view.
+      { replace: true, preventScrollReset: true },
     );
   }
 
