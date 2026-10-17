@@ -124,7 +124,7 @@ export function AboutYouScreen() {
   return (
     <div className="max-w-xl">
       <PageHeader title="About you">
-        The app uses this every time you ask. It stays on your phone.
+        The app uses this every time you ask. It stays with your data, encrypted.
       </PageHeader>
       <Section>
         <div className="flex flex-col gap-5">

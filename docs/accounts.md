@@ -100,6 +100,52 @@ away, and that the reset page shows its "expired" message for a made-up link.
 Claude only ever checks that the names are listed (`npx vercel env ls` prints names, not values). It
 never pulls, prints or asks for the values.
 
+## If a friend asks you to remove their copy
+
+Not part of setup: skip this until someone asks. Removing a copy is permanent, so be sure the
+request really comes from the friend.
+
+**The easy way: they do it themselves.** On the phone, they open Settings, then Account, and tap
+**Turn off and delete my copy**. That removes their account and its locked copy from the service. If
+the phone is lost, they can log in on another one first (with **Forgot password?** if they have
+forgotten the password) and do the same there.
+
+**By hand, when they can't.** You delete a few entries in Upstash. Each is named after the friend's
+username in lower case (usernames are letters, numbers, dots, dashes and underscores, so lower case
+is the only change). Below, `<username>` stands for it.
+
+1. In Vercel, open the **funancial** project, then **Storage**, click the database, and click **Open
+   in Upstash**. In Upstash, open the database and click the **Data Browser** tab. (Labels may differ
+   a little.)
+2. Search for `acct:u:<username>` and open that entry. It is the account record, written as text.
+   Don't copy it anywhere: it holds the account's locked keys. Write down only two values from it:
+   `email` and `deviceTokenHash` (64 letters and numbers). If there is no such entry, the account
+   is already gone. A search also lists longer names that start the same (`sam` shows `samuel`), so
+   check the name matches exactly before you delete anything.
+3. Delete `acct:u:<username>` first. From then on the service turns their phone away, so nothing can
+   be saved back after you delete the copy.
+4. Delete `acct:c:<username>`. This is the locked copy. (There is none if they never saved one.)
+5. Delete `acct:t:<deviceTokenHash>`, using the value you wrote down. It is their phone's pass.
+6. Open `acct:e:<email>`, using the email you wrote down. It lists the usernames that use that email.
+   Remove `<username>` from it. If it was the only one, the entry disappears.
+7. Search for `acct:*<username>*`. Nothing of theirs should be left, except `acct:cl:` entries that
+   vanish within a minute.
+
+**If you skip one, nothing breaks.** This is what each leftover does:
+
+- `acct:t:<deviceTokenHash>`: it points at a username with no account, so the service answers as if
+  their phone had moved, and reads nothing. Harmless clutter.
+- The username in `acct:e:<email>`: "forgot password" skips a name with no account. If someone later
+  makes an account with that username and another email, it is skipped for that email too.
+- `acct:c:<username>`: no one can reach it, since it is only handed out to a log-in on the account,
+  and a new account with the same username ignores it. But it is still the friend's data, so delete
+  it.
+- Reset links, saves in flight and counters (`acct:r:`, `acct:ru:`, `acct:cl:`, `rl:`) clear
+  themselves within a day, mostly within minutes. A reset link emailed in the last 30 minutes stops
+  working as soon as the account is gone.
+
+## When you're done
+
 Before you tell Claude, check in Vercel → Settings → Environment Variables that you can see
 `SERVER_MASTER_KEY`, `GMAIL_USER`, `GMAIL_APP_PASSWORD` and the two `KV_REST_API_` names, and that
 the master key is in your password manager.

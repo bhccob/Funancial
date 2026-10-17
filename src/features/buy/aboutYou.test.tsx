@@ -64,7 +64,7 @@ describe('About you', () => {
     const { saved } = await renderAbout({ goals: [bike] });
     expect(screen.getByRole('heading', { level: 1, name: 'About you' })).toBeInTheDocument();
     expect(
-      screen.getByText('The app uses this every time you ask. It stays on your phone.'),
+      screen.getByText('The app uses this every time you ask. It stays with your data, encrypted.'),
     ).toBeInTheDocument();
     for (const label of [MATTERS, SITUATION]) {
       expect(screen.getByLabelText(label)).toHaveClass('border-b', 'font-extrabold');

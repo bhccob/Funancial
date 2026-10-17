@@ -7,8 +7,8 @@ export const LEGAL: {
   privacy: [
     'Your data lives on your phone, encrypted.',
     "There are no analytics, and Funancial doesn't track how you use it.",
-    "Apart from the update check below, the only network calls go to the app's own price service. They fetch prices, exchange rates, dividends, news, symbol searches, price history and company logos (by symbol), and they read a product link when you paste one. They carry only what is needed to look something up: a symbol, the text you type in search, a currency pair, a start date, or a pasted link. Never your amounts, balances or notes.",
-    "An account is optional. If you make one, a locked copy of your data is also kept on the app's service, so you can move to a new phone.",
+    "Apart from the update check below, the only network calls go to the app's own service. Its lookups fetch prices, exchange rates, dividends, news, symbol searches, price history and company logos (by symbol), and read a product link when you paste one. A lookup carries only what is needed to look something up: a symbol, the text you type in search, a currency pair, a start date, or a pasted link. Never your amounts, balances or notes.",
+    'An account is optional. If you make one, the app also sends a locked copy of your data to that service, and keeps it there, so you can move to a new phone.',
     'Your email is used only for "forgot password".',
     'Because "forgot password" brings your data back, the service can unlock the copy. Only the app\'s owner runs it.',
     '"Delete all data" erases this phone only. An account\'s locked copy stays on the service until you delete it (Settings, Account, Turn off and delete my copy) or ask the app\'s owner to remove it.',

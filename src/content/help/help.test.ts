@@ -113,7 +113,7 @@ describe('glossary, FAQ and legal text', () => {
     expect(privacy).toMatch(/on your phone, encrypted/i);
     expect(privacy).toMatch(/no analytics/i);
     expect(privacy).toMatch(/doesn't track how you use it/i);
-    expect(privacy).toMatch(/price service/i);
+    expect(privacy).toMatch(/the app's own service/i);
     expect(privacy).toMatch(/passphrase/i);
   });
 
@@ -122,16 +122,25 @@ describe('glossary, FAQ and legal text', () => {
     // An account is optional now, so "no account" would be false.
     expect(privacy).not.toMatch(/no account/i);
     expect(privacy).not.toMatch(/does not know who you are/i);
-    expect(privacy).toMatch(/a locked copy of your data is also kept on the app's service/i);
+    expect(privacy).toMatch(
+      /the app also sends a locked copy of your data to that service, and keeps it there/i,
+    );
     expect(privacy).toMatch(/so you can move to a new phone/i);
     expect(privacy).toMatch(/email is used only for "forgot password"/i);
     expect(privacy).toMatch(/the service can unlock the copy/i);
     expect(privacy).toMatch(/only the app's owner runs/i);
   });
 
-  it('says the price service also fetches company logos, by symbol', () => {
-    const line = LEGAL.privacy.find((l) => /price service/.test(l))!;
-    expect(line).toMatch(/company logos/);
+  it("calls the server the app's own service on the Privacy page, never the price service", () => {
+    expect(LEGAL.privacy.join(' ')).not.toMatch(/price service/i);
+  });
+
+  it('says the lookups also fetch company logos, by symbol, and promises only for the lookups', () => {
+    const line = LEGAL.privacy.find((l) => /company logos/.test(l))!;
+    expect(line).toMatch(/the only network calls go to the app's own service/);
+    expect(line).toMatch(/company logos \(by symbol\)/);
+    // Account calls carry the locked copy, so the promise is the lookups', not every call's.
+    expect(line).toMatch(/A lookup carries only what is needed to look something up/);
     expect(line).toMatch(/Never your amounts, balances or notes\./);
   });
 
@@ -208,9 +217,9 @@ describe('help copy says what the code does', () => {
     expect(answer).not.toMatch(/exchange rates|symbol/);
   });
 
-  it('opens the price-service line by setting the update check apart from it', () => {
+  it('opens the service line by setting the update check apart from it', () => {
     expect(LEGAL.privacy.join(' ')).toContain(
-      "Apart from the update check below, the only network calls go to the app's own price service.",
+      "Apart from the update check below, the only network calls go to the app's own service.",
     );
   });
 
