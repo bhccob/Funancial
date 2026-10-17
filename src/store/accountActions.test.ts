@@ -13,6 +13,7 @@ import {
   backoff,
   BUSY_RETRY,
   createAccountActions,
+  forgotProblem,
   SAVE_NOTICE,
   type AccountActions,
 } from './accountActions';
@@ -1303,5 +1304,60 @@ describe('smaller things', () => {
     answer();
     await deleting;
     expect(linkedState(actions)).toBeNull();
+  });
+});
+
+describe('forgot password', () => {
+  it('asks the service to email a link, with what was typed and nothing else', async () => {
+    const { actions, server } = await setup();
+    await expect(actions.forgot('  Robin@Example.com ')).resolves.toBeUndefined();
+    expect(server.sent('forgot')).toEqual([{ who: 'Robin@Example.com' }]);
+  });
+
+  it('works from the welcome screen, before there is any vault', async () => {
+    const { deps } = realStoreDeps();
+    const store = createAppStore(deps);
+    await store.getState().boot();
+    expect(store.getState().phase).toBe('welcome');
+    const server = fakeAccountApi();
+    const actions = createAccountActions(store, server.api, platform, { iterations: ITERATIONS });
+    await expect(actions.forgot('robin')).resolves.toBeUndefined();
+    expect(server.sent('forgot')).toEqual([{ who: 'robin' }]);
+  });
+
+  it('reads a 400 as an answer like any other: the screen says the same line', async () => {
+    const { actions, server } = await setup();
+    server.script('forgot', answers(400, { error: 'invalid' }));
+    await expect(actions.forgot('robin')).resolves.toBeUndefined();
+  });
+
+  it('tells a rate limit with its wait, and nothing about the account', async () => {
+    const { actions, server } = await setup();
+    server.script('forgot', answers(429, { error: 'too many attempts' }, 1800));
+    await expect(actions.forgot('robin')).rejects.toMatchObject({
+      code: 'limited',
+      message: 'Too many tries. Try again in 30 minutes.',
+    });
+  });
+
+  it('says the service is not answering when it is not configured or down', async () => {
+    const { actions, server } = await setup();
+    server.script('forgot', answers(503, { error: 'not configured' }));
+    await expect(actions.forgot('robin')).rejects.toMatchObject({ code: 'unavailable' });
+  });
+
+  it('says offline when nothing answers', async () => {
+    const { actions, server } = await setup();
+    server.script('forgot', unreachable);
+    await expect(actions.forgot('robin')).rejects.toMatchObject({ code: 'offline' });
+  });
+
+  it('judges what was typed the way the service does, before asking it', () => {
+    expect(forgotProblem('robin')).toBeNull();
+    expect(forgotProblem(' Robin.Smith ')).toBeNull();
+    expect(forgotProblem('robin@example.com')).toBeNull();
+    expect(forgotProblem('')).toBe('Enter your username or your email address.');
+    expect(forgotProblem('ro')).toBe('Enter your username or your email address.');
+    expect(forgotProblem('robin@')).toBe('Enter your username or your email address.');
   });
 });

@@ -85,6 +85,8 @@ export function fakeAccountApi() {
         accounts.delete(name);
         return reply(204);
       }),
+    // The service answers a valid username or email alike, whether or not there is an account.
+    forgot: (body) => respond('forgot', null, body, () => reply(200, { ok: true })),
     changePassword: (token, body) =>
       respond('changePassword', token, body, () => {
         const account = byToken(token);

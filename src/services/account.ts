@@ -22,6 +22,7 @@ export type SignUpBody = {
 export type LogInBody = { username: string; authKey: string };
 export type CopyBody = Sealed & { baseVersion: number };
 export type PasswordBody = { oldAuthKey: string; newAuthKey: string; newWrappedPw: Sealed };
+export type ForgotBody = { who: string };
 
 /** The account service, as the app's account layer uses it; tests hand it a fake. Each call throws `NetworkError` where nothing came back. */
 export type AccountApi = {
@@ -30,6 +31,8 @@ export type AccountApi = {
   putCopy(deviceToken: string, body: CopyBody): Promise<Reply>;
   deleteAccount(deviceToken: string): Promise<Reply>;
   changePassword(deviceToken: string, body: PasswordBody): Promise<Reply>;
+  /** Asks for a reset email; for a username or an email address, and nobody is logged in. */
+  forgot(body: ForgotBody): Promise<Reply>;
 };
 
 const sealed = z.object({ iv: z.string(), ciphertext: z.string() });
@@ -103,4 +106,5 @@ export const accountApi: AccountApi = {
   putCopy: (token, body) => call('PUT', 'copy', token, body),
   deleteAccount: (token) => call('DELETE', 'copy', token),
   changePassword: (token, body) => call('POST', 'password', token, body),
+  forgot: (body) => call('POST', 'forgot', null, body),
 };

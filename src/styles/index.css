@@ -43,6 +43,66 @@
   /* The buy meter's marker swinging from Skip to its reading; only used as `motion-safe:animate-meter-sweep`. */
   --animate-meter-sweep: meter-sweep 700ms cubic-bezier(0.22, 1, 0.36, 1) both;
 
+  /*
+   * Setup and the welcome screens: the new step rises 70px (or, going back, comes down) while it
+   * fades in, and the old one leaves the other way. Only used as `motion-safe:animate-step-*`; for
+   * reduced motion the same two steps only cross-fade, as `motion-reduce:animate-fade-*`.
+   */
+  --animate-step-in-up: step-in-up 620ms cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+  --animate-step-in-down: step-in-down 620ms cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+  --animate-step-out-up: step-out-up 620ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  --animate-step-out-down: step-out-down 620ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  --animate-fade-in: fade-in 300ms ease-out backwards;
+  --animate-fade-out: fade-out 300ms ease-out both;
+  /* The soft colour shapes behind the welcome screen and setup; only used as `motion-safe:animate-blob-drift`. */
+  --animate-blob-drift: blob-drift 18s ease-in-out infinite alternate;
+
+  @keyframes step-in-up {
+    from {
+      opacity: 0;
+      transform: translateY(70px);
+    }
+  }
+
+  @keyframes step-in-down {
+    from {
+      opacity: 0;
+      transform: translateY(-70px);
+    }
+  }
+
+  @keyframes step-out-up {
+    to {
+      opacity: 0;
+      transform: translateY(-70px);
+    }
+  }
+
+  @keyframes step-out-down {
+    to {
+      opacity: 0;
+      transform: translateY(70px);
+    }
+  }
+
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+  }
+
+  @keyframes fade-out {
+    to {
+      opacity: 0;
+    }
+  }
+
+  @keyframes blob-drift {
+    to {
+      translate: 28px 36px;
+    }
+  }
+
   @keyframes meter-sweep {
     from {
       transform: rotate(0deg);
@@ -67,5 +127,37 @@
       opacity: 1;
       transform: scale(1);
     }
+  }
+}
+
+/*
+ * The lines of a setup step coming in one after another, 80 ms apart. Only ever used as
+ * `motion-safe:stagger-lines` on the step's box, so reduced motion shows them at once.
+ */
+@keyframes line-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+
+@utility stagger-lines {
+  & > * {
+    animation: line-in 600ms cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+  }
+  & > :nth-child(2) {
+    animation-delay: 80ms;
+  }
+  & > :nth-child(3) {
+    animation-delay: 160ms;
+  }
+  & > :nth-child(4) {
+    animation-delay: 240ms;
+  }
+  & > :nth-child(5) {
+    animation-delay: 320ms;
+  }
+  & > :nth-child(n + 6) {
+    animation-delay: 400ms;
   }
 }

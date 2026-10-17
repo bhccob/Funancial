@@ -1,9 +1,11 @@
-import { screen } from '@testing-library/react';
+import { act, fireEvent, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Toaster } from '@/components/ui/Toaster';
 import { toastStore } from '@/lib/toast';
+import { AccountError } from '@/store/accountActions';
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
+import { fakeAccount, linkedAccount, withAccount } from '@/test/fakeAccount';
 import { OnboardingWizard } from './OnboardingWizard';
 
 const actions = vi.hoisted(() => ({ completeOnboarding: vi.fn(async () => {}) }));
@@ -29,11 +31,43 @@ beforeEach(() => {
 });
 afterEach(() => vi.restoreAllMocks());
 
+const PASSWORD = 'a long enough password';
 const next = () => userEvent.click(screen.getByRole('button', { name: 'Next' }));
 
-async function passIntro() {
-  await userEvent.click(screen.getByRole('checkbox', { name: 'I understand' }));
-  await next();
+/** The wizard under an account layer (a fake unless one is given), with spies for what it asks of the app. */
+function renderWizard(
+  options: {
+    account?: ReturnType<typeof fakeAccount>;
+    store?: ReturnType<typeof createStubStore>;
+  } = {},
+  onFinishing = vi.fn(),
+) {
+  const account = options.account ?? fakeAccount();
+  const rendered = renderWithStore(
+    withAccount(
+      account,
+      <>
+        <OnboardingWizard onFinishing={onFinishing} />
+        <Toaster />
+      </>,
+    ),
+    options.store,
+  );
+  return { account, onFinishing, ...rendered };
+}
+
+/** Types the three fields of the account step. */
+async function fillAccount(username = 'Robin', email = 'robin@example.com', password = PASSWORD) {
+  await userEvent.type(screen.getByLabelText('Username'), username);
+  await userEvent.type(screen.getByLabelText('Email (for "forgot password")'), email);
+  await userEvent.type(screen.getByLabelText('Password'), password);
+}
+
+/** Past the account step by the way a phone with no connection takes. */
+async function skipAccount() {
+  vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
+  act(() => void window.dispatchEvent(new Event('offline')));
+  await userEvent.click(await screen.findByRole('button', { name: 'Skip for now' }));
 }
 
 async function fillBalances(cash = '1,000', savings = '5000') {
@@ -42,20 +76,179 @@ async function fillBalances(cash = '1,000', savings = '5000') {
   await next();
 }
 
-describe('OnboardingWizard', () => {
-  it('keeps Next disabled until the user understands', async () => {
-    renderWithStore(<OnboardingWizard />);
+describe('the account step', () => {
+  it('is the first of six, with the words the owner chose', () => {
+    renderWizard();
     expect(screen.getByText('Step 1 of 6')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { level: 1, name: 'Before we start' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled();
-    await userEvent.click(screen.getByRole('checkbox', { name: 'I understand' }));
-    expect(screen.getByRole('button', { name: 'Next' })).toBeEnabled();
+    expect(
+      screen.getByRole('heading', { level: 1, name: 'Create your account' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText('So you can move to a new phone and keep everything.'),
+    ).toBeInTheDocument();
+    for (const label of ['Username', 'Email (for "forgot password")', 'Password']) {
+      expect(screen.getByLabelText(label)).toHaveClass('border-b', 'font-extrabold');
+    }
+    expect(
+      screen.getByText('A locked copy of your data is kept so you can move to a new phone.'),
+    ).toBeInTheDocument();
+    // The old first step is gone, and with it the checkbox.
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+    expect(screen.queryByText('Before we start')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Back' })).not.toBeInTheDocument();
   });
 
+  it('has no way to skip while online', () => {
+    renderWizard();
+    expect(screen.queryByRole('button', { name: 'Skip for now' })).not.toBeInTheDocument();
+    expect(screen.queryByText(/You're offline/)).not.toBeInTheDocument();
+  });
+
+  it('offers to skip, and says why, when the phone is offline', async () => {
+    const { account } = renderWizard();
+    vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
+    act(() => void window.dispatchEvent(new Event('offline')));
+    expect(
+      await screen.findByText("You're offline. Create your account later in Settings."),
+    ).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Skip for now' }));
+    expect(screen.getByText('Step 2 of 6')).toBeInTheDocument();
+    expect(account.signUp).not.toHaveBeenCalled();
+  });
+
+  it('takes the skip back when the connection returns', async () => {
+    renderWizard();
+    const online = vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
+    act(() => void window.dispatchEvent(new Event('offline')));
+    expect(await screen.findByRole('button', { name: 'Skip for now' })).toBeInTheDocument();
+    online.mockReturnValue(true);
+    act(() => void window.dispatchEvent(new Event('online')));
+    await vi.waitFor(() =>
+      expect(screen.queryByRole('button', { name: 'Skip for now' })).not.toBeInTheDocument(),
+    );
+  });
+
+  it('checks the username, email and password with a message each, before asking anyone', async () => {
+    const { account } = renderWizard();
+    await next();
+    expect(screen.getByText(/Use 3 to 30 letters/)).toBeInTheDocument();
+    expect(screen.getByText('Enter a valid email address.')).toBeInTheDocument();
+    expect(screen.getByText('Use at least 10 characters.')).toBeInTheDocument();
+    expect(account.signUp).not.toHaveBeenCalled();
+    expect(screen.getByText('Step 1 of 6')).toBeInTheDocument();
+  });
+
+  it('makes the account with what was typed, then moves on to the next step', async () => {
+    const { account } = renderWizard();
+    await fillAccount();
+    await next();
+    expect(account.signUp).toHaveBeenCalledTimes(1);
+    expect(account.signUp).toHaveBeenCalledWith({
+      username: 'Robin',
+      email: 'robin@example.com',
+      password: PASSWORD,
+    });
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Your currency and name' }),
+    ).toBeInTheDocument();
+    expect(screen.getByText('Step 2 of 6')).toBeInTheDocument();
+  });
+
+  it('can show what was typed in the password', async () => {
+    renderWizard();
+    await userEvent.type(screen.getByLabelText('Password'), PASSWORD);
+    expect(screen.getByLabelText('Password')).toHaveAttribute('type', 'password');
+    await userEvent.click(screen.getByRole('button', { name: 'Show password' }));
+    expect(screen.getByLabelText('Password')).toHaveAttribute('type', 'text');
+  });
+
+  it('shows it is working and sends one request for two taps in the same instant', async () => {
+    const account = fakeAccount();
+    account.signUp.mockReturnValue(new Promise(() => {}));
+    renderWizard({ account });
+    await fillAccount();
+    const form = screen.getByLabelText('Username').closest('form')!;
+    act(() => {
+      fireEvent.submit(form);
+      fireEvent.submit(form);
+    });
+    expect(account.signUp).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('button', { name: 'Creating…' })).toBeDisabled();
+    expect(
+      screen.queryByRole('heading', { name: 'Your currency and name' }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('puts a taken username under the username, and stays', async () => {
+    const account = fakeAccount();
+    account.signUp.mockRejectedValue(new AccountError('taken'));
+    renderWizard({ account });
+    await fillAccount();
+    await next();
+    const alert = await screen.findByText('That username is taken. Try another one.');
+    expect(alert).toHaveAttribute('role', 'alert');
+    expect(screen.getByLabelText('Username')).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getByText('Step 1 of 6')).toBeInTheDocument();
+    expect(screen.getByLabelText('Username')).toHaveValue('Robin');
+  });
+
+  it.each([
+    ['unavailable', "Funancial's service isn't answering right now. Try again in a moment."],
+    ['busy', 'Funancial is busy right now. Try again in a moment.'],
+  ] as const)(
+    'shows a calm line when the service says %s, and lets the person try again',
+    async (code, message) => {
+      const account = fakeAccount();
+      account.signUp.mockRejectedValueOnce(new AccountError(code));
+      renderWizard({ account });
+      await fillAccount();
+      await next();
+      expect(await screen.findByRole('alert')).toHaveTextContent(message);
+      expect(screen.queryByRole('button', { name: 'Skip for now' })).not.toBeInTheDocument();
+
+      await next();
+      expect(await screen.findByText('Step 2 of 6')).toBeInTheDocument();
+    },
+  );
+
+  it('offers the skip too when nothing comes back, though the phone thinks it is online', async () => {
+    const account = fakeAccount();
+    account.signUp.mockRejectedValue(new AccountError('offline'));
+    renderWizard({ account });
+    await fillAccount();
+    await next();
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      "You're offline. Try again when you're connected.",
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Skip for now' }));
+    expect(screen.getByText('Step 2 of 6')).toBeInTheDocument();
+  });
+
+  it('does not ask again for an account the phone already has', async () => {
+    const account = fakeAccount(linkedAccount());
+    renderWizard({ account });
+    expect(
+      screen.getByRole('heading', { level: 1, name: 'Your account is ready' }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("You're signed in as robin.")).toBeInTheDocument();
+    expect(screen.queryByLabelText('Username')).not.toBeInTheDocument();
+    await next();
+    expect(account.signUp).not.toHaveBeenCalled();
+    expect(screen.getByText('Step 2 of 6')).toBeInTheDocument();
+  });
+
+  it('waits for the phone to read whether it has an account', () => {
+    renderWizard({ account: fakeAccount(null, false) });
+    expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled();
+  });
+});
+
+describe('OnboardingWizard', () => {
   it("starts on the currency of the phone's region, and the person can still pick another", async () => {
     phoneIn('Europe/Amsterdam');
-    renderWithStore(<OnboardingWizard />);
-    await passIntro();
+    renderWizard();
+    await skipAccount();
     expect(screen.getByLabelText('Currency')).toHaveValue('EUR');
 
     await userEvent.selectOptions(screen.getByLabelText('Currency'), 'GBP');
@@ -64,16 +257,18 @@ describe('OnboardingWizard', () => {
 
   it('starts on the language region when the time zone is not one it knows', async () => {
     phoneIn('Mars/Olympus', 'nl-NL');
-    renderWithStore(<OnboardingWizard />);
-    await passIntro();
+    renderWizard();
+    await skipAccount();
     expect(screen.getByLabelText('Currency')).toHaveValue('EUR');
   });
 
-  it('collects everything and finishes with a PIN', async () => {
-    const { store } = renderWithStore(<OnboardingWizard />);
-    await passIntro();
+  it('collects everything, finishes with a PIN, and says the person is all set', async () => {
+    const { store, onFinishing, account } = renderWizard();
+    await fillAccount();
+    await next();
+    expect(await screen.findByText('Step 2 of 6')).toBeInTheDocument();
+    expect(account.signUp).toHaveBeenCalledTimes(1);
 
-    expect(screen.getByText('Step 2 of 6')).toBeInTheDocument();
     expect(screen.getByLabelText('Currency')).toHaveValue('USD');
     await userEvent.type(screen.getByLabelText('What should we call you?'), 'Sam');
     await next();
@@ -109,6 +304,9 @@ describe('OnboardingWizard', () => {
     await userEvent.type(screen.getByLabelText('Confirm PIN'), '2468');
     await userEvent.click(screen.getByRole('button', { name: 'Start my adventure' }));
 
+    expect(
+      await screen.findByRole('heading', { level: 1, name: "You're all set, Sam" }),
+    ).toBeInTheDocument();
     expect(actions.completeOnboarding).toHaveBeenCalledWith({
       name: 'Sam',
       currency: 'USD',
@@ -124,11 +322,48 @@ describe('OnboardingWizard', () => {
     const [lockedAt] = setSecret.mock.invocationCallOrder;
     expect(lockedAt).toBeLessThan(onboardedAt ?? 0);
     expect(store.getState().enableBiometric).not.toHaveBeenCalled();
+
+    // The app is held on this screen while it shows the last step, and let go by Open Funancial.
+    expect(onFinishing).toHaveBeenLastCalledWith(true);
+    expect(onFinishing).not.toHaveBeenCalledWith(false);
+    await userEvent.click(screen.getByRole('button', { name: 'Open Funancial' }));
+    expect(onFinishing).toHaveBeenLastCalledWith(false);
+  });
+
+  it('says only that the person is all set when they gave no name', async () => {
+    renderWizard();
+    await skipAccount();
+    await next();
+    await fillBalances('0', '0');
+    await userEvent.click(screen.getByRole('switch', { name: "I don't have a regular salary" }));
+    await next();
+    await next();
+    await userEvent.click(screen.getByRole('button', { name: 'Start my adventure' }));
+    expect(
+      await screen.findByRole('heading', { level: 1, name: "You're all set" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/your first quest is waiting/)).toBeInTheDocument();
+  });
+
+  it('stays on the last step, and lets go of the app, when setting up fails', async () => {
+    actions.completeOnboarding.mockRejectedValueOnce(new Error('Storage is full.'));
+    const { onFinishing } = renderWizard();
+    await skipAccount();
+    await next();
+    await fillBalances('0', '0');
+    await userEvent.click(screen.getByRole('switch', { name: "I don't have a regular salary" }));
+    await next();
+    await next();
+    await userEvent.click(screen.getByRole('button', { name: 'Start my adventure' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Storage is full.');
+    expect(screen.queryByRole('heading', { name: /all set/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Start my adventure' })).toBeEnabled();
+    expect(onFinishing).toHaveBeenLastCalledWith(false);
   });
 
   it('sends no salary when there is no regular salary, and no secret without a lock', async () => {
-    const { store } = renderWithStore(<OnboardingWizard />);
-    await passIntro();
+    const { store } = renderWizard();
+    await skipAccount();
     await next();
     await fillBalances('0', '0');
 
@@ -145,8 +380,8 @@ describe('OnboardingWizard', () => {
   });
 
   it('turns on biometric unlock after setting the PIN', async () => {
-    const { store } = renderWithStore(<OnboardingWizard />, createStubStore({ biometric: 'off' }));
-    await passIntro();
+    const { store } = renderWizard({ store: createStubStore({ biometric: 'off' }) });
+    await skipAccount();
     await next();
     await fillBalances('0', '0');
     await userEvent.click(screen.getByRole('switch', { name: "I don't have a regular salary" }));
@@ -183,14 +418,8 @@ describe('OnboardingWizard', () => {
         throw new Error('Failed to save data');
       }),
     });
-    renderWithStore(
-      <>
-        <OnboardingWizard />
-        <Toaster />
-      </>,
-      store,
-    );
-    await passIntro();
+    renderWizard({ store });
+    await skipAccount();
     await next();
     await fillBalances('0', '0');
     await userEvent.click(screen.getByRole('switch', { name: "I don't have a regular salary" }));
@@ -211,8 +440,8 @@ describe('OnboardingWizard', () => {
 
   it('does not turn biometric unlock on when setting up fails, so a retry without it leaves it off', async () => {
     actions.completeOnboarding.mockRejectedValueOnce(new Error('Storage is full.'));
-    const { store } = renderWithStore(<OnboardingWizard />, createStubStore({ biometric: 'off' }));
-    await passIntro();
+    const { store } = renderWizard({ store: createStubStore({ biometric: 'off' }) });
+    await skipAccount();
     await next();
     await fillBalances('0', '0');
     await userEvent.click(screen.getByRole('switch', { name: "I don't have a regular salary" }));
@@ -235,8 +464,8 @@ describe('OnboardingWizard', () => {
   });
 
   it('leaves biometric unlock off when switched off', async () => {
-    const { store } = renderWithStore(<OnboardingWizard />, createStubStore({ biometric: 'off' }));
-    await passIntro();
+    const { store } = renderWizard({ store: createStubStore({ biometric: 'off' }) });
+    await skipAccount();
     await next();
     await fillBalances('0', '0');
     await userEvent.click(screen.getByRole('switch', { name: "I don't have a regular salary" }));
@@ -256,8 +485,8 @@ describe('OnboardingWizard', () => {
   });
 
   it('refuses a PIN that does not match its confirmation', async () => {
-    renderWithStore(<OnboardingWizard />, createStubStore());
-    await passIntro();
+    renderWizard();
+    await skipAccount();
     await next();
     await fillBalances('0', '0');
     await userEvent.click(screen.getByRole('switch', { name: "I don't have a regular salary" }));
@@ -272,6 +501,65 @@ describe('OnboardingWizard', () => {
   });
 });
 
+describe('the steps move', () => {
+  const layerOf = (heading: string) =>
+    screen.getByRole('heading', { level: 1, name: heading }).closest('[data-motion]');
+
+  it('rises in from below on Next, and lifts the old step away; reduced motion only fades', async () => {
+    renderWizard();
+    expect(layerOf('Create your account')).toHaveClass('motion-safe:animate-step-in-up');
+    await skipAccount();
+
+    const current = layerOf('Your currency and name');
+    expect(current).toHaveAttribute('data-motion', 'current');
+    expect(current).toHaveClass('motion-safe:animate-step-in-up', 'motion-reduce:animate-fade-in');
+    expect(current?.className).not.toMatch(/(^|\s)animate-/);
+    const leaving = document.querySelector('[data-motion="leaving"]');
+    expect(leaving).toHaveTextContent('Create your account');
+    expect(leaving).toHaveClass(
+      'motion-safe:animate-step-out-up',
+      'motion-reduce:animate-fade-out',
+    );
+    expect(leaving).toHaveAttribute('aria-hidden', 'true');
+  });
+
+  it('comes down from above on Back, and the old step leaves downward', async () => {
+    renderWizard();
+    await skipAccount();
+    await userEvent.click(screen.getByRole('button', { name: 'Back' }));
+
+    expect(screen.getByText('Step 1 of 6')).toBeInTheDocument();
+    expect(layerOf('Create your account')).toHaveClass(
+      'motion-safe:animate-step-in-down',
+      'motion-reduce:animate-fade-in',
+    );
+    expect(document.querySelector('[data-motion="leaving"]')).toHaveClass(
+      'motion-safe:animate-step-out-down',
+    );
+  });
+
+  it('moves focus to the new step so it is announced', async () => {
+    renderWizard();
+    await skipAccount();
+    expect(screen.getByRole('heading', { level: 1, name: 'Your currency and name' })).toHaveFocus();
+  });
+
+  it('glides the progress bar, shifts the colours with each step, and brings the lines in one by one', async () => {
+    const { container } = renderWizard();
+    const fill = () => container.querySelector<HTMLElement>('[data-progress]')!;
+    const blobs = () =>
+      [...container.querySelectorAll('[data-blob]')].map((b) => b.getAttribute('style'));
+    expect(fill()).toHaveClass('motion-safe:transition-[width]', 'motion-safe:duration-700');
+    expect(fill().style.width).toBe('0%');
+    const first = blobs();
+    expect(layerOf('Create your account')).toHaveClass('motion-safe:stagger-lines');
+
+    await skipAccount();
+    expect(fill().style.width).toBe('16.7%');
+    expect(blobs()).not.toEqual(first);
+  });
+});
+
 describe('OnboardingWizard in the line style', () => {
   const isLine = (el: HTMLElement, label: string) => {
     expect(el, label).toHaveClass('border-b', 'font-extrabold');
@@ -279,8 +567,8 @@ describe('OnboardingWizard in the line style', () => {
   };
 
   it('has line fields on every step', async () => {
-    renderWithStore(<OnboardingWizard />);
-    await passIntro();
+    renderWizard();
+    await skipAccount();
     for (const label of ['Currency', 'What should we call you?']) {
       isLine(screen.getByLabelText(label), label);
     }
@@ -295,8 +583,8 @@ describe('OnboardingWizard in the line style', () => {
   });
 
   it('has line fields in the card form', async () => {
-    renderWithStore(<OnboardingWizard />);
-    await passIntro();
+    renderWizard();
+    await skipAccount();
     await next();
     await fillBalances('0', '0');
     await userEvent.click(screen.getByRole('switch', { name: "I don't have a regular salary" }));
@@ -308,8 +596,8 @@ describe('OnboardingWizard in the line style', () => {
   });
 
   it('has underline tabs for the lock, with line fields under them', async () => {
-    renderWithStore(<OnboardingWizard />);
-    await passIntro();
+    renderWizard();
+    await skipAccount();
     await next();
     await fillBalances('0', '0');
     await userEvent.click(screen.getByRole('switch', { name: "I don't have a regular salary" }));

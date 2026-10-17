@@ -46,11 +46,11 @@ test('two tabs on the welcome screen: starting in one moves the other along', as
   const b = await context.newPage();
   await a.goto('/');
   await b.goto('/');
-  await expect(b.getByRole('button', { name: 'Start with my real data' })).toBeVisible();
+  await expect(b.getByRole('button', { name: 'Create an account' })).toBeVisible();
 
-  await a.getByRole('button', { name: 'Start with my real data' }).click();
-  await expect(a.getByRole('heading', { level: 1, name: 'Before we start' })).toBeVisible();
-  await expect(b.getByRole('heading', { level: 1, name: 'Before we start' })).toBeVisible();
+  await a.getByRole('button', { name: 'Create an account' }).click();
+  await expect(a.getByRole('heading', { level: 1, name: 'Create your account' })).toBeVisible();
+  await expect(b.getByRole('heading', { level: 1, name: 'Create your account' })).toBeVisible();
 
   // Finishing onboarding in one tab takes the other to Home too.
   await onboard(a);

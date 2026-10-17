@@ -38,6 +38,24 @@ describe('the account service calls', () => {
     expect(JSON.parse(init.body as string)).toEqual(body);
   });
 
+  it('ask for a reset link with the shared token alone: nobody is logged in', async () => {
+    const fetch = vi.fn(async () => new Response(JSON.stringify({ ok: true }), { status: 200 }));
+    vi.stubGlobal('fetch', fetch);
+    expect(await accountApi.forgot({ who: 'robin' })).toEqual({
+      status: 200,
+      body: { ok: true },
+      retryAfter: null,
+    });
+    const [url, init] = fetch.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe('/api/forgot');
+    expect(init.method).toBe('POST');
+    expect(init.headers).toEqual({
+      'X-Funancial-Token': 'shared-token',
+      'Content-Type': 'application/json',
+    });
+    expect(JSON.parse(init.body as string)).toEqual({ who: 'robin' });
+  });
+
   it('read an answer with no JSON as no body', async () => {
     vi.stubGlobal(
       'fetch',

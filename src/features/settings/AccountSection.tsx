@@ -1,9 +1,12 @@
-import { useRef, useState, type FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 import { Banner } from '@/components/ui/Banner';
 import { Button } from '@/components/ui/Button';
 import { Dialog } from '@/components/ui/Dialog';
 import { Section } from '@/components/ui/Section';
 import { TextField } from '@/components/ui/TextField';
+import { ForgotForm } from '@/features/account/ForgotScreen';
+import { Problem } from '@/features/account/parts';
+import { errorMessage, FORGOT_LEAD, useBusy } from '@/features/account/shared';
 import { toast } from '@/lib/toast';
 import { useAction } from '@/lib/useAction';
 import { emailProblem, passwordProblem, usernameProblem } from '@/store/accountActions';
@@ -11,40 +14,11 @@ import { useAccount, useAccountActions } from '@/store/useAccount';
 
 const dateTime = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' });
 
-const errorMessage = (e: unknown) =>
-  e instanceof Error && e.message ? e.message : 'Something went wrong.';
-
 const SaveNote = () => (
   <p className="text-muted text-sm">
     A locked copy of your data is kept so you can move to a new phone.
   </p>
 );
-
-/** `busy` while a job runs. A second tap before it ends does nothing: state would still read idle in it. */
-function useBusy() {
-  const running = useRef(false);
-  const [busy, setBusy] = useState(false);
-  async function guard(job: () => Promise<void>) {
-    if (running.current) return;
-    running.current = true;
-    setBusy(true);
-    try {
-      await job();
-    } finally {
-      running.current = false;
-      setBusy(false);
-    }
-  }
-  return { busy, guard };
-}
-
-function Problem({ children }: { children?: string }) {
-  return children ? (
-    <p role="alert" className="text-danger text-sm font-bold">
-      {children}
-    </p>
-  ) : null;
-}
 
 function CreateAccountDialog({ open, onClose }: { open: boolean; onClose(): void }) {
   const { signUp } = useAccountActions();
@@ -140,14 +114,24 @@ function CreateAccountDialog({ open, onClose }: { open: boolean; onClose(): void
   );
 }
 
+function ForgotDialog({ open, onClose }: { open: boolean; onClose(): void }) {
+  return (
+    <Dialog open={open} title="Forgot password?" description={FORGOT_LEAD} onClose={onClose}>
+      {open && <ForgotForm doneLabel="Close" onDone={onClose} onCancel={onClose} />}
+    </Dialog>
+  );
+}
+
 function LogInDialog({
   open,
   defaultUsername = '',
   onClose,
+  onForgot,
 }: {
   open: boolean;
   defaultUsername?: string;
   onClose(): void;
+  onForgot(): void;
 }) {
   const { logIn } = useAccountActions();
   const [username, setUsername] = useState(defaultUsername);
@@ -218,6 +202,13 @@ function LogInDialog({
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
               />
+              <button
+                type="button"
+                onClick={onForgot}
+                className="text-accent-text -my-1 inline-flex min-h-11 items-center self-start font-bold underline underline-offset-4"
+              >
+                Forgot password?
+              </button>
             </>
           )}
           <Problem>{error}</Problem>
@@ -365,7 +356,7 @@ function DeleteCopyDialog({ open, onClose }: { open: boolean; onClose(): void })
   );
 }
 
-type Opened = 'create' | 'login' | 'password' | 'delete' | null;
+type Opened = 'create' | 'login' | 'forgot' | 'password' | 'delete' | null;
 
 function Loaded() {
   const { status, username, email, savedAt, tooBig, offline } = useAccount();
@@ -440,7 +431,9 @@ function Loaded() {
         open={opened === 'login'}
         defaultUsername={username ?? undefined}
         onClose={close}
+        onForgot={() => setOpened('forgot')}
       />
+      <ForgotDialog open={opened === 'forgot'} onClose={close} />
       <ChangePasswordDialog open={opened === 'password'} onClose={close} />
       <DeleteCopyDialog open={opened === 'delete'} onClose={close} />
     </div>

@@ -1,10 +1,11 @@
 import { expect, test } from '@playwright/test';
-import { onboard } from './helpers';
+import { onboard, skipAccount } from './helpers';
 
 test('a new user sets up money, salary and a PIN, then lands on Home', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('button', { name: 'Start with my real data' }).click();
+  await page.getByRole('button', { name: 'Create an account' }).click();
   await expect(page.getByText('Step 1 of 6')).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'Create your account' })).toBeVisible();
   await onboard(page, {
     cash: '1,000',
     savings: '5000',
@@ -30,9 +31,8 @@ test.describe('in the Netherlands', () => {
     page,
   }) => {
     await page.goto('/');
-    await page.getByRole('button', { name: 'Start with my real data' }).click();
-    await page.getByRole('checkbox', { name: 'I understand' }).check();
-    await page.getByRole('button', { name: 'Next' }).click();
+    await page.getByRole('button', { name: 'Create an account' }).click();
+    await skipAccount(page);
     await expect(page.getByLabel('Currency')).toHaveValue('EUR');
     await page.getByLabel('Currency').selectOption('GBP');
     await expect(page.getByLabel('Currency')).toHaveValue('GBP');
@@ -41,8 +41,9 @@ test.describe('in the Netherlands', () => {
 
 test('onboarding survives a reload part-way through', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('button', { name: 'Start with my real data' }).click();
-  await page.getByRole('checkbox', { name: 'I understand' }).check();
+  await page.getByRole('button', { name: 'Create an account' }).click();
+  await skipAccount(page);
+  await expect(page.getByText('Step 2 of 6')).toBeVisible();
   await page.reload();
-  await expect(page.getByRole('heading', { level: 1, name: 'Before we start' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'Create your account' })).toBeVisible();
 });

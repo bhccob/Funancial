@@ -11,7 +11,7 @@ function localDate(offsetDays = 0): string {
 
 async function start(page: Page) {
   await page.goto('/');
-  await page.getByRole('button', { name: 'Start with my real data' }).click();
+  await page.getByRole('button', { name: 'Create an account' }).click();
   await onboard(page, { cash: '1000', savings: '5000', salary: { amount: '4200', payDay: '25' } });
 }
 

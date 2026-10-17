@@ -135,6 +135,11 @@ export const emailProblem = (email: string): string | null =>
   z.email().max(254).safeParse(email.trim()).success ? null : 'Enter a valid email address.';
 export const passwordProblem = (password: string): string | null =>
   password.length >= 10 ? null : 'Use at least 10 characters.';
+/** What "forgot password" takes: a username or an email address, as the service reads them. */
+export const forgotProblem = (who: string): string | null =>
+  usernameProblem(who) === null || emailProblem(who) === null
+    ? null
+    : 'Enter your username or your email address.';
 
 /** Anything but the default settings. A phone with nothing else is an empty install. */
 function hasData(data: DataSnapshot): boolean {
@@ -597,6 +602,16 @@ export function createAccountActions(
     if (reply.status !== 204) throw failed(reply, "That isn't your current password.");
   }
 
+  /**
+   * Asks the service to email a reset link. It answers any valid username or email alike (200) and
+   * anything else with 400, so both read as sent: the screen must not tell whether there is an account.
+   */
+  async function forgot(who: string): Promise<void> {
+    const reply = await reach(() => api.forgot({ who: who.trim() }));
+    if (reply.status === 200 || reply.status === 400) return;
+    throw failed(reply);
+  }
+
   /** Removes the account and its copy from the service and stops saving. The data on the phone stays. */
   async function deleteAccount(): Promise<void> {
     requireOpen();
@@ -651,6 +666,7 @@ export function createAccountActions(
     changePassword: exclusive(changePassword),
     deleteAccount: exclusive(deleteAccount),
     unlink: exclusive(unlink),
+    forgot,
     /** Saves a copy now if something changed since the last one. Resolves when that is done; never rejects. */
     saveNow: flush,
   };

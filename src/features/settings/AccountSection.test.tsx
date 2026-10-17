@@ -184,6 +184,56 @@ describe('Settings → Account without an account', () => {
   });
 });
 
+describe('Forgot password from the log-in dialog', () => {
+  const SENT = "If that account exists, we've emailed a link. It works for 30 minutes.";
+
+  async function openForgot(actions = fakeAccount()) {
+    show(actions);
+    await userEvent.click(button('Log in'));
+    const login = screen.getByRole('dialog', { name: 'Log in' });
+    await userEvent.click(within(login).getByRole('button', { name: 'Forgot password?' }));
+    return actions;
+  }
+
+  it('opens the same Forgot password form, in place of the log-in dialog', async () => {
+    await openForgot();
+    expect(screen.queryByRole('dialog', { name: 'Log in' })).not.toBeInTheDocument();
+    const dialog = screen.getByRole('dialog', { name: 'Forgot password?' });
+    expect(within(dialog).getByLabelText('Username or email')).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'Email me a link' })).toBeInTheDocument();
+  });
+
+  it('says the same line for a username as for an email, and closes with Close', async () => {
+    const actions = await openForgot();
+    const dialog = screen.getByRole('dialog', { name: 'Forgot password?' });
+    await userEvent.type(within(dialog).getByLabelText('Username or email'), 'robin');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Email me a link' }));
+    expect(actions.forgot).toHaveBeenCalledWith('robin');
+    expect(await within(dialog).findByRole('status')).toHaveTextContent(SENT);
+
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Close' }));
+    expect(screen.queryByRole('dialog', { name: 'Forgot password?' })).not.toBeInTheDocument();
+  });
+
+  it('can be cancelled before anything is sent', async () => {
+    const actions = await openForgot();
+    const dialog = screen.getByRole('dialog', { name: 'Forgot password?' });
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('dialog', { name: 'Forgot password?' })).not.toBeInTheDocument();
+    expect(actions.forgot).not.toHaveBeenCalled();
+  });
+
+  it("is not offered in the question about replacing this phone's data", async () => {
+    const actions = fakeAccount();
+    actions.logIn.mockResolvedValueOnce('needs-confirm');
+    show(actions);
+    const dialog = await fillLogIn();
+    expect(
+      within(dialog).queryByRole('button', { name: 'Forgot password?' }),
+    ).not.toBeInTheDocument();
+  });
+});
+
 describe('Settings → Account with an account', () => {
   it('shows who it is, when the copy was saved, and what can be done', () => {
     show(fakeAccount(linkedAccount()));

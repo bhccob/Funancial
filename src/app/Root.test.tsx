@@ -5,6 +5,7 @@ import { purchaseEntry } from '@/domain/game/shop';
 import { emptySnapshot } from '@/domain/snapshot';
 import { toastStore } from '@/lib/toast';
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
+import { fakeAccount, withAccount } from '@/test/fakeAccount';
 import { fakeNotifier, onPhone } from '@/test/fakeNotifier';
 import { makeProfile, makeSettings } from '@/test/fixtures';
 import { DemoBanner } from './DemoBanner';
@@ -78,14 +79,19 @@ describe('Root', () => {
     expect(document.documentElement.dataset.gameTheme).toBeUndefined();
   });
 
-  it('runs onboarding for real data that has not been set up yet', () => {
-    renderWithStore(<Root />, createStubStore({ phase: 'unlocked', namespace: 'real' }));
-    expect(screen.getByRole('heading', { level: 1, name: 'Before we start' })).toBeInTheDocument();
+  it('runs onboarding for real data that has not been set up yet, starting with the account', () => {
+    renderWithStore(
+      withAccount(fakeAccount(), <Root />),
+      createStubStore({ phase: 'unlocked', namespace: 'real' }),
+    );
+    expect(
+      screen.getByRole('heading', { level: 1, name: 'Create your account' }),
+    ).toBeInTheDocument();
   });
 
   it('leaves onboarding as soon as the profile is saved', async () => {
     const store = createStubStore({ phase: 'unlocked', namespace: 'real' });
-    renderWithStore(<Root />, store);
+    renderWithStore(withAccount(fakeAccount(), <Root />), store);
     act(() => store.setState({ data: onboarded() }));
     expect(await screen.findByRole('heading', { level: 1, name: 'Home' })).toBeInTheDocument();
   });
@@ -142,13 +148,15 @@ describe('Root across lock cycles', () => {
 
   it('lands on Home after onboarding, wherever the last session left off', async () => {
     const store = createStubStore({ phase: 'unlocked', data: onboarded() });
-    renderWithStore(<Root />, store);
+    renderWithStore(withAccount(fakeAccount(), <Root />), store);
     await userEvent.click(
       (await screen.findAllByRole('link', { name: 'Settings' }))[0] as HTMLElement,
     );
     await screen.findByRole('heading', { level: 1, name: 'Settings' });
     act(() => store.setState({ data: emptySnapshot() }));
-    expect(screen.getByRole('heading', { level: 1, name: 'Before we start' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { level: 1, name: 'Create your account' }),
+    ).toBeInTheDocument();
     act(() => store.setState({ data: onboarded() }));
     expect(await screen.findByRole('heading', { level: 1, name: 'Home' })).toBeInTheDocument();
   });
