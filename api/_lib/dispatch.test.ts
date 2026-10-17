@@ -59,6 +59,17 @@ describe('api/[op].ts', () => {
     expect(await res.text()).toBe('reset GET?token=x');
   });
 
+  it("reads Vercel's op parameter when the function sees its rewritten path", async () => {
+    for (const path of ['/api/[op]?op=signup', '/api/%5Bop%5D?op=signup']) {
+      const res = await send('POST', path);
+      expect(res.status, path).toBe(200);
+      expect(await res.text()).toBe('signup POST?op=signup');
+    }
+    // The path wins when it names a route, and op still can't reach a name the map doesn't own.
+    expect(await (await send('POST', '/api/signup?op=login')).text()).toBe('signup POST?op=login');
+    expect((await send('POST', '/api/[op]?op=__proto__')).status).toBe(404);
+  });
+
   it('answers 404 with no body for a name it does not own', async () => {
     for (const name of [
       'quote',

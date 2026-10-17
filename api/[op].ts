@@ -21,9 +21,12 @@ const routes: Record<string, Partial<Record<string, Handler>>> = {
 const dispatch =
   (method: string) =>
   (req: Request): Response | Promise<Response> => {
-    const name = new URL(req.url).pathname.split('/').pop() ?? '';
+    const url = new URL(req.url);
     // Own keys only, so __proto__ and constructor are no route.
-    const route = Object.hasOwn(routes, name) ? routes[name] : undefined;
+    const own = (name: string | null) => (name && Object.hasOwn(routes, name) ? name : null);
+    // The path names the route; Vercel's `op` parameter covers a function handed its rewritten path.
+    const name = own(url.pathname.split('/').pop() ?? null) ?? own(url.searchParams.get('op'));
+    const route = name ? routes[name] : undefined;
     if (!route) return new Response(null, { status: 404 });
     const handler = Object.hasOwn(route, method) ? route[method] : undefined;
     return handler ? handler(req) : new Response(null, { status: 405 });
