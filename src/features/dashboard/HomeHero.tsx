@@ -74,7 +74,8 @@ export function HomeHero({ view, today }: { view: FinanceView; today: LocalDate 
           Available to spend
         </h2>
         <HelpTip pageId="available" label="available to spend" />
-        <span className="ml-auto">
+        {/* -my-3: the 44px target overhangs the label row instead of pushing the amount down. */}
+        <span className="-my-3 ml-auto">
           <HideAmountsButton />
         </span>
       </div>
