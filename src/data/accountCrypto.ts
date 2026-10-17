@@ -35,9 +35,13 @@ export class UnsupportedError extends Error {
 
 const aesGcm = (iv: string) => ({ name: 'AES-GCM', iv: base64ToBytes(iv) });
 
-/** The username as the salt, the server and the stored account all spell it: NFKC, then lower-case. */
+/**
+ * The username as the salt, the server and the stored account all spell it: NFKC, lower-case, then
+ * NFKC again: lower-casing can leave a sequence NFKC composes further, and the result must be a
+ * fixed point so re-canonicalising a stored name never changes the salt.
+ */
 export function canonicalUsername(name: string): string {
-  return name.normalize('NFKC').toLowerCase();
+  return name.normalize('NFKC').toLowerCase().normalize('NFKC');
 }
 
 /**

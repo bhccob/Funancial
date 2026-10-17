@@ -109,6 +109,11 @@ describe('canonicalUsername', () => {
       '\u0130stanbul',
       '\u212aelvin',
       '',
+      // Lower-casing can leave a sequence NFKC composes further (capital iota with
+      // dialytika, plus a combining acute): one pass would not be a fixed point.
+      '\u03aa\u0301',
+      '\u0399\u0308\u0301',
+      '\u2126\u0301\u0345',
     ]) {
       expect(canonicalUsername(canonicalUsername(name))).toBe(canonicalUsername(name));
     }
