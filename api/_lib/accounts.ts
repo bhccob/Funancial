@@ -258,13 +258,21 @@ export function createAccounts({ store, masterKey, now, mailer, waitUntil }: Acc
   /**
    * Changes fields on the stored record as it is now (not as a slow step earlier read it), and only if
    * nothing changed it between the read and the write: otherwise it reads again, up to 3 times, so no
-   * request can write back an old copy of what another changed. Returns the record before; null if
-   * it's gone or, given `createdAt`, is another account of that name; `BUSY` if it never won.
+   * request can write back an old copy of what another changed.
+   *
+   * `allowed` is what the caller was let do the change on: who it proved to be, the link it holds.
+   * It is checked against the record each try has just read, never only the first: a reset or a
+   * password change that lands in between must not let a request on the old password through.
+   * Returns the record before; null if it's gone or `allowed` refuses it; `BUSY` if it never won.
    */
-  async function patch(name: string, fields: Partial<Account>, createdAt?: string) {
+  async function patch(
+    name: string,
+    fields: Partial<Account>,
+    allowed: (current: Account) => boolean | Promise<boolean>,
+  ) {
     for (let attempt = 0; attempt < WRITE_TRIES; attempt++) {
       const current = await store.get<Account>(K.user(name));
-      if (!current || (createdAt !== undefined && current.createdAt !== createdAt)) return null;
+      if (!current || !(await allowed(current))) return null;
       if (await store.compareAndSet(K.user(name), current, { ...current, ...fields }))
         return current;
     }
@@ -402,7 +410,8 @@ export function createAccounts({ store, masterKey, now, mailer, waitUntil }: Acc
       const token = newToken();
       const hash = sha256(token);
       await store.set(K.token(hash), name);
-      const before = await patch(name, { deviceTokenHash: hash });
+      // The password is checked again on the record each try reads: a reset between would end it.
+      const before = await patch(name, { deviceTokenHash: hash }, (now) => matches(now, authKey));
       if (before === BUSY || !before) {
         await store.del(K.token(hash));
         return before === BUSY ? busy() : unauthorized();
@@ -485,11 +494,15 @@ export function createAccounts({ store, masterKey, now, mailer, waitUntil }: Acc
       if (!(await matches(account, oldAuthKey))) return unauthorized();
 
       const authSalt = randomBytes(16);
-      const changed = await patch(account.username, {
-        authSalt: authSalt.toString('base64'),
-        authHash: (await hashAuth(newAuthKey, authSalt)).toString('base64'),
-        wrappedPw: newWrappedPw,
-      });
+      const changed = await patch(
+        account.username,
+        {
+          authSalt: authSalt.toString('base64'),
+          authHash: (await hashAuth(newAuthKey, authSalt)).toString('base64'),
+          wrappedPw: newWrappedPw,
+        },
+        (now) => matches(now, oldAuthKey),
+      );
       if (changed === BUSY) return busy();
       return changed ? { status: 204 } : unauthorized();
     },
@@ -561,18 +574,20 @@ export function createAccounts({ store, masterKey, now, mailer, waitUntil }: Acc
             authHash: (await hashAuth(parsed.data.newAuthKey, authSalt)).toString('base64'),
             wrappedPw: rewrapPassword(dek, Buffer.from(parsed.data.kek, 'base64')),
           },
-          live.account.createdAt,
+          // The link is for this account and this password: a change in between kills it.
+          (now) =>
+            now.createdAt === live.account.createdAt && now.authSalt === live.account.authSalt,
         );
       } catch (err) {
         // The friend can try the same link again.
         await store.del(used).catch(() => {});
         throw err;
       }
-      if (changed === BUSY) {
+      if (!changed || changed === BUSY) {
+        // Nothing was written: the link is dead (gone, or a password change), or can try again.
         await store.del(used).catch(() => {});
-        return busy();
+        return changed === BUSY ? busy() : gone();
       }
-      if (!changed) return gone();
       // The claim already makes the link one-use; this tidies it away.
       await store.del(K.reset(live.hash)).catch(() => {});
       return { status: 204 };

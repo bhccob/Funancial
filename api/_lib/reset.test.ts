@@ -815,8 +815,11 @@ describe('account writes are compare-and-set', () => {
   const BUSY = { status: 409, body: { error: 'busy' } };
   const newWrapped = () => ({ iv: b64(12), ciphertext: b64(48) });
 
-  it('cannot let a log-in restore the old password when a reset lands between its read and its write', async () => {
-    // Hold the first write to the account record: the log-in's, which rotates the device token.
+  /**
+   * Holds the first write to the account record after a request has read it, so the test can let
+   * another request land in between, then lets it go on.
+   */
+  function holdFirstWrite() {
     let hit!: () => void;
     let open!: () => void;
     const reached = new Promise<void>((resolve) => (hit = resolve));
@@ -830,21 +833,95 @@ describe('account writes are compare-and-set', () => {
       }
       return run();
     };
-    const { accounts, mail } = setup((s) => around(around(s, 'set', hold), 'compareAndSet', hold));
+    return {
+      through: (s: KvStore) => around(around(s, 'set', hold), 'compareAndSet', hold),
+      /** Resolves once a request is held (or after a second, so a test that never gets there fails). */
+      reached: () => Promise.race([reached, new Promise((resolve) => setTimeout(resolve, 1000))]),
+      open,
+    };
+  }
+  const tokenPointers = (store: { dump(): Record<string, unknown> }) =>
+    Object.keys(store.dump()).filter((k) => k.startsWith('acct:t:'));
+
+  it('gives no token to a log-in with the old password when a reset lands between its read and its write', async () => {
+    const held = holdFirstWrite();
+    const { store, accounts, mail } = setup(held.through);
     const { authKey: oldKey } = await join(accounts);
     const link = await linkFor(accounts, mail);
+    const tokensBefore = tokenPointers(store);
+    const deviceBefore = (store.dump()['acct:u:ada'] as { deviceTokenHash: string })
+      .deviceTokenHash;
 
-    // The log-in has read the record, with the old password in it, and waits to write it back.
+    // The log-in has read the record, with the old password in it, and waits to write.
     const login = logIn(accounts, oldKey);
-    await Promise.race([reached, new Promise((resolve) => setTimeout(resolve, 1000))]);
+    await held.reached();
     const fresh = resetKeys();
     expect(await accounts.reset(link, fresh.authKey, fresh.kek, IP)).toEqual({ status: 204 });
-    open();
-    expect((await login).status).toBe(200);
+    held.open();
 
-    // Both landed: the new password works, the old one does not.
+    // It retries, finds the password is no longer the one it was given, and is turned away like
+    // any wrong password: no token, none left behind, and the phone in use is untouched.
+    expect(await login).toEqual({ status: 401, body: { error: 'unauthorized' } });
+    expect(tokenPointers(store)).toEqual(tokensBefore);
+    expect((store.dump()['acct:u:ada'] as { deviceTokenHash: string }).deviceTokenHash).toBe(
+      deviceBefore,
+    );
+
+    // The new password works, the old one does not.
     expect((await logIn(accounts, fresh.authKey)).status).toBe(200);
     expect((await logIn(accounts, oldKey)).status).toBe(401);
+  });
+
+  it('turns a password change with the old key away when a reset lands between its read and its write', async () => {
+    const held = holdFirstWrite();
+    const { store, accounts, mail } = setup(held.through);
+    const { authKey: oldKey, token: device } = await join(accounts);
+    const link = await linkFor(accounts, mail);
+    const chosen = b64(32);
+
+    const change = accounts.changePassword(device, {
+      oldAuthKey: oldKey,
+      newAuthKey: chosen,
+      newWrappedPw: newWrapped(),
+    });
+    await held.reached();
+    const fresh = resetKeys();
+    expect(await accounts.reset(link, fresh.authKey, fresh.kek, IP)).toEqual({ status: 204 });
+    held.open();
+
+    expect(await change).toEqual({ status: 401, body: { error: 'unauthorized' } });
+    // The reset's password stands; the one the change was to set was never written.
+    expect((await logIn(accounts, chosen)).status).toBe(401);
+    expect((await logIn(accounts, fresh.authKey)).status).toBe(200);
+    expect(tokenPointers(store)).toHaveLength(1);
+  });
+
+  it('turns a reset away when a password change lands between its read and its write, and gives its link back', async () => {
+    const held = holdFirstWrite();
+    const { store, accounts, mail } = setup(held.through);
+    const { authKey: oldKey, token: device } = await join(accounts);
+    const link = await linkFor(accounts, mail);
+    const fresh = resetKeys();
+
+    const reset = accounts.reset(link, fresh.authKey, fresh.kek, IP);
+    await held.reached();
+    const chosen = b64(32);
+    expect(
+      await accounts.changePassword(device, {
+        oldAuthKey: oldKey,
+        newAuthKey: chosen,
+        newWrappedPw: newWrapped(),
+      }),
+    ).toEqual({ status: 204 });
+    held.open();
+
+    // The link was made for a password that has since changed, so it is dead.
+    expect(await reset).toEqual(GONE);
+    expect(await accounts.resetInfo(link, IP)).toEqual(GONE);
+    expect(Object.keys(store.dump()).filter((k) => k.startsWith('acct:ru:'))).toEqual([]);
+    // The change stands; the reset's password was never written.
+    expect((await logIn(accounts, fresh.authKey)).status).toBe(401);
+    expect((await logIn(accounts, chosen)).status).toBe(200);
   });
 
   it('reads again and writes on top of what another writer changed meanwhile', async () => {
