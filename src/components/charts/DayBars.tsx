@@ -1,6 +1,8 @@
 import { cn } from '@/lib/cn';
 
 export interface DayBarsProps {
+  /** What the bars show ("Spending per day"): the name of the group of bars for screen readers. */
+  label: string;
   /** One per day, oldest first. `label` is the visible caption ("Sat", "Today"). */
   days: Array<{ label: string; amount: number; isToday: boolean }>;
   selected: number | null;
@@ -12,10 +14,10 @@ export interface DayBarsProps {
 const TALLEST = 100;
 const SHORTEST = 6;
 
-export function DayBars({ days, selected, onSelect, formatAmount }: DayBarsProps) {
+export function DayBars({ label, days, selected, onSelect, formatAmount }: DayBarsProps) {
   const busiest = Math.max(0, ...days.map((d) => d.amount));
   return (
-    <div className="flex h-[130px] items-end gap-3.5">
+    <div role="group" aria-label={label} className="flex h-[130px] items-end">
       {days.map((day, i) => {
         const on = day.isToday || i === selected;
         const height =

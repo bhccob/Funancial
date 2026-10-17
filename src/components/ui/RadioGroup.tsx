@@ -49,7 +49,8 @@ export function RadioGroup<T extends string>({
       <div
         className={
           underline
-            ? 'flex max-w-full flex-wrap gap-x-5'
+            ? // Up to three tabs sit 20px apart; more are 12px apart, so four fit a dialog row.
+              cn('flex max-w-full flex-wrap', options.length > 3 ? 'gap-x-3' : 'gap-x-5')
             : 'bg-surface-2 inline-flex max-w-full flex-wrap gap-1 self-start rounded-[14px] p-1'
         }
       >
@@ -63,7 +64,7 @@ export function RadioGroup<T extends string>({
               underline
                 ? underlineTab(value === o.value)
                 : cn(
-                    'flex min-h-10 items-center rounded-[10px] px-3.5 text-sm font-bold',
+                    'flex min-h-11 items-center rounded-[10px] px-3.5 text-sm font-bold',
                     value === o.value
                       ? 'bg-overlay text-text shadow-[0_1px_3px_rgb(0_0_0/0.12)]'
                       : 'text-muted hover:text-text',
@@ -88,7 +89,7 @@ export function RadioGroup<T extends string>({
         </p>
       )}
       {error && (
-        <p id={errorId} className="text-danger text-sm font-semibold">
+        <p id={errorId} role="alert" className="text-danger text-sm font-semibold">
           {error}
         </p>
       )}

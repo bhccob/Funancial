@@ -76,6 +76,7 @@ export function HomeHero({ view, today }: { view: FinanceView; today: LocalDate 
       {/* The line is 6px tall with a 44px tap area, so it keeps 20px clear above and below. */}
       <div className="mt-6">
         <MonthLine
+          label="This month's money"
           segments={parts.map((p) => ({
             key: p.key,
             label: `${p.name}: ${whole(p.amount)}`,

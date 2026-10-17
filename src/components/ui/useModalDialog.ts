@@ -24,6 +24,14 @@ export function useModalDialog(open: boolean, onClose: () => void): ModalDialogP
     if (open && !el.open) {
       opener.current = document.activeElement;
       el.showModal();
+      // The browser focuses the first control, which can be a radio nobody chose (the "Overall" of
+      // Overall / One category). Start on the chosen one, where Tab and the arrows expect to be.
+      const first = document.activeElement;
+      if (first instanceof HTMLInputElement && first.type === 'radio' && !first.checked) {
+        [...el.querySelectorAll<HTMLInputElement>('input[type="radio"]:checked')]
+          .find((r) => r.name === first.name && r.form === first.form)
+          ?.focus();
+      }
     }
     if (!open && el.open) {
       el.close();

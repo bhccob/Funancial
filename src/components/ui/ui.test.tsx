@@ -27,6 +27,13 @@ describe('Button', () => {
     expect(colours).toEqual(['text-danger']);
   });
 
+  it('keeps white text off the danger fill, which is light in the dark theme', () => {
+    render(<Button variant="danger">Delete</Button>);
+    const button = screen.getByRole('button', { name: 'Delete' });
+    expect(button).toHaveClass('bg-danger', 'text-danger-contrast');
+    expect(button).not.toHaveClass('text-white');
+  });
+
   it('gives the banner button a see-through page-colour surface, so its edge shows on a gradient', () => {
     render(<Button variant="banner">Not now</Button>);
     expect(screen.getByRole('button', { name: 'Not now' })).toHaveClass(
@@ -86,6 +93,14 @@ describe('TextField', () => {
     const input = screen.getByLabelText('PIN');
     expect(input).toHaveAttribute('aria-invalid', 'true');
     expect(input).toHaveAccessibleDescription(/4 to 8 digits.*Too short/);
+  });
+
+  it('announces its error when it appears, and says its hint as plain text', () => {
+    const { rerender } = render(<TextField label="PIN" hint="4 to 8 digits" />);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    rerender(<TextField label="PIN" hint="4 to 8 digits" error="Too short" />);
+    expect(screen.getByRole('alert')).toHaveTextContent('Too short');
+    expect(screen.getByText('4 to 8 digits')).not.toHaveAttribute('role');
   });
 
   it('is valid and described by its hint when there is no error', () => {
@@ -193,6 +208,30 @@ describe('Sheet and Dialog focus', () => {
     },
   );
 
+  it('starts on the chosen radio of a group, not on the first radio the browser finds', () => {
+    // Chrome focuses the first control in a dialog, which here is a radio nobody chose.
+    const showModal = vi
+      .spyOn(HTMLDialogElement.prototype, 'showModal')
+      .mockImplementation(function (this: HTMLDialogElement) {
+        this.open = true;
+        this.querySelector('input')?.focus();
+      });
+    render(
+      <Dialog open title="Limit" onClose={() => {}}>
+        <form>
+          <label>
+            <input type="radio" name="scope" /> Overall
+          </label>
+          <label>
+            <input type="radio" name="scope" defaultChecked /> One category
+          </label>
+        </form>
+      </Dialog>,
+    );
+    expect(screen.getByRole('radio', { name: 'One category' })).toHaveFocus();
+    showModal.mockRestore();
+  });
+
   it('does not throw, or focus a detached node, when the opener is gone before it closes', () => {
     const page = (hasOpener: boolean, open: boolean) => (
       <>
@@ -222,6 +261,15 @@ describe('Toaster', () => {
       'bottom-[calc(76px+env(safe-area-inset-bottom))]',
       'md:bottom-8',
     );
+  });
+});
+
+describe('Toast dismiss button', () => {
+  it('is a 44px tap target around its 16px cross', () => {
+    toastStore.setState({ toasts: [] });
+    render(<Toaster />);
+    act(() => void toast('info', 'Saved.'));
+    expect(screen.getByRole('button', { name: 'Dismiss' })).toHaveClass('size-11');
   });
 });
 
@@ -376,6 +424,8 @@ describe('Section', () => {
     );
     expect(screen.getByRole('link', { name: 'All' })).toHaveAttribute('href', '/goals');
     expect(screen.getByRole('link', { name: 'Add a goal' })).toHaveClass('min-h-11');
+    // A short word like "All" is still a 44px-wide tap target.
+    expect(screen.getByRole('link', { name: 'All' })).toHaveClass('min-w-11');
   });
 
   it('sets a help tip 4px after the title, with the action still on the right', () => {

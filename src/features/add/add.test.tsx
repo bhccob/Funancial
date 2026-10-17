@@ -214,6 +214,21 @@ describe('Add expense from a buy check', () => {
     expect(screen.getByRole('radio', { name: 'Debit card' })).toBeChecked();
   });
 
+  it('opens on the second card it was asked with when Paid with is a select', async () => {
+    // Two cards make five ways to pay, so Paid with is a select, not tabs.
+    renderAdd(
+      fromCheck({ ...bought, paymentMethod: 'credit_card', cardId: 'card-2' }),
+      'motivational',
+      ['Visa', 'Amex'],
+    );
+    expect(screen.queryByRole('group', { name: 'Paid with' })).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Paid with')).toHaveValue('card:card-2');
+    await save();
+    expect(actions.addExpense).toHaveBeenCalledWith(
+      expect.objectContaining({ paymentMethod: 'credit_card', cardId: 'card-2' }),
+    );
+  });
+
   it('opens on Cash when the card it names has been deleted', async () => {
     renderAdd(fromCheck({ ...bought, paymentMethod: 'credit_card', cardId: 'gone' }));
     expect(screen.getByRole('radio', { name: 'Cash' })).toBeChecked();

@@ -52,7 +52,7 @@ export function LimitPaceRow({ status, progress, onEdit }: LimitPaceRowProps) {
           aria-label={`Edit ${name} limit`}
           aria-describedby={detailId}
           onClick={onEdit}
-          className="text-muted hover:text-text -my-3 -mr-2 inline-flex min-h-11 flex-none items-center px-2 text-[13.5px] font-extrabold"
+          className="text-muted hover:text-text -my-3 -mr-2 inline-flex min-h-11 min-w-11 flex-none items-center justify-center px-2 text-[13.5px] font-extrabold"
         >
           Edit
         </button>

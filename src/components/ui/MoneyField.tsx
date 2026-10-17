@@ -101,7 +101,7 @@ export function MoneyField({
         </p>
       )}
       {shownError && (
-        <p id={errorId} className="text-danger text-sm font-semibold">
+        <p id={errorId} role="alert" className="text-danger text-sm font-semibold">
           {shownError}
         </p>
       )}

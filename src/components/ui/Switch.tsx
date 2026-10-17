@@ -37,7 +37,8 @@ export function Switch({ label, checked, onChange, hint, disabled }: SwitchProps
         className={cn(
           'relative h-7 w-12 shrink-0 rounded-full motion-safe:transition-colors',
           'before:absolute before:inset-x-0 before:-inset-y-2',
-          checked ? 'bg-primary' : 'bg-border-strong',
+          // The off track is 3:1 against the page; the faint border colour was 1.4:1.
+          checked ? 'bg-primary' : 'bg-muted',
         )}
       >
         <span

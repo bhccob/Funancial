@@ -81,7 +81,7 @@ export function Select({
         </p>
       )}
       {error && (
-        <p id={errorId} className="text-danger text-sm font-semibold">
+        <p id={errorId} role="alert" className="text-danger text-sm font-semibold">
           {error}
         </p>
       )}

@@ -44,12 +44,12 @@ export function Section({ title, help, action, children, className }: SectionPro
   );
 }
 
-/** A muted link with a chevron, for the right of a section title. Its tap area is 44px tall. */
+/** A muted link with a chevron, for the right of a section title. Its tap area is 44px tall and wide. */
 export function SectionLink({ to, children }: { to: LinkProps['to']; children: ReactNode }) {
   return (
     <Link
       to={to}
-      className="text-muted hover:text-text -my-3 inline-flex min-h-11 items-center gap-0.5 text-[13.5px] font-bold"
+      className="text-muted hover:text-text -my-3 inline-flex min-h-11 min-w-11 items-center justify-end gap-0.5 text-[13.5px] font-bold"
     >
       {children}
       <ChevronRight aria-hidden="true" className="size-4" />

@@ -85,6 +85,7 @@ function PieBlock({ rows, label }: { rows: HoldingRow[]; label: string }) {
     <div role="group" aria-label={label}>
       <div className="flex justify-center">
         <Donut
+          label="Value by holding"
           slices={slices}
           size={180}
           thickness={18}

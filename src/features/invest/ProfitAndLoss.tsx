@@ -52,7 +52,7 @@ export function ProfitAndLoss() {
           aria-expanded={shown}
           aria-controls={bodyId}
           onClick={toggle}
-          className="-my-3 inline-flex min-h-11 items-center px-1"
+          className="-my-3 inline-flex min-h-11 min-w-11 items-center justify-center px-1"
         >
           {shown ? 'Hide' : 'Show'}
         </button>
