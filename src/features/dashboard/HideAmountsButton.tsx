@@ -3,8 +3,8 @@ import { cn } from '@/lib/cn';
 import { useAmountsHidden } from '@/store/useAmountsHidden';
 
 /**
- * The eye on Home: hides every amount in the app, and shows them again. The button is the 44px
- * target; the circle in it is the 36px of the wireframe, dark and filled while amounts are hidden.
+ * The eye on Home: hides every amount in the app, and shows them again. One name, "Hide amounts",
+ * with `aria-pressed` for whether they are hidden. The button is the 44px target; the circle in it is the 36px of the wireframe, dark and filled while amounts are hidden.
  * Its margins take back the 4px each side of the circle, so the circle sits 8px from the quests
  * link and flush with the page's right edge, and the name beside them keeps room.
  */
@@ -16,7 +16,7 @@ export function HideAmountsButton() {
   return (
     <button
       type="button"
-      aria-label={hidden ? 'Show amounts' : 'Hide amounts'}
+      aria-label="Hide amounts"
       aria-pressed={hidden}
       onClick={toggle}
       className="group -mr-1 -ml-2 grid size-11 shrink-0 place-items-center rounded-full"

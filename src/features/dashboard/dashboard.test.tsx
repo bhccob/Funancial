@@ -229,8 +229,8 @@ describe('DashboardScreen top line', () => {
     // The name is plain text in a line that ends in an ellipsis; nothing squeezes it ahead of the date.
     expect(name).not.toHaveClass('truncate');
     expect(name.parentElement).toHaveClass('truncate');
-    // Below 440px the date is dropped altogether rather than shown as a stub.
-    expect(date).toHaveClass('hidden', 'min-[440px]:inline');
+    // Below 400px the date is dropped altogether rather than shown as a stub.
+    expect(date).toHaveClass('hidden', 'min-[400px]:inline');
   });
 });
 
@@ -1064,10 +1064,50 @@ describe('DashboardScreen with amounts hidden', () => {
 
   it('shows the amounts again when the eye is pressed again', async () => {
     renderDashboard(monthData(), TODAY);
-    await userEvent.click(screen.getByRole('button', { name: 'Hide amounts' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Show amounts' }));
+    const eye = screen.getByRole('button', { name: 'Hide amounts' });
+    await userEvent.click(eye);
+    expect(eye).toHaveAttribute('aria-pressed', 'true');
+    await userEvent.click(eye);
+    expect(eye).toHaveAttribute('aria-pressed', 'false');
     expect(digitRuns()).toContain('1,320');
     expect(screen.queryByText('••••')).not.toBeInTheDocument();
+  });
+
+  it("keeps the direction of net worth's move beside the bullets, and says no change only when there is none", async () => {
+    const { unmount } = renderDashboard(monthData(), TODAY);
+    await userEvent.click(screen.getByRole('button', { name: 'Hide amounts' }));
+    expect(screen.getByText('▼ •••• this month')).toHaveClass('text-danger');
+    expect(screen.queryByText('No change this month')).not.toBeInTheDocument();
+    unmount();
+
+    // The same Home with 2,000 of income: net worth went up.
+    const rise = renderDashboard(monthData({ income: 2_000_00 }), TODAY);
+    expect(screen.getByText('▲ •••• this month')).toHaveClass('text-accent-text');
+    rise.unmount();
+
+    renderDashboard(emptySnapshot(), TODAY);
+    expect(screen.getByText('No change this month')).toBeInTheDocument();
+  });
+
+  it('calls a move under the smallest whole unit no change, hidden or shown', async () => {
+    const withIncome = (cents: number) => {
+      const data = emptySnapshot();
+      data.tables.profile = [makeProfile({ openingDate: '2026-09-01' })];
+      data.tables.income = [makeIncome({ amount: cents, date: '2026-10-02', bucket: 'cash' })];
+      return data;
+    };
+    // 49 cents rounds to $0 and 50 to $1, as the whole-dollar text would have said.
+    const small = renderDashboard(withIncome(49), TODAY);
+    expect(screen.getByText('No change this month')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Hide amounts' }));
+    expect(screen.getByText('No change this month')).toBeInTheDocument();
+    small.unmount();
+
+    useAmountsHidden.setState({ hidden: false });
+    renderDashboard(withIncome(50), TODAY);
+    expect(screen.getByText(`▲ ${usdWhole(50)} this month`)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Hide amounts' }));
+    expect(screen.getByText('▲ •••• this month')).toBeInTheDocument();
   });
 
   it('turns the month line into one plain grey line, as its lengths would give the amounts away', async () => {
@@ -1087,8 +1127,17 @@ describe('DashboardScreen with amounts hidden', () => {
     await userEvent.click(
       within(hero).getByRole('button', { name: `Bills still to come: ${usdWhole(284_99)}` }),
     );
-    await userEvent.click(screen.getByRole('button', { name: 'Hide amounts' }));
+    const eye = screen.getByRole('button', { name: 'Hide amounts' });
+    await userEvent.click(eye);
     expect(within(hero).queryByText('Bills still to come')).not.toBeInTheDocument();
     expect(within(hero).getByText(`spent in ${october}`)).toBeInTheDocument();
+
+    // Shown again, nothing is selected: the part tapped before has not come back.
+    await userEvent.click(eye);
+    expect(within(hero).queryByText('Bills still to come')).not.toBeInTheDocument();
+    expect(within(hero).getByText(`spent in ${october}`)).toBeInTheDocument();
+    for (const part of within(hero).getAllByRole('button', { name: /: / })) {
+      expect(part).toHaveAttribute('aria-pressed', 'false');
+    }
   });
 });

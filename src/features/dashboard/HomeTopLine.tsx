@@ -31,11 +31,11 @@ export function HomeTopLine({ name, today, game }: HomeTopLineProps) {
   return (
     <div className="mb-[26px] flex items-center gap-3">
       {/* One line that ends in an ellipsis, so the date is cut before the name; the date does not
-          show below 440px, where it never fits beside the level ring and the eye without squeezing
-          the name. */}
+          show below 400px, where it never fits beside the level ring and the eye without squeezing
+          the name. Past that, one that does not quite fit is cut by the ellipsis, ahead of the name. */}
       <p className="min-w-0 flex-1 truncate text-[15px] font-extrabold">
         <span>{name ? `Hi, ${name}` : 'Hi there'}</span>
-        <span className="text-muted hidden pl-1 font-bold min-[440px]:inline">
+        <span className="text-muted hidden pl-1 font-bold min-[400px]:inline">
           · {formatDay(today)}
         </span>
       </p>

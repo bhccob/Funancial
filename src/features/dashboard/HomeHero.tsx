@@ -28,6 +28,12 @@ export function HomeHero({ view, today }: { view: FinanceView; today: LocalDate 
   const whole = (minor: number) => money(minor, { whole: true });
   const labelId = useId();
   const [selected, setSelected] = useState<string | null>(null);
+  // Hiding clears the selection, so a part tapped before does not come back when amounts are shown.
+  const [wasHidden, setWasHidden] = useState(hidden);
+  if (hidden !== wasHidden) {
+    setWasHidden(hidden);
+    setSelected(null);
+  }
 
   const line = monthLine(view);
   const parts: Part[] = [

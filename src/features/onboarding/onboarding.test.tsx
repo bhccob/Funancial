@@ -2,9 +2,11 @@ import { act, fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Toaster } from '@/components/ui/Toaster';
+import { formatMoney } from '@/domain/money';
 import { emptySnapshot, type DataSnapshot } from '@/domain/snapshot';
 import { toastStore } from '@/lib/toast';
 import { AccountError } from '@/store/accountActions';
+import { useAmountsHidden } from '@/store/useAmountsHidden';
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
 import { fakeAccount, linkedAccount, withAccount } from '@/test/fakeAccount';
 import { OnboardingWizard } from './OnboardingWizard';
@@ -30,7 +32,10 @@ beforeEach(() => {
   // Setup starts on the phone's currency, so the machine running the tests must not decide it.
   phoneIn('America/New_York');
 });
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  useAmountsHidden.setState({ hidden: false });
+});
 
 const PASSWORD = 'a long enough password';
 /** The step showing now: the one that is leaving stays a moment, with fields of its own. */
@@ -511,6 +516,27 @@ describe('OnboardingWizard', () => {
     expect(onFinishing).not.toHaveBeenCalledWith(false);
     await userEvent.click(screen.getByRole('button', { name: 'Open Funancial' }));
     expect(onFinishing).toHaveBeenLastCalledWith(false);
+  });
+
+  it('lists an added card with its balance as bullets while amounts are hidden', async () => {
+    renderWizard();
+    await skipAccount();
+    await next();
+    await fillBalances('0', '0');
+    await userEvent.click(screen.getByRole('switch', { name: "I don't have a regular salary" }));
+    await next();
+    await userEvent.click(screen.getByRole('button', { name: 'Add a card' }));
+    await userEvent.type(screen.getByLabelText('Card name'), 'Visa');
+    await userEvent.type(screen.getByLabelText('Current balance'), '230');
+    await userEvent.selectOptions(screen.getByLabelText('Due day'), '21');
+    await userEvent.click(screen.getByRole('button', { name: 'Save card' }));
+    const owed = (amount: string) => `${amount} owed · due day 21 · paid in full`;
+    expect(screen.getByText(owed(formatMoney(23000, 'USD')))).toBeInTheDocument();
+
+    // The choice is device-wide, so one made earlier (in the demo) holds in setup too.
+    act(() => useAmountsHidden.setState({ hidden: true }));
+    expect(screen.getByText(owed('••••'))).toBeInTheDocument();
+    expect(screen.getByText('Visa')).toBeInTheDocument();
   });
 
   it('says only that the person is all set when they gave no name', async () => {

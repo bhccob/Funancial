@@ -27,6 +27,7 @@ import {
 } from '@/store/accountActions';
 import type { CardInput } from '@/store/financeActions';
 import { useAccount, useAccountActions } from '@/store/useAccount';
+import { HIDDEN_AMOUNT, useAmountsHidden } from '@/store/useAmountsHidden';
 import { useFinanceActions } from '@/store/useFinance';
 
 const STEPS = 6;
@@ -131,6 +132,8 @@ export function OnboardingWizard({ onFinishing }: { onFinishing?(finishing: bool
   const enableBiometric = useApp((s) => s.enableBiometric);
   const deleteAllData = useApp((s) => s.deleteAllData);
   const emptyData = useApp((s) => !hasData(s.data));
+  // The person's choice from Home's eye, which a card's balance below follows (no profile yet).
+  const amountsHidden = useAmountsHidden((s) => s.hidden);
   const { signUp } = useAccountActions();
   const account = useAccount();
   const run = useAction();
@@ -500,7 +503,8 @@ export function OnboardingWizard({ onFinishing }: { onFinishing?(finishing: bool
                     <div className="min-w-0">
                       <p className="truncate font-bold">{c.name}</p>
                       <p className="text-muted text-sm tabular-nums">
-                        {formatMoney(c.balance, currency)} owed · due day {c.dueDay}
+                        {amountsHidden ? HIDDEN_AMOUNT : formatMoney(c.balance, currency)} owed ·
+                        due day {c.dueDay}
                         {c.payInFull ? ' · paid in full' : ''}
                       </p>
                     </div>

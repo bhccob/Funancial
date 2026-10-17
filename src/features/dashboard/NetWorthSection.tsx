@@ -4,9 +4,10 @@ import { HelpTip } from '@/components/ui/HelpTip';
 import { Section } from '@/components/ui/Section';
 import { netWorthChangeThisMonth, netWorthSeries } from '@/domain/charts';
 import type { LocalDate } from '@/domain/dates';
+import { minorDigits } from '@/domain/money';
 import type { DataSnapshot } from '@/domain/snapshot';
 import type { FinanceView } from '@/domain/view';
-import { useMoney } from '@/store/useFinance';
+import { useCurrency, useMoney } from '@/store/useFinance';
 
 export interface NetWorthSectionProps {
   data: DataSnapshot;
@@ -17,13 +18,15 @@ export interface NetWorthSectionProps {
 /** The number, how far it has moved this month, its 30-day line, and what it is made of. */
 export function NetWorthSection({ data, view, today }: NetWorthSectionProps) {
   const money = useMoney();
+  const currency = useCurrency();
   const whole = (minor: number) => money(minor, { whole: true });
 
   const trend = useMemo(() => netWorthSeries(data, today, 30).map((p) => p.value), [data, today]);
   const change = useMemo(() => netWorthChangeThisMonth(data, today), [data, today]);
 
-  // A move smaller than the smallest whole unit would read "▲ $0": call it no change.
-  const moved = whole(Math.abs(change)) !== whole(0);
+  // A move smaller than the smallest whole unit would read "▲ $0": call it no change. Decided on
+  // the numbers, not on `whole`'s text, which is the same four bullets for every amount while hidden.
+  const moved = Math.round(Math.abs(change) / 10 ** minorDigits(currency)) > 0;
   const changeText = !moved ? (
     <span className="text-muted text-[13.5px] font-extrabold">No change this month</span>
   ) : change > 0 ? (
