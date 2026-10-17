@@ -8,9 +8,7 @@ import {
   unwrapDek,
   wrapDek,
 } from '../../src/data/accountCrypto';
-import { OPTIONS as forgotOPTIONS, POST as forgotPOST } from '../forgot.js';
-import { POST as signupPOST } from '../signup.js';
-import { GET as resetGET, POST as resetPOST } from '../reset.js';
+import { GET, OPTIONS, POST } from '../[op].js';
 import {
   createAccounts,
   MasterKeyMismatch,
@@ -1250,18 +1248,18 @@ describe('the routes', () => {
   const TOKEN = 'test-token';
   const ORIGIN = 'http://localhost:5173';
   const mail = fakeMailer();
-  type Handler = (req: Request) => Promise<Response>;
 
+  // Every call goes through the one function Vercel runs, by the real URL.
+  const handlers = { GET, POST };
   const call = (
-    handler: Handler,
-    method: string,
+    method: keyof typeof handlers,
     path: string,
     body?: unknown,
     headers: Record<string, string> = {},
   ) => {
     const init: RequestInit = { method, headers };
     if (body !== undefined) init.body = typeof body === 'string' ? body : JSON.stringify(body);
-    return handler(new Request(`http://localhost${path}`, init));
+    return handlers[method](new Request(`http://localhost${path}`, init));
   };
   const shared = { 'X-Funancial-Token': TOKEN };
   const account = () => ({
@@ -1291,8 +1289,8 @@ describe('the routes', () => {
 
   /** Signs up and asks for a link, all through the routes; returns the link's token. */
   async function aLink() {
-    expect((await call(signupPOST, 'POST', '/api/signup', account(), shared)).status).toBe(200);
-    const res = await call(forgotPOST, 'POST', '/api/forgot', { who: 'ada' }, shared);
+    expect((await call('POST', '/api/signup', account(), shared)).status).toBe(200);
+    const res = await call('POST', '/api/forgot', { who: 'ada' }, shared);
     expect(res.status).toBe(200);
     await afterAnswer();
     return tokenIn(mail.sent[0]?.text ?? '');
@@ -1305,12 +1303,12 @@ describe('the routes', () => {
       { 'X-Funancial-Token': '' },
     ];
     for (const headers of wrong) {
-      const res = await call(forgotPOST, 'POST', '/api/forgot', { who: 'ada' }, headers);
+      const res = await call('POST', '/api/forgot', { who: 'ada' }, headers);
       expect(res.status).toBe(401);
       expect(await res.json()).toEqual({ error: 'unauthorized' });
     }
     expect(kvStoreFromEnv).not.toHaveBeenCalled();
-    const pre = forgotOPTIONS(
+    const pre = await OPTIONS(
       new Request('http://localhost/api/forgot', {
         method: 'OPTIONS',
         headers: { Origin: ORIGIN },
@@ -1321,28 +1319,25 @@ describe('the routes', () => {
   });
 
   it('/api/forgot answers 200 {ok:true}, known or not, with the reply uncached', async () => {
-    expect((await call(signupPOST, 'POST', '/api/signup', account(), shared)).status).toBe(200);
+    expect((await call('POST', '/api/signup', account(), shared)).status).toBe(200);
     for (const who of ['ada', 'ada@example.com', 'nobody']) {
-      const res = await call(forgotPOST, 'POST', '/api/forgot', { who }, shared);
+      const res = await call('POST', '/api/forgot', { who }, shared);
       expect(res.status).toBe(200);
       expect(res.headers.get('Cache-Control')).toBe('no-store');
       expect(await res.text()).toBe('{"ok":true}');
     }
     await afterAnswer();
     expect(mail.sent).toHaveLength(2);
-    expect((await call(forgotPOST, 'POST', '/api/forgot', { who: 7 }, shared)).status).toBe(400);
-    expect((await call(forgotPOST, 'POST', '/api/forgot', 'not json', shared)).status).toBe(400);
+    expect((await call('POST', '/api/forgot', { who: 7 }, shared)).status).toBe(400);
+    expect((await call('POST', '/api/forgot', 'not json', shared)).status).toBe(400);
   });
 
   it('/api/forgot answers before a stalled mailer finishes, handing its work to waitUntil', async () => {
-    expect((await call(signupPOST, 'POST', '/api/signup', account(), shared)).status).toBe(200);
+    expect((await call('POST', '/api/signup', account(), shared)).status).toBe(200);
     vi.mocked(gmailMailerFromEnv).mockReturnValue({ send: () => new Promise<void>(() => {}) });
     const late = new Promise<string>((resolve) => setTimeout(() => resolve('waited'), 1000));
 
-    const res = await Promise.race([
-      call(forgotPOST, 'POST', '/api/forgot', { who: 'ada' }, shared),
-      late,
-    ]);
+    const res = await Promise.race([call('POST', '/api/forgot', { who: 'ada' }, shared), late]);
     expect(res).toBeInstanceOf(Response);
     expect(await (res as Response).text()).toBe('{"ok":true}');
     expect(waitUntil).toHaveBeenCalledTimes(1);
@@ -1350,10 +1345,10 @@ describe('the routes', () => {
 
   it('/api/forgot says 503 not configured without Gmail, while the other routes carry on', async () => {
     vi.mocked(gmailMailerFromEnv).mockReturnValue(null);
-    const res = await call(forgotPOST, 'POST', '/api/forgot', { who: 'ada' }, shared);
+    const res = await call('POST', '/api/forgot', { who: 'ada' }, shared);
     expect(res.status).toBe(503);
     expect(await res.text()).toBe('{"error":"not configured"}');
-    expect((await call(signupPOST, 'POST', '/api/signup', account(), shared)).status).toBe(200);
+    expect((await call('POST', '/api/signup', account(), shared)).status).toBe(200);
   });
 
   it('/api/reset needs no shared token, GET or POST; every other account route still does', async () => {
@@ -1361,12 +1356,12 @@ describe('the routes', () => {
 
     // No X-Funancial-Token at all, and the service has none configured either.
     vi.stubEnv('FUNANCIAL_ACCESS_TOKEN', '');
-    const info = await call(resetGET, 'GET', `/api/reset?token=${token}`);
+    const info = await call('GET', `/api/reset?token=${token}`);
     expect(info.status).toBe(200);
     expect(info.headers.get('Cache-Control')).toBe('no-store');
     expect(await info.json()).toEqual({ username: 'ada' });
 
-    const done = await call(resetPOST, 'POST', '/api/reset', {
+    const done = await call('POST', '/api/reset', {
       token,
       newAuthKey: b64(32),
       kek: b64(32),
@@ -1375,39 +1370,30 @@ describe('the routes', () => {
     expect(await done.text()).toBe('');
 
     vi.stubEnv('FUNANCIAL_ACCESS_TOKEN', TOKEN);
-    const used = await call(resetGET, 'GET', `/api/reset?token=${token}`);
+    const used = await call('GET', `/api/reset?token=${token}`);
     expect(used.status).toBe(410);
     expect(await used.text()).toBe('{"error":"gone"}');
-    for (const [handler, path] of [
-      [signupPOST, '/api/signup'],
-      [forgotPOST, '/api/forgot'],
-    ] as const) {
-      expect((await call(handler, 'POST', path, account())).status, path).toBe(401);
+    for (const path of ['/api/signup', '/api/forgot']) {
+      expect((await call('POST', path, account())).status, path).toBe(401);
     }
   });
 
   it('/api/reset answers 410 for a missing or unknown token, and 400 for a body that is not JSON', async () => {
     for (const path of ['/api/reset', '/api/reset?token=', `/api/reset?token=${b64(32)}`]) {
-      const res = await call(resetGET, 'GET', path);
+      const res = await call('GET', path);
       expect(res.status, path).toBe(410);
     }
-    const res = await call(resetPOST, 'POST', '/api/reset', 'not json');
+    const res = await call('POST', '/api/reset', 'not json');
     expect(res.status).toBe(400);
-    expect(await call(resetPOST, 'POST', '/api/reset', {})).toMatchObject({ status: 410 });
-    expect(await call(resetPOST, 'POST', '/api/reset', null)).toMatchObject({ status: 410 });
+    expect(await call('POST', '/api/reset', {})).toMatchObject({ status: 410 });
+    expect(await call('POST', '/api/reset', null)).toMatchObject({ status: 410 });
   });
 
   it('/api/reset counts attempts by address: Retry-After on the 21st', async () => {
     const send = (ip: string) =>
-      call(
-        resetGET,
-        'GET',
-        `/api/reset?token=${randomBytes(32).toString('base64url')}`,
-        undefined,
-        {
-          'X-Forwarded-For': ip,
-        },
-      );
+      call('GET', `/api/reset?token=${randomBytes(32).toString('base64url')}`, undefined, {
+        'X-Forwarded-For': ip,
+      });
     for (let i = 0; i < 20; i++) expect((await send('203.0.113.9')).status).toBe(410);
     const limited = await send('203.0.113.9');
     expect(limited.status).toBe(429);
@@ -1420,7 +1406,7 @@ describe('the routes', () => {
     const token = await aLink();
     vi.stubEnv('SERVER_MASTER_KEY', b64(32));
     const spies = spied();
-    const res = await call(resetPOST, 'POST', '/api/reset', {
+    const res = await call('POST', '/api/reset', {
       token,
       newAuthKey: b64(32),
       kek: b64(32),
@@ -1444,23 +1430,22 @@ describe('the routes', () => {
     const newAuthKey = b64(32);
 
     const failures: Response[] = [
-      await call(forgotPOST, 'POST', '/api/forgot', { who: 7 }, shared),
-      await call(forgotPOST, 'POST', '/api/forgot', 'not json', shared),
-      await call(forgotPOST, 'POST', '/api/forgot', { who: 'ada' }, { 'X-Funancial-Token': 'x' }),
-      await call(resetGET, 'GET', `/api/reset?token=${guess}`),
-      await call(resetPOST, 'POST', '/api/reset', { token: guess, newAuthKey, kek }),
-      await call(resetPOST, 'POST', '/api/reset', { token, newAuthKey: 'x', kek }),
-      await call(resetPOST, 'POST', '/api/reset', '{"token":'),
-      await call(resetPOST, 'POST', '/api/reset', 'x'.repeat(1_500_001)),
+      await call('POST', '/api/forgot', { who: 7 }, shared),
+      await call('POST', '/api/forgot', 'not json', shared),
+      await call('POST', '/api/forgot', { who: 'ada' }, { 'X-Funancial-Token': 'x' }),
+      await call('GET', `/api/reset?token=${guess}`),
+      await call('POST', '/api/reset', { token: guess, newAuthKey, kek }),
+      await call('POST', '/api/reset', { token, newAuthKey: 'x', kek }),
+      await call('POST', '/api/reset', '{"token":'),
+      await call('POST', '/api/reset', 'x'.repeat(1_500_001)),
     ];
-    for (let i = 0; i < 21; i++)
-      failures.push(await call(resetGET, 'GET', `/api/reset?token=${guess}`));
+    for (let i = 0; i < 21; i++) failures.push(await call('GET', `/api/reset?token=${guess}`));
     // And the service not set up.
     vi.mocked(kvStoreFromEnv).mockReturnValue(null);
     failures.push(
-      await call(forgotPOST, 'POST', '/api/forgot', { who: 'ada' }, shared),
-      await call(resetGET, 'GET', `/api/reset?token=${token}`),
-      await call(resetPOST, 'POST', '/api/reset', { token, newAuthKey, kek }),
+      await call('POST', '/api/forgot', { who: 'ada' }, shared),
+      await call('GET', `/api/reset?token=${token}`),
+      await call('POST', '/api/reset', { token, newAuthKey, kek }),
     );
 
     expect(failures.some((res) => res.status === 429)).toBe(true);
@@ -1500,9 +1485,9 @@ describe('the routes', () => {
     const token = randomBytes(32).toString('base64url');
 
     const results = [
-      await call(forgotPOST, 'POST', '/api/forgot', { who: 'ada' }, shared),
-      await call(resetGET, 'GET', `/api/reset?token=${token}`),
-      await call(resetPOST, 'POST', '/api/reset', { token, newAuthKey: b64(32), kek: b64(32) }),
+      await call('POST', '/api/forgot', { who: 'ada' }, shared),
+      await call('GET', `/api/reset?token=${token}`),
+      await call('POST', '/api/reset', { token, newAuthKey: b64(32), kek: b64(32) }),
     ];
     for (const res of results) {
       expect(res.status).toBe(503);

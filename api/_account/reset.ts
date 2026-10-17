@@ -1,4 +1,4 @@
-import { accountRoute, field } from './_lib/accountRoute.js';
+import { accountRoute, field } from '../_lib/accountRoute.js';
 
 // Both skip the shared X-Funancial-Token: the page at /reset is public, so it can't carry one. The
 // emailed token is the proof (256 bits, one use, 30 minutes), behind a limit of 20 tries an hour per address.

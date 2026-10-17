@@ -1,5 +1,5 @@
-import { accountRoute } from './_lib/accountRoute.js';
-import { preflight } from './_lib/http.js';
+import { accountRoute } from '../_lib/accountRoute.js';
+import { preflight } from '../_lib/http.js';
 
 export const OPTIONS = preflight;
 export const PUT = accountRoute((accounts, { token, body }) => accounts.putCopy(token, body));
