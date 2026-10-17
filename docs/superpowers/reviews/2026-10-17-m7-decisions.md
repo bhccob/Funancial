@@ -9,10 +9,11 @@
   3. An Inbox of reminders from the last 30 days.
   4. The money forms in the line style.
   5. Settings and onboarding in the line style, plus an accessibility pass.
-- **Task 6, the guided tour, is not built.** It has a new look, so it waits for your OK on the last phone of the wireframe.
+- **Task 6, the guided tour, was dropped by the owner on 2026-10-17** after seeing the wireframe. M7 ends without it.
+- **On the phone, 2026-10-17:** M7 (versionCode 7, "0.7") was installed over M6, the data upgraded without a refusal or console errors, and the owner checked Help, the "?" tips, the Inbox, the forms and Settings: "looks good".
 - **Final review.** A whole-branch review (Opus) found no Critical issues. It led to one fix wave and one follow-up for a regression that wave caused. The scoped re-reviews came back clean.
 
-## Before you install: the order matters
+## Installing: the order matters (done in this order on 2026-10-17)
 
 - This branch raises the Android `versionCode` from 1 to 7. Android will now refuse to install any older Funancial build over it.
 - **So install M6 first (its Task 10), then M7.** After M7 is on the phone, the M6 build can only go back on after an uninstall, which wipes the phone's data (a backup restores it).
