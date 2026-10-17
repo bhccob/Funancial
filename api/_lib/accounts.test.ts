@@ -1011,6 +1011,37 @@ describe('rate limits', () => {
   });
 });
 
+describe('request bodies', () => {
+  it('are refused with 400 for a field the service does not know, at any depth, and change nothing', async () => {
+    const { store, accounts } = setup();
+    const a = await join(accounts);
+    const before = JSON.stringify(store.dump());
+    const extra = { isAdmin: true };
+    const BAD = { status: 400, body: { error: 'bad request' } };
+
+    expect((await join(accounts, { username: 'grace', ...extra })).res).toEqual(BAD);
+    expect(
+      (await join(accounts, { username: 'grace', wrappedPw: { ...wrapped(), ...extra } })).res,
+    ).toEqual(BAD);
+    expect(await accounts.login({ username: 'ada', authKey: a.authKey, ...extra }, IP)).toEqual(
+      BAD,
+    );
+    expect(await accounts.putCopy(a.token, { baseVersion: 0, ...copyOf(), ...extra })).toEqual(BAD);
+    const change = { oldAuthKey: a.authKey, newAuthKey: b64(32), newWrappedPw: wrapped() };
+    expect(await accounts.changePassword(a.token, { ...change, ...extra })).toEqual(BAD);
+    expect(
+      await accounts.changePassword(a.token, {
+        ...change,
+        newWrappedPw: { ...wrapped(), ...extra },
+      }),
+    ).toEqual(BAD);
+    expect(JSON.stringify(store.dump())).toBe(before);
+
+    // The same bodies without it go through.
+    expect((await accounts.login({ username: 'ada', authKey: a.authKey }, IP)).status).toBe(200);
+  });
+});
+
 describe('secrets', () => {
   const spied = () =>
     (['log', 'info', 'warn', 'error', 'debug'] as const).map((m) =>

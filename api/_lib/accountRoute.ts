@@ -6,10 +6,6 @@ import { kvStoreFromEnv } from './store.js';
 
 type Context = { token: string | null; body: unknown; query: URLSearchParams; ip: string };
 
-/** One field of a JSON body, or undefined where the body isn't an object; the account methods check what they get. */
-export const field = (body: unknown, name: string): unknown =>
-  typeof body === 'object' && body !== null ? (body as Record<string, unknown>)[name] : undefined;
-
 /** Read at call time; null when the database or the master key (base64 of 32 bytes) is missing. Without Gmail only `forgot` is unavailable. */
 function accountsFromEnv(): Accounts | null {
   const store = kvStoreFromEnv();

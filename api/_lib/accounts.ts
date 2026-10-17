@@ -96,10 +96,10 @@ export function canonicalUsername(name: string): string {
 }
 
 // Exact shapes, so what is stored is what the phone's crypto produced: a 32-byte key, a 12-byte IV, a
-// data key wrapped (32 bytes plus the tag).
+// data key wrapped (32 bytes plus the tag). Strict: a field nobody sends is refused, not dropped.
 const key32 = z.string().regex(/^[A-Za-z0-9+/]{43}=$/);
 const iv = z.string().regex(/^[A-Za-z0-9+/]{16}$/);
-const wrappedKey = z.object({ iv, ciphertext: z.string().regex(/^[A-Za-z0-9+/]{64}$/) });
+const wrappedKey = z.strictObject({ iv, ciphertext: z.string().regex(/^[A-Za-z0-9+/]{64}$/) });
 const username = z.string().max(100).transform(canonicalUsername).pipe(z.string().regex(USERNAME));
 const email = z
   .string()
@@ -107,9 +107,15 @@ const email = z
   .pipe(z.email())
   .transform((e) => e.toLowerCase());
 
-const signupBody = z.object({ username, email, authKey: key32, dek: key32, wrappedPw: wrappedKey });
-const loginBody = z.object({ username, authKey: key32 });
-const copyBody = z.object({
+const signupBody = z.strictObject({
+  username,
+  email,
+  authKey: key32,
+  dek: key32,
+  wrappedPw: wrappedKey,
+});
+const loginBody = z.strictObject({ username, authKey: key32 });
+const copyBody = z.strictObject({
   baseVersion: z.int().min(0),
   iv,
   ciphertext: z
@@ -118,9 +124,10 @@ const copyBody = z.object({
     .refine((s) => s.length % 4 === 0),
 });
 // A username or an email address; only an address has an "@".
-const forgotBody = z.union([email, username]);
-const resetKeys = z.object({ newAuthKey: key32, kek: key32 });
-const passwordBody = z.object({
+const forgotBody = z.strictObject({ who: z.union([email, username]) });
+// The token is checked apart: any that is not a live link's is answered as an expired one (410).
+const resetBody = z.strictObject({ token: z.unknown(), newAuthKey: key32, kek: key32 });
+const passwordBody = z.strictObject({
   oldAuthKey: key32,
   newAuthKey: key32,
   newWrappedPw: wrappedKey,
@@ -624,11 +631,11 @@ export function createAccounts({ store, masterKey, now, mailer, waitUntil }: Acc
      * asked about, not the account, so a 429 says nothing either. It answers before it has looked
      * for the account, so neither the answer nor its timing says whether there is one.
      */
-    async forgot(who: unknown, ip: string): Promise<Result> {
+    async forgot(body: unknown, ip: string): Promise<Result> {
       if (!mailer) return fail(503, 'not configured');
-      const parsed = forgotBody.safeParse(who);
+      const parsed = forgotBody.safeParse(body);
       if (!parsed.success) return badRequest();
-      const subject = parsed.data;
+      const subject = parsed.data.who;
       const over =
         (await throttle('forgot:ip', ip, 10, HOUR)) ??
         (await throttle('forgot:subject', subject, 3, HOUR));
@@ -656,10 +663,11 @@ export function createAccounts({ store, masterKey, now, mailer, waitUntil }: Acc
      * key and locked again with the page's `kek`. The device token and the copy are not touched, so the
      * phone in use goes on uploading. The link works once.
      */
-    async reset(token: unknown, newAuthKey: unknown, kek: unknown, ip: string): Promise<Result> {
-      if (typeof token !== 'string' || !TOKEN.test(token)) return gone();
-      const parsed = resetKeys.safeParse({ newAuthKey, kek });
+    async reset(body: unknown, ip: string): Promise<Result> {
+      const parsed = resetBody.safeParse(body);
       if (!parsed.success) return badRequest();
+      const { token } = parsed.data;
+      if (typeof token !== 'string' || !TOKEN.test(token)) return gone();
       const over = await throttle('reset:ip', ip, 20, HOUR);
       if (over) return over;
       const live = await liveReset(token);

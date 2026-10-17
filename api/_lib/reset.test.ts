@@ -151,7 +151,7 @@ const tokenIn = (text: string) => /token=([A-Za-z0-9_-]{43})$/m.exec(text)?.[1] 
 /** Asks for a link for `who` and returns the token the (fake) email carried. */
 async function linkFor(accounts: Accounts, mail: ReturnType<typeof fakeMailer>, who = 'ada') {
   const before = mail.sent.length;
-  expect(await accounts.forgot(who, IP)).toEqual(OK);
+  expect(await accounts.forgot({ who }, IP)).toEqual(OK);
   await settled();
   const token = tokenIn(mail.sent[before]?.text ?? '');
   expect(token).toHaveLength(43);
@@ -168,7 +168,7 @@ describe('forgot', () => {
   it('emails a known username a one-use link, in the words of Call 15', async () => {
     const { accounts, mail } = setup();
     await join(accounts);
-    expect(await accounts.forgot('Ada', IP)).toEqual(OK);
+    expect(await accounts.forgot({ who: 'Ada' }, IP)).toEqual(OK);
     await settled();
 
     expect(mail.sent).toHaveLength(1);
@@ -191,7 +191,7 @@ describe('forgot', () => {
     const { accounts, mail } = setup();
     await join(accounts);
     for (const who of ['ADA@example.COM', 'ada@example.com', 'ＡＤＡ']) {
-      expect(await accounts.forgot(who, IP)).toEqual(OK);
+      expect(await accounts.forgot({ who }, IP)).toEqual(OK);
     }
     await settled();
     expect(mail.sent.map((m) => m.to)).toEqual(Array(3).fill('ada@example.com'));
@@ -202,9 +202,9 @@ describe('forgot', () => {
   it('answers an unknown name or email exactly as it answers a known one, and sends nothing', async () => {
     const { accounts, mail } = setup();
     await join(accounts);
-    const known = await accounts.forgot('ada', IP);
+    const known = await accounts.forgot({ who: 'ada' }, IP);
     for (const who of ['nobody', 'nobody@example.com']) {
-      expect(await accounts.forgot(who, IP)).toEqual(known);
+      expect(await accounts.forgot({ who }, IP)).toEqual(known);
     }
     expect(known).toEqual(OK);
     await settled();
@@ -224,8 +224,8 @@ describe('forgot', () => {
     await join(accounts);
     const late = new Promise<string>((resolve) => setTimeout(() => resolve('waited'), 500));
 
-    const known = await Promise.race([accounts.forgot('ada', IP), late]);
-    const unknown = await Promise.race([accounts.forgot('nobody', IP), late]);
+    const known = await Promise.race([accounts.forgot({ who: 'ada' }, IP), late]);
+    const unknown = await Promise.race([accounts.forgot({ who: 'nobody' }, IP), late]);
     expect(known).toEqual(OK);
     expect(unknown).toEqual(OK);
     // The work is handed over to run after the answer.
@@ -235,7 +235,7 @@ describe('forgot', () => {
   it('hands the lookup, the link and the mail to waitUntil, and they still happen', async () => {
     const { store, accounts, mail } = setup();
     await join(accounts);
-    expect(await accounts.forgot('ada', IP)).toEqual(OK);
+    expect(await accounts.forgot({ who: 'ada' }, IP)).toEqual(OK);
     expect(pending).toHaveLength(1);
     await settled();
     expect(mail.sent).toHaveLength(1);
@@ -251,7 +251,7 @@ describe('forgot', () => {
       mailer: mail,
     });
     await join(accounts);
-    expect(await accounts.forgot('ada', IP)).toEqual(OK);
+    expect(await accounts.forgot({ who: 'ada' }, IP)).toEqual(OK);
     expect(mail.sent).toHaveLength(1);
   });
 
@@ -259,7 +259,7 @@ describe('forgot', () => {
     const { accounts, mail } = setup();
     await join(accounts, { username: 'ada' });
     await join(accounts, { username: 'grace' }, '198.51.100.9');
-    expect(await accounts.forgot('ada@example.com', IP)).toEqual(OK);
+    expect(await accounts.forgot({ who: 'ada@example.com' }, IP)).toEqual(OK);
     await settled();
 
     expect(mail.sent).toHaveLength(2);
@@ -278,7 +278,7 @@ describe('forgot', () => {
     for (const [i, name] of ['ada', 'grace', 'alan', 'edsger', 'barbara'].entries()) {
       await join(accounts, { username: name }, `198.51.100.${i + 1}`);
     }
-    expect(await accounts.forgot('ada@example.com', IP)).toEqual(OK);
+    expect(await accounts.forgot({ who: 'ada@example.com' }, IP)).toEqual(OK);
     await settled();
     expect(mail.sent).toHaveLength(3);
   });
@@ -292,13 +292,13 @@ describe('forgot', () => {
     // 299 sent already today.
     for (let i = 0; i < 299; i++) await rateLimit(store, 'forgot:global', 'all', 300, DAY);
 
-    expect(await accounts.forgot('ada', IP)).toEqual(OK);
+    expect(await accounts.forgot({ who: 'ada' }, IP)).toEqual(OK);
     await settled();
     expect(mail.sent).toHaveLength(1);
     expect(spies[0]).not.toHaveBeenCalled();
 
     // The 301st is not sent, and its link is not made either.
-    expect(await accounts.forgot('ada', IP)).toEqual(OK);
+    expect(await accounts.forgot({ who: 'ada' }, IP)).toEqual(OK);
     await settled();
     expect(mail.sent).toHaveLength(1);
     expect(Object.keys(store.dump()).filter((k) => k.startsWith('acct:r:'))).toHaveLength(1);
@@ -306,7 +306,7 @@ describe('forgot', () => {
 
     // A day later it sends again.
     advance(DAY + 1);
-    expect(await accounts.forgot('ada', IP)).toEqual(OK);
+    expect(await accounts.forgot({ who: 'ada' }, IP)).toEqual(OK);
     await settled();
     expect(mail.sent).toHaveLength(2);
     spies.forEach((spy) => spy.mockRestore());
@@ -315,9 +315,9 @@ describe('forgot', () => {
   it('counts only emails actually sent against the daily cap', async () => {
     const { store, accounts } = setup();
     await join(accounts);
-    await accounts.forgot('nobody', IP);
-    await accounts.forgot('ada', IP);
-    await accounts.forgot('ada@example.com', IP);
+    await accounts.forgot({ who: 'nobody' }, IP);
+    await accounts.forgot({ who: 'ada' }, IP);
+    await accounts.forgot({ who: 'ada@example.com' }, IP);
     await settled();
     expect(store.dump()['rl:forgot:global:all']).toBe(2);
   });
@@ -344,30 +344,44 @@ describe('forgot', () => {
     const { accounts, mail } = setup();
     await join(accounts);
     for (const who of ['ada', 'nobody']) {
-      for (let i = 0; i < 3; i++) expect((await accounts.forgot(who, IP)).status).toBe(200);
+      for (let i = 0; i < 3; i++) expect((await accounts.forgot({ who }, IP)).status).toBe(200);
     }
-    const known = await accounts.forgot('ada', IP);
+    const known = await accounts.forgot({ who: 'ada' }, IP);
     expect(known).toEqual({ status: 429, body: { error: 'too many attempts' }, retryAfter: HOUR });
     // Saying nothing of the account: an unknown name gets the same.
-    expect(await accounts.forgot('nobody', IP)).toEqual(known);
+    expect(await accounts.forgot({ who: 'nobody' }, IP)).toEqual(known);
     await settled();
     expect(mail.sent).toHaveLength(3);
 
     advance(HOUR + 1);
-    expect(await accounts.forgot('ada', IP)).toEqual(OK);
+    expect(await accounts.forgot({ who: 'ada' }, IP)).toEqual(OK);
     await settled();
     expect(mail.sent).toHaveLength(4);
   });
 
   it('gives 429 for the 11th request from one address in an hour, whatever the names', async () => {
     const { accounts } = setup();
-    for (let i = 0; i < 10; i++) expect((await accounts.forgot(`user${i}`, IP)).status).toBe(200);
-    expect(await accounts.forgot('user10', IP)).toEqual({
+    for (let i = 0; i < 10; i++)
+      expect((await accounts.forgot({ who: `user${i}` }, IP)).status).toBe(200);
+    expect(await accounts.forgot({ who: 'user10' }, IP)).toEqual({
       status: 429,
       body: { error: 'too many attempts' },
       retryAfter: HOUR,
     });
-    expect((await accounts.forgot('user10', '198.51.100.2')).status).toBe(200);
+    expect((await accounts.forgot({ who: 'user10' }, '198.51.100.2')).status).toBe(200);
+  });
+
+  it('refuses a body with a field it does not know, or that is not { who }, with 400', async () => {
+    const { accounts, mail } = setup();
+    await join(accounts);
+    for (const body of [{ who: 'ada', extra: 1 }, { who: 'ada', who2: 'grace' }, 'ada', null, []]) {
+      expect(await accounts.forgot(body, IP)).toEqual({
+        status: 400,
+        body: { error: 'bad request' },
+      });
+    }
+    await settled();
+    expect(mail.sent).toHaveLength(0);
   });
 
   it('refuses what is neither a username nor an email with 400, and does not count it', async () => {
@@ -387,24 +401,27 @@ describe('forgot', () => {
       'x'.repeat(300),
     ];
     for (const who of bad)
-      expect(await accounts.forgot(who, IP)).toEqual({
+      expect(await accounts.forgot({ who }, IP)).toEqual({
         status: 400,
         body: { error: 'bad request' },
       });
     await settled();
     expect(mail.sent).toHaveLength(0);
-    for (let i = 0; i < 3; i++) expect((await accounts.forgot('ada', IP)).status).toBe(200);
+    for (let i = 0; i < 3; i++)
+      expect((await accounts.forgot({ who: 'ada' }, IP)).status).toBe(200);
   });
 
   it('says not configured, and nothing else, where there is no mailer', async () => {
     const store = memoryKvStore(() => clock);
     const accounts = createAccounts({ store, masterKey: MASTER, now: () => clock });
     await join(accounts);
-    expect(await accounts.forgot('ada', IP)).toEqual({
+    expect(await accounts.forgot({ who: 'ada' }, IP)).toEqual({
       status: 503,
       body: { error: 'not configured' },
     });
-    expect(await accounts.forgot('nobody', IP)).toEqual(await accounts.forgot('ada', IP));
+    expect(await accounts.forgot({ who: 'nobody' }, IP)).toEqual(
+      await accounts.forgot({ who: 'ada' }, IP),
+    );
   });
 
   it('answers 200 even when the email could not be sent, so a failure does not tell a known name from an unknown one', async () => {
@@ -426,8 +443,8 @@ describe('forgot', () => {
     });
     await join(accounts);
 
-    expect(await accounts.forgot('ada', IP)).toEqual(OK);
-    expect(await accounts.forgot('nobody', IP)).toEqual(OK);
+    expect(await accounts.forgot({ who: 'ada' }, IP)).toEqual(OK);
+    expect(await accounts.forgot({ who: 'nobody' }, IP)).toEqual(OK);
     await settled();
 
     // The owner can see that mail failed, and why in a word; nothing of the address or the link.
@@ -459,7 +476,7 @@ describe('forgot', () => {
       await join(accounts, { username: name }, `198.51.100.${i + 1}`);
     }
 
-    expect(await accounts.forgot('ada@example.com', IP)).toEqual(OK);
+    expect(await accounts.forgot({ who: 'ada@example.com' }, IP)).toEqual(OK);
     await settled();
     expect(attempts).toHaveLength(1);
     expect(spies[0]?.mock.calls).toEqual([['[api] reset email failed:', 'ETIMEDOUT']]);
@@ -477,7 +494,7 @@ describe('forgot', () => {
       }),
     );
     await join(accounts);
-    expect(await accounts.forgot('ada@example.com', IP)).toEqual(OK);
+    expect(await accounts.forgot({ who: 'ada@example.com' }, IP)).toEqual(OK);
     await settled();
     expect(mail.sent).toHaveLength(0);
     expect(spies[0]?.mock.calls).toEqual([['[api] reset email failed:', 'unknown']]);
@@ -494,7 +511,7 @@ describe('forgot', () => {
     expect(await accounts.deleteAccount(token)).toEqual({ status: 204 });
     await store.sadd('acct:e:ada@example.com', 'ada');
 
-    expect(await accounts.forgot('ada@example.com', IP)).toEqual(OK);
+    expect(await accounts.forgot({ who: 'ada@example.com' }, IP)).toEqual(OK);
     await settled();
     expect(mail.sent).toHaveLength(0);
   });
@@ -518,14 +535,16 @@ describe('resetInfo', () => {
     expect((await accounts.resetInfo(token, IP)).status).toBe(200);
     advance(2);
     expect(await accounts.resetInfo(token, IP)).toEqual(GONE);
-    expect(await accounts.reset(token, b64(32), b64(32), IP)).toEqual(GONE);
+    expect(await accounts.reset({ token, newAuthKey: b64(32), kek: b64(32) }, IP)).toEqual(GONE);
   });
 
   it('gives 410 once the link has been used', async () => {
     const { accounts, mail } = setup();
     await join(accounts);
     const token = await linkFor(accounts, mail);
-    expect(await accounts.reset(token, b64(32), b64(32), IP)).toEqual({ status: 204 });
+    expect(await accounts.reset({ token, newAuthKey: b64(32), kek: b64(32) }, IP)).toEqual({
+      status: 204,
+    });
     expect(await accounts.resetInfo(token, IP)).toEqual(GONE);
   });
 
@@ -542,7 +561,7 @@ describe('resetInfo', () => {
     const token = await linkFor(accounts, mail);
     expect(await accounts.deleteAccount(device)).toEqual({ status: 204 });
     expect(await accounts.resetInfo(token, IP)).toEqual(GONE);
-    expect(await accounts.reset(token, b64(32), b64(32), IP)).toEqual(GONE);
+    expect(await accounts.reset({ token, newAuthKey: b64(32), kek: b64(32) }, IP)).toEqual(GONE);
   });
 
   it('gives 410 when the name was deleted and made again, and never touches the new account', async () => {
@@ -556,7 +575,7 @@ describe('resetInfo', () => {
     const before = JSON.stringify(store.dump()['acct:u:ada']);
 
     expect(await accounts.resetInfo(token, IP)).toEqual(GONE);
-    expect(await accounts.reset(token, b64(32), b64(32), IP)).toEqual(GONE);
+    expect(await accounts.reset({ token, newAuthKey: b64(32), kek: b64(32) }, IP)).toEqual(GONE);
     expect(JSON.stringify(store.dump()['acct:u:ada'])).toBe(before);
     expect((await logIn(accounts, again.authKey)).status).toBe(200);
   });
@@ -584,7 +603,9 @@ describe('reset', () => {
     const fresh = await newPassword();
     const before = store.dump()['acct:u:ada'] as Record<string, unknown>;
 
-    expect(await accounts.reset(token, fresh.authKey, fresh.kek, IP)).toEqual({ status: 204 });
+    expect(await accounts.reset({ token, newAuthKey: fresh.authKey, kek: fresh.kek }, IP)).toEqual({
+      status: 204,
+    });
 
     // The active phone's token and copy are untouched: it keeps uploading from where it was.
     const after = store.dump()['acct:u:ada'] as Record<string, unknown>;
@@ -621,7 +642,9 @@ describe('reset', () => {
     const { authKey, kek } = resetKeys();
     const before = store.dump()['acct:u:ada'] as Record<string, unknown>;
 
-    expect(await accounts.reset(token, authKey, kek, IP)).toEqual({ status: 204 });
+    expect(await accounts.reset({ token, newAuthKey: authKey, kek }, IP)).toEqual({
+      status: 204,
+    });
 
     const dump = store.dump();
     const all = JSON.stringify(dump);
@@ -638,9 +661,11 @@ describe('reset', () => {
     await join(accounts);
     const token = await linkFor(accounts, mail);
     const first = resetKeys();
-    expect(await accounts.reset(token, first.authKey, first.kek, IP)).toEqual({ status: 204 });
+    expect(await accounts.reset({ token, newAuthKey: first.authKey, kek: first.kek }, IP)).toEqual({
+      status: 204,
+    });
 
-    expect(await accounts.reset(token, b64(32), b64(32), IP)).toEqual(GONE);
+    expect(await accounts.reset({ token, newAuthKey: b64(32), kek: b64(32) }, IP)).toEqual(GONE);
     expect((await logIn(accounts, first.authKey)).status).toBe(200);
   });
 
@@ -651,8 +676,8 @@ describe('reset', () => {
     const a = resetKeys();
     const b = resetKeys();
     const results = await Promise.all([
-      accounts.reset(token, a.authKey, a.kek, IP),
-      accounts.reset(token, b.authKey, b.kek, IP),
+      accounts.reset({ token, newAuthKey: a.authKey, kek: a.kek }, IP),
+      accounts.reset({ token, newAuthKey: b.authKey, kek: b.kek }, IP),
     ]);
     expect(results.map((r) => r.status).sort()).toEqual([204, 410]);
     const winner = results[0]?.status === 204 ? a : b;
@@ -671,8 +696,28 @@ describe('reset', () => {
     );
     await join(accounts);
     const token = await linkFor(accounts, mail);
-    expect(await accounts.reset(token, b64(32), b64(32), IP)).toEqual({ status: 204 });
-    expect(await accounts.reset(token, b64(32), b64(32), IP)).toEqual(GONE);
+    expect(await accounts.reset({ token, newAuthKey: b64(32), kek: b64(32) }, IP)).toEqual({
+      status: 204,
+    });
+    expect(await accounts.reset({ token, newAuthKey: b64(32), kek: b64(32) }, IP)).toEqual(GONE);
+  });
+
+  it('refuses a body with a field it does not know with 400 and leaves the link usable', async () => {
+    const { accounts, mail } = setup();
+    await join(accounts);
+    const token = await linkFor(accounts, mail);
+    const { authKey, kek } = resetKeys();
+    for (const body of [
+      { token, newAuthKey: authKey, kek, extra: 1 },
+      { token, newAuthKey: authKey, kek, username: 'grace' },
+      [token, authKey, kek],
+    ]) {
+      expect(await accounts.reset(body, IP)).toEqual({
+        status: 400,
+        body: { error: 'bad request' },
+      });
+    }
+    expect(await accounts.reset({ token, newAuthKey: authKey, kek }, IP)).toEqual({ status: 204 });
   });
 
   it('refuses a malformed key with 400 and leaves the link usable', async () => {
@@ -691,12 +736,14 @@ describe('reset', () => {
       [7, {}],
     ];
     for (const [authKey, kek] of bad) {
-      expect(await accounts.reset(token, authKey, kek, IP)).toEqual({
+      expect(await accounts.reset({ token, newAuthKey: authKey, kek }, IP)).toEqual({
         status: 400,
         body: { error: 'bad request' },
       });
     }
-    expect(await accounts.reset(token, ok.authKey, ok.kek, IP)).toEqual({ status: 204 });
+    expect(await accounts.reset({ token, newAuthKey: ok.authKey, kek: ok.kek }, IP)).toEqual({
+      status: 204,
+    });
   });
 
   it('gives 410 for a token nobody was given, and for anything that is not a token', async () => {
@@ -704,7 +751,8 @@ describe('reset', () => {
     await join(accounts);
     const { authKey, kek } = resetKeys();
     const bad: unknown[] = [randomBytes(32).toString('base64url'), 'short', '', null, undefined, 7];
-    for (const token of bad) expect(await accounts.reset(token, authKey, kek, IP)).toEqual(GONE);
+    for (const token of bad)
+      expect(await accounts.reset({ token, newAuthKey: authKey, kek }, IP)).toEqual(GONE);
   });
 
   it('throws for a master key that is not the one that wrapped the account, and the link stays usable', async () => {
@@ -716,13 +764,15 @@ describe('reset', () => {
     // Named as the setup problem it is, not taken for an expired link (the tag needs the key too).
     const wrongKey = createAccounts({ store, masterKey: randomBytes(32), now: () => clock });
     await expect(wrongKey.resetInfo(token, IP)).rejects.toBeInstanceOf(MasterKeyMismatch);
-    await expect(wrongKey.reset(token, b64(32), b64(32), IP)).rejects.toBeInstanceOf(
-      MasterKeyMismatch,
-    );
+    await expect(
+      wrongKey.reset({ token, newAuthKey: b64(32), kek: b64(32) }, IP),
+    ).rejects.toBeInstanceOf(MasterKeyMismatch);
     expect(JSON.stringify(store.dump()['acct:u:ada'])).toBe(before);
 
     // Once the owner puts the right key back, the same link works.
-    expect(await accounts.reset(token, b64(32), b64(32), IP)).toEqual({ status: 204 });
+    expect(await accounts.reset({ token, newAuthKey: b64(32), kek: b64(32) }, IP)).toEqual({
+      status: 204,
+    });
   });
 
   it('gives the link back when the store fails part-way, so the friend can try again', async () => {
@@ -740,8 +790,12 @@ describe('reset', () => {
     const token = await linkFor(accounts, mail);
     advance(5); // so the write that fails is the reset's own
     const { authKey, kek } = resetKeys();
-    await expect(accounts.reset(token, authKey, kek, IP)).rejects.toThrow('connection reset');
-    expect(await accounts.reset(token, authKey, kek, IP)).toEqual({ status: 204 });
+    await expect(accounts.reset({ token, newAuthKey: authKey, kek }, IP)).rejects.toThrow(
+      'connection reset',
+    );
+    expect(await accounts.reset({ token, newAuthKey: authKey, kek }, IP)).toEqual({
+      status: 204,
+    });
     expect((await logIn(accounts, authKey)).status).toBe(200);
   });
 
@@ -753,9 +807,13 @@ describe('reset', () => {
     expect(second).not.toBe(first);
     expect((await accounts.resetInfo(first, IP)).status).toBe(200);
 
-    expect(await accounts.reset(second, b64(32), b64(32), IP)).toEqual({ status: 204 });
+    expect(await accounts.reset({ token: second, newAuthKey: b64(32), kek: b64(32) }, IP)).toEqual({
+      status: 204,
+    });
     expect(await accounts.resetInfo(first, IP)).toEqual(GONE);
-    expect(await accounts.reset(first, b64(32), b64(32), IP)).toEqual(GONE);
+    expect(await accounts.reset({ token: first, newAuthKey: b64(32), kek: b64(32) }, IP)).toEqual(
+      GONE,
+    );
   });
 
   it('kills a link made before a password change', async () => {
@@ -770,7 +828,9 @@ describe('reset', () => {
     expect(changed).toEqual({ status: 204 });
 
     expect(await accounts.resetInfo(link, IP)).toEqual(GONE);
-    expect(await accounts.reset(link, b64(32), b64(32), IP)).toEqual(GONE);
+    expect(await accounts.reset({ token: link, newAuthKey: b64(32), kek: b64(32) }, IP)).toEqual(
+      GONE,
+    );
   });
 
   it('leaves a link alone when someone logs in, which does not change the password', async () => {
@@ -786,11 +846,19 @@ describe('reset', () => {
     await join(accounts);
     for (let i = 0; i < 20; i++) {
       expect(
-        (await accounts.reset(randomBytes(32).toString('base64url'), b64(32), b64(32), IP)).status,
+        (
+          await accounts.reset(
+            { token: randomBytes(32).toString('base64url'), newAuthKey: b64(32), kek: b64(32) },
+            IP,
+          )
+        ).status,
       ).toBe(410);
     }
     expect(
-      await accounts.reset(randomBytes(32).toString('base64url'), b64(32), b64(32), IP),
+      await accounts.reset(
+        { token: randomBytes(32).toString('base64url'), newAuthKey: b64(32), kek: b64(32) },
+        IP,
+      ),
     ).toEqual({
       status: 429,
       body: { error: 'too many attempts' },
@@ -799,9 +867,7 @@ describe('reset', () => {
     expect(
       (
         await accounts.reset(
-          randomBytes(32).toString('base64url'),
-          b64(32),
-          b64(32),
+          { token: randomBytes(32).toString('base64url'), newAuthKey: b64(32), kek: b64(32) },
           '198.51.100.2',
         )
       ).status,
@@ -827,7 +893,7 @@ describe('reset', () => {
       again = await join(accounts, {}, '198.51.100.2');
     };
 
-    expect(await accounts.reset(token, b64(32), b64(32), IP)).toEqual(GONE);
+    expect(await accounts.reset({ token, newAuthKey: b64(32), kek: b64(32) }, IP)).toEqual(GONE);
     expect(again?.res.status).toBe(200);
     const after = store.dump()['acct:u:ada'] as { deviceTokenHash: string };
     expect(after.deviceTokenHash).toBe(sha(again?.token ?? ''));
@@ -839,7 +905,7 @@ describe('reset', () => {
     const { dek } = await joinAsPhone(accounts);
     const token = await linkFor(accounts, mail);
     const fresh = await newPassword();
-    await accounts.reset(token, fresh.authKey, fresh.kek, IP);
+    await accounts.reset({ token, newAuthKey: fresh.authKey, kek: fresh.kek }, IP);
 
     const stored = (store.dump()['acct:u:ada'] as { wrappedPw: { iv: string; ciphertext: string } })
       .wrappedPw;
@@ -888,7 +954,7 @@ describe('the database alone unlocks no copy', () => {
     ];
     for (const token of forged) {
       expect(await accounts.resetInfo(token, IP)).toEqual(GONE);
-      expect(await accounts.reset(token, b64(32), b64(32), IP)).toEqual(GONE);
+      expect(await accounts.reset({ token, newAuthKey: b64(32), kek: b64(32) }, IP)).toEqual(GONE);
     }
     expect(JSON.stringify(store.dump()['acct:u:ada'])).toBe(before);
 
@@ -905,12 +971,16 @@ describe('the database alone unlocks no copy', () => {
     await store.set('acct:u:ada', { ...account, email: 'mallory@example.com' });
     // A link mailed to the real address dies with the change, like an expired one.
     expect(await accounts.resetInfo(genuine, IP)).toEqual(GONE);
-    expect(await accounts.reset(genuine, b64(32), b64(32), IP)).toEqual(GONE);
+    expect(await accounts.reset({ token: genuine, newAuthKey: b64(32), kek: b64(32) }, IP)).toEqual(
+      GONE,
+    );
 
     const token = await linkFor(accounts, mail);
     expect(mail.sent.at(-1)?.to).toBe('mallory@example.com');
     const mallory = await newPassword('mallory chose this');
-    await expect(accounts.reset(token, mallory.authKey, mallory.kek, IP)).rejects.toThrow();
+    await expect(
+      accounts.reset({ token, newAuthKey: mallory.authKey, kek: mallory.kek }, IP),
+    ).rejects.toThrow();
 
     // The data key was never locked again under the new kek: nothing changed, and it logs no one in.
     const after = store.dump()['acct:u:ada'] as Account;
@@ -936,7 +1006,9 @@ describe('the database alone unlocks no copy', () => {
 
     const token = await linkFor(accounts, mail, 'mallory');
     const keys = await newPassword('mallory chose this');
-    await expect(accounts.reset(token, keys.authKey, keys.kek, IP)).rejects.toThrow();
+    await expect(
+      accounts.reset({ token, newAuthKey: keys.authKey, kek: keys.kek }, IP),
+    ).rejects.toThrow();
     expect((store.dump()['acct:u:mallory'] as Account).wrappedPw).toEqual(attacker.wrappedPw);
   });
 
@@ -955,7 +1027,9 @@ describe('the database alone unlocks no copy', () => {
 
     const token = await linkFor(accounts, mail);
     const fresh = await newPassword();
-    expect(await accounts.reset(token, fresh.authKey, fresh.kek, IP)).toEqual({ status: 204 });
+    expect(await accounts.reset({ token, newAuthKey: fresh.authKey, kek: fresh.kek }, IP)).toEqual({
+      status: 204,
+    });
     const res = await logIn(accounts, fresh.authKey);
     expect(res.status).toBe(200);
     const wrappedPw = out<{ wrappedPw: { iv: string; ciphertext: string } }>(res).wrappedPw;
@@ -1008,7 +1082,9 @@ describe('account writes are compare-and-set', () => {
     const login = logIn(accounts, oldKey);
     await held.reached();
     const fresh = resetKeys();
-    expect(await accounts.reset(link, fresh.authKey, fresh.kek, IP)).toEqual({ status: 204 });
+    expect(
+      await accounts.reset({ token: link, newAuthKey: fresh.authKey, kek: fresh.kek }, IP),
+    ).toEqual({ status: 204 });
     held.open();
 
     // It retries, finds the password is no longer the one it was given, and is turned away like
@@ -1038,7 +1114,9 @@ describe('account writes are compare-and-set', () => {
     });
     await held.reached();
     const fresh = resetKeys();
-    expect(await accounts.reset(link, fresh.authKey, fresh.kek, IP)).toEqual({ status: 204 });
+    expect(
+      await accounts.reset({ token: link, newAuthKey: fresh.authKey, kek: fresh.kek }, IP),
+    ).toEqual({ status: 204 });
     held.open();
 
     expect(await change).toEqual({ status: 401, body: { error: 'denied' } });
@@ -1055,7 +1133,7 @@ describe('account writes are compare-and-set', () => {
     const link = await linkFor(accounts, mail);
     const fresh = resetKeys();
 
-    const reset = accounts.reset(link, fresh.authKey, fresh.kek, IP);
+    const reset = accounts.reset({ token: link, newAuthKey: fresh.authKey, kek: fresh.kek }, IP);
     await held.reached();
     const chosen = b64(32);
     expect(
@@ -1131,12 +1209,16 @@ describe('account writes are compare-and-set', () => {
 
     // A reset gives its link back.
     const fresh = resetKeys();
-    expect(await accounts.reset(link, fresh.authKey, fresh.kek, IP)).toEqual(BUSY);
+    expect(
+      await accounts.reset({ token: link, newAuthKey: fresh.authKey, kek: fresh.kek }, IP),
+    ).toEqual(BUSY);
     expect(JSON.stringify(store.dump()['acct:u:ada'])).toBe(before);
     expect((await put(accounts, token, 0)).status).toBe(200);
 
     losing = false;
-    expect(await accounts.reset(link, fresh.authKey, fresh.kek, IP)).toEqual({ status: 204 });
+    expect(
+      await accounts.reset({ token: link, newAuthKey: fresh.authKey, kek: fresh.kek }, IP),
+    ).toEqual({ status: 204 });
   });
 
   it('wins on the third try', async () => {
@@ -1197,7 +1279,9 @@ describe('account writes are compare-and-set', () => {
       const link = await linkFor(accounts, mail);
       const fresh = resetKeys();
 
-      expect(await accounts.reset(link, fresh.authKey, fresh.kek, IP)).toEqual({ status: 204 });
+      expect(
+        await accounts.reset({ token: link, newAuthKey: fresh.authKey, kek: fresh.kek }, IP),
+      ).toEqual({ status: 204 });
       expect((await logIn(accounts, fresh.authKey)).status).toBe(200);
       expect((await logIn(accounts, oldKey)).status).toBe(401);
       expect(await accounts.resetInfo(link, IP)).toEqual(GONE);
@@ -1221,17 +1305,19 @@ describe('secrets', () => {
     const { authKey, kek } = resetKeys();
 
     const results: Result[] = [
-      await accounts.forgot(7, IP),
-      await accounts.forgot('nobody', IP),
+      await accounts.forgot({ who: 7 }, IP),
+      await accounts.forgot({ who: 'nobody' }, IP),
       await accounts.resetInfo(guess, IP),
       await accounts.resetInfo('short', IP),
-      await accounts.reset(guess, authKey, kek, IP),
-      await accounts.reset(token, 'x', kek, IP),
-      await accounts.reset(token, authKey, 'x', IP),
+      await accounts.reset({ token: guess, newAuthKey: authKey, kek }, IP),
+      await accounts.reset({ token, newAuthKey: 'x', kek }, IP),
+      await accounts.reset({ token, newAuthKey: authKey, kek: 'x' }, IP),
     ];
-    expect(await accounts.reset(token, authKey, kek, IP)).toEqual({ status: 204 });
+    expect(await accounts.reset({ token, newAuthKey: authKey, kek }, IP)).toEqual({
+      status: 204,
+    });
     results.push(
-      await accounts.reset(token, authKey, kek, IP),
+      await accounts.reset({ token, newAuthKey: authKey, kek }, IP),
       await accounts.resetInfo(token, IP),
     );
     for (let i = 0; i < 20; i++) results.push(await accounts.resetInfo(guess, IP));
@@ -1331,6 +1417,7 @@ describe('the routes', () => {
     expect(mail.sent).toHaveLength(2);
     expect((await call('POST', '/api/forgot', { who: 7 }, shared)).status).toBe(400);
     expect((await call('POST', '/api/forgot', 'not json', shared)).status).toBe(400);
+    expect((await call('POST', '/api/forgot', { who: 'ada', extra: 1 }, shared)).status).toBe(400);
   });
 
   it('/api/forgot answers before a stalled mailer finishes, handing its work to waitUntil', async () => {
@@ -1379,15 +1466,23 @@ describe('the routes', () => {
     }
   });
 
-  it('/api/reset answers 410 for a missing or unknown token, and 400 for a body that is not JSON', async () => {
+  it('/api/reset answers 410 for a missing or unknown token, and 400 for a body it does not take', async () => {
     for (const path of ['/api/reset', '/api/reset?token=', `/api/reset?token=${b64(32)}`]) {
       const res = await call('GET', path);
       expect(res.status, path).toBe(410);
     }
     const res = await call('POST', '/api/reset', 'not json');
     expect(res.status).toBe(400);
-    expect(await call('POST', '/api/reset', {})).toMatchObject({ status: 410 });
-    expect(await call('POST', '/api/reset', null)).toMatchObject({ status: 410 });
+    // A body that is not one the page sends: no token to call expired.
+    expect(await call('POST', '/api/reset', {})).toMatchObject({ status: 400 });
+    expect(await call('POST', '/api/reset', null)).toMatchObject({ status: 400 });
+    const keys = { newAuthKey: b64(32), kek: b64(32) };
+    expect(await call('POST', '/api/reset', { ...keys, token: b64(32) })).toMatchObject({
+      status: 410,
+    });
+    expect(await call('POST', '/api/reset', { ...keys, token: b64(32), extra: 1 })).toMatchObject({
+      status: 400,
+    });
   });
 
   it('/api/reset counts attempts by address: Retry-After on the 21st', async () => {
