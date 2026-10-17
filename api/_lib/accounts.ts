@@ -61,6 +61,10 @@ const HOUR = 60 * 60;
  * outlasts its claim.
  */
 const CLAIM_SECONDS = 60;
+/** How long an emailed reset link works. */
+const RESET_SECONDS = 30 * 60;
+/** Where the link in a reset email points (the page is site/reset). */
+const SITE = 'https://funancial.vercel.app';
 
 const USERNAME = /^[a-z0-9._-]{3,30}$/;
 const TOKEN = /^[A-Za-z0-9_-]{43}$/;
@@ -95,6 +99,9 @@ const copyBody = z.object({
     .regex(/^[A-Za-z0-9+/]{24,}={0,2}$/)
     .refine((s) => s.length % 4 === 0),
 });
+// A username or an email address; only an address has an "@".
+const forgotBody = z.union([email, username]);
+const resetKeys = z.object({ newAuthKey: key32, kek: key32 });
 const passwordBody = z.object({
   oldAuthKey: key32,
   newAuthKey: key32,
@@ -179,9 +186,18 @@ const K = {
   copy: (name: string) => `acct:c:${name}`,
   token: (hash: string) => `acct:t:${hash}`,
   claim: (name: string, since: string, version: number) => `acct:cl:${name}:${since}:${version}`,
+  /** A reset link, by the hash of its token. */
+  reset: (hash: string) => `acct:r:${hash}`,
+  /** Marks a reset link as taken by one request, so two at once can't both use it. */
+  resetUsed: (hash: string) => `acct:ru:${hash}`,
 };
 
-export function createAccounts({ store, masterKey, now }: AccountDeps) {
+const gone = (): Result => fail(410, 'gone');
+
+/** What a reset link is for: the account's name, and the `createdAt` of the account it was made for. */
+type ResetLink = { username: string; createdAt: string };
+
+export function createAccounts({ store, masterKey, now, mailer }: AccountDeps) {
   if (masterKey.length !== 32) throw new Error('the master key must be 32 bytes');
 
   const stamp = () => new Date(now()).toISOString();
@@ -221,11 +237,46 @@ export function createAccounts({ store, masterKey, now }: AccountDeps) {
     return account && sameText(account.deviceTokenHash, hash) ? account : null;
   }
 
-  /** Changes fields on the stored record as it is now (not as a slow step earlier read it). Returns the record before, or null if it's gone. */
-  async function patch(name: string, fields: Partial<Account>) {
+  /**
+   * Changes fields on the stored record as it is now (not as a slow step earlier read it). Returns the
+   * record before, or null if it's gone or, given `createdAt`, is another account of that name.
+   */
+  async function patch(name: string, fields: Partial<Account>, createdAt?: string) {
     const current = await store.get<Account>(K.user(name));
-    if (current) await store.set(K.user(name), { ...current, ...fields });
+    if (!current || (createdAt !== undefined && current.createdAt !== createdAt)) return null;
+    await store.set(K.user(name), { ...current, ...fields });
     return current;
+  }
+
+  /** The account a reset token is for, if the link is unused, unexpired, and the account is the one it was made for. */
+  async function liveReset(token: string) {
+    const hash = sha256(token);
+    const link = await store.get<ResetLink>(K.reset(hash));
+    const account = link ? await store.get<Account>(K.user(link.username)) : null;
+    return link && account && account.createdAt === link.createdAt ? { hash, account } : null;
+  }
+
+  /** Emails `account` a new link. Nothing in here may tell a caller that the account exists. */
+  async function sendLink(account: Account) {
+    const token = newToken();
+    const link: ResetLink = { username: account.username, createdAt: account.createdAt };
+    try {
+      await store.set(K.reset(sha256(token)), link, RESET_SECONDS);
+      await mailer?.send(
+        account.email,
+        'Choose a new Funancial password',
+        `Hi ${account.username}, tap the link to choose a new password. It works for 30 minutes.\n\n` +
+          `${SITE}/reset?token=${token}\n\n` +
+          "If you didn't ask for this, ignore this email.",
+      );
+    } catch (err) {
+      // A 503 here would tell a known name from an unknown one, so it goes to the log, in one word.
+      const code = (err as { code?: unknown } | null)?.code;
+      console.error(
+        '[api] reset email failed:',
+        typeof code === 'string' && /^[A-Z_]{3,20}$/.test(code) ? code : 'unknown',
+      );
+    }
   }
 
   return {
@@ -376,6 +427,91 @@ export function createAccounts({ store, masterKey, now }: AccountDeps) {
         wrappedPw: newWrappedPw,
       });
       return changed ? { status: 204 } : unauthorized();
+    },
+
+    /**
+     * Emails a reset link to the account named by `who` (a username), or to each account that uses it
+     * (an email address). Always `{ok:true}`, whether or not there is one; the limits count the name
+     * asked about, not the account, so a 429 says nothing either.
+     *
+     * shortcut: a known name takes the time of sending and an unknown one doesn't, so timing can tell
+     * them apart; the limits cap the tries at 3 per name and 10 per address an hour, so move the send
+     * to a background task (waitUntil) only if that is not enough.
+     */
+    async forgot(who: unknown, ip: string): Promise<Result> {
+      if (!mailer) return fail(503, 'not configured');
+      const parsed = forgotBody.safeParse(who);
+      if (!parsed.success) return badRequest();
+      const subject = parsed.data;
+      const over =
+        (await throttle('forgot:ip', ip, 10, HOUR)) ??
+        (await throttle('forgot:subject', subject, 3, HOUR));
+      if (over) return over;
+
+      const names = subject.includes('@') ? await store.smembers(K.email(subject)) : [subject];
+      for (const name of names) {
+        const account = await store.get<Account>(K.user(name));
+        // A set can name an account that is gone, or one that has since taken another address.
+        if (account && (!subject.includes('@') || account.email === subject)) {
+          await sendLink(account);
+        }
+      }
+      return { status: 200, body: { ok: true } };
+    },
+
+    /** Whose account a link is for, so the reset page can derive the right keys; 410 for any link that isn't live. */
+    async resetInfo(token: unknown, ip: string): Promise<Result> {
+      if (typeof token !== 'string' || !TOKEN.test(token)) return gone();
+      const over = await throttle('reset:ip', ip, 20, HOUR);
+      if (over) return over;
+      const live = await liveReset(token);
+      return live ? { status: 200, body: { username: live.account.username } } : gone();
+    },
+
+    /**
+     * Sets a new password from a reset link and keeps the data: the data key is opened with the master
+     * key and locked again with the page's `kek`. The device token and the copy are not touched, so the
+     * phone in use goes on uploading. The link works once.
+     */
+    async reset(token: unknown, newAuthKey: unknown, kek: unknown, ip: string): Promise<Result> {
+      if (typeof token !== 'string' || !TOKEN.test(token)) return gone();
+      const parsed = resetKeys.safeParse({ newAuthKey, kek });
+      if (!parsed.success) return badRequest();
+      const over = await throttle('reset:ip', ip, 20, HOUR);
+      if (over) return over;
+      const live = await liveReset(token);
+      if (!live) return gone();
+
+      // Of two requests with one link only the first claim wins. A retried write that already took
+      // effect sees the claim taken, so the claim holds a nonce: finding ours means we won. A claim
+      // nobody finishes holds until the link would have expired anyway.
+      const used = K.resetUsed(live.hash);
+      const nonce = randomBytes(8).toString('hex');
+      const won =
+        (await store.setNx(used, nonce, RESET_SECONDS)) || (await store.get(used)) === nonce;
+      if (!won) return gone();
+
+      try {
+        const dek = unwrapServer(live.account, masterKey);
+        const authSalt = randomBytes(16);
+        const changed = await patch(
+          live.account.username,
+          {
+            authSalt: authSalt.toString('base64'),
+            authHash: (await hashAuth(parsed.data.newAuthKey, authSalt)).toString('base64'),
+            wrappedPw: rewrapPassword(dek, Buffer.from(parsed.data.kek, 'base64')),
+          },
+          live.account.createdAt,
+        );
+        if (!changed) return gone();
+      } catch (err) {
+        // The friend can try the same link again.
+        await store.del(used).catch(() => {});
+        throw err;
+      }
+      // The claim already makes the link one-use; this tidies it away.
+      await store.del(K.reset(live.hash)).catch(() => {});
+      return { status: 204 };
     },
 
     async deleteAccount(token: string | null): Promise<Result> {

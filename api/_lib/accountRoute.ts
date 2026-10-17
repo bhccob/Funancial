@@ -1,29 +1,36 @@
 import { createAccounts, MasterKeyMismatch, type Accounts, type Result } from './accounts.js';
 import { bearerToken, clientIp, empty, guard, json, readJson } from './http.js';
+import { gmailMailerFromEnv } from './mailer.js';
 import { kvStoreFromEnv } from './store.js';
 
-type Context = { token: string | null; body: unknown; ip: string };
+type Context = { token: string | null; body: unknown; query: URLSearchParams; ip: string };
 
-/** Read at call time; null when the database or the master key (base64 of 32 bytes) is missing. */
+/** One field of a JSON body, or undefined where the body isn't an object; the account methods check what they get. */
+export const field = (body: unknown, name: string): unknown =>
+  typeof body === 'object' && body !== null ? (body as Record<string, unknown>)[name] : undefined;
+
+/** Read at call time; null when the database or the master key (base64 of 32 bytes) is missing. Without Gmail only `forgot` is unavailable. */
 function accountsFromEnv(): Accounts | null {
   const store = kvStoreFromEnv();
   const masterKey = Buffer.from(process.env.SERVER_MASTER_KEY ?? '', 'base64');
   return store && masterKey.length === 32
-    ? createAccounts({ store, masterKey, now: Date.now })
+    ? createAccounts({ store, masterKey, now: Date.now, mailer: gmailMailerFromEnv() ?? undefined })
     : null;
 }
 
 /**
  * Makes an account route: the shared token first, then the service's setup, the JSON body (capped),
  * and `run`. Failures answer with a fixed string; the reason is never logged, as a store error can
- * carry what was being stored.
+ * carry what was being stored. `sharedToken: false` is for the reset link's routes only, whose proof
+ * is the emailed token (see `reset`): the reset page is public and can't carry the shared one.
  */
 export function accountRoute(
   run: (accounts: Accounts, context: Context) => Promise<Result>,
   hasBody = true,
+  { sharedToken = true }: { sharedToken?: boolean } = {},
 ) {
   return async (req: Request): Promise<Response> => {
-    const denied = guard(req);
+    const denied = sharedToken ? guard(req) : null;
     if (denied) return denied;
     try {
       const accounts = accountsFromEnv();
@@ -46,6 +53,7 @@ export function accountRoute(
       } = await run(accounts, {
         token: bearerToken(req),
         body,
+        query: new URL(req.url).searchParams,
         ip: clientIp(req),
       });
       const res = answer === undefined ? empty(req, status) : json(req, answer, 'no-store', status);

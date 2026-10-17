@@ -42,6 +42,13 @@ describe('vercel.json', () => {
     expect(headersOf('/(.*)')['X-Robots-Tag']).toBe('noindex, nofollow');
   });
 
+  it.each(['/reset', '/reset/'])(
+    'serves the reset page %s fresh, as its link carries a token for one use',
+    (source) => {
+      expect(headersOf(source)).toEqual({ 'Cache-Control': 'no-cache' });
+    },
+  );
+
   it.each(['/get/latest.json', '/get/test/latest.json'])(
     'serves %s fresh, and to the app inside Android’s WebView (origin https://localhost)',
     (source) => {

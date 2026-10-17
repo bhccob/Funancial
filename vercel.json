@@ -6,6 +6,14 @@
   "headers": [
     { "source": "/(.*)", "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }] },
     {
+      "source": "/reset",
+      "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
+    },
+    {
+      "source": "/reset/",
+      "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
+    },
+    {
       "source": "/get/latest.json",
       "headers": [
         { "key": "Cache-Control", "value": "no-cache" },

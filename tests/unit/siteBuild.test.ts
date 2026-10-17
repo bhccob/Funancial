@@ -17,12 +17,15 @@ describe('the two builds', () => {
     expect(appConfig.build?.rollupOptions?.input).toBeUndefined();
   });
 
-  it('write the download page to site-dist, from site/get/index.html', () => {
+  it('write the download page and the reset page to site-dist, from site/get and site/reset', () => {
     expect(resolve(String(siteConfig.root))).toBe(resolve(root, 'site'));
     expect(resolve(String(siteConfig.root), String(siteConfig.build?.outDir))).toBe(
       resolve(root, 'site-dist'),
     );
-    expect(siteConfig.build?.rollupOptions?.input).toBe(resolve(root, 'site/get/index.html'));
+    expect(siteConfig.build?.rollupOptions?.input).toEqual({
+      get: resolve(root, 'site/get/index.html'),
+      reset: resolve(root, 'site/reset/index.html'),
+    });
     expect(siteConfig.resolve?.alias).toEqual({ '@': resolve(root, 'src') });
   });
 });

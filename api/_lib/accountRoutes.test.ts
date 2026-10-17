@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { POST as loginPOST, OPTIONS as loginOPTIONS } from '../login.js';
 import { DELETE as copyDELETE, OPTIONS as copyOPTIONS, PUT as copyPUT } from '../copy.js';
+import { OPTIONS as forgotOPTIONS, POST as forgotPOST } from '../forgot.js';
 import { POST as passwordPOST, OPTIONS as passwordOPTIONS } from '../password.js';
 import { POST as signupPOST, OPTIONS as signupOPTIONS } from '../signup.js';
 import { accountRoute } from './accountRoute.js';
@@ -59,6 +60,7 @@ const routes: Array<[string, Handler, string, string]> = [
   ['put copy', copyPUT, 'PUT', '/api/copy'],
   ['delete copy', copyDELETE, 'DELETE', '/api/copy'],
   ['password', passwordPOST, 'POST', '/api/password'],
+  ['forgot', forgotPOST, 'POST', '/api/forgot'],
 ];
 
 describe('account routes', () => {
@@ -78,7 +80,13 @@ describe('account routes', () => {
   });
 
   it('answer the preflight with every method and header the phone uses', () => {
-    for (const options of [signupOPTIONS, loginOPTIONS, copyOPTIONS, passwordOPTIONS]) {
+    for (const options of [
+      signupOPTIONS,
+      loginOPTIONS,
+      copyOPTIONS,
+      passwordOPTIONS,
+      forgotOPTIONS,
+    ]) {
       const res = options(
         new Request('http://localhost/api/copy', {
           method: 'OPTIONS',
