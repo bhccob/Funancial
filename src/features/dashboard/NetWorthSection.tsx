@@ -2,7 +2,7 @@ import { ChevronRight } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Sparkline } from '@/components/charts/Sparkline';
 import { HelpTip } from '@/components/ui/HelpTip';
-import { Section } from '@/components/ui/Section';
+import { Section, SectionLink } from '@/components/ui/Section';
 import { netWorthChangeThisMonth, netWorthSeries } from '@/domain/charts';
 import type { LocalDate } from '@/domain/dates';
 import { minorDigits } from '@/domain/money';
@@ -56,18 +56,21 @@ export function NetWorthSection({ data, view, today }: NetWorthSectionProps) {
       help={<HelpTip pageId="net-worth" label="net worth" />}
       action={changeText}
     >
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="flex min-h-11 items-center gap-1 text-left"
-      >
-        <span className="text-[34px] leading-tight font-extrabold tracking-[-0.035em] tabular-nums">
-          {money(view.netWorth)}
-        </span>
-        <ChevronRight aria-hidden="true" className="text-muted size-6 flex-none" />
-        {/* Its name is the amount you see, then what it does, so the name holds the visible text. */}
-        <span className="sr-only"> Net worth: see and correct</span>
-      </button>
+      <div className="flex flex-wrap items-center justify-between gap-x-3">
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="flex min-h-11 items-center gap-1 text-left"
+        >
+          <span className="text-[34px] leading-tight font-extrabold tracking-[-0.035em] tabular-nums">
+            {money(view.netWorth)}
+          </span>
+          <ChevronRight aria-hidden="true" className="text-muted size-6 flex-none" />
+          {/* Its name is the amount you see, then what it does, so the name holds the visible text. */}
+          <span className="sr-only"> Net worth: see and correct</span>
+        </button>
+        <SectionLink to="/income">Income stats</SectionLink>
+      </div>
       <NetWorthSheet open={open} view={view} onClose={() => setOpen(false)} />
       <div className="mt-3">
         <Sparkline

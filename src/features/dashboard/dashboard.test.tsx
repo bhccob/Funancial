@@ -687,6 +687,17 @@ describe('DashboardScreen net worth', () => {
     expect(screen.getByText('No change this month')).toHaveClass('text-muted');
   });
 
+  it('links to the Income page from the Net worth section, beside the number and not inside it', () => {
+    renderDashboard(monthData(), TODAY);
+    const worth = region('Net worth');
+    const link = within(worth).getByRole('link', { name: 'Income stats' });
+    expect(link).toHaveAttribute('href', '/income');
+    const number = within(worth).getByRole('button', { name: /Net worth: see and correct$/ });
+    expect(number).not.toContainElement(link);
+    expect(link.closest('button')).toBeNull();
+    expect(link.parentElement).toBe(number.parentElement);
+  });
+
   it('adds Investments to the legend, in the second chart colour, once they are worth something', () => {
     const data = monthData();
     data.tables.holding = [

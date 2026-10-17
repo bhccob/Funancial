@@ -117,7 +117,7 @@ Numbers are tabular. Money always goes through `useMoney()` / `formatMoney`, dat
   with a grab handle and rounded top corners. It is a plain list in two groups (section titles at
   21px); each row is at least 48px tall with a coloured round icon, the name, a line saying what is
   inside right now, and an arrow. Escape and the Android back gesture close it.
-  - **Your money:** Bills & cards, Goals, Debts, History, Salary freeze, Buy it?.
+  - **Your money:** Bills & cards, Goals, Debts, Income, History, Salary freeze, Buy it?.
   - **You:** Quests, Shop, Inbox ("Soon"), Help ("Soon"), Settings.
 - **Desktop:** the sidebar lists Home, Budget and Invest, then the same groups, under an "Add
   expense" button.
@@ -133,7 +133,7 @@ Fixed in both themes (`src/app/menu.ts`); each holds at least 3:1 against the wh
 | History | `#d9541e` | Inbox | `#3b82c4` |
 | Salary freeze | `#4458d6` | Help | `#128a60` |
 | Buy it? | `#c43b6a` | Settings | `#5b6270` |
-| Debts | `#b3261e` | | |
+| Debts | `#b3261e` | Income | `#2e7d32` |
 
 ## Welcome and setup
 

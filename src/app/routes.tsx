@@ -13,6 +13,7 @@ import { HelpScreen } from '@/features/help/HelpScreen';
 import { HistoryScreen } from '@/features/history/HistoryScreen';
 import { InboxScreen } from '@/features/inbox/InboxScreen';
 import { HoldingPage } from '@/features/invest/HoldingPage';
+import { IncomeScreen } from '@/features/income/IncomeScreen';
 import { InvestScreen } from '@/features/invest/InvestScreen';
 import { QuestsScreen } from '@/features/quests/QuestsScreen';
 import { ShopScreen } from '@/features/shop/ShopScreen';
@@ -41,6 +42,7 @@ export const APP_ROUTES: AppRoute[] = [
   { path: '/freeze', element: <FreezeScreen /> },
   { path: '/goals', element: <GoalsScreen /> },
   { path: '/debts', element: <DebtsScreen /> },
+  { path: '/income', element: <IncomeScreen /> },
   { path: '/history', element: <HistoryScreen /> },
   { path: '/shop', element: <ShopScreen /> },
   { path: '/inbox', element: <InboxScreen /> },

@@ -1,6 +1,7 @@
+import { incomeByMonth } from '@/domain/income';
 import { formatDay } from '@/lib/format';
 import { useApp } from '@/store/AppStoreProvider';
-import { useFinanceView, useMoney } from '@/store/useFinance';
+import { useFinanceView, useMoney, useToday } from '@/store/useFinance';
 import { useGameView } from '@/store/useGame';
 import { useInboxItems } from '@/store/useInbox';
 
@@ -13,6 +14,8 @@ export function useMenuSubtitles(): Record<string, string> {
   const subscriptions = useApp((s) => s.data.tables.subscription);
   const debts = useApp((s) => s.data.tables.debt);
   const goals = useApp((s) => s.data.tables.goal);
+  const data = useApp((s) => s.data);
+  const today = useToday();
   // Reversals can take the ledger below zero; the Shop shows nothing to spend then, never a debt.
   const game = useGameView();
   const coins = Math.max(0, game.totals.coins);
@@ -43,6 +46,7 @@ export function useMenuSubtitles(): Record<string, string> {
     '/subscriptions': billsLine || 'None yet',
     '/goals': goals.length > 0 ? `${plural(goals.length, 'goal')} · ${percent}% saved` : 'None yet',
     '/debts': debts.length > 0 ? `${debtCount} · ${money(view.debtTotal)}` : 'None yet',
+    '/income': `${money(incomeByMonth(data, today, 1)[0]!.total)} this month`,
     '/history': 'Every entry, searchable',
     '/freeze': view.activeFreeze
       ? `Active until ${formatDay(view.activeFreeze.end)}`

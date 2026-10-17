@@ -14,7 +14,9 @@ import { createStubStore, renderWithStore } from '@/test/appStoreStub';
 import { INBOX_NOW, inboxData } from '@/test/inboxData';
 import {
   makeDebt,
+  makeDividend,
   makeGoal,
+  makeIncome,
   makeLedgerEntry,
   makeProfile,
   makeSubscription,
@@ -240,6 +242,54 @@ describe('Menu sheet', () => {
     });
   });
 
+  describe('Income row', () => {
+    afterEach(() => useAmountsHidden.setState({ hidden: false }));
+
+    const earning = () => {
+      const data = emptySnapshot();
+      data.tables.profile.push(makeProfile({ currency: 'USD' }));
+      data.tables.income.push(
+        makeIncome({ date: '2026-10-05', amount: 4_000_00 }),
+        makeIncome({ date: '2026-09-25', amount: 9_000_00 }),
+        // Not arrived: not income.
+        makeIncome({ date: '2026-10-25', amount: 5_000_00, status: 'expected' }),
+      );
+      data.tables.dividend.push(
+        makeDividend({ paidOn: '2026-10-03', expectedPayDate: '2026-10-03', amount: 13_00 }),
+      );
+      return data;
+    };
+
+    it('sits before History and says what came in this month', async () => {
+      renderAt('/', earning());
+      const sheet = await openMenu();
+      expect(row(sheet, 'Income')).toHaveTextContent(`${usd(4_013_00)} this month`);
+      expect(row(sheet, 'Income')).toHaveAttribute('href', '/income');
+      const hrefs = within(sheet)
+        .getAllByRole('link')
+        .map((a) => a.getAttribute('href'));
+      expect(hrefs.indexOf('/income')).toBe(hrefs.indexOf('/history') - 1);
+    });
+
+    it('says $0 this month when nothing has come in', async () => {
+      renderAt('/');
+      expect(row(await openMenu(), 'Income')).toHaveTextContent(`${usd(0)} this month`);
+    });
+
+    it('hides the amount with the eye', async () => {
+      useAmountsHidden.setState({ hidden: true });
+      renderAt('/', earning());
+      expect(row(await openMenu(), 'Income')).toHaveTextContent('•••• this month');
+    });
+
+    it('opens the Income page and closes the sheet', async () => {
+      renderAt('/', earning());
+      await userEvent.click(row(await openMenu(), 'Income'));
+      expect(screen.getByRole('heading', { level: 1, name: 'Income' })).toBeInTheDocument();
+      expect(screen.queryByRole('dialog', { name: 'Menu' })).not.toBeInTheDocument();
+    });
+  });
+
   it('shows the level the player has reached on the Quests row', async () => {
     const data = emptySnapshot();
     data.tables.ledger.push(makeLedgerEntry({ coins: 0, xp: levelStart(3) }));
@@ -357,7 +407,7 @@ describe('Menu sheet', () => {
       within(money)
         .getAllByRole('link')
         .map((a) => a.getAttribute('href')),
-    ).toEqual(['/subscriptions', '/goals', '/debts', '/history', '/freeze', '/buy']);
+    ).toEqual(['/subscriptions', '/goals', '/debts', '/income', '/history', '/freeze', '/buy']);
 
     await userEvent.click(row(sheet, 'Buy it\\?'));
     expect(screen.getByRole('heading', { level: 1, name: 'Should I buy it?' })).toBeInTheDocument();
@@ -453,6 +503,7 @@ describe('sidebar', () => {
   it.each([
     ['/goals', 'Goals'],
     ['/debts', 'Debts'],
+    ['/income', 'Income'],
   ])('marks %s as the current screen', (path, name) => {
     renderAt(path);
     const sidebar = screen.getByRole('navigation', { name: 'All sections' });
@@ -463,7 +514,7 @@ describe('sidebar', () => {
 describe('menu items', () => {
   it('has the two groups in order, with a fixed chip colour that holds 3:1 against a white icon', () => {
     expect(MENU_GROUPS.map((g) => [g.title, g.items.length])).toEqual([
-      ['Your money', 6],
+      ['Your money', 7],
       ['You', 6],
     ]);
     const luminance = (hex: string) => {
