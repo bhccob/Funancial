@@ -65,6 +65,19 @@ async function openMenu() {
 const row = (sheet: HTMLElement, label: string) =>
   within(sheet).getByRole('link', { name: new RegExp(`^${label}`) });
 
+describe('sidebar', () => {
+  it('has links that are 44px tall', () => {
+    renderAt('/');
+    const sidebar = screen.getByRole('navigation', { name: 'All sections' });
+    // The Add expense button above them is 48px (a medium button); the rows are nav links.
+    const rows = within(sidebar)
+      .getAllByRole('link')
+      .filter((link) => link.textContent !== 'Add expense');
+    expect(rows.length).toBeGreaterThan(10);
+    for (const link of rows) expect(link, link.textContent ?? '').toHaveClass('min-h-11');
+  });
+});
+
 describe('bottom bar', () => {
   it('shows Home, Budget, Invest and Menu in the bar, and Quests first in the Menu', async () => {
     renderAt('/');

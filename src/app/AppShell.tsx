@@ -13,12 +13,17 @@ export function AppShell() {
   const shown = useRef(pathname);
 
   // A link in the old page takes focus with it when the page changes, leaving Tab to start from
-  // the top of the document. Put focus on the new page instead, unless it focused a field itself
-  // (focus is then inside it) or the link used is a bar link, which stays on screen with its focus.
+  // the top of the document. Put focus on the new screen's heading instead (its name, which a
+  // screen reader then reads), or on the page when it has none. Not when the new screen focused a
+  // field itself, or the link used is a bar link, which stays on screen with its focus.
   useEffect(() => {
     if (shown.current === pathname) return;
     shown.current = pathname;
-    if (document.activeElement === document.body) main.current?.focus();
+    if (document.activeElement !== document.body) return;
+    const heading = main.current?.querySelector('h1');
+    // Focusable by script only, as the page is.
+    if (heading && !heading.hasAttribute('tabindex')) heading.tabIndex = -1;
+    (heading ?? main.current)?.focus({ preventScroll: true });
   }, [pathname]);
 
   return (
@@ -29,7 +34,7 @@ export function AppShell() {
       <main
         ref={main}
         tabIndex={-1}
-        className="mx-auto w-full max-w-6xl px-[22px] pt-[max(1rem,env(safe-area-inset-top))] pb-[calc(6rem+env(safe-area-inset-bottom))] focus:outline-none md:px-10 md:pt-6 md:pb-12"
+        className="mx-auto w-full max-w-6xl px-[22px] pt-[max(1rem,env(safe-area-inset-top))] pb-[calc(6rem+env(safe-area-inset-bottom))] focus:outline-none md:px-10 md:pt-6 md:pb-12 [&_h1:focus]:outline-none"
       >
         <DemoBanner />
         <Outlet />

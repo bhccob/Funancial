@@ -342,7 +342,8 @@ describe('About you', () => {
       });
       failingWrites(store);
       await userEvent.click(chip('Fun'));
-      expect(await screen.findByText('Disk is full')).toBeInTheDocument();
+      // Said as an alert, like the other fields' errors, so a screen reader hears it at once.
+      expect(await screen.findByRole('alert')).toHaveTextContent('Disk is full');
       expect(chip('Fun')).toHaveAttribute('aria-pressed', 'false');
       expect(chip('Shopping')).toHaveAttribute('aria-pressed', 'true');
       expect(screen.queryByText('Saved')).not.toBeInTheDocument();

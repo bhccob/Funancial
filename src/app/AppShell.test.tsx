@@ -1,8 +1,9 @@
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { createMemoryRouter, RouterProvider } from 'react-router';
-import { describe, expect, it } from 'vitest';
+import { createMemoryRouter, Link, RouterProvider } from 'react-router';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { renderWithStore } from '@/test/appStoreStub';
+import { AppShell } from './AppShell';
 import { appRouteObjects } from './router';
 
 function renderAt(path: string) {
@@ -10,6 +11,8 @@ function renderAt(path: string) {
   renderWithStore(<RouterProvider router={router} />);
   return router;
 }
+
+afterEach(() => vi.restoreAllMocks());
 
 describe('AppShell', () => {
   it('shows not found for an unknown path with a way home', async () => {
@@ -19,17 +22,40 @@ describe('AppShell', () => {
     expect(screen.getByRole('heading', { level: 1, name: 'Home' })).toBeInTheDocument();
   });
 
-  it('moves focus into the page when a route change leaves it nowhere, so Tab starts in its content', async () => {
+  it('moves focus to the heading of the new screen when a route change leaves it nowhere', async () => {
+    const focus = vi.spyOn(HTMLElement.prototype, 'focus');
     renderAt('/nope');
-    const main = screen.getByRole('main');
     // The first screen leaves focus where the browser put it.
-    expect(main).not.toHaveFocus();
+    expect(screen.getByRole('heading', { level: 1, name: 'Page not found' })).not.toHaveFocus();
     await userEvent.click(screen.getByRole('link', { name: 'Go home' }));
-    expect(screen.getByRole('heading', { level: 1, name: 'Home' })).toBeInTheDocument();
-    expect(main).toHaveFocus();
-    // The page is where focus is placed, not a control: it draws no ring of its own.
-    expect(main).toHaveAttribute('tabindex', '-1');
-    expect(main).toHaveClass('focus:outline-none');
+    const home = screen.getByRole('heading', { level: 1, name: 'Home' });
+    expect(home).toHaveFocus();
+    // A heading is where focus is placed, not a control: it is focusable by script and draws no ring.
+    expect(home).toHaveAttribute('tabindex', '-1');
+    expect(screen.getByRole('main').className).toContain('[&_h1:focus]:outline-none');
+    // It must not scroll the screen to its top while the person is mid-page.
+    expect(focus).toHaveBeenCalledWith({ preventScroll: true });
+  });
+
+  it('falls back to the page itself when a screen has no heading', async () => {
+    const router = createMemoryRouter(
+      [
+        {
+          element: <AppShell />,
+          children: [
+            { path: '/', element: <Link to="/bare">Open</Link> },
+            { path: '/bare', element: <p>No heading here</p> },
+          ],
+        },
+      ],
+      { initialEntries: ['/'] },
+    );
+    renderWithStore(<RouterProvider router={router} />);
+    await userEvent.click(screen.getByRole('link', { name: 'Open' }));
+    expect(screen.getByText('No heading here')).toBeInTheDocument();
+    expect(screen.getByRole('main')).toHaveFocus();
+    expect(screen.getByRole('main')).toHaveAttribute('tabindex', '-1');
+    expect(screen.getByRole('main')).toHaveClass('focus:outline-none');
   });
 
   it('leaves focus on a bar link that was used, which stays on screen', async () => {

@@ -7,25 +7,46 @@ import { expect, test, type Locator, type Page } from '@playwright/test';
  */
 
 /**
- * Whether the focused element shows that it has focus: an outline (the page-wide ring, which the
- * radio tabs draw on their label), or the 2px ink line that line fields take under their value
- * instead of a box (`focus:outline-none` + `focus:border-b-2`, by design).
+ * Whether the focused element shows that it has focus.
+ * - A radio or checkbox is a hidden native input (the page-wide ring would give it an outline no one
+ *   sees), so what counts is the ring on its visible label.
+ * - A text input or select has no outline by design (`focus:outline-none`); it takes a 2px line in
+ *   ink under its value instead, in place of the 1px hairline. That counts when the line is at
+ *   least 2px and not the hairline's colour (so a tab's always-there transparent border cannot pass).
+ * - Anything else (links, buttons, switches, bars) needs an outline of its own.
  */
 const focusIsShown = (page: Page) =>
   page.evaluate(() => {
     const el = document.activeElement;
     if (!el || el === document.body) return false;
-    const outlined = (e: Element) => {
+    const ring = (e: Element) => {
       const s = getComputedStyle(e);
-      return s.outlineStyle !== 'none' && parseFloat(s.outlineWidth) > 0;
+      const clear = s.outlineColor === 'transparent' || /,\s*0\)$/.test(s.outlineColor);
+      return s.outlineStyle !== 'none' && parseFloat(s.outlineWidth) > 0 && !clear;
     };
-    if (outlined(el) || (el.closest('label') && outlined(el.closest('label')!))) return true;
+    if (el instanceof HTMLInputElement && (el.type === 'radio' || el.type === 'checkbox')) {
+      const label = el.closest('label');
+      return label !== null && ring(label);
+    }
     // The calendar button inside a date field: focus is on it, not on the field, and Chrome rings it.
     if (el instanceof HTMLInputElement && el.type === 'date' && !el.matches(':focus')) return true;
+    if (ring(el)) return true;
     if (el instanceof HTMLInputElement || el instanceof HTMLSelectElement) {
+      // The hairline's colour as the page resolves it, to tell the focused line from the resting one.
+      const probe = document.createElement('div');
+      probe.style.color = 'var(--color-border)';
+      document.body.append(probe);
+      const hairline = getComputedStyle(probe).color;
+      probe.remove();
+      // The line is the input's own border, or its wrapper's (the share stepper's).
       for (let e: Element | null = el, up = 0; e && up < 3; e = e.parentElement, up++) {
         const s = getComputedStyle(e);
-        if (s.borderBottomStyle !== 'none' && parseFloat(s.borderBottomWidth) >= 2) return true;
+        if (
+          s.borderBottomStyle !== 'none' &&
+          parseFloat(s.borderBottomWidth) >= 2 &&
+          s.borderBottomColor !== hairline
+        )
+          return true;
       }
     }
     return false;
@@ -141,9 +162,10 @@ test('set a limit with the keyboard alone, and focus comes back to Add a limit',
   await openAndEscape(page, opener, dialog);
   await page.keyboard.press('Enter');
   await expect(dialog).toBeVisible();
-  // The dialog takes focus into itself, onto the first choice.
+  // The dialog takes focus into itself, onto the chosen radio of its first group (One category);
+  // the browser alone would pick the first radio, Overall, which nobody chose.
   await expect(dialog.getByRole('radio', { name: 'One category' })).toBeFocused();
-  await expectFocusShown(page, 'the first choice in the dialog');
+  await expectFocusShown(page, 'the chosen radio in the dialog');
 
   const category = dialog.getByLabel('Category', { exact: true });
   await tabTo(page, category);
@@ -168,7 +190,10 @@ test('ask Buy it? on demo money with the keyboard alone', async ({ page }) => {
   await demoByKeyboard(page);
   await tabTo(page, page.getByRole('main').getByRole('link', { name: 'Buy it?', exact: true }));
   await page.keyboard.press('Enter');
-  await expect(page.getByRole('heading', { level: 1, name: 'Should I buy it?' })).toBeVisible();
+  const title = page.getByRole('heading', { level: 1, name: 'Should I buy it?' });
+  await expect(title).toBeVisible();
+  // The link that was used left with the Home screen; focus lands on the new screen's name.
+  await expect(title).toBeFocused();
 
   await tabTo(page, page.getByLabel('What is it?'));
   await page.keyboard.type('Noise-cancelling headphones');
@@ -208,9 +233,14 @@ for (const width of [360, 375]) {
     test.skip(testInfo.project.name !== 'mobile-chromium', 'phone widths only');
     await page.setViewportSize({ width, height: 812 });
     await demoByKeyboard(page);
+    // Opened by keyboard like everything else here (the URL change is not a mouse action).
     await page.goto('/subscriptions');
-    await page.getByRole('button', { name: 'Add', exact: true }).first().click();
+    await tabTo(page, page.getByRole('button', { name: 'Add', exact: true }).first());
+    await page.keyboard.press('Enter');
     const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible();
+    // Widths depend on the font, so measure once it has loaded.
+    await page.evaluate(() => document.fonts.ready);
     // Cycle has four tabs; Paid with has four on demo money (Cash, Debit card, Demo Visa, Other).
     for (const legend of ['Cycle', 'Paid with']) {
       const tabs = dialog.getByRole('group', { name: legend }).locator('label');
