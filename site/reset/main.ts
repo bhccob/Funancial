@@ -19,6 +19,8 @@ const submit = el<HTMLButtonElement>('reset-submit');
 
 const MIN_LENGTH = 10;
 const EXPIRED = 'This link has expired. Ask for a new one in the app.';
+// The address has no token: the link is opened again from the email (a reload gets here, as the token is taken out).
+const NO_TOKEN = 'Open the link in your email again to choose a new password.';
 const DONE = 'Your password is changed. Log in on your phone with the new one.';
 const LATER = 'Something went wrong. Try again in a moment.';
 
@@ -56,7 +58,7 @@ function clearComplaint() {
 }
 
 async function open() {
-  if (!token) return say(EXPIRED);
+  if (!token) return say(NO_TOKEN);
   try {
     const res = await fetch(`/api/reset?token=${encodeURIComponent(token)}`);
     if (res.status === 410) return say(EXPIRED);

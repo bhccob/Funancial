@@ -430,6 +430,35 @@ describe('forgot', () => {
     spies.forEach((spy) => spy.mockRestore());
   });
 
+  it('stops at the first send that fails, so a stalled Gmail cannot take the time of every account', async () => {
+    const spies = (['error', 'log', 'info', 'warn', 'debug'] as const).map((m) =>
+      vi.spyOn(console, m).mockImplementation(() => {}),
+    );
+    const attempts: string[] = [];
+    const failing: Mailer = {
+      send: async (to) => {
+        attempts.push(to);
+        throw Object.assign(new Error('timed out'), { code: 'ETIMEDOUT' });
+      },
+    };
+    const accounts = createAccounts({
+      store: memoryKvStore(() => clock),
+      masterKey: MASTER,
+      now: () => clock,
+      mailer: failing,
+      waitUntil: background,
+    });
+    for (const [i, name] of ['ada', 'grace', 'alan'].entries()) {
+      await join(accounts, { username: name }, `198.51.100.${i + 1}`);
+    }
+
+    expect(await accounts.forgot('ada@example.com', IP)).toEqual(OK);
+    await settled();
+    expect(attempts).toHaveLength(1);
+    expect(spies[0]?.mock.calls).toEqual([['[api] reset email failed:', 'ETIMEDOUT']]);
+    spies.forEach((spy) => spy.mockRestore());
+  });
+
   it('answers 200, and logs one word, when the lookup itself fails after the answer', async () => {
     const spies = (['error', 'log', 'info', 'warn', 'debug'] as const).map((m) =>
       vi.spyOn(console, m).mockImplementation(() => {}),
@@ -994,6 +1023,62 @@ describe('account writes are compare-and-set', () => {
     );
     const { authKey } = await join(accounts);
     expect((await logIn(accounts, authKey)).status).toBe(200);
+  });
+
+  describe('when the reply to a write that landed is lost', () => {
+    // The Upstash client sends a request again when its fetch threw. If the first EVAL had applied
+    // and only its reply was lost, the second finds the key already changed and answers 0. Here the
+    // first compare-and-set applies and still reports that it didn't, the same.
+    const lostReply = (s: KvStore) => {
+      let first = true;
+      return around(s, 'compareAndSet', async (_args, run) => {
+        const wrote = await run();
+        if (!first) return wrote;
+        first = false;
+        return false;
+      });
+    };
+
+    it('keeps the token a log-in made, so it works and the old phone is replaced', async () => {
+      const { store, accounts } = setup(lostReply);
+      const { authKey, token: oldToken } = await join(accounts);
+
+      const res = await logIn(accounts, authKey);
+      expect(res.status).toBe(200);
+      const token = out<{ deviceToken: string }>(res).deviceToken;
+      // Its pointer is there (and the old one is gone), not removed as if the write had lost.
+      expect(tokenPointers(store)).toEqual([`acct:t:${sha(token)}`]);
+      expect((await put(accounts, token, 0)).status).toBe(200);
+      expect((await put(accounts, oldToken, 1)).status).toBe(401);
+    });
+
+    it('answers 204 for a password change that took effect', async () => {
+      const { accounts } = setup(lostReply);
+      const { authKey, token } = await join(accounts);
+      const chosen = b64(32);
+
+      expect(
+        await accounts.changePassword(token, {
+          oldAuthKey: authKey,
+          newAuthKey: chosen,
+          newWrappedPw: newWrapped(),
+        }),
+      ).toEqual({ status: 204 });
+      expect((await logIn(accounts, chosen)).status).toBe(200);
+      expect((await logIn(accounts, authKey)).status).toBe(401);
+    });
+
+    it('answers 204 for a reset that took effect, and the link is spent', async () => {
+      const { accounts, mail } = setup(lostReply);
+      const { authKey: oldKey } = await join(accounts);
+      const link = await linkFor(accounts, mail);
+      const fresh = resetKeys();
+
+      expect(await accounts.reset(link, fresh.authKey, fresh.kek, IP)).toEqual({ status: 204 });
+      expect((await logIn(accounts, fresh.authKey)).status).toBe(200);
+      expect((await logIn(accounts, oldKey)).status).toBe(401);
+      expect(await accounts.resetInfo(link, IP)).toEqual(GONE);
+    });
   });
 });
 

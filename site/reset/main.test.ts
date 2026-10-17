@@ -8,6 +8,7 @@ import page from './index.html?raw';
 
 const TOKEN = 'x'.repeat(43);
 const EXPIRED = 'This link has expired. Ask for a new one in the app.';
+const NO_TOKEN = 'Open the link in your email again to choose a new password.';
 const DONE = 'Your password is changed. Log in on your phone with the new one.';
 const LATER = 'Something went wrong. Try again in a moment.';
 const PASSWORD = 'a brand new password';
@@ -185,9 +186,11 @@ describe('the reset page', () => {
     expect(screen.queryByLabelText('New password')).not.toBeVisible();
   });
 
-  it('says the link has expired, without asking, when there is no token', async () => {
+  it('asks to open the link in the email again, without asking the service, when there is no token', async () => {
     await open('');
-    expect(await screen.findByText(EXPIRED)).toBeVisible();
+    expect(await screen.findByText(NO_TOKEN)).toBeVisible();
+    expect(screen.queryByText(EXPIRED)).toBeNull();
+    expect(screen.queryByLabelText('New password')).not.toBeVisible();
     expect(fetchMock).not.toHaveBeenCalled();
   });
 

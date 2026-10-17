@@ -69,6 +69,17 @@ test('says an old link has expired', async ({ page }) => {
   await expect(page.getByLabel('New password')).toBeHidden();
 });
 
+test('asks to open the emailed link again when the address has no token, as after a reload', async ({
+  page,
+}) => {
+  await serveReset(page, { status: 200, body: { username: 'ada' } });
+  await page.goto('/reset');
+  await expect(
+    page.getByText('Open the link in your email again to choose a new password.'),
+  ).toBeVisible();
+  await expect(page.getByLabel('New password')).toBeHidden();
+});
+
 test('fits a phone, with fields and a button a thumb can hit', async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 812 });
   await serveReset(page, { status: 200, body: { username: 'ada' } });

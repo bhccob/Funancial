@@ -264,20 +264,33 @@ export function createAccounts({ store, masterKey, now, mailer, waitUntil }: Acc
    * It is checked against the record each try has just read, never only the first: a reset or a
    * password change that lands in between must not let a request on the old password through.
    * Returns the record before; null if it's gone or `allowed` refuses it; `BUSY` if it never won.
+   * (`allowed` is not asked about a write that already landed: it would now refuse its own.)
    */
   async function patch(
     name: string,
     fields: Partial<Account>,
     allowed: (current: Account) => boolean | Promise<boolean>,
   ) {
+    let before: Account | undefined;
     for (let attempt = 0; attempt < WRITE_TRIES; attempt++) {
       const current = await store.get<Account>(K.user(name));
-      if (!current || !(await allowed(current))) return null;
+      if (!current) return null;
+      // A write whose reply was lost (the client sends it again, and the key has already changed)
+      // reports that it lost. Every caller's `fields` hold something it just made at random, so a
+      // record that already holds them all is its own write: it won, and `before` is what it replaced.
+      if (before && sameFields(current, fields)) return before;
+      if (!(await allowed(current))) return null;
       if (await store.compareAndSet(K.user(name), current, { ...current, ...fields }))
         return current;
+      before = current;
     }
     return BUSY;
   }
+
+  const sameFields = (account: Account, fields: Partial<Account>) =>
+    Object.entries(fields).every(
+      ([key, value]) => JSON.stringify(account[key as keyof Account]) === JSON.stringify(value),
+    );
 
   /**
    * The account a reset token is for, if the link is unused and unexpired, the account is the one it
@@ -301,7 +314,11 @@ export function createAccounts({ store, masterKey, now, mailer, waitUntil }: Acc
     );
   }
 
-  /** Emails `account` a new link. False when the day's cap is used up, and nothing was made or sent. */
+  /**
+   * Emails `account` a new link. False when the caller should go no further: the day's cap is used
+   * up (nothing was made or sent) or this send failed (a stalled Gmail would take as long again for
+   * the next, and the function has only so long).
+   */
   async function sendLink(account: Account) {
     try {
       if (!(await rateLimit(store, 'forgot:global', 'all', SENDS_PER_DAY, DAY)).ok) {
@@ -324,6 +341,7 @@ export function createAccounts({ store, masterKey, now, mailer, waitUntil }: Acc
       );
     } catch (err) {
       logMailFailure(err);
+      return false;
     }
     return true;
   }
