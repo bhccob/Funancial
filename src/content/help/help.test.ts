@@ -155,6 +155,12 @@ describe('help copy says what the code does', () => {
     expect(answer).not.toMatch(/exchange rates|symbol/);
   });
 
+  it('says an app installed from the download page checks it for a newer version, and sends nothing', () => {
+    expect(LEGAL.privacy).toContain(
+      'An app installed from the download page also checks that page for a newer version. That check carries nothing about you.',
+    );
+  });
+
   it("says the app doesn't keep the passphrase, not that it keeps no copy of the backup", () => {
     const privacy = LEGAL.privacy.join(' ');
     expect(privacy).toContain("Funancial doesn't keep your passphrase");

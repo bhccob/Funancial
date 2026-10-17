@@ -20,6 +20,10 @@ describe('createWebPlatform', () => {
     expect(downloadText).toHaveBeenCalledWith('funancial-export.json', '{}', 'application/json');
   });
 
+  it('has no app version, since a web page is not an installed build', async () => {
+    await expect(createWebPlatform().appVersion()).resolves.toBeNull();
+  });
+
   it('reports a resume when the page becomes visible again', () => {
     const platform = createWebPlatform();
     const resumed = vi.fn();

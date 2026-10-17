@@ -8,6 +8,7 @@ export const LEGAL: {
     'Your data lives on your phone, encrypted.',
     'There is no account and no analytics. Funancial does not know who you are, and it does not track how you use it.',
     "The only network calls go to the app's own price service. They fetch prices, exchange rates, dividends, news, symbol searches and price history, and they read a product link when you paste one. They carry only what is needed to look something up: a symbol, the text you type in search, a currency pair, a start date, or a pasted link. Never your amounts, balances or notes.",
+    'An app installed from the download page also checks that page for a newer version. That check carries nothing about you.',
     "A backup is a file you choose where to save, encrypted with your passphrase. Funancial doesn't keep your passphrase, so if you lose it, nobody can open the backup.",
   ],
   terms: [

@@ -11,6 +11,7 @@ import {
   releaseDir,
   webBuildEnv,
 } from '../../scripts/release-android.mjs';
+import { LatestSchema } from '../../src/domain/update';
 
 const read = (path: string) => readFileSync(new URL(`../../${path}`, import.meta.url), 'utf8');
 
@@ -71,8 +72,10 @@ describe('buildLatest', () => {
       notes: 'First release for friends.',
       size: 12_345_678,
     });
-    expect(latest.sha256).toMatch(/^[0-9a-f]{64}$/);
-    expect(latest.size).toBeGreaterThan(0);
+    // Exactly what the app's own schema accepts, for both channels.
+    expect(LatestSchema.parse(latest)).toEqual(latest);
+    const test = buildLatest({ ...input, channel: 'test' });
+    expect(LatestSchema.parse(test)).toEqual(test);
   });
 
   it('refuses empty notes, notes over 500 characters and a name over 20', () => {

@@ -47,6 +47,7 @@ export function createWebPlatform(): Platform {
     files: webFiles,
     onPause: (cb) => onVisibility('hidden', cb),
     onResume: (cb) => onVisibility('visible', cb),
+    appVersion: async () => null,
     biometric: null,
     notifier: null,
   };

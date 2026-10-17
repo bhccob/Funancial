@@ -25,6 +25,11 @@ export async function createAndroidPlatform(): Promise<Platform> {
     onPause: (cb) =>
       listen((run) => App.addListener('pause', run), cb, 'the app going to the background'),
     onResume: (cb) => listen((run) => App.addListener('resume', run), cb, 'the app coming back'),
+    appVersion: async () => {
+      // `build` is the versionCode (a string over the bridge), `version` the versionName.
+      const { build, version } = await App.getInfo();
+      return { code: Number(build), name: version };
+    },
     biometric: androidBiometric,
     notifier: createAndroidNotifier(),
   };
