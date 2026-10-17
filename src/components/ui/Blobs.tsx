@@ -24,9 +24,10 @@ const STEPS: Array<[Hue, Hue]> = [
 ];
 
 const blob =
-  'absolute rounded-full bg-(--blob-light) blur-[40px] opacity-50 dark:bg-(--blob-dark) dark:opacity-50 ' +
+  'absolute rounded-full bg-(--blob-light) blur-[40px] opacity-50 dark:bg-(--blob-dark) ' +
   'motion-safe:transition-[transform,background-color] motion-safe:duration-900 motion-safe:ease-[cubic-bezier(0.2,0.8,0.2,1)] ' +
-  'motion-safe:animate-blob-drift';
+  // Only translate and transform move, and the blurred layer is composited once, not repainted as it drifts.
+  'motion-safe:will-change-transform motion-safe:animate-blob-drift';
 
 const tint = (hue: Hue, shift: string): CSSProperties =>
   ({

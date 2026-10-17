@@ -79,8 +79,7 @@ async function mockAccountService(page: Page) {
     if (name === 'forgot') return route.fulfill({ json: { ok: true } });
     return route.fulfill({ status: 404, json: { error: 'not found' } });
   });
-  const uploads = () => seen.filter((s) => s.route === 'copy' && s.method === 'PUT').length;
-  return { accounts, seen, state, uploads };
+  return { accounts, seen, state };
 }
 
 /** What the browser does when the app goes to the background: the app saves a copy at once. */
@@ -101,10 +100,14 @@ async function wipePhone(page: Page) {
   await page.reload();
 }
 
-test('an account made in setup brings the same data to a phone with nothing on it', async ({
-  page,
-}) => {
-  const service = await mockAccountService(page);
+/**
+ * An account made in setup, with $6,234.00 on it and its copy saved on the service; then the phone is
+ * wiped, so the next thing the page shows is the welcome screen of a new phone.
+ */
+async function accountThenNewPhone(
+  page: Page,
+  service: Awaited<ReturnType<typeof mockAccountService>>,
+) {
   await page.goto('/');
   await page.getByRole('button', { name: 'Create an account' }).click();
   await onboard(page, {
@@ -120,16 +123,26 @@ test('an account made in setup brings the same data to a phone with nothing on i
   expect(signup!.body).toMatchObject({ username: 'robin', email: ME.email });
   expect(JSON.stringify(service.seen)).not.toContain(ME.password);
 
-  // The copy goes up when the app goes to the background; wait for the one that holds the whole setup.
-  const before = service.uploads();
+  // The copy goes up when the app goes to the background: wait for the service to hold a newer one.
+  const stored = () => service.accounts.get('robin')?.copy?.version ?? 0;
+  const before = stored();
   await sendToBackground(page);
-  await expect.poll(service.uploads).toBeGreaterThan(before);
-  await page.waitForTimeout(300);
+  await expect.poll(stored).toBeGreaterThan(before);
 
   await wipePhone(page);
+  await expect(page.getByRole('button', { name: 'Create an account' })).toBeVisible();
+}
+
+test('an account made in setup brings the same data to a phone with nothing on it', async ({
+  page,
+}) => {
+  const service = await mockAccountService(page);
+  await accountThenNewPhone(page, service);
   await expect(page.getByRole('button', { name: 'I have an account' })).toBeVisible();
   await page.getByRole('button', { name: 'I have an account' }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Log in' })).toBeVisible();
+  // A screen reader is told about the screen that has just come up.
+  await expect(page.getByRole('heading', { level: 1, name: 'Log in' })).toBeFocused();
 
   // A wrong password is turned away, and the phone is still empty.
   await page.getByLabel('Username').fill('robin');
@@ -153,6 +166,29 @@ test('an account made in setup brings the same data to a phone with nothing on i
   await expect(page.getByRole('heading', { level: 1, name: 'Welcome back' })).toBeVisible();
   await page.getByLabel('PIN').fill('2468');
   await page.getByLabel('PIN').press('Enter');
+  await expect(page.getByRole('region', { name: 'Available to spend' })).toContainText('$6,234.00');
+});
+
+test('someone who has started setup on a new phone can still log in to their account', async ({
+  page,
+}) => {
+  const service = await mockAccountService(page);
+  await accountThenNewPhone(page, service);
+  await page.getByRole('button', { name: 'Create an account' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Create your account' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Skip for now' })).toBeHidden();
+
+  await page.getByRole('button', { name: 'I already have an account' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Log in' })).toBeFocused();
+  // The step that is leaving stays a moment with fields of its own: use the one showing now.
+  const showing = page.locator('[data-motion="current"]');
+  await showing.getByLabel('Username').fill('Robin');
+  await showing.getByLabel('Password', { exact: true }).fill(ME.password);
+  await page.getByRole('button', { name: 'Log in', exact: true }).click();
+
+  await expect(page.getByRole('heading', { level: 1, name: 'Lock this phone' })).toBeVisible();
+  await page.getByRole('button', { name: 'Skip the lock' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Home' })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Available to spend' })).toContainText('$6,234.00');
 });
 
@@ -225,6 +261,8 @@ test.describe('the welcome screen and setup move', () => {
     await expect(layer).toHaveCSS('animation-duration', '0.62s');
     await expect(layer.locator('> :nth-child(2)')).toHaveCSS('animation-delay', '0.08s');
     await expect(page.locator('[data-blob]').first()).toHaveCSS('animation-name', 'blob-drift');
+    // Composited once, so a blurred shape is not repainted as it drifts.
+    await expect(page.locator('[data-blob]').first()).toHaveCSS('will-change', 'transform');
 
     await page.getByRole('button', { name: 'Create an account' }).click();
     await expect(page.locator('[data-motion="current"]')).toHaveCSS('animation-name', 'step-in-up');
@@ -238,6 +276,7 @@ test.describe('the welcome screen and setup move', () => {
     await expect(layer).toHaveCSS('animation-name', 'fade-in');
     await expect(layer.locator('> :nth-child(2)')).toHaveCSS('animation-name', 'none');
     await expect(page.locator('[data-blob]').first()).toHaveCSS('animation-name', 'none');
+    await expect(page.locator('[data-blob]').first()).toHaveCSS('will-change', 'auto');
 
     await page.getByRole('button', { name: 'Create an account' }).click();
     await expect(page.locator('[data-motion="current"]')).toHaveCSS('animation-name', 'fade-in');

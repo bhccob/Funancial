@@ -6,7 +6,7 @@ import { Section } from '@/components/ui/Section';
 import { TextField } from '@/components/ui/TextField';
 import { ForgotForm } from '@/features/account/ForgotScreen';
 import { Problem } from '@/features/account/parts';
-import { errorMessage, FORGOT_LEAD, useBusy } from '@/features/account/shared';
+import { errorMessage, FORGOT_LEAD, SAVE_NOTE, useBusy } from '@/features/account/shared';
 import { toast } from '@/lib/toast';
 import { useAction } from '@/lib/useAction';
 import { emailProblem, passwordProblem, usernameProblem } from '@/store/accountActions';
@@ -14,11 +14,7 @@ import { useAccount, useAccountActions } from '@/store/useAccount';
 
 const dateTime = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' });
 
-const SaveNote = () => (
-  <p className="text-muted text-sm">
-    A locked copy of your data is kept so you can move to a new phone.
-  </p>
-);
+const SaveNote = () => <p className="text-muted text-sm">{SAVE_NOTE}</p>;
 
 function CreateAccountDialog({ open, onClose }: { open: boolean; onClose(): void }) {
   const { signUp } = useAccountActions();
@@ -204,8 +200,13 @@ function LogInDialog({
               />
               <button
                 type="button"
-                onClick={onForgot}
-                className="text-accent-text -my-1 inline-flex min-h-11 items-center self-start font-bold underline underline-offset-4"
+                onClick={() => {
+                  // Not kept across a trip out of this dialog: it is typed again when it is back.
+                  setPassword('');
+                  onForgot();
+                }}
+                disabled={busy}
+                className="text-accent-text -my-1 inline-flex min-h-11 items-center self-start font-bold underline underline-offset-4 disabled:pointer-events-none disabled:opacity-45"
               >
                 Forgot password?
               </button>

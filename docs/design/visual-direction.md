@@ -134,6 +134,25 @@ Fixed in both themes (`src/app/menu.ts`); each holds at least 3:1 against the wh
 | Salary freeze | `#4458d6` | Help | `#128a60` |
 | Buy it? | `#c43b6a` | Settings | `#5b6270` |
 
+## Welcome and setup
+
+The first screens are the one place the app moves more than a little. All of it is under
+`motion-safe:`; with reduced motion the screens only cross-fade (300ms) and the shapes sit still.
+
+- **Welcome (A, "Calm and simple"):** the name at 56px over two soft colour shapes, with Create an
+  account (primary, 56px), I have an account (secondary, 56px) and Try with demo money (a text button,
+  44px) at the bottom where a thumb reaches, and the one-line footer under them. Log in and Forgot
+  password rise in over it.
+- **Setup steps** (`StepMotion`): the new step rises 70px from below while it fades in, over 620ms
+  (`cubic-bezier(0.2, 0.8, 0.2, 1)`), and the old one lifts 70px and fades out. Back reverses it: the
+  step comes down from above. The lines of a step come in one after another, 80ms apart. The progress
+  bar glides over 700ms, empty on the first step and full on "You're all set". Focus moves to the new
+  step's heading, so a screen reader announces it.
+- **Colour shapes** (`Blobs`): two blurred circles, pastel on the light page and dim on the dark one,
+  that drift slowly (18s and 23s, translate only) and move and change colour a little with each step
+  (900ms). `will-change: transform` keeps each blurred layer composited, so it is not repainted as it
+  drifts.
+
 ## Charts
 
 Small hand-written SVG components in `src/components/charts/`, no chart library.
@@ -166,7 +185,7 @@ Small hand-written SVG components in `src/components/charts/`, no chart library.
 
 1. **No boxes on screens.** Sections are separated by whitespace and 1px `--color-border`
    hairlines. Surfaces (overlay colour, rounded corners, soft shadow) are only for dialogs and the
-   Menu sheet. Welcome and the lock screen keep their one soft `Card`.
+   Menu sheet. The lock screen keeps its one soft `Card`; the welcome screen has none.
 2. **Numbers lead.** Key amounts are big, 800 weight, tabular, `--color-text`. Never colour a whole
    amount except gains/losses (`accent-text` / `danger`) and limit warnings.
 3. **One action colour.** Primary buttons are ink; secondary are hairline outlines; tertiary are
@@ -175,5 +194,6 @@ Small hand-written SVG components in `src/components/charts/`, no chart library.
    never competes with money figures.
 5. **Every action has a visible text label;** nothing is icon-only without an `aria-label`.
 6. **Icons:** Lucide, 2px stroke, round caps.
-7. **Motion** only under `motion-safe:`; nothing animates under reduced motion.
+7. **Motion** only under `motion-safe:`; with reduced motion nothing moves and the one thing that
+   changes (a new step on the welcome and setup screens) gets a plain cross-fade. See Welcome and setup.
 8. **Copy:** no shame, the same tone as the rest of the app ("Nothing spent", "No limits yet").

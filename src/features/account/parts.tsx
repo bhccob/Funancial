@@ -1,5 +1,5 @@
 import { ChevronLeft } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { TextField, type TextFieldProps } from '@/components/ui/TextField';
 
 export function Problem({ children }: { children?: string }) {
@@ -57,17 +57,25 @@ export function ScreenHeader({
   eyebrow,
   title,
   lead,
+  focus,
 }: {
   eyebrow?: string;
   title: string;
   lead?: string;
+  /** Takes focus as it appears, for a screen that changes inside another (a screen reader hears it). */
+  focus?: boolean;
 }) {
+  const heading = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    if (focus) heading.current?.focus({ preventScroll: true });
+  }, [focus]);
   return (
     <header className="flex flex-col gap-2">
       {eyebrow && (
         <p className="text-xp-text text-xs font-extrabold tracking-[0.12em] uppercase">{eyebrow}</p>
       )}
       <h1
+        ref={heading}
         tabIndex={-1}
         className="text-[34px] leading-tight font-extrabold tracking-[-0.035em] outline-none"
       >

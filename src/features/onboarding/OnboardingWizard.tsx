@@ -1,5 +1,5 @@
 import { Check } from 'lucide-react';
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useRef, useState, type FormEvent } from 'react';
 import { Blobs } from '@/components/ui/Blobs';
 import { Button } from '@/components/ui/Button';
 import { MoneyField } from '@/components/ui/MoneyField';
@@ -10,8 +10,10 @@ import { Switch } from '@/components/ui/Switch';
 import { TextField } from '@/components/ui/TextField';
 import { validateSecret, type SecretKind } from '@/data/keys';
 import { formatMoney, minorDigits } from '@/domain/money';
+import { ForgotScreen } from '@/features/account/ForgotScreen';
+import { LoginScreen } from '@/features/account/LoginScreen';
 import { BackButton, PasswordField, Problem, ScreenHeader } from '@/features/account/parts';
-import { BIOMETRIC_FAILED, errorMessage, useBusy } from '@/features/account/shared';
+import { BIOMETRIC_FAILED, errorMessage, SAVE_NOTE, useBusy } from '@/features/account/shared';
 import { currencyOptions, defaultCurrency } from '@/features/shared/currencies';
 import { toast } from '@/lib/toast';
 import { useAction } from '@/lib/useAction';
@@ -27,7 +29,8 @@ import { useAccount, useAccountActions } from '@/store/useAccount';
 import { useFinanceActions } from '@/store/useFinance';
 
 const STEPS = 6;
-type Step = number | 'done';
+/** A step, the last screen, or a way out of the first step to an account the person already has. */
+type Step = number | 'done' | 'login' | 'forgot';
 
 const DAY_OPTIONS = Array.from({ length: 31 }, (_, i) => ({
   value: String(i + 1),
@@ -128,11 +131,12 @@ export function OnboardingWizard({ onFinishing }: { onFinishing?(finishing: bool
   const { signUp } = useAccountActions();
   const account = useAccount();
   const run = useAction();
-  const form = useRef<HTMLFormElement>(null);
   const [options] = useState(() => currencyOptions());
 
   const [step, setStep] = useState(1);
   const [direction, setDirection] = useState<StepDirection>('forward');
+  // Log in (and its Forgot password) over the first step, for someone who already has an account.
+  const [aside, setAside] = useState<'login' | 'forgot' | null>(null);
   const [done, setDone] = useState(false);
 
   const [username, setUsername] = useState('');
@@ -168,20 +172,15 @@ export function OnboardingWizard({ onFinishing }: { onFinishing?(finishing: bool
   const [errors, setErrors] = useState<{ secret?: string; confirm?: string }>({});
   const [busy, setBusy] = useState(false);
 
-  const firstRender = useRef(true);
-  useEffect(() => {
-    // Move focus to the new step's heading so screen readers announce it. Without scrolling to it:
-    // it is still on its way up from below.
-    if (firstRender.current) firstRender.current = false;
-    else
-      form.current
-        ?.querySelector<HTMLElement>('[data-motion="current"] h1')
-        ?.focus({ preventScroll: true });
-  }, [step, done]);
-
   function go(to: number) {
     setDirection(to > step ? 'forward' : 'back');
     setStep(to);
+  }
+
+  function goAside(to: 'login' | 'forgot' | null) {
+    // Further in (log in, then forgot) rises; back out comes down.
+    setDirection(to === null || (to === 'login' && aside === 'forgot') ? 'back' : 'forward');
+    setAside(to);
   }
 
   function changeCurrency(next: string) {
@@ -222,8 +221,11 @@ export function OnboardingWizard({ onFinishing }: { onFinishing?(finishing: bool
       } catch (err) {
         const code = err instanceof AccountError ? err.code : null;
         if (code === 'taken') setAccountErrors({ username: errorMessage(err) });
-        else setAccountErrors({ other: errorMessage(err) });
-        if (code === 'offline') setUnreachable(true);
+        else if (code === 'offline') {
+          // Nothing came back: say so once, in the one offline line that comes with the way on.
+          setAccountErrors({});
+          setUnreachable(true);
+        } else setAccountErrors({ other: errorMessage(err) });
       }
     });
   }
@@ -294,6 +296,18 @@ export function OnboardingWizard({ onFinishing }: { onFinishing?(finishing: bool
             />
           </>
         );
+      case 'login':
+        return (
+          <LoginScreen
+            onBack={() => goAside(null)}
+            onForgot={() => goAside('forgot')}
+            // Over setup the profile the account brings would end it at once: stay for the PIN.
+            onHold={onFinishing}
+            onDone={() => goAside(null)}
+          />
+        );
+      case 'forgot':
+        return <ForgotScreen onBack={() => goAside('login')} />;
       case 1:
         if (account.status !== 'none') {
           return (
@@ -337,15 +351,28 @@ export function OnboardingWizard({ onFinishing }: { onFinishing?(finishing: bool
               error={accountErrors.password}
               onChange={(e) => setPassword(e.target.value)}
             />
-            <p className="text-muted text-sm">
-              A locked copy of your data is kept so you can move to a new phone.
-            </p>
+            <p className="text-muted text-sm">{SAVE_NOTE}</p>
+            <button
+              type="button"
+              onClick={() => goAside('login')}
+              disabled={!account.loaded || signingUp}
+              className="text-accent-text -my-1 inline-flex min-h-11 items-center self-start font-bold underline underline-offset-4 disabled:pointer-events-none disabled:opacity-45"
+            >
+              I already have an account
+            </button>
             {offline && (
               <div className="flex flex-col items-start gap-3">
                 <p className="text-muted text-sm">
                   You&apos;re offline. Create your account later in Settings.
                 </p>
-                <Button variant="secondary" onClick={() => go(2)}>
+                <Button
+                  variant="secondary"
+                  disabled={signingUp}
+                  onClick={() => {
+                    setPassword('');
+                    go(2);
+                  }}
+                >
                   Skip for now
                 </Button>
               </div>
@@ -561,36 +588,52 @@ export function OnboardingWizard({ onFinishing }: { onFinishing?(finishing: bool
     <main className="relative isolate flex min-h-dvh flex-col overflow-hidden">
       <Blobs step={done ? STEPS : step - 1} />
       <div className="mx-auto flex w-full max-w-lg flex-1 flex-col px-[22px] pt-[max(1.25rem,env(safe-area-inset-top))] pb-[max(1.5rem,env(safe-area-inset-bottom))] md:py-16">
-        <div className="flex items-center gap-3">
-          {step > 1 && !done ? (
-            <BackButton onClick={() => go(step - 1)} disabled={working} />
-          ) : (
-            <span aria-hidden className="size-11 shrink-0" />
-          )}
-          <div aria-hidden className="bg-track h-1.5 flex-1 overflow-hidden rounded-full">
-            <div
-              data-progress
-              className="bg-primary h-full rounded-full motion-safe:transition-[width] motion-safe:duration-700 motion-safe:ease-[cubic-bezier(0.2,0.8,0.2,1)]"
-              style={{ width: `${progress}%` }}
-            />
+        {!aside && (
+          <div className="flex items-center gap-3">
+            {step > 1 && !done ? (
+              <BackButton onClick={() => go(step - 1)} disabled={working} />
+            ) : (
+              <span aria-hidden className="size-11 shrink-0" />
+            )}
+            <div aria-hidden className="bg-track h-1.5 flex-1 overflow-hidden rounded-full">
+              <div
+                data-progress
+                className="bg-primary h-full rounded-full motion-safe:transition-[width] motion-safe:duration-700 motion-safe:ease-[cubic-bezier(0.2,0.8,0.2,1)]"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+            <p className="text-muted min-w-[5.25rem] text-right text-sm font-bold">
+              {done ? '' : `Step ${step} of ${STEPS}`}
+            </p>
           </div>
-          <p className="text-muted min-w-[5.25rem] text-right text-sm font-bold">
-            {done ? '' : `Step ${step} of ${STEPS}`}
-          </p>
-        </div>
-        <form ref={form} className="mt-8 flex flex-1 flex-col" onSubmit={submit} noValidate>
+        )}
+        <div className={`flex flex-1 flex-col ${aside ? 'mt-1' : 'mt-8'}`}>
+          {/* Each step is its own form (Enter submits it), as Log in has its own: no form inside a form. */}
           <StepMotion<Step>
-            stepKey={done ? 'done' : step}
+            stepKey={aside ?? (done ? 'done' : step)}
             direction={direction}
             render={render}
             layerClassName="flex flex-col gap-5"
+            form={(key) =>
+              key === 'login' || key === 'forgot'
+                ? undefined
+                : { id: `setup-${key}`, onSubmit: submit }
+            }
           />
-          <div className="mt-auto pt-10">
-            <Button type="submit" size="lg" className="w-full" disabled={!done && !valid[step]}>
-              {label}
-            </Button>
-          </div>
-        </form>
+          {!aside && (
+            <div className="mt-auto pt-10">
+              <Button
+                type="submit"
+                form={`setup-${done ? 'done' : step}`}
+                size="lg"
+                className="w-full"
+                disabled={!done && !valid[step]}
+              >
+                {label}
+              </Button>
+            </div>
+          )}
+        </div>
       </div>
     </main>
   );

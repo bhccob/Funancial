@@ -1,4 +1,4 @@
-import { act, fireEvent, screen } from '@testing-library/react';
+import { act, fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Toaster } from '@/components/ui/Toaster';
@@ -32,6 +32,8 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 
 const PASSWORD = 'a long enough password';
+/** The step showing now: the one that is leaving stays a moment, with fields of its own. */
+const nowShowing = () => within(document.querySelector<HTMLElement>('[data-motion="current"]')!);
 const next = () => userEvent.click(screen.getByRole('button', { name: 'Next' }));
 
 /** The wizard under an account layer (a fake unless one is given), with spies for what it asks of the app. */
@@ -218,11 +220,95 @@ describe('the account step', () => {
     renderWizard({ account });
     await fillAccount();
     await next();
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      "You're offline. Try again when you're connected.",
-    );
+    // One offline line, the owner's words, with the way on: not a second one from the layer too.
+    expect(
+      await screen.findByText("You're offline. Create your account later in Settings."),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Try again when you're connected/)).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Skip for now' }));
     expect(screen.getByText('Step 2 of 6')).toBeInTheDocument();
+  });
+
+  it('cannot be skipped while the account is being made', async () => {
+    const account = fakeAccount();
+    account.signUp.mockReturnValue(new Promise(() => {}));
+    renderWizard({ account });
+    vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
+    act(() => void window.dispatchEvent(new Event('offline')));
+    await fillAccount();
+    await next();
+    expect(account.signUp).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('button', { name: 'Skip for now' })).toBeDisabled();
+  });
+
+  it('forgets the password when the step is skipped, and keeps the rest for a return', async () => {
+    renderWizard();
+    await userEvent.type(screen.getByLabelText('Username'), 'Robin');
+    await userEvent.type(screen.getByLabelText('Password'), PASSWORD);
+    await skipAccount();
+    await userEvent.click(screen.getByRole('button', { name: 'Back' }));
+    expect(screen.getByLabelText('Password')).toHaveValue('');
+    expect(screen.getByLabelText('Username')).toHaveValue('Robin');
+  });
+
+  describe('for someone who already has an account', () => {
+    const link = () => screen.getByRole('button', { name: 'I already have an account' });
+
+    it('offers a way to log in instead, which opens Log in and can come back to setup', async () => {
+      renderWizard();
+      await userEvent.type(screen.getByLabelText('Username'), 'Robin');
+      await userEvent.click(link());
+      expect(screen.getByRole('heading', { level: 1, name: 'Log in' })).toHaveFocus();
+      expect(screen.queryByRole('button', { name: 'Next' })).not.toBeInTheDocument();
+      expect(screen.queryByText('Step 1 of 6')).not.toBeInTheDocument();
+
+      await userEvent.click(screen.getByRole('button', { name: 'Back' }));
+      expect(screen.getByRole('heading', { level: 1, name: 'Create your account' })).toHaveFocus();
+      expect(nowShowing().getByLabelText('Username')).toHaveValue('Robin');
+      expect(screen.getByText('Step 1 of 6')).toBeInTheDocument();
+    });
+
+    it('logs in over setup, holding the app on this screen until the PIN is dealt with', async () => {
+      const { account, onFinishing, store } = renderWizard();
+      await userEvent.click(link());
+      await userEvent.type(nowShowing().getByLabelText('Username'), 'robin');
+      await userEvent.type(nowShowing().getByLabelText('Password'), PASSWORD);
+      await userEvent.click(screen.getByRole('button', { name: 'Log in' }));
+      expect(account.logIn).toHaveBeenCalledWith(
+        { username: 'robin', password: PASSWORD },
+        { replace: false },
+      );
+      expect(onFinishing).toHaveBeenLastCalledWith(true);
+      expect(
+        await screen.findByRole('heading', { level: 1, name: 'Lock this phone' }),
+      ).toBeInTheDocument();
+      await userEvent.type(screen.getByLabelText('Choose a PIN'), '2468');
+      await userEvent.type(screen.getByLabelText('Confirm PIN'), '2468');
+      await userEvent.click(screen.getByRole('button', { name: 'Set PIN' }));
+      await vi.waitFor(() => expect(onFinishing).toHaveBeenLastCalledWith(false));
+      expect(store.getState().setSecret).toHaveBeenCalledWith('2468', 'pin');
+    });
+
+    it('is not offered while the account is being made, or when the phone has one', async () => {
+      const account = fakeAccount();
+      account.signUp.mockReturnValue(new Promise(() => {}));
+      const { unmount } = renderWizard({ account });
+      await fillAccount();
+      await next();
+      expect(link()).toBeDisabled();
+      unmount();
+
+      renderWizard({ account: fakeAccount(linkedAccount()) });
+      expect(
+        screen.queryByRole('button', { name: 'I already have an account' }),
+      ).not.toBeInTheDocument();
+    });
+
+    it('waits for the phone to read its account, as Next does', () => {
+      renderWizard({ account: fakeAccount(null, false) });
+      expect(link()).toBeDisabled();
+    });
   });
 
   it('does not ask again for an account the phone already has', async () => {
@@ -245,6 +331,23 @@ describe('the account step', () => {
 });
 
 describe('OnboardingWizard', () => {
+  it('keeps what was entered on a step when the person goes back to it', async () => {
+    renderWizard();
+    await skipAccount();
+    await userEvent.selectOptions(screen.getByLabelText('Currency'), 'GBP');
+    await userEvent.type(screen.getByLabelText('What should we call you?'), 'Sam');
+    await next();
+    await userEvent.type(screen.getByLabelText('Cash & checking'), '250');
+    await userEvent.type(screen.getByLabelText('Savings'), '900');
+    await next();
+    await userEvent.click(screen.getByRole('button', { name: 'Back' }));
+    expect(screen.getByLabelText('Cash & checking')).toHaveValue('250.00');
+    expect(screen.getByLabelText('Savings')).toHaveValue('900.00');
+    await userEvent.click(screen.getByRole('button', { name: 'Back' }));
+    expect(screen.getByLabelText('Currency')).toHaveValue('GBP');
+    expect(screen.getByLabelText('What should we call you?')).toHaveValue('Sam');
+  });
+
   it("starts on the currency of the phone's region, and the person can still pick another", async () => {
     phoneIn('Europe/Amsterdam');
     renderWizard();

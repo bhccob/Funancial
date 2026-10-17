@@ -1,4 +1,5 @@
-import { act, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
+import type { FormEvent } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Blobs } from './Blobs';
 import { StepMotion, type StepDirection } from './StepMotion';
@@ -25,7 +26,10 @@ const layer = (name: string) => screen.getByRole('heading', { name }).closest('[
 const leaving = () => document.querySelector('[data-motion="leaving"]');
 
 beforeEach(() => vi.useFakeTimers());
-afterEach(() => vi.useRealTimers());
+afterEach(() => {
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+});
 
 describe('StepMotion', () => {
   it('rises in from below, and only fades for a person who asked for less motion', () => {
@@ -87,6 +91,53 @@ describe('StepMotion', () => {
     expect(leaving()).toHaveTextContent('First: 12');
   });
 
+  it("moves focus to the new step's heading when the step changes, so it is announced", () => {
+    const focus = vi.spyOn(HTMLElement.prototype, 'focus');
+    const { rerender } = render(<Steps at="a" />);
+    // Not on the first showing: the page has only just opened.
+    expect(focus).not.toHaveBeenCalled();
+    expect(screen.getByRole('heading', { name: 'First' })).not.toHaveFocus();
+
+    rerender(<Steps at="b" />);
+    const heading = screen.getByRole('heading', { name: 'Second' });
+    expect(heading).toHaveFocus();
+    // A heading is focusable by script only, and the screen is not scrolled to it as it rises.
+    expect(heading).toHaveAttribute('tabindex', '-1');
+    expect(focus).toHaveBeenLastCalledWith({ preventScroll: true });
+
+    rerender(<Steps at="a" direction="back" />);
+    expect(screen.getByRole('heading', { name: 'First' })).toHaveFocus();
+  });
+
+  it("can make a step's box a form, which a button outside it submits, and never the leaving one", () => {
+    const onSubmit = vi.fn((e: FormEvent) => e.preventDefault());
+    function Formed({ at }: { at: Key }) {
+      return (
+        <>
+          <StepMotion
+            stepKey={at}
+            render={(k) => <h1>{NAMES[k]}</h1>}
+            form={(k) => ({ id: `step-${k}`, onSubmit })}
+          />
+          <button type="submit" form={`step-${at}`}>
+            Next
+          </button>
+        </>
+      );
+    }
+    const { rerender } = render(<Formed at="a" />);
+    expect(layer('First')?.tagName).toBe('FORM');
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+
+    rerender(<Formed at="b" />);
+    expect(layer('Second')?.tagName).toBe('FORM');
+    // What is leaving is only a picture of the step: not a form, so nothing in it submits.
+    expect(leaving()?.tagName).toBe('DIV');
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+    expect(onSubmit).toHaveBeenCalledTimes(2);
+  });
+
   it('keeps only the latest leaving step when steps follow each other quickly', () => {
     const { rerender } = render(<Steps at="a" />);
     rerender(<Steps at="b" />);
@@ -105,6 +156,9 @@ describe('Blobs', () => {
     expect(container.firstElementChild).toHaveAttribute('aria-hidden', 'true');
     for (const blob of blobs) {
       expect(blob).toHaveClass('motion-safe:animate-blob-drift');
+      // Composited once, not repainted as it drifts, and only while it drifts.
+      expect(blob).toHaveClass('motion-safe:will-change-transform');
+      expect(blob.className).not.toMatch(/(^|s)will-change/);
       expect(blob.className).not.toMatch(/(^|\s)animate-/);
     }
   });

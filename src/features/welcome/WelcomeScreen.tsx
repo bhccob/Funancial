@@ -46,7 +46,7 @@ export function WelcomeScreen({ onHold }: { onHold?(held: boolean): void }) {
         return (
           <>
             <div className="flex flex-1 flex-col gap-2 pt-[16dvh]">
-              <h1 className="text-[56px] leading-none font-extrabold tracking-[-0.045em]">
+              <h1 className="text-[56px] leading-none font-extrabold tracking-[-0.045em] outline-none">
                 Fun<span className="text-accent-text">ancial</span>
               </h1>
               <p className="text-lg font-bold">Level up your real financial life.</p>

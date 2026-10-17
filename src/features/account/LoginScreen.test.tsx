@@ -123,6 +123,15 @@ describe('LoginScreen', () => {
     expect(screen.getByRole('button', { name: 'Back' })).toBeDisabled();
   });
 
+  it('offers no Forgot password while a log-in is on its way', async () => {
+    const actions = fakeAccount();
+    actions.logIn.mockReturnValue(new Promise(() => {}));
+    show(actions);
+    expect(screen.getByRole('button', { name: 'Forgot password?' })).toBeEnabled();
+    await logIn();
+    expect(screen.getByRole('button', { name: 'Forgot password?' })).toBeDisabled();
+  });
+
   it('does no key work while typing: only a submit asks the account layer', async () => {
     const { actions } = show();
     await fillIn();
@@ -165,6 +174,9 @@ describe('LoginScreen', () => {
     it('asks for a new PIN for this phone, and lets go of the screen once it is set', async () => {
       const { store, onHold } = await loggedIn();
       expect(screen.queryByLabelText('Password')).not.toBeInTheDocument();
+      expect(screen.getByRole('heading', { level: 1, name: 'Lock this phone' })).toHaveFocus();
+      expect(screen.getByText('Choose a PIN to open Funancial on this phone.')).toBeInTheDocument();
+      expect(screen.queryByText(/Your data is here/)).not.toBeInTheDocument();
       await userEvent.type(screen.getByLabelText('Choose a PIN'), '2468');
       await userEvent.type(screen.getByLabelText('Confirm PIN'), '2468');
       await userEvent.click(screen.getByRole('button', { name: 'Set PIN' }));
@@ -190,7 +202,7 @@ describe('LoginScreen', () => {
 
     it('can be left for later, with no lock set', async () => {
       const { store, onHold } = await loggedIn();
-      await userEvent.click(screen.getByRole('button', { name: 'Not now' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Skip the lock' }));
       expect(onHold).toHaveBeenLastCalledWith(false);
       expect(store.getState().setSecret).not.toHaveBeenCalled();
     });
@@ -246,6 +258,9 @@ describe('LoginScreen', () => {
       show(actions);
       await logIn();
       expect(await screen.findByRole('heading', { level: 1, name: REPLACE })).toBeInTheDocument();
+      expect(screen.getByText('Before you log in')).toBeInTheDocument();
+      // A screen reader is told about the new screen.
+      expect(screen.getByRole('heading', { level: 1, name: REPLACE })).toHaveFocus();
       expect(actions.logIn).toHaveBeenCalledTimes(1);
       expect(actions.logIn).toHaveBeenCalledWith(expect.anything(), { replace: false });
       expect(screen.queryByLabelText('Password')).not.toBeInTheDocument();

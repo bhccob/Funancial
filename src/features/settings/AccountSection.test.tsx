@@ -215,6 +215,30 @@ describe('Forgot password from the log-in dialog', () => {
     expect(screen.queryByRole('dialog', { name: 'Forgot password?' })).not.toBeInTheDocument();
   });
 
+  it('is not offered while a log-in is on its way', async () => {
+    const actions = fakeAccount();
+    actions.logIn.mockReturnValue(new Promise(() => {}));
+    show(actions);
+    const dialog = await fillLogIn();
+    expect(within(dialog).getByRole('button', { name: 'Forgot password?' })).toBeDisabled();
+  });
+
+  it('does not keep a typed password across the trip to Forgot password', async () => {
+    show();
+    await userEvent.click(button('Log in'));
+    const login = screen.getByRole('dialog', { name: 'Log in' });
+    await userEvent.type(within(login).getByLabelText('Username'), 'robin');
+    await userEvent.type(within(login).getByLabelText('Password'), PASSWORD);
+    await userEvent.click(within(login).getByRole('button', { name: 'Forgot password?' }));
+    const forgot = screen.getByRole('dialog', { name: 'Forgot password?' });
+    await userEvent.click(within(forgot).getByRole('button', { name: 'Cancel' }));
+
+    await userEvent.click(button('Log in'));
+    const again = screen.getByRole('dialog', { name: 'Log in' });
+    expect(within(again).getByLabelText('Password')).toHaveValue('');
+    expect(within(again).getByLabelText('Username')).toHaveValue('robin');
+  });
+
   it('can be cancelled before anything is sent', async () => {
     const actions = await openForgot();
     const dialog = screen.getByRole('dialog', { name: 'Forgot password?' });

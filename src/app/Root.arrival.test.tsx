@@ -1,9 +1,9 @@
-import { act, screen } from '@testing-library/react';
+import { act, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { emptySnapshot } from '@/domain/snapshot';
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
-import { fakeAccount, withAccount } from '@/test/fakeAccount';
+import { fakeAccount, linkedAccount, withAccount } from '@/test/fakeAccount';
 import { makeProfile } from '@/test/fixtures';
 import { Root } from './Root';
 
@@ -16,6 +16,8 @@ function onboarded() {
   return data;
 }
 
+/** The screen showing now: the one that is leaving stays a moment, with fields of its own. */
+const nowShowing = () => within(document.querySelector<HTMLElement>('[data-motion="current"]')!);
 const heading = (name: string) => screen.findByRole('heading', { level: 1, name });
 
 describe('after Log in', () => {
@@ -50,7 +52,7 @@ describe('after Log in', () => {
     expect(await heading('Home')).toBeInTheDocument();
   });
 
-  it('shows Home after "Not now" too', async () => {
+  it('shows Home after skipping the lock too', async () => {
     const account = fakeAccount();
     const store = createStubStore({ phase: 'welcome' });
     account.logIn.mockImplementation(async () => {
@@ -62,7 +64,7 @@ describe('after Log in', () => {
     await userEvent.type(screen.getByLabelText('Username'), 'robin');
     await userEvent.type(screen.getByLabelText('Password'), 'a long enough password');
     await userEvent.click(screen.getByRole('button', { name: 'Log in' }));
-    await userEvent.click(await screen.findByRole('button', { name: 'Not now' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Skip the lock' }));
     expect(await heading('Home')).toBeInTheDocument();
   });
 
@@ -78,8 +80,52 @@ describe('after Log in', () => {
     await userEvent.type(screen.getByLabelText('Username'), 'robin');
     await userEvent.type(screen.getByLabelText('Password'), 'a long enough password');
     await userEvent.click(screen.getByRole('button', { name: 'Log in' }));
-    await userEvent.click(await screen.findByRole('button', { name: 'Not now' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Skip the lock' }));
     expect(await heading('Create your account')).toBeInTheDocument();
+  });
+
+  it("logs in from setup's first step, with the restored data and the PIN prompt, then Home", async () => {
+    const account = fakeAccount();
+    const store = createStubStore({ phase: 'unlocked', namespace: 'real' });
+    // Setup's vault already exists: the copy is restored into it, and the profile it brings ends setup.
+    account.logIn.mockImplementation(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      store.setState({ data: onboarded() });
+      return 'done';
+    });
+    renderWithStore(withAccount(account, <Root />), store);
+
+    expect(await heading('Create your account')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'I already have an account' }));
+    await userEvent.type(nowShowing().getByLabelText('Username'), 'robin');
+    await userEvent.type(nowShowing().getByLabelText('Password'), 'a long enough password');
+    await userEvent.click(screen.getByRole('button', { name: 'Log in' }));
+
+    // The profile has arrived, which alone would have switched to Home: the PIN comes first.
+    expect(await heading('Lock this phone')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Home' })).not.toBeInTheDocument();
+    await userEvent.type(screen.getByLabelText('Choose a PIN'), '2468');
+    await userEvent.type(screen.getByLabelText('Confirm PIN'), '2468');
+    await userEvent.click(screen.getByRole('button', { name: 'Set PIN' }));
+    expect(store.getState().setSecret).toHaveBeenCalledWith('2468', 'pin');
+    expect(await heading('Home')).toBeInTheDocument();
+  });
+
+  it('goes back to setup, with the account made, when that account had no copy yet', async () => {
+    const account = fakeAccount();
+    const store = createStubStore({ phase: 'unlocked', namespace: 'real' });
+    account.logIn.mockImplementation(async () => {
+      account.view.setState({ state: linkedAccount() });
+      return 'done';
+    });
+    renderWithStore(withAccount(account, <Root />), store);
+    await userEvent.click(await screen.findByRole('button', { name: 'I already have an account' }));
+    await userEvent.type(nowShowing().getByLabelText('Username'), 'robin');
+    await userEvent.type(nowShowing().getByLabelText('Password'), 'a long enough password');
+    await userEvent.click(screen.getByRole('button', { name: 'Log in' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Skip the lock' }));
+    expect(await heading('Your account is ready')).toBeInTheDocument();
+    expect(screen.getByText('Step 1 of 6')).toBeInTheDocument();
   });
 
   it('lets go of the app when the person goes back, so a later start is not held', async () => {

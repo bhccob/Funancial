@@ -49,7 +49,8 @@ function NewPhonePin({ onDone }: { onDone(): void }) {
       <ScreenHeader
         eyebrow="Almost there"
         title="Lock this phone"
-        lead="Your data is here. Choose a PIN to open Funancial with on this phone."
+        lead="Choose a PIN to open Funancial on this phone."
+        focus
       />
       <form className="flex flex-col gap-5" onSubmit={submit} noValidate>
         <TextField
@@ -84,7 +85,7 @@ function NewPhonePin({ onDone }: { onDone(): void }) {
           {busy ? 'Setting up…' : 'Set PIN'}
         </Button>
         <Button variant="ghost" disabled={busy} onClick={onDone}>
-          Not now
+          Skip the lock
         </Button>
       </form>
     </>
@@ -95,15 +96,18 @@ function NewPhonePin({ onDone }: { onDone(): void }) {
  * Log in (I have an account): the username and password, then the account's copy on this phone, then
  * a PIN for it. `onHold(true)` from the first tap asks the app to keep this screen up while the phone
  * moves on to its new data (it passes through "unlocked" on the way), and `onHold(false)` lets go.
+ * `onDone` is for a host that goes on showing after the PIN step (setup, when the account had no copy).
  */
 export function LoginScreen({
   onBack,
   onForgot,
   onHold,
+  onDone,
 }: {
   onBack(): void;
   onForgot(): void;
   onHold?(held: boolean): void;
+  onDone?(): void;
 }) {
   const { logIn } = useAccountActions();
   const { offline } = useAccount();
@@ -138,14 +142,24 @@ export function LoginScreen({
     });
   }
 
-  if (step === 'pin') return <NewPhonePin onDone={() => onHold?.(false)} />;
+  if (step === 'pin') {
+    return (
+      <NewPhonePin
+        onDone={() => {
+          onHold?.(false);
+          onDone?.();
+        }}
+      />
+    );
+  }
 
   if (step === 'confirm') {
     return (
       <>
         <ScreenHeader
-          eyebrow="One more thing"
+          eyebrow="Before you log in"
           title={REPLACE}
+          focus
           lead="What is on this phone now is replaced. Make an encrypted backup first if you might want it back."
         />
         <div className="flex flex-col gap-3">
@@ -204,7 +218,8 @@ export function LoginScreen({
         <button
           type="button"
           onClick={onForgot}
-          className="text-accent-text -my-1 inline-flex min-h-11 items-center justify-center font-bold underline underline-offset-4"
+          disabled={busy}
+          className="text-accent-text -my-1 inline-flex min-h-11 items-center justify-center font-bold underline underline-offset-4 disabled:pointer-events-none disabled:opacity-45"
         >
           Forgot password?
         </button>

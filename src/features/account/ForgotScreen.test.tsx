@@ -49,15 +49,6 @@ describe('ForgotScreen', () => {
     },
   );
 
-  it('shows that line for a 400 too: the layer reads it as an answer like any other', async () => {
-    // The layer resolves for 200 and for 400 alike (accountActions.test), so the screen has one path.
-    const actions = fakeAccount();
-    actions.forgot.mockResolvedValue(undefined);
-    show(actions);
-    await ask('robin');
-    expect(await screen.findByRole('status')).toHaveTextContent(SENT);
-  });
-
   it('shows a calm line, and no success, when the service is not answering, and lets the person try again', async () => {
     const actions = fakeAccount();
     actions.forgot.mockRejectedValueOnce(new AccountError('unavailable'));

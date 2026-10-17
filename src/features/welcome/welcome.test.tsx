@@ -85,11 +85,14 @@ it('opens Log in with I have an account, without making anything on the phone', 
   expect(store.getState().startFresh).not.toHaveBeenCalled();
   const layer = screen.getByRole('heading', { name: 'Log in' }).closest('[data-motion]');
   expect(layer).toHaveClass('motion-safe:animate-step-in-up');
+  // A screen reader is told about the new screen.
+  expect(screen.getByRole('heading', { level: 1, name: 'Log in' })).toHaveFocus();
 
   // The arrow returns to the three choices, the step coming down from above.
   await userEvent.click(screen.getByRole('button', { name: 'Back' }));
   expect(screen.getByRole('heading', { level: 1, name: 'Funancial' })).toBeInTheDocument();
   expect(choice('Create an account')).toBeInTheDocument();
+  expect(screen.getByRole('heading', { level: 1, name: 'Funancial' })).toHaveFocus();
   expect(screen.getByRole('heading', { name: 'Funancial' }).closest('[data-motion]')).toHaveClass(
     'motion-safe:animate-step-in-down',
   );
@@ -99,9 +102,9 @@ it('opens Forgot password from Log in, and returns to Log in', async () => {
   show();
   await userEvent.click(choice('I have an account'));
   await userEvent.click(screen.getByRole('button', { name: 'Forgot password?' }));
-  expect(screen.getByRole('heading', { level: 1, name: 'Forgot password?' })).toBeInTheDocument();
+  expect(screen.getByRole('heading', { level: 1, name: 'Forgot password?' })).toHaveFocus();
   await userEvent.click(screen.getByRole('button', { name: 'Back' }));
-  expect(screen.getByRole('heading', { level: 1, name: 'Log in' })).toBeInTheDocument();
+  expect(screen.getByRole('heading', { level: 1, name: 'Log in' })).toHaveFocus();
 });
 
 it('tells the app to hold this screen while a log-in moves the phone on', async () => {
