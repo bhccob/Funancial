@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="description" content="Funancial, a budget app that stays on your phone." />
+    <title>Funancial</title>
+  </head>
+  <body>
+    <main>
+      <div id="story">
+        <div id="stage">
+          <header class="hero">
+            <h1>Funancial</h1>
+            <p class="subline">A budget app that stays on your phone.</p>
+          </header>
+
+          <div id="stops" class="stops">
+            <section class="stop" data-screen="0" aria-labelledby="stop-0">
+              <div class="caption">
+                <p class="n">01 · Home</p>
+                <h2 id="stop-0">See what you can still spend.</h2>
+                <p>One number that already counts your bills, cards and limits.</p>
+              </div>
+            </section>
+            <section class="stop" data-screen="1" aria-labelledby="stop-1">
+              <div class="caption">
+                <p class="n">02 · Budget</p>
+                <h2 id="stop-1">Limits that tap you on the shoulder.</h2>
+                <p>Warnings at 80%, 100% and 120%, before it gets out of hand.</p>
+              </div>
+            </section>
+            <section class="stop" data-screen="2" aria-labelledby="stop-2">
+              <div class="caption">
+                <p class="n">03 · Buy it?</p>
+                <h2 id="stop-2">Ask before you buy.</h2>
+                <p>A meter weighs the purchase against your own numbers.</p>
+              </div>
+            </section>
+            <section class="stop" data-screen="3" aria-labelledby="stop-3">
+              <div class="caption">
+                <p class="n">04 · Levels</p>
+                <h2 id="stop-3">Level up as you go.</h2>
+                <p>Badges, coins and quests for staying on track.</p>
+              </div>
+            </section>
+          </div>
+
+          <section class="end" id="download" aria-labelledby="download-title">
+            <h2 id="download-title">Get it on your phone.</h2>
+            <div class="download" id="download-area" hidden>
+              <div class="qr" id="download-qr" hidden>
+                <img
+                  src="./qr.svg"
+                  width="176"
+                  height="176"
+                  alt="QR code for this page"
+                  loading="lazy"
+                />
+                <p>Scan with your Android phone</p>
+              </div>
+              <a class="btn" id="download-link" href="#" hidden>Download for Android</a>
+              <button class="btn" id="download-soon" type="button" disabled hidden>
+                Coming soon
+              </button>
+              <p class="note" id="download-ios" hidden>Funancial is Android-only for now.</p>
+              <p class="meta" id="download-meta" hidden></p>
+            </div>
+          </section>
+        </div>
+      </div>
+
+      <div class="after">
+        <section id="whats-new" aria-labelledby="whats-new-title" hidden>
+          <h2 id="whats-new-title">What's new</h2>
+          <p id="whats-new-notes"></p>
+        </section>
+
+        <section aria-labelledby="safe-title">
+          <h2 id="safe-title">Safe and simple</h2>
+          <p>Your money stays on your phone, encrypted. No account, no ads.</p>
+          <p>Not financial advice.</p>
+          <h3>Why Android asks</h3>
+          <p>
+            Android asks before installing apps that don't come from the Play Store, and that's
+            normal for an app shared between friends.
+          </p>
+          <h3>What the app asks for</h3>
+          <ul>
+            <li data-permission="INTERNET">
+              <strong>The internet</strong>, to look up prices and to check for a new version.
+            </li>
+            <li data-permission="POST_NOTIFICATIONS">
+              <strong>Notifications</strong>, to show the reminders you set.
+            </li>
+            <li data-permission="RECEIVE_BOOT_COMPLETED">
+              <strong>Start after a restart</strong>, to bring your reminders back.
+            </li>
+            <li data-permission="USE_BIOMETRIC">
+              <strong>Fingerprint or face unlock</strong>, if you turn it on.
+            </li>
+          </ul>
+        </section>
+
+        <section aria-labelledby="steps-title">
+          <h2 id="steps-title">How to install</h2>
+          <ol>
+            <li>Tap Download, then open the file.</li>
+            <li>If Android asks, allow your browser to install apps.</li>
+            <li>Tap Install, open Funancial, and try demo money first.</li>
+          </ol>
+        </section>
+      </div>
+    </main>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

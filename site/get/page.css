@@ -1,0 +1,287 @@
+@import 'tailwindcss/theme.css' layer(theme);
+@import '@fontsource-variable/manrope';
+/* The app's colours and font, as CSS variables on :root. */
+@import '../../src/styles/tokens.css';
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+html {
+  color-scheme: light;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: #f4f2fb;
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  line-height: 1.5;
+}
+
+/* The soft backdrop from the spike: three blurred colours that stay put behind the page. */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(56vmax 56vmax at -8% -6%, rgb(201 219 255 / 0.75), transparent 70%),
+    radial-gradient(48vmax 48vmax at 108% 42%, rgb(227 210 255 / 0.75), transparent 70%),
+    radial-gradient(40vmax 40vmax at 34% 104%, rgb(255 226 196 / 0.6), transparent 70%);
+}
+
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+
+h1,
+h2 {
+  font-weight: 800;
+  letter-spacing: -0.03em;
+}
+
+:focus-visible {
+  outline: 3px solid var(--color-focus);
+  outline-offset: 3px;
+}
+
+/* ---- Title ---- */
+
+.hero {
+  padding: clamp(56px, 13vh, 120px) 24px 24px;
+  text-align: center;
+}
+
+.hero h1 {
+  font-size: clamp(48px, 9vw, 92px);
+  line-height: 1.05;
+  letter-spacing: -0.035em;
+}
+
+.subline {
+  margin-top: 12px;
+  font-size: clamp(17px, 2.2vw, 20px);
+  color: var(--color-text-muted);
+}
+
+/* ---- The four stops, as plain sections with a still phone each ---- */
+
+.stops {
+  display: grid;
+  gap: 24px;
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 24px 24px 0;
+}
+
+.stop {
+  display: grid;
+  justify-items: center;
+  gap: 28px;
+  padding: 32px 0;
+  text-align: center;
+}
+
+.n {
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-xp-text);
+}
+
+.caption h2 {
+  margin: 8px 0 12px;
+  font-size: clamp(28px, 4vw, 44px);
+  line-height: 1.08;
+}
+
+.caption p:last-child {
+  max-width: 28ch;
+  margin-inline: auto;
+  font-size: 18px;
+  color: var(--color-text-muted);
+}
+
+.phone {
+  width: min(250px, 68vw);
+  padding: 7px;
+  border-radius: 38px;
+  background: #23232b;
+  box-shadow: var(--shadow-float);
+}
+
+.phone canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 31px;
+  background: var(--color-bg);
+}
+
+@media (min-width: 760px) {
+  .stop {
+    grid-template-columns: 1fr 1fr;
+    align-items: center;
+    gap: 64px;
+    text-align: left;
+  }
+
+  .stop:nth-child(even) .caption {
+    order: 2;
+  }
+
+  .stop .phone {
+    justify-self: center;
+  }
+
+  .caption p:last-child {
+    margin-inline: 0;
+  }
+}
+
+/* ---- Download ---- */
+
+.end {
+  display: grid;
+  justify-items: center;
+  gap: 20px;
+  padding: 56px 24px 72px;
+  text-align: center;
+}
+
+.end h2 {
+  font-size: clamp(30px, 4vw, 48px);
+  line-height: 1.08;
+}
+
+.download {
+  display: grid;
+  justify-items: center;
+  gap: 16px;
+}
+
+.qr {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  padding: 16px;
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-float);
+}
+
+.qr img {
+  display: block;
+  width: 176px;
+  height: 176px;
+}
+
+.qr p {
+  font-weight: 700;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 220px;
+  min-height: 56px;
+  padding: 0 32px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--color-primary);
+  color: var(--color-primary-contrast);
+  font: inherit;
+  font-size: 16px;
+  font-weight: 800;
+  text-decoration: none;
+  box-shadow: 0 10px 30px rgb(20 20 25 / 0.18);
+}
+
+/* On a computer the QR code is the main way; the file is the quieter second. */
+.btn.quiet {
+  min-height: 48px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  box-shadow: inset 0 0 0 1px var(--color-border-strong);
+}
+
+.btn:disabled {
+  background: var(--color-surface-2);
+  color: var(--color-text-muted);
+  box-shadow: none;
+}
+
+.note {
+  max-width: 28ch;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.meta {
+  font-size: 14px;
+  color: var(--color-text-muted);
+}
+
+/* ---- What's new, safe and simple, how to install ---- */
+
+.after {
+  display: grid;
+  gap: 48px;
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 32px 24px 96px;
+}
+
+.after h2 {
+  margin-bottom: 12px;
+  font-size: 28px;
+  line-height: 1.15;
+}
+
+.after h3 {
+  margin: 24px 0 6px;
+  font-size: 18px;
+}
+
+.after p,
+.after li {
+  font-size: 17px;
+  line-height: 1.65;
+  color: var(--color-text-muted);
+}
+
+.after p + p {
+  margin-top: 8px;
+}
+
+.after strong {
+  color: var(--color-text);
+}
+
+#whats-new-notes {
+  white-space: pre-line;
+}
+
+.after ul,
+.after ol {
+  margin: 0;
+  padding-left: 1.4em;
+}
+
+.after li + li {
+  margin-top: 6px;
+}
