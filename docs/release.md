@@ -80,6 +80,9 @@ the test channel), not the live site:
 
   (There is nothing to fetch before the first release.)
 
+  Don't deploy from that computer until you've made a release on it: its `latest.json` would name an
+  APK that isn't there, and a new friend's Download would fail.
+
 ## 4. Build the release
 
 ```powershell

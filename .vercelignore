@@ -1,0 +1,8 @@
+# Releases deploy with `vercel build` + `vercel deploy --prebuilt`, which uploads only .vercel/output.
+# These lines guard against a plain `vercel deploy` uploading the source: never send secrets or the
+# Android project to Vercel.
+.env*
+android/
+*.jks
+*.keystore
+keystore.properties

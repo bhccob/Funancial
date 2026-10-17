@@ -4,6 +4,7 @@
 
 /* The download page's words and classes are not the app's: keep them out of the app's CSS. */
 @source not '../../site';
+@source not '../../tests/e2e/site';
 
 @custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));
 
