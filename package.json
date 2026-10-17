@@ -19,7 +19,8 @@
     "android:sync": "npm run build && cap sync android",
     "android:open": "cap open android",
     "android:run": "npm run android:sync && node scripts/android-run.mjs",
-    "android:dev": "node scripts/android-dev.mjs"
+    "android:dev": "node scripts/android-dev.mjs",
+    "release:android": "node scripts/release-android.mjs"
   },
   "dependencies": {
     "@capacitor-community/sqlite": "8.1.1",

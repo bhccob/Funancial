@@ -10,3 +10,10 @@ blob-report/
 .DS_Store
 .env.local
 .vercel
+*.jks
+*.keystore
+android/keystore.properties
+site-dist/
+site/public/get/*.apk
+site/public/get/**/*.apk
+site/public/get/**/latest.json
