@@ -118,6 +118,12 @@ test('a phone whose account moved says so and keeps working', async ({ page }) =
   await expect(page.getByRole('button', { name: 'Log in again' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Keep using without an account' })).toBeVisible();
 
+  // Home says so too, and leads back to the account.
+  await page.getByRole('link', { name: 'Home' }).first().click();
+  await expect(page.getByText("This phone isn't saving its copy any more")).toBeVisible();
+  await page.getByRole('link', { name: 'Account settings' }).click();
+  await expect(page.getByText('Your account moved to another phone')).toBeVisible();
+
   // The data stayed as the person left it.
   await page.reload();
   await expect(page.getByLabel('Name')).toHaveValue('Robin Changed');

@@ -5,7 +5,7 @@ import { Dialog } from '@/components/ui/Dialog';
 import { Section } from '@/components/ui/Section';
 import { TextField } from '@/components/ui/TextField';
 import { ForgotForm } from '@/features/account/ForgotScreen';
-import { Problem } from '@/features/account/parts';
+import { PasswordField, Problem } from '@/features/account/parts';
 import { errorMessage, FORGOT_LEAD, SAVE_NOTE, useBusy } from '@/features/account/shared';
 import { toast } from '@/lib/toast';
 import { useAction } from '@/lib/useAction';
@@ -84,10 +84,7 @@ function CreateAccountDialog({ open, onClose }: { open: boolean; onClose(): void
             error={errors.email}
             onChange={(e) => setEmail(e.target.value)}
           />
-          <TextField
-            variant="line"
-            label="Password"
-            type="password"
+          <PasswordField
             autoComplete="new-password"
             hint="At least 10 characters"
             value={password}
@@ -190,10 +187,7 @@ function LogInDialog({
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
               />
-              <TextField
-                variant="line"
-                label="Password"
-                type="password"
+              <PasswordField
                 autoComplete="current-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -269,29 +263,23 @@ function ChangePasswordDialog({ open, onClose }: { open: boolean; onClose(): voi
     >
       {open && (
         <form className="flex flex-col gap-5" onSubmit={submit} noValidate>
-          <TextField
-            variant="line"
+          <PasswordField
             label="Current password"
-            type="password"
             autoComplete="current-password"
             autoFocus
             value={current}
             onChange={(e) => setCurrent(e.target.value)}
           />
-          <TextField
-            variant="line"
+          <PasswordField
             label="New password"
-            type="password"
             autoComplete="new-password"
             hint="At least 10 characters"
             value={next}
             error={errors.next}
             onChange={(e) => setNext(e.target.value)}
           />
-          <TextField
-            variant="line"
+          <PasswordField
             label="Confirm new password"
-            type="password"
             autoComplete="new-password"
             value={again}
             error={errors.again}

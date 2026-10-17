@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -7,6 +7,8 @@ import { fakeAccount, linkedAccount, withAccount } from '@/test/fakeAccount';
 import { AccountReminder } from './AccountReminder';
 
 const TEXT = 'Make an account so you can move to a new phone and keep everything.';
+const MOVED =
+  "This phone isn't saving its copy any more, because your account was opened on another phone.";
 
 beforeEach(() => localStorage.clear());
 
@@ -55,6 +57,23 @@ describe('the Home reminder to make an account', () => {
     first.unmount();
     home();
     expect(screen.queryByText(TEXT)).not.toBeInTheDocument();
+  });
+
+  it('says on Home, while the account is moved, that this phone stopped saving, and links to Settings', async () => {
+    home(fakeAccount(linkedAccount({ status: 'moved' })));
+    const banner = screen.getByText(MOVED).closest('[role="status"]')!;
+    expect(banner).toBeInTheDocument();
+    await userEvent.click(
+      within(banner as HTMLElement).getByRole('link', { name: 'Account settings' }),
+    );
+    expect(screen.getByText('Settings page')).toBeInTheDocument();
+  });
+
+  it('says nothing of a move for a linked phone, or one with no account', () => {
+    home(fakeAccount(linkedAccount()));
+    expect(screen.queryByText(MOVED)).not.toBeInTheDocument();
+    home();
+    expect(screen.queryByText(MOVED)).not.toBeInTheDocument();
   });
 
   it('Set up takes the person to Settings and does not come back', async () => {

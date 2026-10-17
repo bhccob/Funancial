@@ -74,7 +74,8 @@ export function ForgotForm({
       {/* Always on the page, so the line is announced when it fills. */}
       <div role="status">{sent && <p className="font-bold">{SENT}</p>}</div>
       {sent && (
-        <Button variant="secondary" onClick={onDone}>
+        // The form, with the button that had focus, is gone: carry focus on rather than drop it.
+        <Button variant="secondary" autoFocus onClick={onDone}>
           {doneLabel}
         </Button>
       )}

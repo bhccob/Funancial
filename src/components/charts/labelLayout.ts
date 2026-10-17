@@ -1,7 +1,10 @@
-/** A label's size and how it stands off the ring, in px. A logo disc over a share, such as "27%". */
+/**
+ * A label's size and how it stands off the ring, in px. An 18px logo disc over a 12px share, such
+ * as "27%", with 2px between; the width is the widest share's, "100%".
+ */
 export const LABEL = {
   width: 32,
-  height: 34,
+  height: 32,
   /** From the ring's edge to the nearest side of the box: the room for the leader line. */
   lead: 12,
   /** The least space left between two boxes. */

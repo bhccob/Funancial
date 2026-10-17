@@ -405,6 +405,34 @@ describe('Settings → Account with an account', () => {
   });
 });
 
+describe("Settings' account dialogs", () => {
+  it.each([
+    ['Create account', 'Create your account', false, ['Password']],
+    ['Log in', 'Log in', false, ['Password']],
+    [
+      'Change password',
+      'Change password',
+      true,
+      ['Current password', 'New password', 'Confirm new password'],
+    ],
+  ] as const)(
+    '%s can show each password typed, as setup and Log in can',
+    async (open, title, linked, labels) => {
+      show(linked ? fakeAccount(linkedAccount()) : fakeAccount());
+      await userEvent.click(button(open));
+      const dialog = screen.getByRole('dialog', { name: title });
+      const toggles = within(dialog).getAllByRole('button', { name: 'Show password' });
+      expect(toggles).toHaveLength(labels.length);
+      for (const [i, label] of labels.entries()) {
+        const field = within(dialog).getByLabelText(label);
+        expect(field).toHaveAttribute('type', 'password');
+        await userEvent.click(toggles[i]!);
+        expect(field).toHaveAttribute('type', 'text');
+      }
+    },
+  );
+});
+
 describe('Settings → Account after another phone logged in', () => {
   const moved = () => fakeAccount(linkedAccount({ status: 'moved' }));
 

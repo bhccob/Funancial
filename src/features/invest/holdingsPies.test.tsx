@@ -211,6 +211,9 @@ describe('Holdings pie', () => {
       const logo = el.querySelector('[data-logo]');
       expect(logo, key).toHaveAttribute('data-logo', key.toUpperCase());
       expect(logo).toHaveTextContent(key.toUpperCase().slice(0, 1));
+      // The spec's 18px disc, in a box that holds it over the 12px share.
+      expect(logo).toHaveStyle({ width: '18px', height: '18px' });
+      expect(parseFloat(el.style.height)).toBeGreaterThanOrEqual(18 + 12);
     }
     // All four are in the legend with their share as well.
     expect(legend('All holdings')).toEqual([

@@ -49,6 +49,12 @@ describe('ForgotScreen', () => {
     },
   );
 
+  it('moves focus to Back to log in once the link is sent, as the form that held it is gone', async () => {
+    show();
+    await ask('robin');
+    expect(await screen.findByRole('button', { name: 'Back to log in' })).toHaveFocus();
+  });
+
   it('shows a calm line, and no success, when the service is not answering, and lets the person try again', async () => {
     const actions = fakeAccount();
     actions.forgot.mockRejectedValueOnce(new AccountError('unavailable'));

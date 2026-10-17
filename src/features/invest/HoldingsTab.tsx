@@ -115,7 +115,7 @@ function PieBlock({ rows, label }: { rows: HoldingRow[]; label: string }) {
           thickness={22}
           outsideLabels={slices.map((slice, i) => ({
             key: slice.key,
-            logo: logo(slice, i, 20),
+            logo: logo(slice, i, 18),
             text: `${Math.round((slice.amount / total) * 100)}%`,
           }))}
           formatAmount={(minor) => money(minor)}
