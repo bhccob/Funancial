@@ -5,16 +5,14 @@ import { MoneyField } from '@/components/ui/MoneyField';
 import { RadioGroup } from '@/components/ui/RadioGroup';
 import { Select } from '@/components/ui/Select';
 import { Switch } from '@/components/ui/Switch';
-import { categoryLabel } from '@/domain/budget';
-import { CategorySchema, type BudgetLimit, type Category } from '@/domain/entities';
+import type { BudgetLimit, Category } from '@/domain/entities';
+import { CATEGORY_OPTIONS } from '@/features/shared/categories';
 import { useAction } from '@/lib/useAction';
 import { useApp } from '@/store/AppStoreProvider';
 import { useCurrency, useFinanceActions } from '@/store/useFinance';
 
 type Scope = BudgetLimit['scope'];
 type Period = BudgetLimit['period'];
-
-const CATEGORY_OPTIONS = CategorySchema.options.map((c) => ({ value: c, label: categoryLabel(c) }));
 
 function LimitForm({ limit, onDone }: { limit: BudgetLimit | null; onDone(): void }) {
   const { saveLimit, deleteLimit } = useFinanceActions();
@@ -70,6 +68,7 @@ function LimitForm({ limit, onDone }: { limit: BudgetLimit | null; onDone(): voi
   return (
     <form className="flex flex-col gap-5" onSubmit={submit} noValidate>
       <RadioGroup<Scope>
+        variant="underline"
         legend="Applies to"
         value={scope}
         onChange={(v) => {
@@ -83,6 +82,7 @@ function LimitForm({ limit, onDone }: { limit: BudgetLimit | null; onDone(): voi
       />
       {scope === 'category' && (
         <Select
+          variant="line"
           label="Category"
           value={category}
           onChange={(v) => {
@@ -93,6 +93,7 @@ function LimitForm({ limit, onDone }: { limit: BudgetLimit | null; onDone(): voi
         />
       )}
       <RadioGroup<Period>
+        variant="underline"
         legend="Period"
         value={period}
         onChange={(v) => {
@@ -105,6 +106,7 @@ function LimitForm({ limit, onDone }: { limit: BudgetLimit | null; onDone(): voi
         ]}
       />
       <MoneyField
+        variant="line"
         label="Limit"
         currency={currency}
         value={amount}

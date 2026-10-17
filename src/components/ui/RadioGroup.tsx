@@ -16,6 +16,8 @@ export interface RadioGroupProps<T extends string> {
   /** `underline` is the Invest forms' tabs: no well, the choice marked by a line under it. */
   variant?: 'segmented' | 'underline';
   /** Said under the choices, which it describes. */
+  hint?: string;
+  /** Said under the choices in danger, which it describes. */
   error?: string;
   /** Added to each choice, e.g. a width for one-character labels. */
   optionClassName?: string;
@@ -28,14 +30,19 @@ export function RadioGroup<T extends string>({
   options,
   onChange,
   variant = 'segmented',
+  hint,
   error,
   optionClassName,
 }: RadioGroupProps<T>) {
   const name = useId();
+  const hintId = `${name}-hint`;
   const errorId = `${name}-error`;
   const underline = variant === 'underline';
   return (
-    <fieldset className="flex flex-col gap-2" aria-describedby={error ? errorId : undefined}>
+    <fieldset
+      className="flex flex-col gap-2"
+      aria-describedby={[hint && hintId, error && errorId].filter(Boolean).join(' ') || undefined}
+    >
       <legend className={underline ? cn(lineLabel, 'mb-0.5') : 'mb-2 text-sm font-bold'}>
         {legend}
       </legend>
@@ -75,6 +82,11 @@ export function RadioGroup<T extends string>({
           </label>
         ))}
       </div>
+      {hint && (
+        <p id={hintId} className="text-muted text-sm">
+          {hint}
+        </p>
+      )}
       {error && (
         <p id={errorId} className="text-danger text-sm font-semibold">
           {error}

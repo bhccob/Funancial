@@ -2,7 +2,6 @@ import { useState, type FormEvent } from 'react';
 import { Button } from '@/components/ui/Button';
 import { MoneyField } from '@/components/ui/MoneyField';
 import { RadioGroup } from '@/components/ui/RadioGroup';
-import { Select } from '@/components/ui/Select';
 import { TextField } from '@/components/ui/TextField';
 import { useAction } from '@/lib/useAction';
 import { useCurrency, useFinanceActions, useToday } from '@/store/useFinance';
@@ -62,6 +61,7 @@ export function IncomeForm({ onDone }: { onDone(): void }) {
   return (
     <form className="flex flex-col gap-5" onSubmit={submit} noValidate>
       <MoneyField
+        variant="line"
         label="Amount"
         currency={currency}
         value={amount}
@@ -73,6 +73,7 @@ export function IncomeForm({ onDone }: { onDone(): void }) {
         autoFocus
       />
       <RadioGroup<Source>
+        variant="underline"
         legend="Source"
         value={source}
         onChange={changeSource}
@@ -82,12 +83,14 @@ export function IncomeForm({ onDone }: { onDone(): void }) {
         ]}
       />
       <TextField
+        variant="line"
         label="Label"
         autoComplete="off"
         value={label}
         onChange={(e) => setLabel(e.target.value)}
       />
       <DateField
+        variant="line"
         value={date}
         today={today}
         error={errors.date}
@@ -96,16 +99,18 @@ export function IncomeForm({ onDone }: { onDone(): void }) {
           setErrors((x) => ({ ...x, date: undefined }));
         }}
       />
-      <Select
-        label="Goes to"
+      <RadioGroup<'cash' | 'savings'>
+        variant="underline"
+        legend="Goes to"
         value={bucket}
-        onChange={(v) => setBucket(v as 'cash' | 'savings')}
+        onChange={setBucket}
         options={[
           { value: 'cash', label: 'Cash' },
           { value: 'savings', label: 'Savings' },
         ]}
       />
       <TextField
+        variant="line"
         label="Note"
         autoComplete="off"
         value={note}

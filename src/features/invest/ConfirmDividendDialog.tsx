@@ -66,6 +66,7 @@ function ConfirmForm({ payout, onDone }: { payout: ExpectedPayout; onDone(): voi
   return (
     <form className="flex flex-col gap-5" onSubmit={submit} noValidate>
       <MoneyField
+        variant="line"
         label="Amount received"
         currency={currency}
         value={amount}
@@ -76,6 +77,7 @@ function ConfirmForm({ payout, onDone }: { payout: ExpectedPayout; onDone(): voi
         }}
       />
       <TextField
+        variant="line"
         label="Date"
         type="date"
         max={today}
@@ -87,6 +89,7 @@ function ConfirmForm({ payout, onDone }: { payout: ExpectedPayout; onDone(): voi
         }}
       />
       <RadioGroup<Bucket>
+        variant="underline"
         legend="Where did it go?"
         value={bucket}
         error={errors.bucket}

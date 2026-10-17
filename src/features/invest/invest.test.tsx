@@ -1467,6 +1467,18 @@ describe('Dividends tab', () => {
     );
   });
 
+  it('asks for a due payout on line fields and underline tabs', async () => {
+    renderDividends(dividendData(), true);
+    await userEvent.click(within(region('Due')).getByRole('button', { name: 'Confirm' }));
+    const dialog = screen.getByRole('dialog', { name: 'Confirm VWRL dividend' });
+    for (const label of ['Amount received', 'Date']) {
+      expect(within(dialog).getByLabelText(label), label).toHaveClass('border-b', 'font-extrabold');
+      expect(within(dialog).getByLabelText(label), label).not.toHaveClass('rounded-md');
+    }
+    expect(within(dialog).getByText('Cash')).toHaveClass('border-b-2', 'border-text');
+    expect(within(dialog).getByText('Reinvest')).toHaveClass('border-transparent');
+  });
+
   it('confirms a due payout into reinvest and it leaves the list', async () => {
     const store = renderDividends(dividendData(), true);
     const due = region('Due');

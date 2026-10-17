@@ -749,6 +749,16 @@ describe('DashboardScreen salary and freeze', () => {
     expect(actions.confirmIncome).toHaveBeenCalledWith('salary-2026-10', 270968);
   });
 
+  it('confirms the salary on a line field', async () => {
+    const today = '2026-10-25';
+    renderDashboard(applyRecords(sal.data, dueGenerated(sal.data, today)), today);
+    await userEvent.click(screen.getByRole('button', { name: `Confirm ${october} salary` }));
+    const dialog = screen.getByRole('dialog', { name: 'Confirm salary' });
+    const amount = within(dialog).getByLabelText('Amount received');
+    expect(amount).toHaveClass('border-b', 'font-extrabold');
+    expect(amount).not.toHaveClass('rounded-md');
+  });
+
   it('lets a salary that never came be marked as not arrived', async () => {
     const today = '2026-10-25';
     renderDashboard(applyRecords(sal.data, dueGenerated(sal.data, today)), today);

@@ -120,9 +120,9 @@ test('I bought it opens Add Expense with the item, amount, category and card fil
   await expect(page).toHaveURL(/\/add$/);
   await expect(page.getByLabel('Amount', { exact: true })).toHaveValue('150.00');
   await expect(page.getByLabel('Note', { exact: true })).toHaveValue('Concert VIP pass');
-  await expect(page.getByRole('radio', { name: 'Fun', exact: true })).toBeChecked();
+  await expect(page.getByLabel('Category').locator('option:checked')).toHaveText('Fun');
   // The card the ask said it would be paid with, not Cash.
-  await expect(page.getByLabel('Paid with').locator('option:checked')).toHaveText('Demo Visa');
+  await expect(page.getByRole('radio', { name: 'Demo Visa' })).toBeChecked();
 });
 
 test('when the link cannot be read it says so and Ask still works', async ({ page }) => {

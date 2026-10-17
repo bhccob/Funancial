@@ -107,6 +107,23 @@ describe('the line variant of the fields', () => {
     expect(input).toHaveClass('border-danger');
   });
 
+  it('shows a larger amount when asked', () => {
+    render(
+      <MoneyField
+        variant="line"
+        large
+        label="Amount"
+        currency="USD"
+        value={null}
+        onChange={() => {}}
+      />,
+    );
+    const input = screen.getByLabelText('Amount');
+    expect(input).toHaveClass('text-[20px]', 'font-extrabold', 'h-11');
+    expect(input).not.toHaveClass('text-base');
+    expect(screen.getByText(currencySymbol('USD'))).toHaveClass('text-[20px]');
+  });
+
   it('is a select too', () => {
     render(
       <Select
@@ -143,6 +160,23 @@ describe('RadioGroup as underline tabs', () => {
     expect(screen.getByText('Cash')).toHaveClass('border-transparent', 'text-muted');
     await userEvent.click(screen.getByRole('radio', { name: 'Cash' }));
     expect(onChange).toHaveBeenCalledWith('cash');
+  });
+
+  it('says a hint under the choices, which describes the group', () => {
+    render(
+      <RadioGroup
+        variant="underline"
+        legend="Paid with"
+        value="visa"
+        onChange={() => {}}
+        options={[{ value: 'visa', label: 'Visa' }]}
+        hint="Adds to the card balance."
+      />,
+    );
+    expect(screen.getByRole('group', { name: 'Paid with' })).toHaveAccessibleDescription(
+      'Adds to the card balance.',
+    );
+    expect(screen.getByText('Adds to the card balance.')).toHaveClass('text-muted', 'text-sm');
   });
 });
 

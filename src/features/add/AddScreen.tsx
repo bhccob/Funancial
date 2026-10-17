@@ -35,6 +35,7 @@ export function AddScreen() {
       <PageHeader title="Add" />
       <div className="flex flex-col gap-6 pt-6">
         <RadioGroup<Kind>
+          variant="underline"
           legend="Type"
           value={kind}
           // The state stays, or switching to Income and back would drop what "I bought it" handed over.

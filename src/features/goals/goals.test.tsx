@@ -166,3 +166,62 @@ describe('Debts', () => {
     expect(await screen.findByText(HISTORY)).toBeInTheDocument();
   });
 });
+
+describe('the goal and debt dialogs in the line style', () => {
+  const LINE = ['border-b', 'font-extrabold'];
+  const lineFields = (dialog: HTMLElement, labels: string[]) => {
+    for (const label of labels) {
+      expect(within(dialog).getByLabelText(label), label).toHaveClass(...LINE);
+      expect(within(dialog).getByLabelText(label), label).not.toHaveClass('rounded-md');
+    }
+  };
+
+  it('has line fields and underline tabs for a goal', async () => {
+    renderGoals();
+    await userEvent.click(screen.getByRole('button', { name: 'Add goal' }));
+    const dialog = screen.getByRole('dialog', { name: 'Add a goal' });
+    lineFields(dialog, ['Name', 'Target', 'Saved so far', 'Deadline']);
+    expect(within(dialog).getByText('Savings')).toHaveClass('border-b-2', 'border-text');
+    expect(within(dialog).getByText('Emergency fund')).toHaveClass('border-transparent');
+  });
+
+  it('has line fields and a line select for a card', async () => {
+    renderGoals();
+    await userEvent.click(screen.getByRole('button', { name: 'Add card' }));
+    const dialog = screen.getByRole('dialog', { name: 'Add a card' });
+    lineFields(dialog, [
+      'Name',
+      'Current balance',
+      'Interest rate %',
+      'Minimum payment',
+      'Credit limit',
+      'Due day',
+    ]);
+  });
+
+  it('has line fields for a loan', async () => {
+    renderGoals();
+    await userEvent.click(screen.getByRole('button', { name: 'Add loan' }));
+    lineFields(screen.getByRole('dialog', { name: 'Add a loan' }), [
+      'Name',
+      'Current balance',
+      'Interest rate %',
+      'Minimum payment',
+    ]);
+  });
+
+  it('has a line amount when adding to a goal', async () => {
+    renderGoals();
+    await userEvent.click(row('New bike').getByRole('button', { name: 'Add money' }));
+    lineFields(screen.getByRole('dialog', { name: 'Add to goal' }), ['Amount']);
+  });
+
+  it('has a line amount and underline tabs when paying a card', async () => {
+    renderGoals();
+    await userEvent.click(row('Visa').getByRole('button', { name: 'Pay card' }));
+    const dialog = screen.getByRole('dialog', { name: 'Pay Visa' });
+    lineFields(dialog, ['Amount']);
+    expect(within(dialog).getByText('Cash')).toHaveClass('border-b-2', 'border-text');
+    expect(within(dialog).getByText('Savings')).toHaveClass('border-transparent');
+  });
+});

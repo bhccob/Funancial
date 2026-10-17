@@ -106,3 +106,18 @@ describe('FreezeScreen', () => {
     );
   });
 });
+
+describe('the freeze form in the line style', () => {
+  it('has line date fields, an underline choice for lost pay and a line amount', async () => {
+    renderFreeze(salData());
+    for (const label of ['From', 'To']) {
+      expect(screen.getByLabelText(label), label).toHaveClass('border-b', 'font-extrabold');
+      expect(screen.getByLabelText(label), label).not.toHaveClass('rounded-md');
+    }
+    expect(screen.getByText('Calculate from my salary')).toHaveClass('border-b-2', 'border-text');
+    expect(screen.getByText("I'll enter the amount")).toHaveClass('border-transparent');
+    await userEvent.click(screen.getByRole('radio', { name: "I'll enter the amount" }));
+    expect(screen.getByLabelText('Amount lost')).toHaveClass('border-b', 'font-extrabold');
+    expect(screen.getByLabelText('Amount lost')).not.toHaveClass('rounded-md');
+  });
+});
