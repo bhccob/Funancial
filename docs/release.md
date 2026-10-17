@@ -38,7 +38,7 @@ keyPassword=<the password you typed>
   without one.
 - `keyPassword` is the same password as `storePassword`.
 - If this file is missing or wrong, only release builds fail, with a message that names it. Your own
-  debug builds (`npm run android:run`) never read it.
+  debug builds (`npm run android:run`) never fail because of it.
 - `*.jks`, `*.keystore` and `keystore.properties` are git-ignored in any case.
 
 ## 2. Back up the key (the same day)
@@ -75,7 +75,7 @@ the test channel), not the live site:
 
   ```powershell
   New-Item -ItemType Directory -Force site\public\get
-  curl.exe -o site\public\get\latest.json https://funancial.vercel.app/get/latest.json
+  curl.exe --fail -o site\public\get\latest.json https://funancial.vercel.app/get/latest.json
   ```
 
   (There is nothing to fetch before the first release.)
