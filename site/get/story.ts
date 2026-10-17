@@ -39,8 +39,11 @@ import {
   type Frame,
 } from './timeline';
 
-/** No more than about 60 frames a second: a 120 Hz phone would only spend battery and heat on more. */
-const MIN_FRAME_MS = 15;
+/**
+ * Skip a frame that comes sooner than this: 120 Hz draws at 60 and 144 Hz at 72, for battery and
+ * heat, while 90 Hz keeps every frame (a 15 ms floor would have halved it to 45).
+ */
+const MIN_FRAME_MS = 10;
 
 /** The phone body in scene units, and the colours of its metal. */
 const BODY = { w: 1.6, h: 3.3, d: 0.2 } as const;

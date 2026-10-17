@@ -219,6 +219,13 @@ h2 {
   font-weight: 700;
 }
 
+/* A computer window narrowed after the story started: the QR card would cover the phone. */
+@media (max-width: 759px) {
+  .story-on .qr {
+    display: none;
+  }
+}
+
 .btn {
   display: inline-flex;
   align-items: center;
