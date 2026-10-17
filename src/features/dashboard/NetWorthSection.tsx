@@ -1,5 +1,5 @@
 import { ChevronRight } from 'lucide-react';
-import { useId, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Sparkline } from '@/components/charts/Sparkline';
 import { HelpTip } from '@/components/ui/HelpTip';
 import { Section } from '@/components/ui/Section';
@@ -25,7 +25,6 @@ export function NetWorthSection({ data, view, today }: NetWorthSectionProps) {
   const money = useMoney();
   const currency = useCurrency();
   const whole = (minor: number) => money(minor, { whole: true });
-  const amountId = useId();
   const [open, setOpen] = useState(false);
 
   const trend = useMemo(() => netWorthSeries(data, today, 30).map((p) => p.value), [data, today]);
@@ -59,18 +58,15 @@ export function NetWorthSection({ data, view, today }: NetWorthSectionProps) {
     >
       <button
         type="button"
-        aria-label="Net worth: see and correct"
-        aria-describedby={amountId}
         onClick={() => setOpen(true)}
         className="flex min-h-11 items-center gap-1 text-left"
       >
-        <span
-          id={amountId}
-          className="text-[34px] leading-tight font-extrabold tracking-[-0.035em] tabular-nums"
-        >
+        <span className="text-[34px] leading-tight font-extrabold tracking-[-0.035em] tabular-nums">
           {money(view.netWorth)}
         </span>
         <ChevronRight aria-hidden="true" className="text-muted size-6 flex-none" />
+        {/* Its name is the amount you see, then what it does, so the name holds the visible text. */}
+        <span className="sr-only"> Net worth: see and correct</span>
       </button>
       <NetWorthSheet open={open} view={view} onClose={() => setOpen(false)} />
       <div className="mt-3">

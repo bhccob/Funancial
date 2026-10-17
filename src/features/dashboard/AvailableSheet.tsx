@@ -46,13 +46,10 @@ export function AvailableSheet({
                 value={money(view.buckets.savings)}
                 action={correct('savings')}
               />
-              <Row
-                label="Bills still to come this month"
-                value={`−${money(sum('subscription'))}`}
-              />
-              <Row label="Card payments due" value={`−${money(sum('card'))}`} />
+              <Row label="Bills still to come this month" value={money(0 - sum('subscription'))} />
+              <Row label="Card payments due" value={money(0 - sum('card'))} />
               {view.reserved !== 0 && (
-                <Row label="Reserved for limits" value={`−${money(view.reserved)}`} />
+                <Row label="Reserved for limits" value={money(0 - view.reserved)} />
               )}
             </ul>
             <Total label="= Available to spend" value={money(view.available)} />

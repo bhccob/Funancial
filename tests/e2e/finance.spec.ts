@@ -142,11 +142,14 @@ test('setting the actual cash balance records a correction', async ({ page }) =>
 
 test("Home's Available to spend sheet corrects cash and keeps its place", async ({ page }) => {
   await start(page);
-  await page.getByRole('button', { name: 'Available to spend: see and correct' }).click();
+  const number = page.getByRole('button', { name: 'Available to spend: see and correct' });
+  // The name is the amount drawn, then what it does, so it holds the text on screen.
+  await expect(number).toHaveAccessibleName('$6,000.00 Available to spend: see and correct');
+  await number.click();
   const sheet = page.getByRole('dialog', { name: 'Available to spend' });
   const cash = sheet.getByRole('listitem').filter({ hasText: 'Cash' });
   await expect(cash).toContainText('$1,000.00');
-  await cash.getByRole('button', { name: 'Correct' }).click();
+  await cash.getByRole('button', { name: 'Correct Cash', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'Set actual balance' });
   await expect(dialog.getByRole('radio', { name: 'Cash' })).toBeChecked();
   await dialog.getByLabel('Actual balance').fill('900');
@@ -155,7 +158,7 @@ test("Home's Available to spend sheet corrects cash and keeps its place", async 
   // The sheet is still open with the new cash, and focus is back on the button that asked.
   await expect(cash).toContainText('$900.00');
   await expect(sheet.getByText('= Available to spend').locator('..')).toContainText('$5,900.00');
-  await expect(cash.getByRole('button', { name: 'Correct' })).toBeFocused();
+  await expect(cash.getByRole('button', { name: 'Correct Cash', exact: true })).toBeFocused();
   await page.keyboard.press('Escape');
   await expect(available(page)).toContainText('$5,900.00');
   await expect(

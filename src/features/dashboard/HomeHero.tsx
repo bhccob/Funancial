@@ -21,8 +21,8 @@ const LONG_AMOUNT = 11;
 
 /**
  * What is available to spend, huge, and under it one thin line for the month: spent so far, bills
- * still to come, and what is left of the monthly limit. The label and the amount are one button
- * that opens what the amount is made of. Tapping a part of the line names it in the
+ * still to come, and what is left of the monthly limit. The amount is a button that opens what it
+ * is made of, and its cover takes in the label too. Tapping a part of the line names it in the
  * left key, with its exact amount; the idle keys are in whole units. While amounts are hidden the
  * line is one plain grey track, as the lengths of its parts would give the amounts away.
  */
@@ -31,7 +31,6 @@ export function HomeHero({ view, today }: { view: FinanceView; today: LocalDate 
   const hidden = useAmountsHidden((s) => s.hidden);
   const whole = (minor: number) => money(minor, { whole: true });
   const labelId = useId();
-  const amountId = useId();
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
   // Hiding clears the selection, so a part tapped before does not come back when amounts are shown.
@@ -89,13 +88,10 @@ export function HomeHero({ view, today }: { view: FinanceView; today: LocalDate 
         </div>
         <button
           type="button"
-          aria-label="Available to spend: see and correct"
-          aria-describedby={amountId}
           onClick={() => setOpen(true)}
           className="mt-1.5 flex items-center gap-1 text-left after:absolute after:inset-0 after:max-w-xs"
         >
           <span
-            id={amountId}
             className={cn(
               'leading-[1.05] font-extrabold tracking-[-0.045em] tabular-nums',
               amount.length > LONG_AMOUNT ? 'text-[40px]' : 'text-[50px]',
@@ -104,6 +100,8 @@ export function HomeHero({ view, today }: { view: FinanceView; today: LocalDate 
             {amount}
           </span>
           <ChevronRight aria-hidden="true" className="text-muted size-7 flex-none" />
+          {/* Its name is the amount you see, then what it does, so the name holds the visible text. */}
+          <span className="sr-only"> Available to spend: see and correct</span>
         </button>
       </div>
       <AvailableSheet open={open} view={view} onClose={() => setOpen(false)} />

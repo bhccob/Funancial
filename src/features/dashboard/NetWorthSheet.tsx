@@ -69,8 +69,9 @@ export function NetWorthSheet({
                   <Row
                     key={debt.id}
                     label={debt.name}
-                    // Owing is taken off; a card paid past its balance is a credit, which adds.
-                    value={balance > 0 ? `−${money(balance)}` : money(0 - balance)}
+                    // Owing is taken off and a card paid past its balance is a credit, which adds. Zero
+                    // is 0 - balance, never -balance: that is -0, which prints as "-$0.00".
+                    value={money(0 - balance)}
                     action={{ label: 'Edit', onClick: () => setEditing({ kind: debt.kind, debt }) }}
                   />
                 ))}

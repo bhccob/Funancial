@@ -13,6 +13,7 @@ import {
   makeLimit,
   makeProfile,
   makeSubscription,
+  makeTransaction,
 } from '@/test/fixtures';
 import { freshRealStore } from '@/test/realStore';
 import { DashboardScreen } from './DashboardScreen';
@@ -34,7 +35,14 @@ const pair = (el: Element | null) => [
   el?.lastElementChild?.textContent,
 ];
 
-type Seed = { cash?: number; reserve?: boolean; invested?: boolean; passive?: boolean };
+type Seed = {
+  cash?: number;
+  /** Without it there is no Visa and no subscription: no bill of any kind. */
+  bills?: boolean;
+  reserve?: boolean;
+  invested?: boolean;
+  passive?: boolean;
+};
 
 /**
  * October 14th on a real store, so a correction really changes Home. Cash 3,680 (5,000 less 1,320
@@ -44,6 +52,7 @@ type Seed = { cash?: number; reserve?: boolean; invested?: boolean; passive?: bo
  */
 async function renderHome({
   cash = 5_000_00,
+  bills = true,
   reserve = false,
   invested = false,
   passive = false,
@@ -59,10 +68,12 @@ async function renderHome({
       salary: null,
     }),
   );
-  await put(
-    'debt',
-    makeDebt({ id: 'visa', name: 'Visa', openingBalance: 230_00, openingDate: '2026-09-01' }),
-  );
+  if (bills) {
+    await put(
+      'debt',
+      makeDebt({ id: 'visa', name: 'Visa', openingBalance: 230_00, openingDate: '2026-09-01' }),
+    );
+  }
   await put(
     'debt',
     makeDebt({
@@ -85,14 +96,16 @@ async function renderHome({
   ] as const) {
     await put('expense', makeExpense({ date, category, amount }));
   }
-  await put(
-    'subscription',
-    makeSubscription({ name: 'Streamflix', amount: 15_99, nextRenewal: '2026-10-20' }),
-  );
-  await put(
-    'subscription',
-    makeSubscription({ name: 'FitHub Gym', amount: 39_00, nextRenewal: '2026-10-28' }),
-  );
+  if (bills) {
+    await put(
+      'subscription',
+      makeSubscription({ name: 'Streamflix', amount: 15_99, nextRenewal: '2026-10-20' }),
+    );
+    await put(
+      'subscription',
+      makeSubscription({ name: 'FitHub Gym', amount: 39_00, nextRenewal: '2026-10-28' }),
+    );
+  }
   await put(
     'budgetLimit',
     makeLimit({ category: 'entertainment', period: 'monthly', amount: 100_00, reserve }),
@@ -121,8 +134,15 @@ async function renderHome({
   return store;
 }
 
+/**
+ * The name of a number's button: the amount drawn, then what pressing it does. jsdom drops the space
+ * between the two, which a browser keeps (the Home e2e spec checks it there).
+ */
+const named = (amount: string, what: string) =>
+  new RegExp(`^${amount.replace(/[$.]/g, '\\$&')}\\s*${what}$`);
+
 const trigger = (which: 'Available to spend' | 'Net worth') =>
-  screen.getByRole('button', { name: `${which}: see and correct` });
+  screen.getByRole('button', { name: new RegExp(`${which}: see and correct$`) });
 
 async function openSheet(which: 'Available to spend' | 'Net worth') {
   await userEvent.click(trigger(which));
@@ -139,8 +159,10 @@ describe('the Available to spend sheet', () => {
   it('opens from the number', async () => {
     await renderHome();
     const button = trigger('Available to spend');
-    // Its name says what it does, and the amount is still read out, as its description.
-    expect(button).toHaveAccessibleDescription(usd(6_395_01));
+    // Its name is the amount you see, then what it does.
+    expect(button).toHaveAccessibleName(
+      named(usd(6_395_01), 'Available to spend: see and correct'),
+    );
     expect(button).toHaveTextContent(usd(6_395_01));
     // The "?" and the eye are buttons of their own, never inside it.
     for (const other of ['What is available to spend?', 'Hide amounts']) {
@@ -158,11 +180,23 @@ describe('the Available to spend sheet', () => {
     expect(rows(sheet)).toEqual([
       ['Cash', usd(3_680_00)],
       ['Savings', usd(3_000_00)],
-      ['Bills still to come this month', `−${usd(54_99)}`],
-      ['Card payments due', `−${usd(230_00)}`],
-      ['Reserved for limits', `−${usd(70_00)}`],
+      ['Bills still to come this month', usd(-54_99)],
+      ['Card payments due', usd(-230_00)],
+      ['Reserved for limits', usd(-70_00)],
     ]);
     expect(total(sheet, '= Available to spend')).toEqual(['= Available to spend', usd(6_325_01)]);
+  });
+
+  it('shows a bill row of nothing as a plain zero, never a minus zero', async () => {
+    await renderHome({ bills: false });
+    const sheet = await openSheet('Available to spend');
+    expect(rows(sheet)).toEqual([
+      ['Cash', usd(3_680_00)],
+      ['Savings', usd(3_000_00)],
+      ['Bills still to come this month', usd(0)],
+      ['Card payments due', usd(0)],
+    ]);
+    expect(total(sheet, '= Available to spend')[1]).toBe(usd(6_680_00));
   });
 
   it('leaves out Reserved for limits when nothing is reserved', async () => {
@@ -195,16 +229,17 @@ describe('the Available to spend sheet', () => {
     await renderHome();
     const sheet = await openSheet('Available to spend');
 
-    // Two buttons named Correct are told apart by what they describe.
-    const correctSavings = within(row(sheet, 'Savings')).getByRole('button', { name: 'Correct' });
-    expect(correctSavings).toHaveAccessibleDescription('Savings');
+    // The buttons are told apart by name: "Correct Savings", not two of "Correct".
+    const correctSavings = within(row(sheet, 'Savings')).getByRole('button', {
+      name: 'Correct Savings',
+    });
     await userEvent.click(correctSavings);
     let dialog = screen.getByRole('dialog', { name: 'Set actual balance' });
     expect(within(dialog).getByRole('radio', { name: 'Savings' })).toBeChecked();
     expect(within(dialog).getByText(`Funancial thinks: ${usd(3_000_00)}`)).toBeInTheDocument();
     await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
 
-    await userEvent.click(within(row(sheet, 'Cash')).getByRole('button', { name: 'Correct' }));
+    await userEvent.click(within(row(sheet, 'Cash')).getByRole('button', { name: 'Correct Cash' }));
     dialog = screen.getByRole('dialog', { name: 'Set actual balance' });
     expect(within(dialog).getByRole('radio', { name: 'Cash' })).toBeChecked();
     expect(within(dialog).getByText(`Funancial thinks: ${usd(3_680_00)}`)).toBeInTheDocument();
@@ -213,7 +248,7 @@ describe('the Available to spend sheet', () => {
   it('puts a correction into the rows, the total and Home', async () => {
     await renderHome();
     const sheet = await openSheet('Available to spend');
-    await userEvent.click(within(row(sheet, 'Cash')).getByRole('button', { name: 'Correct' }));
+    await userEvent.click(within(row(sheet, 'Cash')).getByRole('button', { name: 'Correct Cash' }));
     const dialog = screen.getByRole('dialog', { name: 'Set actual balance' });
     await userEvent.type(within(dialog).getByLabelText('Actual balance'), '3,700');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
@@ -231,7 +266,7 @@ describe('the Available to spend sheet', () => {
       within(screen.getByRole('region', { name: 'Net worth' })).getByText(usd(5_470_00)),
     ).toBeInTheDocument();
     // The correction is focused back on the button that asked for it.
-    expect(within(row(sheet, 'Cash')).getByRole('button', { name: 'Correct' })).toHaveFocus();
+    expect(within(row(sheet, 'Cash')).getByRole('button', { name: 'Correct Cash' })).toHaveFocus();
   });
 
   it('shows no amount while amounts are hidden', async () => {
@@ -239,13 +274,7 @@ describe('the Available to spend sheet', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Hide amounts' }));
     const sheet = await openSheet('Available to spend');
     expect(sheet.textContent).not.toMatch(/\d/);
-    expect(rows(sheet).map(([, value]) => value)).toEqual([
-      '••••',
-      '••••',
-      '−••••',
-      '−••••',
-      '−••••',
-    ]);
+    expect(rows(sheet).map(([, value]) => value)).toEqual(['••••', '••••', '••••', '••••', '••••']);
     expect(total(sheet, '= Available to spend')[1]).toBe('••••');
   });
 });
@@ -254,7 +283,7 @@ describe('the Net worth sheet', () => {
   it('opens from the number', async () => {
     await renderHome();
     const button = trigger('Net worth');
-    expect(button).toHaveAccessibleDescription(usd(5_450_00));
+    expect(button).toHaveAccessibleName(named(usd(5_450_00), 'Net worth: see and correct'));
     expect(button).toHaveTextContent(usd(5_450_00));
     expect(screen.queryByRole('dialog', { name: 'Net worth' })).not.toBeInTheDocument();
     await openSheet('Net worth');
@@ -272,8 +301,8 @@ describe('the Net worth sheet', () => {
       ['Cash', usd(3_680_00)],
       ['Savings', usd(3_000_00)],
       ['Passive income received', usd(0)],
-      ['Visa', `−${usd(230_00)}`],
-      ['Car loan', `−${usd(1_000_00)}`],
+      ['Visa', usd(-230_00)],
+      ['Car loan', usd(-1_000_00)],
     ]);
     expect(total(sheet, '= Net worth')).toEqual(['= Net worth', usd(5_450_00)]);
     // No investments yet, so nothing to look at in Invest.
@@ -333,12 +362,14 @@ describe('the Net worth sheet', () => {
   it('opens the correction on the balance of the row it was tapped on', async () => {
     await renderHome();
     const sheet = await openSheet('Net worth');
-    await userEvent.click(within(row(sheet, 'Savings')).getByRole('button', { name: 'Correct' }));
+    await userEvent.click(
+      within(row(sheet, 'Savings')).getByRole('button', { name: 'Correct Savings' }),
+    );
     const dialog = screen.getByRole('dialog', { name: 'Set actual balance' });
     expect(within(dialog).getByRole('radio', { name: 'Savings' })).toBeChecked();
     await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
 
-    await userEvent.click(within(row(sheet, 'Cash')).getByRole('button', { name: 'Correct' }));
+    await userEvent.click(within(row(sheet, 'Cash')).getByRole('button', { name: 'Correct Cash' }));
     expect(
       within(screen.getByRole('dialog', { name: 'Set actual balance' })).getByRole('radio', {
         name: 'Cash',
@@ -346,15 +377,44 @@ describe('the Net worth sheet', () => {
     ).toBeChecked();
   });
 
+  it('adds a card paid past its balance, and shows a settled loan as a plain zero', async () => {
+    const store = await renderHome();
+    // 280 against the Visa's 230 leaves a 50 credit; 1,000 settles the car loan. Net worth is
+    // unchanged by paying a debt: the money moved from cash to what is owed.
+    const paid = (debtId: string, type: 'card_payment' | 'debt_payment', amount: number) =>
+      store
+        .getState()
+        .put(
+          'transaction',
+          makeTransaction({ type, amount, date: '2026-10-10', from: 'cash', to: null, debtId }),
+        );
+    await paid('visa', 'card_payment', 280_00);
+    await paid('car', 'debt_payment', 1_000_00);
+    const sheet = await openSheet('Net worth');
+    expect(rows(sheet)).toEqual([
+      ['Cash', usd(2_400_00)],
+      ['Savings', usd(3_000_00)],
+      ['Passive income received', usd(0)],
+      ['Visa', usd(50_00)],
+      ['Car loan', usd(0)],
+    ]);
+    const shown = minor(trigger('Net worth').textContent);
+    expect(shown).toBe(5_450_00);
+    expect(minor(total(sheet, '= Net worth')[1] ?? null)).toBe(shown);
+    expect(rows(sheet).reduce((sum, [, value]) => sum + minor(value ?? null), 0)).toBe(shown);
+  });
+
   it('opens the existing editor for a card and for a loan', async () => {
     await renderHome();
     const sheet = await openSheet('Net worth');
-    await userEvent.click(within(row(sheet, 'Visa')).getByRole('button', { name: 'Edit' }));
+    await userEvent.click(within(row(sheet, 'Visa')).getByRole('button', { name: 'Edit Visa' }));
     let dialog = screen.getByRole('dialog', { name: 'Edit card' });
     expect(within(dialog).getByLabelText('Name')).toHaveValue('Visa');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
 
-    await userEvent.click(within(row(sheet, 'Car loan')).getByRole('button', { name: 'Edit' }));
+    await userEvent.click(
+      within(row(sheet, 'Car loan')).getByRole('button', { name: 'Edit Car loan' }),
+    );
     dialog = screen.getByRole('dialog', { name: 'Edit loan' });
     expect(within(dialog).getByLabelText('Name')).toHaveValue('Car loan');
   });
@@ -362,7 +422,9 @@ describe('the Net worth sheet', () => {
   it('puts an edited debt into the rows, the total and Home', async () => {
     await renderHome();
     const sheet = await openSheet('Net worth');
-    await userEvent.click(within(row(sheet, 'Car loan')).getByRole('button', { name: 'Edit' }));
+    await userEvent.click(
+      within(row(sheet, 'Car loan')).getByRole('button', { name: 'Edit Car loan' }),
+    );
     const dialog = screen.getByRole('dialog', { name: 'Edit loan' });
     const balance = within(dialog).getByLabelText('Balance when added');
     await userEvent.clear(balance);
@@ -372,7 +434,7 @@ describe('the Net worth sheet', () => {
     await waitFor(() =>
       expect(screen.queryByRole('dialog', { name: 'Edit loan' })).not.toBeInTheDocument(),
     );
-    expect(pair(row(sheet, 'Car loan'))).toEqual(['Car loan', `−${usd(800_00)}`]);
+    expect(pair(row(sheet, 'Car loan'))).toEqual(['Car loan', usd(-800_00)]);
     expect(total(sheet, '= Net worth')[1]).toBe(usd(5_650_00));
     expect(trigger('Net worth')).toHaveTextContent(usd(5_650_00));
   });
@@ -396,8 +458,8 @@ describe('the Net worth sheet', () => {
       '••••',
       '••••',
       '••••',
-      '−••••',
-      '−••••',
+      '••••',
+      '••••',
     ]);
   });
 });
