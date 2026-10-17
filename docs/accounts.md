@@ -24,7 +24,7 @@ Accepting Upstash's terms (step 1) and Google's (step 2) is your click. Claude c
 6. When it asks which project to connect to, pick **funancial** and keep **Production** ticked.
 
 That is all. Vercel adds the database's address and password to the project by itself (you will see
-`KV_REST_API_URL` and `KV_REST_API_TOKEN` appear under Settings → Environment Variables). **Don't add
+`KV_REST_API_URL` and `KV_REST_API_TOKEN` appear under Environment Variables, in the project's left sidebar). **Don't add
 anything by hand for the database.** Vercel's screens change now and then, so if a button is named a
 little differently, pick the closest one. If the variables Vercel added aren't named
 `KV_REST_API_URL` and `KV_REST_API_TOKEN` (for example, a prefix was added), tell Claude. Keep those
@@ -47,7 +47,7 @@ dedicate to this (a fresh one is ideal).
 4. Type a name, for example `Funancial`, and click **Create**.
 5. Google shows a password of 16 letters, in four groups. **It is shown once.** Copy it, and save it
    in your password manager right away.
-6. In Vercel, open the **funancial** project, then **Settings**, then **Environment Variables**.
+6. In Vercel, open the **funancial** project, then click **Environment Variables** in the left sidebar.
 7. Add two variables, one at a time. For each: type the **Key**, paste the **Value**, make sure
    **Production** is ticked, and click **Save**.
    - Key `GMAIL_USER`, value: the Gmail address, for example `someone@gmail.com`.
@@ -73,7 +73,7 @@ it on this computer. Nobody else ever sees it.
    mouse and press Ctrl+C to copy it.
 4. **First**, save it in your password manager, named for example `Funancial SERVER_MASTER_KEY`. Do
    this before anything else.
-5. In Vercel, open the **funancial** project, then **Settings**, then **Environment Variables**.
+5. In Vercel, open the **funancial** project, then click **Environment Variables** in the left sidebar.
 6. Click to add one. Key `SERVER_MASTER_KEY`, value: paste the line. Make sure **Production** is
    ticked. If you see a **Sensitive** switch, turn it on. Click **Save**.
 7. Close PowerShell. (If you ran the command again by mistake, use only the line you saved in step 4.)
@@ -97,7 +97,7 @@ away, and that the reset page shows its "expired" message for a made-up link.
 | `SERVER_MASTER_KEY` | The master key you made in step 3. | Lets the service unlock a copy for "forgot password". With it and a stolen database, someone could open every copy. | **Lost:** email resets can't restore old data. **Leaked:** tell Claude. Replacing it has a cost (see step 3), so don't do it on your own. |
 | `GMAIL_USER` | The Gmail address that sends the emails. | Not a secret by itself. It's the "from" address. | Nothing to protect. |
 | `GMAIL_APP_PASSWORD` | A Google app password for that address. | Lets the service send "forgot password" emails from your Gmail. | Someone could send email as that Gmail. Delete the app password in your Google account and make a new one. |
-| `FUNANCIAL_ACCESS_TOKEN`, `FUNANCIAL_APP_ORIGIN` | Already set from earlier. | They keep strangers' requests out. | **Leave them alone.** |
+| `FUNANCIAL_ACCESS_TOKEN` | Already set from earlier. | It keeps strangers' requests out. | **Leave them alone.** |
 
 Claude only ever checks that the names are listed (`npx vercel env ls` prints names, not values). It
 never pulls, prints or asks for the values.
@@ -153,7 +153,7 @@ This is what each leftover does:
 
 ## When you're done
 
-Before you tell Claude, check in Vercel → Settings → Environment Variables that you can see
+Before you tell Claude, check in Vercel → Environment Variables (left sidebar) that you can see
 `SERVER_MASTER_KEY`, `GMAIL_USER`, `GMAIL_APP_PASSWORD` and the two `KV_REST_API_` names, and that
 the master key is in your password manager.
 
