@@ -1,16 +1,18 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import type { Slice } from '@/domain/charts';
 import { cn } from '@/lib/cn';
 import { sliceColors } from './colors';
+import { LABEL, layoutLabels } from './labelLayout';
 
 /** The space between neighbouring arcs, in px along the ring. */
 const GAP = 3;
-/** A slice gets its percentage written on the pie from this share of the pie up; smaller ones keep it to the legend. */
-const LABEL_MIN_SHARE = 0.06;
-/** How far a percentage stands off the ring, and the room around the donut that keeps one on the screen. */
-const LABEL_GAP = 4;
-const LABEL_ROOM_X = 28;
-const LABEL_ROOM_Y = 16;
+
+/** What stands outside the ring for the slice with this key: a logo over a short text such as "27%". */
+export interface OutsideLabel {
+  key: string;
+  logo: ReactNode;
+  text: string;
+}
 
 export interface DonutProps {
   /** What the donut shows ("Spending by category"): the name of its list of slices for screen readers. */
@@ -25,8 +27,12 @@ export interface DonutProps {
   caption?: string;
   selected: number | null;
   onSelect(index: number | null): void;
-  /** Write each slice's share just outside the ring (slices of 6% or more); the donut then takes room for it. */
-  showPercent?: boolean;
+  /**
+   * A label for slices (matched by key), just outside the ring at the middle of the slice with a
+   * leader line to it. A label that would overlap another is left out, the smaller slice's first.
+   * The donut then takes room around it for the labels.
+   */
+  outsideLabels?: OutsideLabel[];
 }
 
 export function Donut({
@@ -39,7 +45,7 @@ export function Donut({
   caption,
   selected,
   onSelect,
-  showPercent = false,
+  outsideLabels,
 }: DonutProps) {
   const [focused, setFocused] = useState<number | null>(null);
   const total = slices.reduce((sum, s) => sum + Math.max(0, s.amount), 0);
@@ -51,19 +57,21 @@ export function Donut({
   const r = (size - thickness) / 2;
   const circumference = 2 * Math.PI * r;
   const centre = size / 2;
-  // Where each arc starts along the ring, how long it is once the gap is taken off, and where its middle points.
+  // Where each arc starts along the ring, and how long it is once the gap is taken off.
   const arcs = drawn.map((slice, i) => {
     const before = drawn.slice(0, i).reduce((sum, s) => sum + Math.max(0, s.amount), 0);
     const amount = Math.max(0, slice.amount);
     return {
       dash: `${Math.max(0, (amount / total) * circumference - (drawn.length > 1 ? GAP : 0))} ${circumference}`,
       offset: -(before / total) * circumference,
-      share: amount / total,
-      // Clockwise from the top, where the first arc starts.
-      mid: ((before + amount / 2) / total) * 2 * Math.PI,
     };
   });
-  const labelRadius = r + thickness / 2 + LABEL_GAP;
+  const labelFor = new Map((outsideLabels ?? []).map((l) => [l.key, l]));
+  const placed = layoutLabels(
+    drawn.map((s) => Math.max(0, s.amount) / total),
+    size,
+    new Set(drawn.flatMap((s, i) => (labelFor.has(s.key) ? [i] : []))),
+  );
 
   const toggle = (i: number) => onSelect(i === selected ? null : i);
   const big = size >= 200;
@@ -78,7 +86,9 @@ export function Donut({
       style={{
         width: size,
         height: size,
-        margin: showPercent ? `${LABEL_ROOM_Y}px ${LABEL_ROOM_X}px` : undefined,
+        margin: outsideLabels
+          ? `${LABEL.lead + LABEL.height}px ${LABEL.lead + LABEL.width}px`
+          : undefined,
       }}
     >
       <svg
@@ -126,27 +136,52 @@ export function Donut({
           />
         ))}
       </svg>
-      {showPercent &&
-        drawn.map((slice, i) => {
-          const { share, mid } = arcs[i]!;
-          if (share < LABEL_MIN_SHARE) return null;
-          const [x, y] = [Math.sin(mid), -Math.cos(mid)];
-          return (
-            <span
-              key={slice.key}
-              aria-hidden="true"
-              className="text-text pointer-events-none absolute text-xs leading-none font-extrabold tabular-nums"
-              style={{
-                left: centre + labelRadius * x,
-                top: centre + labelRadius * y,
-                // The label stands on the outside of its point, so it never lands on the ring.
-                transform: `translate(${-50 + 50 * x}%, ${-50 + 50 * y}%)`,
-              }}
-            >
-              {`${pct(slice)}%`}
-            </span>
-          );
-        })}
+      {placed.length > 0 && (
+        // Not under the arcs' rotation, so the lines are in the same px as the label boxes.
+        <svg
+          width={size}
+          height={size}
+          aria-hidden="true"
+          focusable="false"
+          className="pointer-events-none absolute inset-0 overflow-visible"
+        >
+          {placed.map(({ index, line }) => (
+            <line
+              key={drawn[index]!.key}
+              {...line}
+              stroke="var(--color-text-muted)"
+              strokeOpacity={0.6}
+              strokeWidth={1.25}
+            />
+          ))}
+        </svg>
+      )}
+      {placed.map(({ index, box, above }) => {
+        const key = drawn[index]!.key;
+        const { logo, text } = labelFor.get(key)!;
+        return (
+          <div
+            key={key}
+            data-label={key}
+            aria-hidden="true"
+            className="text-text pointer-events-none absolute flex flex-col items-center justify-between text-xs leading-none font-extrabold tabular-nums"
+            style={{ left: box.left, top: box.top, width: box.width, height: box.height }}
+          >
+            {/* The logo is the part the leader line meets, so it faces the ring. */}
+            {above ? (
+              <>
+                <span>{text}</span>
+                {logo}
+              </>
+            ) : (
+              <>
+                {logo}
+                <span>{text}</span>
+              </>
+            )}
+          </div>
+        );
+      })}
       <div className="pointer-events-none absolute inset-0 grid place-content-center px-2 text-center">
         {caption && (
           <span className={cn('text-muted font-bold', big ? 'text-[13px]' : 'text-xs')}>
@@ -190,6 +225,8 @@ export interface DonutLegendProps {
   onSelect(index: number | null): void;
   /** Add each slice's share of the whole, at the end of its row; the amount then sits under the name. */
   showPercent?: boolean;
+  /** A logo, by slice key, that starts its row in place of the colour dot. */
+  logos?: Record<string, ReactNode>;
 }
 
 export function DonutLegend({
@@ -198,6 +235,7 @@ export function DonutLegend({
   selected,
   onSelect,
   showPercent = false,
+  logos,
 }: DonutLegendProps) {
   const colors = sliceColors(slices);
   const total = slices.reduce((sum, s) => sum + Math.max(0, s.amount), 0);
@@ -214,11 +252,13 @@ export function DonutLegend({
               onClick={() => onSelect(on ? null : i)}
               className="flex min-h-11 w-full items-center gap-2.5 py-1.5 text-left text-[13.5px]"
             >
-              <span
-                aria-hidden="true"
-                className="size-[9px] flex-none rounded-full"
-                style={{ backgroundColor: colors[i] }}
-              />
+              {logos?.[slice.key] ?? (
+                <span
+                  aria-hidden="true"
+                  className="size-[9px] flex-none rounded-full"
+                  style={{ backgroundColor: colors[i] }}
+                />
+              )}
               {showPercent ? (
                 // Room is tight beside a donut with percentages on it, so the amount goes under the name.
                 <>

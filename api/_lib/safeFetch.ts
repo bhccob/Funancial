@@ -8,7 +8,20 @@ const TIMEOUT_MS = 5000;
 // timeout still bounds the time, and a bigger page is cut here, so the memory is bounded too.
 const MAX_BYTES = 2 * 1024 * 1024;
 const MAX_REDIRECTS = 3;
-const HTML = /^(?:text\/html|application\/xhtml\+xml)\s*(?:;|$)/i;
+// A favicon is a few KB; a bigger one is refused whole, as a cut-off picture is a broken one.
+const MAX_ICON_BYTES = 256 * 1024;
+
+/** What a fetch asks for (the Accept header) and the Content-Type it will read. */
+type Kind = { accept: string; type: RegExp };
+const PAGE: Kind = {
+  accept: 'text/html,application/xhtml+xml',
+  type: /^(?:text\/html|application\/xhtml\+xml)\s*(?:;|$)/i,
+};
+// Plain bitmaps only: an SVG can carry script.
+const ICON: Kind = {
+  accept: 'image/*',
+  type: /^image\/(?:png|jpeg|gif|webp|x-icon|vnd\.microsoft\.icon)\s*(?:;|$)/i,
+};
 
 /** The link itself is refused (bad input, or aimed inside a network). Any other failure is the page's. */
 export class BlockedUrlError extends Error {}
@@ -100,7 +113,7 @@ function assertAllowed(url: URL): void {
 
 // node:http never follows a redirect, so every hop is the caller's to check. The signal covers the
 // lookup, the connection, the headers and the body.
-function send(url: URL, signal: AbortSignal): Promise<IncomingMessage> {
+function send(url: URL, signal: AbortSignal, accept: string): Promise<IncomingMessage> {
   return new Promise((resolve, reject) => {
     const https = url.protocol === 'https:';
     const request = https ? httpsRequest : httpRequest;
@@ -111,7 +124,7 @@ function send(url: URL, signal: AbortSignal): Promise<IncomingMessage> {
         lookup: checkedLookup,
         signal,
         headers: {
-          Accept: 'text/html,application/xhtml+xml',
+          Accept: accept,
           // Left out, a server may choose any encoding, and the body is read as it comes.
           'Accept-Encoding': 'identity',
           'User-Agent': 'Mozilla/5.0 (compatible; Funancial/1.0)',
@@ -124,25 +137,22 @@ function send(url: URL, signal: AbortSignal): Promise<IncomingMessage> {
   });
 }
 
-// A bigger page is cut at the cap, not refused: a product's name and price sit well inside it.
-async function readCapped(res: IncomingMessage): Promise<string> {
+// A bigger body is cut at `max`, not refused: a product's name and price sit well inside the page cap.
+async function readCapped(res: IncomingMessage, max: number): Promise<Buffer> {
   const chunks: Buffer[] = [];
   let size = 0;
   // An abort, the 5 s timeout included, also fails this stream (ECONNRESET), so a body that
   // stalls cannot outlast the budget. Leaving the loop early destroys the stream and its socket.
   for await (const chunk of res as AsyncIterable<Buffer>) {
-    chunks.push(chunk.subarray(0, MAX_BYTES - size));
+    chunks.push(chunk.subarray(0, max - size));
     size += chunk.byteLength;
-    if (size >= MAX_BYTES) break;
+    if (size >= max) break;
   }
-  return Buffer.concat(chunks).toString('utf8');
+  return Buffer.concat(chunks);
 }
 
-/**
- * The first 2 MiB of the HTML at a public http(s) link, or a throw: BlockedUrlError for a link
- * that is refused, anything else for a page that cannot be read. Every redirect hop is checked again.
- */
-export async function safeFetch(link: string): Promise<string> {
+/** The 2xx response of `kind` at a public http(s) link; every redirect hop is checked again. */
+async function open(link: string, kind: Kind): Promise<IncomingMessage> {
   let url: URL;
   try {
     url = new URL(link);
@@ -154,7 +164,7 @@ export async function safeFetch(link: string): Promise<string> {
   for (let redirects = 0; ; redirects += 1) {
     signal.throwIfAborted();
     assertAllowed(url);
-    const res = await send(url, signal);
+    const res = await send(url, signal, kind.accept);
     const status = res.statusCode ?? 0;
     if (status >= 300 && status < 400) {
       res.destroy();
@@ -164,10 +174,26 @@ export async function safeFetch(link: string): Promise<string> {
       continue;
     }
     const type = res.headers['content-type'] ?? '';
-    if (status < 200 || status >= 300 || !HTML.test(type)) {
+    if (status < 200 || status >= 300 || !kind.type.test(type)) {
       res.destroy();
       throw new Error(`unreadable page: ${status} ${type}`);
     }
-    return readCapped(res);
+    return res;
   }
+}
+
+/**
+ * The first 2 MiB of the HTML at a public http(s) link, or a throw: BlockedUrlError for a link
+ * that is refused, anything else for a page that cannot be read. Every redirect hop is checked again.
+ */
+export async function safeFetch(link: string): Promise<string> {
+  return (await readCapped(await open(link, PAGE), MAX_BYTES)).toString('utf8');
+}
+
+/** A raster icon at a public link with its Content-Type; over 256 KiB, or anything else, is a throw. */
+export async function safeFetchImage(link: string): Promise<{ type: string; bytes: Buffer }> {
+  const res = await open(link, ICON);
+  const bytes = await readCapped(res, MAX_ICON_BYTES);
+  if (bytes.byteLength >= MAX_ICON_BYTES) throw new Error('icon too large');
+  return { type: res.headers['content-type'] ?? '', bytes };
 }

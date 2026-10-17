@@ -14,7 +14,7 @@ import { GET as profileGET } from '../profile.js';
 import { GET as quoteGET, OPTIONS as quoteOPTIONS } from '../quote.js';
 import { GET as searchGET } from '../search.js';
 import { parseSymbols } from './http.js';
-import { BlockedUrlError, checkedLookup } from './safeFetch.js';
+import { BlockedUrlError, checkedLookup, safeFetchImage } from './safeFetch.js';
 import * as yahoo from './yahoo.js';
 
 vi.mock('node:dns/promises', () => ({ lookup: vi.fn() }));
@@ -1326,6 +1326,75 @@ describe('price service', () => {
         serve.mockImplementation(async () => page('<title>x</title>', { 'Content-Type': type }));
         expect((await extract('https://shop.example/p')).status, type).toBe(200);
       }
+    });
+
+    describe('safeFetchImage', () => {
+      // Bytes that are not valid UTF-8, so a body read as text would come back changed.
+      const BYTES = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0xff, 0xfe, 0x00, 0x80]);
+      const PNG = { 'Content-Type': 'image/png' };
+      const icon = (body: BodyInit | null = BYTES, headers: Record<string, string> = PNG) =>
+        new Response(body, { headers });
+      const FAVICON = 'https://www.google.com/s2/favicons?domain=apple.com&sz=64';
+
+      it('hands back the bytes untouched and the type, asking for an image', async () => {
+        serve.mockImplementation(async () => icon());
+        const got = await safeFetchImage(FAVICON);
+        expect(got.type).toBe('image/png');
+        expect(new Uint8Array(got.bytes)).toEqual(BYTES);
+        expect(serve.mock.calls[0]![1]).toMatchObject({
+          lookup: checkedLookup,
+          headers: { Accept: 'image/*', 'Accept-Encoding': 'identity' },
+        });
+      });
+
+      it("follows the favicon service's redirect to the image, checking every hop", async () => {
+        const hops: Record<string, () => Response> = {
+          [FAVICON]: () => redirect('https://t3.gstatic.com/faviconV2?client=SOCIAL&size=64'),
+          'https://t3.gstatic.com/faviconV2?client=SOCIAL&size=64': () => icon(),
+        };
+        serve.mockImplementation(async (url) => hops[String(url)]!());
+        expect((await safeFetchImage(FAVICON)).type).toBe('image/png');
+        expect(fetched()).toEqual(Object.keys(hops));
+        for (const [, options] of serve.mock.calls) expect(options.lookup).toBe(checkedLookup);
+
+        serve.mockReset();
+        serve.mockImplementation(async () => redirect('http://169.254.169.254/latest/meta-data/'));
+        await expect(safeFetchImage(FAVICON)).rejects.toBeInstanceOf(BlockedUrlError);
+        expect(fetched()).toEqual([FAVICON]);
+      });
+
+      it('takes pictures a browser draws as plain bitmaps, and nothing else', async () => {
+        for (const type of [
+          'image/png',
+          'IMAGE/PNG; charset=binary',
+          'image/jpeg',
+          'image/gif',
+          'image/webp',
+          'image/x-icon',
+          'image/vnd.microsoft.icon',
+        ]) {
+          serve.mockImplementation(async () => icon(BYTES, { 'Content-Type': type }));
+          expect((await safeFetchImage(FAVICON)).type, type).toBe(type);
+        }
+        // SVG can carry script, and a page, JSON or a missing type is no icon at all.
+        for (const type of ['image/svg+xml', 'text/html', 'application/json', 'image/pngx']) {
+          serve.mockImplementation(async () => icon(BYTES, { 'Content-Type': type }));
+          await expect(safeFetchImage(FAVICON), type).rejects.toThrow('unreadable');
+        }
+        serve.mockImplementation(async () => new Response(BYTES));
+        await expect(safeFetchImage(FAVICON)).rejects.toThrow('unreadable');
+      });
+
+      it('fails on an error status, and on an icon over 256 KiB, which it never cuts short', async () => {
+        serve.mockImplementation(async () => new Response('gone', { status: 404, headers: PNG }));
+        await expect(safeFetchImage(FAVICON)).rejects.toThrow('unreadable');
+
+        const cap = 256 * 1024;
+        serve.mockImplementation(async () => icon(new Uint8Array(cap - 1)));
+        expect((await safeFetchImage(FAVICON)).bytes.byteLength).toBe(cap - 1);
+        serve.mockImplementation(async () => icon(new Uint8Array(cap + 1)));
+        await expect(safeFetchImage(FAVICON)).rejects.toThrow('too large');
+      });
     });
 
     it('answers 502 without details for an error status, a network error or a DNS failure', async () => {

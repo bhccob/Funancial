@@ -22,6 +22,8 @@ export interface RawProfile {
   exchangeName?: string;
   currency?: string;
   sector?: string;
+  /** The company's own site (most ETFs have none); the logo route looks up its icon. */
+  website?: string;
 }
 
 export interface RawDividends {
@@ -77,7 +79,7 @@ export function getProfile(symbol: string): Promise<RawProfile> {
     const { price, assetProfile } = await yahoo.quoteSummary(symbol, {
       modules: ['price', 'assetProfile'],
     });
-    return { ...price, sector: assetProfile?.sector };
+    return { ...price, sector: assetProfile?.sector, website: assetProfile?.website };
   });
 }
 

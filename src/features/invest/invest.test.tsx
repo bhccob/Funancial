@@ -24,6 +24,7 @@ import {
 } from '@/services/market';
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
 import { expectHelpTip } from '@/test/helpTip';
+import { spoken } from '@/test/spoken';
 import { makeDividend, makeHolding, makeProfile, makeSale } from '@/test/fixtures';
 import { FUTURE } from '@/store/financeActions';
 import { SOLD_NO_REINVEST, UNKNOWN_SYMBOL } from '@/store/investActions';
@@ -225,7 +226,7 @@ describe('Holdings tab', () => {
     const legend = (name: string) =>
       within(screen.getByRole('group', { name }))
         .getAllByRole('button')
-        .map((b) => b.textContent ?? '')
+        .map(spoken)
         .filter((text) => text !== '');
     expect(legend('All holdings')).toEqual([
       `AAPL${usdWhole(950_00)}49%`,
@@ -244,7 +245,7 @@ describe('Holdings tab', () => {
     ];
     expect(screen.queryByRole('list', { name: 'Other' })).not.toBeInTheDocument();
     // Each says its break-even: what it cost a share.
-    expect(rows.map((r) => r.textContent)).toEqual([
+    expect(rows.map(spoken)).toEqual([
       `KO · Coca-Cola10 shares · break-even ${usd(50_00)}${usd(600_00)}▲ ${formatPercent(20)}`,
       `AAPL · Apple5 shares · break-even ${usd(200_00)}${usd(950_00)}▼ ${formatPercent(5)}`,
       `VWRL · All-World ETF4 shares · break-even ${usd(100_00)}${usd(400_00)}▲ ${formatPercent(0)}`,

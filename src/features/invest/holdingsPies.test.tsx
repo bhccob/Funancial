@@ -8,6 +8,7 @@ import { emptySnapshot, type DataSnapshot } from '@/domain/snapshot';
 import { market } from '@/services/market';
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
 import { makeHolding, makeProfile } from '@/test/fixtures';
+import { spoken } from '@/test/spoken';
 import { InvestScreen } from './InvestScreen';
 
 const usd = (minor: number) => formatMoney(minor, 'USD');
@@ -74,10 +75,18 @@ const none = (name: string) =>
   expect(screen.queryByRole('group', { name })).not.toBeInTheDocument();
 /** What the legend of a pie says, one string per row. */
 const legend = (name: string) =>
+  within(pie(name)).getAllByRole('button').map(spoken).filter(Boolean);
+/** The rows of a pie's legend: the pie's buttons that are not the hidden ones over its slices. */
+const legendRows = (name: string) =>
   within(pie(name))
     .getAllByRole('button')
-    .map((b) => b.textContent)
-    .filter(Boolean);
+    .filter((b) => b.closest('ul')?.getAttribute('aria-label') !== 'Value by holding');
+/** The labels standing just outside the ring, by the slice key they belong to. */
+const outside = (name: string) =>
+  [...pie(name).querySelectorAll<HTMLElement>('[data-label]')].map((el) => ({
+    key: el.dataset.label!,
+    el,
+  }));
 
 describe('Holdings pie', () => {
   it('starts on All: one pie of everything, with the share of each holding in its legend', () => {
@@ -110,9 +119,9 @@ describe('Holdings pie', () => {
     }
   });
 
-  it('draws one bigger pie, 180px wide', () => {
+  it('draws one bigger pie, 220px wide', () => {
     renderTab(mixed());
-    expect(pie('All holdings').querySelector('svg')).toHaveAttribute('width', '180');
+    expect(pie('All holdings').querySelector('svg')).toHaveAttribute('width', '220');
   });
 
   it('shows only the stocks, or only the ETFs, when chosen, and keeps the choice in the address', async () => {
@@ -192,17 +201,68 @@ describe('Holdings pie', () => {
     expect(lists.map((l) => l.getAttribute('aria-label'))).toEqual(['Stocks', 'Other']);
   });
 
-  it('writes the share on each slice of 6% or more, and leaves smaller ones to the legend', () => {
-    // $10,000: 80%, 10%, exactly 6% and 4%.
+  it("stands each holding's logo and share just outside its slice", () => {
+    // $10,000: 80%, 10%, 6% and 4%.
     renderTab(dataOf(worth('AAA', 8000), worth('BBB', 1000), worth('CCC', 600), worth('DDD', 400)));
-    const all = pie('All holdings');
-    // Once on the pie and once in the legend ...
-    for (const text of ['80%', '10%', '6%']) {
-      expect(within(all).getAllByText(text), text).toHaveLength(2);
+    const labels = outside('All holdings');
+    expect(labels.map((l) => l.key)).toEqual(['aaa', 'bbb', 'ccc', 'ddd']);
+    expect(labels.map((l) => spoken(l.el))).toEqual(['80%', '10%', '6%', '4%']);
+    for (const { key, el } of labels) {
+      const logo = el.querySelector('[data-logo]');
+      expect(logo, key).toHaveAttribute('data-logo', key.toUpperCase());
+      expect(logo).toHaveTextContent(key.toUpperCase().slice(0, 1));
     }
-    // ... but the 4% slice is too small for the pie.
-    expect(within(all).getAllByText('4%')).toHaveLength(1);
-    expect(within(all).getByText('DDD').closest('button')).toHaveTextContent('4%');
+    // All four are in the legend with their share as well.
+    expect(legend('All holdings')).toEqual([
+      `AAA${usdWhole(8000_00)}80%`,
+      `BBB${usdWhole(1000_00)}10%`,
+      `CCC${usdWhole(600_00)}6%`,
+      `DDD${usdWhole(400_00)}4%`,
+    ]);
+  });
+
+  it('writes the Other slice as a grey +N, N holdings folded into it, with its share', () => {
+    const many = ['A', 'B', 'C', 'D', 'E', 'F', 'G'].map((s, i) => worth(s, (7 - i) * 100));
+    renderTab(dataOf(...many));
+    // F and G, $300 of $2,800, fold into Other.
+    const other = outside('All holdings').find((l) => l.key === 'other')!;
+    expect(other.el.querySelector('[data-logo]')).toHaveTextContent('+2');
+    expect(spoken(other.el)).toBe('11%');
+    expect(other.el.querySelector('[data-logo]')!.getAttribute('style')).toContain(
+      '--color-chart-other',
+    );
+    // The legend's Other row starts with the same grey disc.
+    const row = legendRows('All holdings').at(-1)!;
+    expect(row.firstElementChild).toHaveAttribute('data-logo', 'other');
+    expect(row.firstElementChild).toHaveTextContent('+2');
+  });
+
+  it('starts every legend row and every holdings row with a logo', () => {
+    renderTab(mixed());
+    const rows = legendRows('All holdings');
+    expect(rows).toHaveLength(5);
+    expect(rows.map((r) => r.firstElementChild?.getAttribute('data-logo'))).toEqual([
+      'AAPL',
+      'KO',
+      'VUSA',
+      'ASML',
+      'VWRL',
+    ]);
+    // The rows under the pie, one link each, start the same way and still read as just the holding.
+    for (const list of screen.getAllByRole('list', { name: /^(Stocks|ETFs)$/ })) {
+      for (const link of within(list).getAllByRole('link')) {
+        expect(link.querySelector('[data-logo]')).toBe(link.firstElementChild);
+        expect(link.firstElementChild).toHaveAttribute('aria-hidden', 'true');
+        expect(link).toHaveAccessibleName(/^[A-Z]+ · [A-Z]+ Inc/);
+      }
+    }
+    expect(screen.getAllByRole('link', { name: /Inc/ })).toHaveLength(5);
+  });
+
+  it('asks the price service for no logo while it has no token, so each stays its letter', () => {
+    renderTab(mixed());
+    expect(document.querySelectorAll('img')).toHaveLength(0);
+    expect(document.querySelectorAll('[data-logo]').length).toBeGreaterThan(0);
   });
 
   it('folds all but the biggest five into Other', () => {

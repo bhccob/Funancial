@@ -254,66 +254,6 @@ describe('Donut centre figure', () => {
   });
 });
 
-describe('Donut percentages', () => {
-  const shown = () => screen.queryAllByText(/^[0-9]+%$/).map((el) => el.textContent);
-
-  it('writes no percentages unless asked', () => {
-    const { container } = donut();
-    expect(shown()).toEqual([]);
-    expect(container.firstElementChild).not.toHaveStyle({ margin: '16px 28px' });
-  });
-
-  it('writes the share of each slice of 6% or more, rounded to a whole percent', () => {
-    donut({ showPercent: true });
-    expect(shown()).toEqual(['64%', '27%', '9%']);
-
-    // 5.9% stays off the pie; exactly 6% gets its label. The read-out of the arcs is unchanged.
-    const { unmount } = donut({
-      showPercent: true,
-      slices: [
-        { key: 'a', label: 'A', amount: 6 },
-        { key: 'b', label: 'B', amount: 5.9 },
-        { key: 'c', label: 'C', amount: 88.1 },
-      ],
-    });
-    expect(shown().slice(3)).toEqual(['6%', '88%']);
-    expect(screen.getByRole('button', { name: 'B, $0.06, 6%' })).toBeInTheDocument();
-    unmount();
-  });
-
-  it('puts a label just outside the ring at the middle of its slice, in the text colour', () => {
-    donut({ showPercent: true });
-    const label = screen.getByText('64%');
-    // Rent runs from 0 to 64% of the way round, so it points 115.2 degrees clockwise from the top.
-    const angle = 0.32 * 2 * Math.PI;
-    const radius = (150 - 18) / 2 + 18 / 2 + 4;
-    expect(parseFloat(label.style.left)).toBeCloseTo(75 + radius * Math.sin(angle), 5);
-    expect(parseFloat(label.style.top)).toBeCloseTo(75 - radius * Math.cos(angle), 5);
-    expect(label).toHaveClass('text-text');
-    expect(label.style.color).toBe('');
-    expect(label).toHaveAttribute('aria-hidden', 'true');
-    // On the right of the ring it grows rightwards, so it clears the ring.
-    expect(label.style.transform).toBe(
-      `translate(${-50 + 50 * Math.sin(angle)}%, ${-50 - 50 * Math.cos(angle)}%)`,
-    );
-  });
-
-  it('keeps room around the ring for the labels', () => {
-    const { container } = donut({ showPercent: true });
-    expect(container.firstElementChild).toHaveStyle({ margin: '16px 28px' });
-  });
-
-  it('labels a lone slice below the ring, as 100%', () => {
-    donut({ showPercent: true, slices: [{ key: 'ko', label: 'KO', amount: 500 }] });
-    expect(shown()).toEqual(['100%']);
-  });
-
-  it('writes none on an empty donut', () => {
-    donut({ showPercent: true, slices: [] });
-    expect(shown()).toEqual([]);
-  });
-});
-
 describe('DonutLegend', () => {
   it('lists each slice with its amount and marks the selected one', async () => {
     const onSelect = vi.fn();

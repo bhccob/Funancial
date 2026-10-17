@@ -173,10 +173,14 @@ Small hand-written SVG components in `src/components/charts/`, no chart library.
    text such as "$X left" or "$X over". Budget bars carry a pace mark showing how far through the
    period today is.
 5. The 7-day bars put today in ink and label it "Today"; the net-worth trend is a 30-day line.
-6. A donut can write each slice's share just outside the ring (`showPercent`), for slices of 6% or
-   more, in the text colour and never the slice colour; smaller slices show it in the legend only.
-   Invest's pie uses it: one pie, 180px, by holding, of everything (All) or of just Stocks, ETFs or
-   Other, chosen with underline tabs, with a full-width legend under it.
+6. A donut can stand a label for each slice just outside the ring (`outsideLabels`): a logo over
+   its share, at the middle of the slice with a short leader line, the share in the text colour and
+   never the slice colour. Labels that would overlap are left out, the smallest slice's first, and
+   the legend always has every one. Invest's pie uses it: one pie, 220px, by holding, of everything
+   (All) or of just Stocks, ETFs or Other, chosen with underline tabs, with a full-width legend under
+   it. Each logo is the company's site icon from the price service (`/api/logo`), or its first
+   letter on a disc ringed in the slice colour; Other is a grey +N, N holdings folded into it. The
+   legend's rows and the holdings' rows start with the same logo.
 7. A holding's price chart (`PriceLine`) is an ink line with a dashed line at what was paid per
    share, a dot where it starts and the latest price at its end. Touching it, or the arrow keys,
    read out a day and its price.

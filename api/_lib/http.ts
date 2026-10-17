@@ -27,6 +27,17 @@ export function json(req: Request, body: unknown, cacheControl: string, status =
   });
 }
 
+/** A picture's bytes; `nosniff` so a browser draws it as the type it was served as, or not at all. */
+export function image(req: Request, bytes: Buffer, type: string, cacheControl: string): Response {
+  return new Response(new Uint8Array(bytes), {
+    headers: headers(req, {
+      'Content-Type': type,
+      'Cache-Control': cacheControl,
+      'X-Content-Type-Options': 'nosniff',
+    }),
+  });
+}
+
 export const badRequest = (req: Request) => json(req, { error: 'bad request' }, 'no-store', 400);
 
 /** A response with no body (204), for the routes that answer with nothing. */
