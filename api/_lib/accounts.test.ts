@@ -930,6 +930,30 @@ describe('rate limits', () => {
     expect((await tryKey(accounts, authKey)).status).toBe(200);
   });
 
+  it('gives the count its lifetime in the step that counts, so a function cut off there leaves none for ever', async () => {
+    let cut = false;
+    // The function dies straight after the count: every store call after it fails.
+    const { store, accounts } = setup(
+      (real) =>
+        new Proxy(real, {
+          get(target, name, receiver) {
+            const member: unknown = Reflect.get(target, name, receiver);
+            if (typeof member !== 'function') return member;
+            return async (...args: unknown[]) => {
+              if (cut) throw new Error('cut off');
+              const out: unknown = await member.apply(target, args);
+              if (name === 'incr' && String(args[0]).startsWith('rl:login:fail:')) cut = true;
+              return out;
+            };
+          },
+        }),
+    );
+    await join(accounts);
+    await tryKey(accounts, b64(32)).catch(() => {});
+    expect(cut).toBe(true);
+    expect(await store.ttl('rl:login:fail:ada')).toBe(900);
+  });
+
   it('clears the failures when a log-in succeeds', async () => {
     const { store, accounts } = setup();
     const { authKey } = await join(accounts);

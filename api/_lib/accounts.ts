@@ -285,8 +285,8 @@ export function createAccounts({ store, masterKey, now, mailer, waitUntil }: Acc
    */
   async function loginFailed(name: string): Promise<Result> {
     const key = `rl:login:fail:${name}`;
-    const fails = await store.incr(key);
-    await store.expire(key, LOGIN_FAILS_SECONDS, 'renew');
+    // The count and its lifetime in one step: a function cut off between two would leave one for ever.
+    const fails = await store.incr(key, LOGIN_FAILS_SECONDS);
     if (fails >= LOGIN_FREE_FAILS) {
       await store.setNx(`rl:login:wait:${name}`, fails, loginWait(fails));
     }

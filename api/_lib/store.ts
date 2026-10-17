@@ -17,12 +17,13 @@ export interface KvStore {
    */
   compareAndSet(key: string, expected: unknown, next: unknown): Promise<boolean>;
   del(...keys: string[]): Promise<void>;
-  incr(key: string): Promise<number>;
   /**
-   * Arms a lifetime on a key that has none (EXPIRE NX); one that has a lifetime keeps it. With
-   * `'renew'` the lifetime starts again from now either way (EXPIRE).
+   * Counts up by one. With `ex`, the key's lifetime starts again at `ex` seconds in the same step
+   * (one EVAL), so a count made this way always expires; without, it keeps the one it has.
    */
-  expire(key: string, seconds: number, renew?: 'renew'): Promise<void>;
+  incr(key: string, ex?: number): Promise<number>;
+  /** Arms a lifetime on a key that has none (EXPIRE NX); one that has a lifetime keeps it. */
+  expire(key: string, seconds: number): Promise<void>;
   /** Seconds left: -1 for a key with no lifetime, -2 for a missing key. */
   ttl(key: string): Promise<number>;
   sadd(key: string, member: string): Promise<void>;
@@ -35,6 +36,8 @@ export type UpstashClient = Pick<
   'get' | 'set' | 'del' | 'incr' | 'expire' | 'ttl' | 'sadd' | 'smembers' | 'srem' | 'eval'
 >;
 
+const INCR_WITH_LIFETIME =
+  "local n = redis.call('INCR', KEYS[1]) redis.call('EXPIRE', KEYS[1], ARGV[1]) return n";
 const COMPARE_AND_SET =
   "if redis.call('GET', KEYS[1]) == ARGV[1] then redis.call('SET', KEYS[1], ARGV[2]) return 1 else return 0 end";
 
@@ -70,9 +73,12 @@ export function upstashKvStore(redis: UpstashClient): KvStore {
     async del(...keys) {
       if (keys.length) await redis.del(...keys);
     },
-    incr: (key) => redis.incr(key),
-    async expire(key, seconds, renew) {
-      await (renew ? redis.expire(key, seconds) : redis.expire(key, seconds, 'NX'));
+    async incr(key, ex) {
+      if (ex === undefined) return redis.incr(key);
+      return Number(await redis.eval(INCR_WITH_LIFETIME, [key], [String(ex)]));
+    },
+    async expire(key, seconds) {
+      await redis.expire(key, seconds, 'NX');
     },
     ttl: (key) => redis.ttl(key),
     async sadd(key, member) {
@@ -139,15 +145,18 @@ export function memoryKvStore(now: () => number = Date.now): KvStore & {
     async del(...keys) {
       for (const key of keys) data.delete(key);
     },
-    async incr(key) {
+    async incr(key, ex) {
       const e = entry(key);
       const n = Number(e?.value ?? 0) + 1;
-      data.set(key, { value: String(n), expiresAt: e?.expiresAt });
+      data.set(key, {
+        value: String(n),
+        ...(ex === undefined ? { expiresAt: e?.expiresAt } : expiry(ex)),
+      });
       return n;
     },
-    async expire(key, seconds, renew) {
+    async expire(key, seconds) {
       const e = entry(key);
-      if (e && (renew || e.expiresAt === undefined)) e.expiresAt = now() + seconds * 1000;
+      if (e && e.expiresAt === undefined) e.expiresAt = now() + seconds * 1000;
     },
     async ttl(key) {
       const e = entry(key);

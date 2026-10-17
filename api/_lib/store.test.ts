@@ -54,19 +54,20 @@ describe('memoryKvStore', () => {
     expect(await store.incr('n')).toBe(1);
   });
 
-  it("starts a key's lifetime again with 'renew', and gives a lifetime to one that had none", async () => {
+  it('counts with a lifetime that starts again at each count, given in the same step', async () => {
     let now = T0;
     const store = memoryKvStore(() => now);
-    await store.incr('n');
-    await store.expire('n', 60, 'renew');
+    expect(await store.incr('n', 60)).toBe(1);
     expect(await store.ttl('n')).toBe(60);
     now += 50_000;
-    await store.expire('n', 60, 'renew');
+    expect(await store.incr('n', 60)).toBe(2);
     expect(await store.ttl('n')).toBe(60);
     now += 50_000;
-    expect(await store.incr('n')).toBe(2);
-    await store.expire('missing', 60, 'renew');
-    expect(await store.ttl('missing')).toBe(-2);
+    // Without one, a count keeps the lifetime it has.
+    expect(await store.incr('n')).toBe(3);
+    expect(await store.ttl('n')).toBe(10);
+    now += 10_000;
+    expect(await store.incr('n', 60)).toBe(1);
   });
 
   it('keeps sets of strings, and an emptied set is gone', async () => {
@@ -156,6 +157,11 @@ describe('upstashKvStore', () => {
       },
       eval: async (script: string, keys: string[], args: string[]) => {
         calls.push(['eval', script, keys, args]);
+        if (script.includes('INCR')) {
+          const n = Number(data.get(keys[0] ?? '') ?? 0) + 1;
+          data.set(keys[0] ?? '', String(n));
+          return n;
+        }
         // What the script does: SET only if GET still gives the first argument.
         if (data.get(keys[0] ?? '') !== args[0]) return 0;
         data.set(keys[0] ?? '', args[1] ?? '');
@@ -207,13 +213,22 @@ describe('upstashKvStore', () => {
     const { calls, store } = fake();
     await store.expire('rl:x', 900);
     expect(await store.ttl('rl:x')).toBe(12);
-    // With 'renew', a plain EXPIRE: the lifetime starts again whatever it was.
-    await store.expire('rl:y', 900, 'renew');
     expect(calls).toEqual([
       ['expire', 'rl:x', 900, 'NX'],
       ['ttl', 'rl:x'],
-      ['expire', 'rl:y', 900, undefined],
     ]);
+  });
+
+  it('counts with a lifetime in one EVAL, INCR then EXPIRE, so no count is left without one', async () => {
+    const { calls, store } = fake();
+    expect(await store.incr('rl:x', 900)).toBe(1);
+    expect(await store.incr('rl:x', 900)).toBe(2);
+    expect(calls).toHaveLength(2);
+    const [name, script, keys, args] = calls[0] as [string, string, string[], string[]];
+    expect([name, keys, args]).toEqual(['eval', ['rl:x'], ['900']]);
+    expect(script).toBe(
+      "local n = redis.call('INCR', KEYS[1]) redis.call('EXPIRE', KEYS[1], ARGV[1]) return n",
+    );
   });
 
   it('runs compareAndSet as one EVAL of GET-compare-SET over the JSON text', async () => {
