@@ -16,9 +16,11 @@ function timeoutSignal(ms: number): { signal: AbortSignal; done: () => void } {
 
 /** The newest release, or null when there is none yet or the file is not one. */
 export async function loadLatest(fetchImpl: typeof fetch = fetch): Promise<Latest | null> {
-  const { signal, done } = timeoutSignal(TIMEOUT_MS);
+  let done = () => {};
   try {
-    const response = await fetchImpl(LATEST_URL, { cache: 'no-cache', signal });
+    const timeout = timeoutSignal(TIMEOUT_MS);
+    done = timeout.done;
+    const response = await fetchImpl(LATEST_URL, { cache: 'no-cache', signal: timeout.signal });
     if (!response.ok) return null;
     const parsed = LatestSchema.safeParse(await response.json());
     return parsed.success ? parsed.data : null;

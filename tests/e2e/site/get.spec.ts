@@ -33,7 +33,7 @@ const downloadLink = (page: Page) =>
   page.locator('#download').getByRole('link', { name: 'Download for Android' });
 const comingSoon = (page: Page) => page.getByRole('button', { name: 'Coming soon' });
 
-/** The lowest contrast ratio between the CSS colour `color` and any pixel of the PNG. */
+/** The lowest contrast ratio between the CSS colour `color` (any syntax) and any pixel of the PNG. */
 function lowestContrast(page: Page, png: Buffer, color: string) {
   return page.evaluate(
     async ({ base64, color }) => {
@@ -51,7 +51,11 @@ function lowestContrast(page: Page, png: Buffer, color: string) {
       };
       const luminance = (r: number, g: number, b: number) =>
         0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
-      const [r, gr, b] = color.match(/\d+/g)!.map(Number);
+      // Let the browser read the colour: computed values come back as rgb(), color(srgb …) and more.
+      const probe = document.createElement('canvas').getContext('2d')!;
+      probe.fillStyle = color;
+      probe.fillRect(0, 0, 1, 1);
+      const [r, gr, b] = probe.getImageData(0, 0, 1, 1).data;
       const text = luminance(r!, gr!, b!);
       const { data } = g.getImageData(0, 0, canvas.width, canvas.height);
       let lowest = Infinity;

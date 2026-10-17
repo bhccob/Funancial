@@ -66,6 +66,18 @@ describe('loadLatest', () => {
     });
   });
 
+  it('is null, and does not reject, in a browser with no AbortSignal or AbortController', async () => {
+    const globals = globalThis as Record<string, unknown>;
+    const saved = { AbortSignal, AbortController };
+    delete globals.AbortSignal;
+    delete globals.AbortController;
+    try {
+      await expect(loadLatest(answer(JSON.stringify(LATEST)))).resolves.toBeNull();
+    } finally {
+      Object.assign(globals, saved);
+    }
+  });
+
   it('is null when the request fails', async () => {
     const offline = vi.fn<typeof fetch>(async () => {
       throw new TypeError('Failed to fetch');
