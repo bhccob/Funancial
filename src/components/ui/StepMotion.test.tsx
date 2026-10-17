@@ -158,7 +158,7 @@ describe('Blobs', () => {
       expect(blob).toHaveClass('motion-safe:animate-blob-drift');
       // Composited once, not repainted as it drifts, and only while it drifts.
       expect(blob).toHaveClass('motion-safe:will-change-transform');
-      expect(blob.className).not.toMatch(/(^|s)will-change/);
+      expect(blob.className).not.toMatch(/(^|\s)will-change/);
       expect(blob.className).not.toMatch(/(^|\s)animate-/);
     }
   });
