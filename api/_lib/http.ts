@@ -1,4 +1,5 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
+import { isIPv6 } from 'node:net';
 
 const ORIGINS = ['http://localhost:5173', 'capacitor://localhost', 'https://localhost'];
 const SYMBOL = /^[A-Za-z0-9.^=-]{1,15}$/;
@@ -108,10 +109,29 @@ export async function readJson(
   }
 }
 
-/** The caller's address as the platform reports it (the first X-Forwarded-For entry), kept short. */
+/**
+ * What a rate limit counts a caller as: the address the platform reports (the first X-Forwarded-For
+ * entry). An IPv6 caller owns a whole /64, so it is counted by that prefix; IPv4 stays whole.
+ */
 export function clientIp(req: Request): string {
   const first = req.headers.get('X-Forwarded-For')?.split(',')[0]?.trim();
-  return (first || req.headers.get('X-Real-IP') || 'unknown').slice(0, 64);
+  const ip = (first || req.headers.get('X-Real-IP') || 'unknown').slice(0, 64);
+  if (!isIPv6(ip)) return ip;
+
+  // The URL parser gives the canonical form (lower-case, one "::", no dotted tail).
+  const host = new URL(`http://[${ip.split('%')[0]}]`).hostname.slice(1, -1);
+  const [head = '', tail] = host.split('::');
+  const a = head ? head.split(':') : [];
+  const b = tail ? tail.split(':') : [];
+  const groups = [...a, ...Array<string>(8 - a.length - b.length).fill('0'), ...b].map((g) =>
+    g.padStart(4, '0'),
+  );
+  // An IPv4 address in IPv6 dress is the same caller as the IPv4 one.
+  if (groups.slice(0, 5).every((g) => g === '0000') && groups[5] === 'ffff') {
+    const hex = `${groups[6]}${groups[7]}`;
+    return [0, 2, 4, 6].map((i) => parseInt(hex.slice(i, i + 2), 16)).join('.');
+  }
+  return `${groups.slice(0, 4).join(':')}::/64`;
 }
 
 /** The token of an `Authorization: Bearer <token>` header, or null. */

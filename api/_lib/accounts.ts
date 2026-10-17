@@ -2,6 +2,7 @@ import {
   createCipheriv,
   createDecipheriv,
   createHash,
+  createHmac,
   randomBytes,
   scrypt,
   timingSafeEqual,
@@ -28,6 +29,8 @@ export type Account = {
   wrappedPw: Sealed;
   /** The data key locked with `SERVER_MASTER_KEY`, for an email reset. */
   wrappedServer: Sealed;
+  /** Which master key wrapped `wrappedServer` (see `masterKeyId`). */
+  keyId: string;
   /** SHA-256 hex of the current device token. */
   deviceTokenHash: string;
   /** Record format. */
@@ -46,12 +49,16 @@ export type AccountDeps = {
 
 export type Accounts = ReturnType<typeof createAccounts>;
 
-/** The most ciphertext a copy may carry, as the base64 text that is stored. */
-const MAX_COPY = 1_000_000;
+/** The most ciphertext a copy may carry, in bytes (the base64 that stores it is a third longer). */
+const MAX_COPY_BYTES = 1_000_000;
 const TAG_BYTES = 16;
 const LOGIN_WINDOW = 15 * 60;
 const HOUR = 60 * 60;
-/** How long a writer's claim on a version lasts; one that died mid-write is let go after this. */
+/**
+ * How long a writer's claim on a version lasts; one that died mid-write is let go after this. Safe
+ * only because a function is cut off after `maxDuration` (10 s, in vercel.json): no live writer
+ * outlasts its claim.
+ */
 const CLAIM_SECONDS = 60;
 
 const USERNAME = /^[a-z0-9._-]{3,30}$/;
@@ -130,8 +137,29 @@ function unwrap(key: Uint8Array, sealed: Sealed): Buffer {
   ]);
 }
 
-/** The account's raw data key, opened with the master key. */
-export function unwrapServer(account: Pick<Account, 'wrappedServer'>, masterKey: Uint8Array) {
+/** Names a master key without revealing it: the first 8 bytes of an HMAC of a fixed label, as hex. */
+export function masterKeyId(masterKey: Uint8Array): string {
+  return createHmac('sha256', masterKey)
+    .update('funancial key id')
+    .digest()
+    .subarray(0, 8)
+    .toString('hex');
+}
+
+/** Thrown when an account's data key was wrapped under a different master key than this one. */
+export class MasterKeyMismatch extends Error {
+  constructor() {
+    super('the master key is not the one that wrapped this account');
+    this.name = 'MasterKeyMismatch';
+  }
+}
+
+/** The account's raw data key, opened with the master key; throws `MasterKeyMismatch` for another key. */
+export function unwrapServer(
+  account: Pick<Account, 'wrappedServer' | 'keyId'>,
+  masterKey: Uint8Array,
+) {
+  if (account.keyId !== masterKeyId(masterKey)) throw new MasterKeyMismatch();
   return unwrap(masterKey, account.wrappedServer);
 }
 
@@ -210,12 +238,17 @@ export function createAccounts({ store, masterKey, now }: AccountDeps) {
         authSalt: authSalt.toString('base64'),
         wrappedPw,
         wrappedServer: wrap(masterKey, Buffer.from(dek, 'base64')),
+        keyId: masterKeyId(masterKey),
         deviceTokenHash: sha256(token),
         version: 1,
         createdAt: stamp(),
       };
-      // One step, so two sign-ups for a name can't both win.
-      if (!(await store.setNx(K.user(name), account))) return fail(409, 'taken');
+      // One step, so two sign-ups for a name can't both win. A retried write that already took
+      // effect sees the name taken; this attempt's token hash is its nonce, so an account with it is ours.
+      const created =
+        (await store.setNx(K.user(name), account)) ||
+        (await store.get<Account>(K.user(name)))?.deviceTokenHash === account.deviceTokenHash;
+      if (!created) return fail(409, 'taken');
       try {
         await store.set(K.token(account.deviceTokenHash), name);
         await store.sadd(K.email(address), name);
@@ -239,6 +272,9 @@ export function createAccounts({ store, masterKey, now }: AccountDeps) {
       const account = await store.get<Account>(K.user(name));
       if (!(await matches(account, authKey)) || !account) return unauthorized();
 
+      // Read before anything changes, so a failed read never logs the old phone out.
+      const copy = await store.get<Copy>(K.copy(name));
+
       // A new token ends the old phone's: that is the takeover. The pointer goes in first, so a
       // failure part-way leaves the old token working rather than none.
       const token = newToken();
@@ -251,7 +287,6 @@ export function createAccounts({ store, masterKey, now }: AccountDeps) {
       }
       await store.del(K.token(before.deviceTokenHash));
 
-      const copy = await store.get<Copy>(K.copy(name));
       return {
         status: 200,
         body: {
@@ -266,30 +301,45 @@ export function createAccounts({ store, masterKey, now }: AccountDeps) {
       const account = await authed(token);
       if (!account) return unauthorized();
       const text = (body as { ciphertext?: unknown } | null)?.ciphertext;
-      if (typeof text === 'string' && text.length > MAX_COPY) return fail(413, 'too large');
+      if (typeof text === 'string' && Buffer.byteLength(text, 'base64') > MAX_COPY_BYTES) {
+        return fail(413, 'too large');
+      }
       const parsed = copyBody.safeParse(body);
       if (!parsed.success) return badRequest();
       const { baseVersion, iv: ivText, ciphertext } = parsed.data;
 
-      const stored = (await store.get<Copy>(K.copy(account.username)))?.version ?? 0;
-      // Of two writers from the same version only the first claim wins; the other is stale.
+      // The 409s say where the phone stands: `stale` means re-base on `version`, `busy` means
+      // another write from this version is in flight (or stuck): try again later.
+      const copyKey = K.copy(account.username);
+      const stored = (await store.get<Copy>(copyKey))?.version ?? 0;
+      if (baseVersion !== stored) return { status: 409, body: { error: 'stale', version: stored } };
+      // Of two writers from the same version only the first claim wins. A retried write that already
+      // took effect sees the claim taken, so the claim holds a nonce: finding ours means we won.
       const claim = K.claim(account.username, account.createdAt, baseVersion);
-      if (baseVersion !== stored || !(await store.setNx(claim, 1, CLAIM_SECONDS))) {
-        return fail(409, 'conflict');
+      const nonce = randomBytes(8).toString('hex');
+      const won =
+        (await store.setNx(claim, nonce, CLAIM_SECONDS)) || (await store.get(claim)) === nonce;
+      if (!won) return { status: 409, body: { error: 'busy', version: stored } };
+
+      try {
+        const copy: Copy = { iv: ivText, ciphertext, version: baseVersion + 1, savedAt: stamp() };
+        await store.set(copyKey, copy);
+        const now = await store.get<Account>(K.user(account.username));
+        // Deleted while this was written: no copy may outlive its account.
+        if (!now) {
+          await store.del(copyKey);
+          return unauthorized();
+        }
+        // Taken over (or deleted and made again, which also gives a new token) meanwhile: this phone
+        // has been replaced. The copy stays; the new phone's first upload is told its version (stale)
+        // and goes on from it.
+        if (now.deviceTokenHash !== account.deviceTokenHash) return unauthorized();
+        return { status: 200, body: { version: copy.version, savedAt: copy.savedAt } };
+      } catch (err) {
+        // A claim nobody will finish would turn the phone's next try into a wait; give it back.
+        await store.del(claim).catch(() => {});
+        throw err;
       }
-      const copy: Copy = {
-        iv: ivText,
-        ciphertext,
-        version: baseVersion + 1,
-        savedAt: stamp(),
-      };
-      await store.set(K.copy(account.username), copy);
-      // An account deleted while this was being written must not leave its copy behind.
-      if (!(await store.get(K.user(account.username)))) {
-        await store.del(K.copy(account.username));
-        return unauthorized();
-      }
-      return { status: 200, body: { version: copy.version, savedAt: copy.savedAt } };
     },
 
     async changePassword(token: string | null, body: unknown): Promise<Result> {
@@ -315,10 +365,15 @@ export function createAccounts({ store, masterKey, now }: AccountDeps) {
     async deleteAccount(token: string | null): Promise<Result> {
       const account = await authed(token);
       if (!account) return unauthorized();
-      // The account and its pointer go last, together: if anything fails the owner can still ask again.
-      await store.del(K.copy(account.username));
       await store.srem(K.email(account.email), account.username);
-      await store.del(K.token(account.deviceTokenHash), K.user(account.username));
+      // One call, last: the copy goes with the account, so an upload that lands part-way is removed
+      // with it, and one that lands after finds no account and takes its own copy back. If anything
+      // above fails the account is still there and the owner can ask again.
+      await store.del(
+        K.copy(account.username),
+        K.token(account.deviceTokenHash),
+        K.user(account.username),
+      );
       return { status: 204 };
     },
   };

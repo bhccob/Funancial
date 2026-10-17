@@ -4,7 +4,10 @@ import { POST as loginPOST, OPTIONS as loginOPTIONS } from '../login.js';
 import { DELETE as copyDELETE, OPTIONS as copyOPTIONS, PUT as copyPUT } from '../copy.js';
 import { POST as passwordPOST, OPTIONS as passwordOPTIONS } from '../password.js';
 import { POST as signupPOST, OPTIONS as signupOPTIONS } from '../signup.js';
-import { kvStoreFromEnv, memoryKvStore } from './store.js';
+import { accountRoute } from './accountRoute.js';
+import { unwrapServer, type Account } from './accounts.js';
+import { clientIp } from './http.js';
+import { kvStoreFromEnv, memoryKvStore, type KvStore } from './store.js';
 
 // The routes build their store from the environment; here that is a memory store.
 vi.mock('./store.js', async (orig) => ({
@@ -261,36 +264,194 @@ describe('account routes', () => {
     const limited = await send('203.0.113.9', 'user5');
     expect(limited.status).toBe(429);
     expect(limited.headers.get('Retry-After')).toBe('3600');
+    // So the phone's WebView, a cross-origin caller, can read it.
+    expect(limited.headers.get('Access-Control-Expose-Headers')).toBe('Retry-After');
     expect(limited.headers.get('Cache-Control')).toBe('no-store');
     expect(await limited.json()).toEqual({ error: 'too many attempts' });
 
     expect((await send('203.0.113.10', 'user5')).status).toBe(200);
   });
 
-  it('answer 503 without details, and log no message, when the store fails', async () => {
-    const secret = b64(32);
+  it('count an IPv6 caller by its /64, and an IPv4 caller by the whole address', async () => {
+    expect(
+      clientIp(new Request('http://x', { headers: { 'X-Forwarded-For': '203.0.113.9' } })),
+    ).toBe('203.0.113.9');
+    const v6 = (ip: string) =>
+      clientIp(new Request('http://x', { headers: { 'X-Forwarded-For': ip } }));
+    const prefix = '2001:0db8:0001:0002::/64';
+    for (const ip of [
+      '2001:db8:1:2:aaaa:bbbb:cccc:dddd',
+      '2001:DB8:1:2::1',
+      '2001:db8:1:2:ffff:ffff:ffff:ffff',
+      '2001:0db8:0001:0002:0000:0000:0000:0009',
+    ]) {
+      expect(v6(ip), ip).toBe(prefix);
+    }
+    expect(v6('2001:db8:1:3::1')).toBe('2001:0db8:0001:0003::/64');
+    expect(v6('::1')).toBe('0000:0000:0000:0000::/64');
+    // An IPv4 address in IPv6 dress is the same caller as the IPv4 one.
+    expect(v6('::ffff:203.0.113.9')).toBe('203.0.113.9');
+    expect(v6('not an address')).toBe('not an address');
+
+    // End to end: five sign-ups from one /64 use up its hour, whichever host bits they come from.
+    const send = (ip: string, username: string) =>
+      call(
+        signupPOST,
+        'POST',
+        '/api/signup',
+        { ...account(), username },
+        { 'X-Forwarded-For': ip },
+      );
+    for (let i = 0; i < 5; i++) {
+      expect((await send(`2001:db8:1:2:${i}::${i}`, `user${i}`)).status).toBe(200);
+    }
+    expect((await send('2001:db8:1:2:ffff::1', 'user5')).status).toBe(429);
+    expect((await send('2001:db8:1:3::1', 'user5')).status).toBe(200);
+  });
+
+  it('answer 503 not configured when the master key is not the one that wrapped the account', async () => {
     const store = memoryKvStore();
-    store.get = async () => {
-      throw new Error(`connection refused for token ${secret}`);
-    };
     vi.mocked(kvStoreFromEnv).mockReturnValue(store);
-    const logged = [
-      vi.spyOn(console, 'error').mockImplementation(() => {}),
-      vi.spyOn(console, 'log').mockImplementation(() => {}),
-      vi.spyOn(console, 'warn').mockImplementation(() => {}),
-    ];
+    expect((await call(signupPOST, 'POST', '/api/signup', account())).status).toBe(200);
+
+    // A route that opens the stored data key, as the email reset will, under a changed key.
+    vi.stubEnv('SERVER_MASTER_KEY', b64(32));
+    const reset = accountRoute(async () => {
+      const key = Buffer.from(process.env.SERVER_MASTER_KEY ?? '', 'base64');
+      unwrapServer(store.dump()['acct:u:ada'] as Account, key);
+      return { status: 204 };
+    }, false);
+    const res = await reset(
+      new Request('http://localhost/api/x', {
+        method: 'POST',
+        headers: { 'X-Funancial-Token': TOKEN },
+      }),
+    );
+    expect(res.status).toBe(503);
+    expect(await res.text()).toBe('{"error":"not configured"}');
+  });
+
+  // Every console method, so a stray log of any kind fails the test.
+  const spiedConsole = () =>
+    (['error', 'log', 'info', 'warn', 'debug'] as const).map((m) =>
+      vi.spyOn(console, m).mockImplementation(() => {}),
+    );
+  const logged = (spies: ReturnType<typeof spiedConsole>) =>
+    JSON.stringify(spies.map((spy) => spy.mock.calls));
+
+  it('answer 503 without details, and log only the kind of error, when the store fails, on every route', async () => {
+    const secret = b64(32);
+    const failing = Object.fromEntries(
+      ['get', 'set', 'setNx', 'del', 'incr', 'expire', 'ttl', 'sadd', 'smembers', 'srem'].map(
+        (name) => [
+          name,
+          async () => {
+            throw new Error(`connection refused for token ${secret}`);
+          },
+        ],
+      ),
+    ) as unknown as KvStore;
+    vi.mocked(kvStoreFromEnv).mockReturnValue(failing);
+    const spies = spiedConsole();
 
     const a = account();
-    const res = await call(loginPOST, 'POST', '/api/login', {
-      username: 'ada',
-      authKey: a.authKey,
-    });
-    expect(res.status).toBe(503);
-    expect(res.headers.get('Cache-Control')).toBe('no-store');
-    expect(await res.text()).toBe('{"error":"unavailable"}');
+    const auth = bearer(randomBytes(32).toString('base64url'));
+    const bodies: Array<[Handler, string, string, unknown]> = [
+      [signupPOST, 'POST', '/api/signup', a],
+      [loginPOST, 'POST', '/api/login', { username: 'ada', authKey: a.authKey }],
+      [copyPUT, 'PUT', '/api/copy', { baseVersion: 0, iv: b64(12), ciphertext: b64(100) }],
+      [copyDELETE, 'DELETE', '/api/copy', undefined],
+      [
+        passwordPOST,
+        'POST',
+        '/api/password',
+        { oldAuthKey: a.authKey, newAuthKey: b64(32), newWrappedPw: a.wrappedPw },
+      ],
+    ];
+    for (const [handler, method, path, body] of bodies) {
+      const res = await call(handler, method, path, body, auth);
+      expect(res.status, path).toBe(503);
+      expect(res.headers.get('Cache-Control')).toBe('no-store');
+      expect(await res.text()).toBe('{"error":"unavailable"}');
+    }
 
-    const seen = JSON.stringify(logged.map((spy) => spy.mock.calls));
-    expect(logged[0]).toHaveBeenCalledTimes(1);
-    for (const text of [secret, a.authKey, 'connection refused']) expect(seen).not.toContain(text);
+    const [error, ...others] = spies;
+    expect(error).toHaveBeenCalledTimes(bodies.length);
+    for (const spy of others) expect(spy).not.toHaveBeenCalled();
+    for (const text of [secret, a.authKey, a.dek, 'connection refused']) {
+      expect(logged(spies)).not.toContain(text);
+    }
+  });
+
+  it('log nothing, and return no secret, on any failure path of any route', async () => {
+    const spies = spiedConsole();
+    const a = account();
+    const signup = await call(signupPOST, 'POST', '/api/signup', a);
+    const { deviceToken } = (await signup.json()) as { deviceToken: string };
+    const guess = b64(32);
+    const guessToken = randomBytes(32).toString('base64url');
+    const master = process.env.SERVER_MASTER_KEY ?? '';
+    const noToken = { 'X-Funancial-Token': 'nope' };
+    const copy = { baseVersion: 0, iv: b64(12), ciphertext: b64(100) };
+
+    const failures: Response[] = [];
+    // No shared token, on every route, with real secrets in the body.
+    for (const [, handler, method, path] of routes) {
+      failures.push(await call(handler, method, path, a, noToken));
+    }
+    failures.push(
+      await call(signupPOST, 'POST', '/api/signup', a), // taken
+      await call(signupPOST, 'POST', '/api/signup', { ...a, username: 'grace', dek: guess }),
+      await call(signupPOST, 'POST', '/api/signup', '{"authKey":'), // not JSON
+      await call(loginPOST, 'POST', '/api/login', { username: 'ada', authKey: guess }),
+      await call(loginPOST, 'POST', '/api/login', { username: 'nobody', authKey: a.authKey }),
+      await call(copyPUT, 'PUT', '/api/copy', copy, bearer(guessToken)),
+      await call(copyPUT, 'PUT', '/api/copy', { ...copy, baseVersion: 7 }, bearer(deviceToken)),
+      await call(
+        copyPUT,
+        'PUT',
+        '/api/copy',
+        { ...copy, ciphertext: b64(1_000_001) },
+        bearer(deviceToken),
+      ),
+      await call(copyPUT, 'PUT', '/api/copy', 'x'.repeat(1_500_001), bearer(deviceToken)),
+      await call(copyDELETE, 'DELETE', '/api/copy', undefined, bearer(guessToken)),
+      await call(
+        passwordPOST,
+        'POST',
+        '/api/password',
+        { oldAuthKey: guess, newAuthKey: b64(32), newWrappedPw: a.wrappedPw },
+        bearer(deviceToken),
+      ),
+      await call(
+        passwordPOST,
+        'POST',
+        '/api/password',
+        { oldAuthKey: a.authKey, newAuthKey: b64(32), newWrappedPw: a.wrappedPw },
+        bearer(guessToken),
+      ),
+    );
+    // Until the log-in limit answers.
+    for (let i = 0; i < 11; i++) {
+      failures.push(
+        await call(loginPOST, 'POST', '/api/login', { username: 'ada', authKey: guess }),
+      );
+    }
+    // And with the service not set up.
+    vi.mocked(kvStoreFromEnv).mockReturnValue(null);
+    for (const [, handler, method, path] of routes) {
+      failures.push(await call(handler, method, path, a, bearer(deviceToken)));
+    }
+
+    expect(failures.some((res) => res.status === 429)).toBe(true);
+    const seen = JSON.stringify(
+      await Promise.all(
+        failures.map(async (res) => [res.status, [...res.headers], await res.text()]),
+      ),
+    );
+    for (const secret of [a.authKey, a.dek, deviceToken, guess, guessToken, master]) {
+      expect(seen).not.toContain(secret);
+    }
+    for (const spy of spies) expect(spy).not.toHaveBeenCalled();
   });
 });

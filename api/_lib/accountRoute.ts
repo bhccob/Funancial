@@ -1,4 +1,4 @@
-import { createAccounts, type Accounts, type Result } from './accounts.js';
+import { createAccounts, MasterKeyMismatch, type Accounts, type Result } from './accounts.js';
 import { bearerToken, clientIp, empty, guard, json, readJson } from './http.js';
 import { kvStoreFromEnv } from './store.js';
 
@@ -50,8 +50,15 @@ export function accountRoute(
       });
       const res = answer === undefined ? empty(req, status) : json(req, answer, 'no-store', status);
       if (retryAfter !== undefined) res.headers.set('Retry-After', String(retryAfter));
+      // The phone is a cross-origin caller and reads Retry-After only if it is exposed.
+      res.headers.set('Access-Control-Expose-Headers', 'Retry-After');
       return res;
     } catch (err) {
+      if (err instanceof MasterKeyMismatch) {
+        // SERVER_MASTER_KEY was changed after accounts were made: a setup problem, not a failure.
+        console.error('[api] the master key does not match the account');
+        return json(req, { error: 'not configured' }, 'no-store', 503);
+      }
       console.error('[api] accounts failure:', err instanceof Error ? err.name : 'unknown');
       return json(req, { error: 'unavailable' }, 'no-store', 503);
     }

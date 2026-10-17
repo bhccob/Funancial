@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash, createHmac, randomBytes } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 // The phone's own module, by relative path: the cross tests below hold the server to its formats.
 import {
@@ -12,6 +12,8 @@ import {
 import {
   canonicalUsername,
   createAccounts,
+  masterKeyId,
+  MasterKeyMismatch,
   rewrapPassword,
   unwrapServer,
   type Accounts,
@@ -48,15 +50,40 @@ const lagged = (store: KvStore): KvStore =>
     },
   });
 
-function setup(slow = false) {
-  const store = memoryKvStore(() => clock);
-  const accounts = createAccounts({
-    store: slow ? lagged(store) : store,
-    masterKey: MASTER,
-    now: () => clock,
+// Runs `wrapper` in place of one store method, with a way to carry on with the real call.
+const around = (
+  store: KvStore,
+  method: keyof KvStore,
+  wrapper: (args: unknown[], run: () => Promise<unknown>) => Promise<unknown>,
+): KvStore =>
+  new Proxy(store, {
+    get(target, name, receiver) {
+      const member: unknown = Reflect.get(target, name, receiver);
+      if (name !== method || typeof member !== 'function') return member;
+      return (...args: unknown[]) => wrapper(args, () => member.apply(target, args));
+    },
   });
+
+// A point two requests can be held at: `hit` says it was reached, `open` lets the holder go on.
+const gate = () => {
+  let open!: () => void;
+  let hit!: () => void;
+  const opened = new Promise<void>((resolve) => (open = resolve));
+  const reached = new Promise<void>((resolve) => (hit = resolve));
+  return { open, opened, hit, reached };
+};
+
+function setup(through: (store: KvStore) => KvStore = (store) => store) {
+  const store = memoryKvStore(() => clock);
+  const accounts = createAccounts({ store: through(store), masterKey: MASTER, now: () => clock });
   return { store, accounts };
 }
+
+const acctKeys = (store: { dump(): Record<string, unknown> }) =>
+  // A claim on a version lapses by itself within a minute; it is not account data.
+  Object.keys(store.dump()).filter((k) => k.startsWith('acct:') && !k.startsWith('acct:cl:'));
+const claimKeys = (store: { dump(): Record<string, unknown> }) =>
+  Object.keys(store.dump()).filter((k) => k.startsWith('acct:cl:'));
 
 const b64 = (bytes: number) => randomBytes(bytes).toString('base64');
 const sha = (text: string) => createHash('sha256').update(text).digest('hex');
@@ -109,7 +136,7 @@ describe('sign-up', () => {
   it('wraps the sent data key under the master key, and it unwraps back to that key', async () => {
     const { store, accounts } = setup();
     const { dek } = await join(accounts);
-    const account = store.dump()['acct:u:ada'] as { wrappedServer: Sealed };
+    const account = store.dump()['acct:u:ada'] as { wrappedServer: Sealed; keyId: string };
     expect(unwrapServer(account, MASTER).toString('base64')).toBe(dek);
     expect(account.wrappedServer.ciphertext).not.toContain(dek);
     // A different master key opens nothing.
@@ -129,7 +156,7 @@ describe('sign-up', () => {
   });
 
   it('lets only one of two simultaneous sign-ups for a name win', async () => {
-    const { store, accounts } = setup(true);
+    const { store, accounts } = setup(lagged);
     const [a, b] = await Promise.all([
       join(accounts, { email: 'a@example.com' }, '198.51.100.1'),
       join(accounts, { email: 'b@example.com' }, '198.51.100.2'),
@@ -139,6 +166,39 @@ describe('sign-up', () => {
     expect(store.dump()['acct:u:ada']).toMatchObject({ deviceTokenHash: sha(winner.token) });
     // The loser left nothing behind.
     expect(Object.keys(store.dump()).filter((k) => k.startsWith('acct:t:'))).toHaveLength(1);
+  });
+
+  it('does not call its own account taken when a retried write finds it already made', async () => {
+    // The client retries a SET NX whose first try took effect but whose answer was lost: it sees
+    // the key taken. The token hash in the account is this attempt's own, so the account is ours.
+    const { store, accounts } = setup((s) =>
+      around(s, 'setNx', async ([key], run) => {
+        const won = await run();
+        return key === 'acct:u:ada' ? false : won;
+      }),
+    );
+    const { res, token } = await join(accounts);
+    expect(res.status).toBe(200);
+    expect(store.dump()['acct:u:ada']).toMatchObject({ deviceTokenHash: sha(token) });
+    expect(Object.keys(store.dump()).filter((k) => k.startsWith('acct:t:'))).toEqual([
+      `acct:t:${sha(token)}`,
+    ]);
+  });
+
+  it('marks the account with the master key that wrapped its data key', async () => {
+    const { store, accounts } = setup();
+    await join(accounts);
+    const account = store.dump()['acct:u:ada'] as { keyId: string; wrappedServer: Sealed };
+    const idOf = (key: Uint8Array) =>
+      createHmac('sha256', key).update('funancial key id').digest().subarray(0, 8).toString('hex');
+    expect(account.keyId).toBe(idOf(MASTER));
+    expect(account.keyId).toMatch(/^[0-9a-f]{16}$/);
+    expect(unwrapServer(account, MASTER)).toHaveLength(32);
+
+    // Another key is refused up front, by name, not as a failed decryption.
+    const other = randomBytes(32);
+    expect(idOf(other)).not.toBe(account.keyId);
+    expect(() => unwrapServer(account, other)).toThrow(MasterKeyMismatch);
   });
 
   it('refuses a bad username, email, key, data key or wrapped key with 400, storing nothing', async () => {
@@ -239,6 +299,25 @@ describe('log-in', () => {
     ]);
   });
 
+  it('reads the copy before it rotates the token, so a failed read never logs the old phone out', async () => {
+    let failing = true;
+    const { store, accounts } = setup((s) =>
+      around(s, 'get', async ([key], run) => {
+        if (failing && key === 'acct:c:ada') throw new Error('store down');
+        return run();
+      }),
+    );
+    const { authKey, token } = await join(accounts);
+    await expect(logIn(accounts, authKey)).rejects.toThrow('store down');
+
+    expect(store.dump()['acct:u:ada']).toMatchObject({ deviceTokenHash: sha(token) });
+    expect(Object.keys(store.dump()).filter((k) => k.startsWith('acct:t:'))).toEqual([
+      `acct:t:${sha(token)}`,
+    ]);
+    failing = false;
+    expect((await put(accounts, token, 0)).status).toBe(200);
+  });
+
   it('keeps the token when the key is wrong', async () => {
     const { accounts } = setup();
     const { token } = await join(accounts);
@@ -263,57 +342,102 @@ describe('putCopy', () => {
     expect(store.dump()['acct:c:ada']).toMatchObject({ version: 2 });
   });
 
-  it('answers 409 for a stale or a future baseVersion and keeps the stored copy', async () => {
+  it('answers 409 stale, with the stored version, for a base behind or ahead, and keeps the copy', async () => {
     const { store, accounts } = setup();
     const { token } = await join(accounts);
+    expect(await put(accounts, token, 5)).toEqual({
+      status: 409,
+      body: { error: 'stale', version: 0 },
+    });
     await put(accounts, token, 0);
     const kept = JSON.stringify(store.dump()['acct:c:ada']);
     for (const base of [0, 2, 9]) {
       expect(await put(accounts, token, base)).toEqual({
         status: 409,
-        body: { error: 'conflict' },
+        body: { error: 'stale', version: 1 },
       });
     }
     expect(JSON.stringify(store.dump()['acct:c:ada'])).toBe(kept);
   });
 
   it('lets only one of two uploads from the same version win', async () => {
-    const { store, accounts } = setup(true);
+    const { store, accounts } = setup(lagged);
     const { token } = await join(accounts);
     const a = copyOf();
     const b = copyOf();
     const results = await Promise.all([put(accounts, token, 0, a), put(accounts, token, 0, b)]);
     expect(results.map((r) => r.status).sort()).toEqual([200, 409]);
+    // The one that lost the claim is told to try later, not that it is stale.
+    expect(results.find((r) => r.status === 409)?.body).toEqual({ error: 'busy', version: 0 });
     const winner = results[0]?.status === 200 ? a : b;
     expect(store.dump()['acct:c:ada']).toEqual({
       ...winner,
       version: 1,
       savedAt: '2026-10-17T12:00:00.000Z',
     });
-    // The next version can still be written once the race is over.
+    // Retried after the race, the loser is stale and learns the version to re-base on.
+    expect(await put(accounts, token, 0)).toEqual({
+      status: 409,
+      body: { error: 'stale', version: 1 },
+    });
     expect((await put(accounts, token, 1)).status).toBe(200);
   });
 
   it('retries cleanly after the claim on a version has lapsed', async () => {
     const { store, accounts } = setup();
     const { token } = await join(accounts);
-    // A writer that claimed version 0 and died before saving.
-    await store.setNx('acct:cl:ada:2026-10-17T12:00:00.000Z:0', 1, 60);
-    expect((await put(accounts, token, 0)).status).toBe(409);
+    // A writer that claimed version 0 and was killed before saving: no catch ran for it.
+    await store.setNx('acct:cl:ada:2026-10-17T12:00:00.000Z:0', 'another-writer', 60);
+    expect(await put(accounts, token, 0)).toEqual({
+      status: 409,
+      body: { error: 'busy', version: 0 },
+    });
     advance(61);
+    expect((await put(accounts, token, 0)).status).toBe(200);
+  });
+
+  it('lets go of its claim when the write fails, so the next try from the same version succeeds', async () => {
+    let failing = true;
+    const { store, accounts } = setup((s) =>
+      around(s, 'set', async ([key], run) => {
+        if (failing && key === 'acct:c:ada') throw new Error('store down');
+        return run();
+      }),
+    );
+    const { token } = await join(accounts);
+    await expect(put(accounts, token, 0)).rejects.toThrow('store down');
+    expect(claimKeys(store)).toEqual([]);
+
+    failing = false;
+    expect((await put(accounts, token, 0)).status).toBe(200);
+  });
+
+  it('takes a claim as its own when a retried write finds it already made', async () => {
+    const { accounts } = setup((s) =>
+      around(s, 'setNx', async ([key], run) => {
+        const won = await run();
+        return String(key).startsWith('acct:cl:') ? false : won;
+      }),
+    );
+    const { token } = await join(accounts);
     expect((await put(accounts, token, 0)).status).toBe(200);
   });
 
   it('refuses over 1,000,000 bytes of ciphertext with 413, and takes exactly that many', async () => {
     const { store, accounts } = setup();
     const { token } = await join(accounts);
-    const big = (n: number) => ({ iv: b64(12), ciphertext: 'A'.repeat(n) });
-    expect(await put(accounts, token, 0, big(1_000_004))).toEqual({
+    // n counts bytes; the base64 that carries them is a third longer.
+    const big = (n: number) => ({ iv: b64(12), ciphertext: b64(n) });
+    expect(await put(accounts, token, 0, big(1_000_001))).toEqual({
       status: 413,
       body: { error: 'too large' },
     });
     expect(store.dump()['acct:c:ada']).toBeUndefined();
-    expect((await put(accounts, token, 0, big(1_000_000))).status).toBe(200);
+    const full = await put(accounts, token, 0, big(1_000_000));
+    expect(full.status).toBe(200);
+    expect((store.dump()['acct:c:ada'] as { ciphertext: string }).ciphertext).toHaveLength(
+      1_333_336,
+    );
   });
 
   it('answers 401 to a missing, malformed, unknown or old Bearer', async () => {
@@ -363,6 +487,75 @@ describe('putCopy', () => {
     // The upload is refused as from an account that no longer exists, and its copy is removed.
     expect((await put(accounts, token, 0)).status).toBe(401);
     expect(store.dump()['acct:c:ada']).toBeUndefined();
+  });
+
+  it('refuses an upload whose token was replaced while it was written, and leaves the copy for the new phone to re-base on', async () => {
+    const g = gate();
+    const { store, accounts } = setup((s) =>
+      around(s, 'set', async ([key], run) => {
+        if (key === 'acct:c:ada') {
+          g.hit();
+          await g.opened;
+        }
+        return run();
+      }),
+    );
+    const { authKey, token } = await join(accounts);
+    const upload = put(accounts, token, 0);
+    await g.reached;
+    const second = out<{ deviceToken: string }>(await logIn(accounts, authKey)).deviceToken;
+    g.open();
+
+    expect((await upload).status).toBe(401);
+    expect(store.dump()['acct:c:ada']).toMatchObject({ version: 1 });
+    // The new phone's first upload is told the version, and goes on from it.
+    expect(await put(accounts, second, 0)).toEqual({
+      status: 409,
+      body: { error: 'stale', version: 1 },
+    });
+    expect((await put(accounts, second, 1)).status).toBe(200);
+  });
+});
+
+describe('deleting while uploading', () => {
+  it("leaves no copy when the delete runs between the upload's checks and its write", async () => {
+    const g = gate();
+    const { store, accounts } = setup((s) =>
+      around(s, 'set', async ([key], run) => {
+        if (key === 'acct:c:ada') {
+          g.hit();
+          await g.opened;
+        }
+        return run();
+      }),
+    );
+    const { token } = await join(accounts);
+    const upload = put(accounts, token, 0);
+    await g.reached; // the claim is made and the version read; the copy is not written yet
+    expect(await accounts.deleteAccount(token)).toEqual({ status: 204 });
+    g.open();
+
+    expect((await upload).status).toBe(401);
+    expect(acctKeys(store)).toEqual([]);
+  });
+
+  it("leaves no copy when an upload lands between the delete's own steps", async () => {
+    const g = gate();
+    const { store, accounts } = setup((s) =>
+      around(s, 'srem', async (_args, run) => {
+        g.hit();
+        await g.opened;
+        return run();
+      }),
+    );
+    const { token } = await join(accounts);
+    const deletion = accounts.deleteAccount(token);
+    await g.reached; // the delete is part-way
+    expect((await put(accounts, token, 0)).status).toBe(200);
+    g.open();
+
+    expect(await deletion).toEqual({ status: 204 });
+    expect(acctKeys(store)).toEqual([]);
   });
 });
 
@@ -465,10 +658,7 @@ describe('deleteAccount', () => {
 
     expect(await accounts.deleteAccount(token)).toEqual({ status: 204 });
 
-    // A claim on a version lapses by itself within a minute; it is not account data.
-    const keys = Object.keys(store.dump()).filter(
-      (k) => k.startsWith('acct:') && !k.startsWith('acct:cl:'),
-    );
+    const keys = acctKeys(store);
     expect(keys.sort()).toEqual(
       ['acct:u:grace', 'acct:e:ada@example.com', `acct:t:${sha(other.token)}`].sort(),
     );
@@ -597,7 +787,7 @@ describe('secrets', () => {
       await put(accounts, null, 0),
       await put(accounts, guessToken, 0),
       await put(accounts, a.token, 5),
-      await put(accounts, a.token, 0, { iv: b64(12), ciphertext: 'A'.repeat(1_000_004) }),
+      await put(accounts, a.token, 0, { iv: b64(12), ciphertext: b64(1_000_001) }),
       await accounts.putCopy(a.token, { baseVersion: 0, iv: a.dek, ciphertext: a.authKey }),
       await accounts.changePassword(a.token, {
         oldAuthKey: guess,
@@ -663,7 +853,11 @@ describe('with the phone module', () => {
 
     // Phone to server.
     const fromPhone = await wrapDek(dek, await aesKey(MASTER));
-    expect(unwrapServer({ wrappedServer: fromPhone }, MASTER).toString('base64')).toBe(dek);
+    expect(
+      unwrapServer({ wrappedServer: fromPhone, keyId: masterKeyId(MASTER) }, MASTER).toString(
+        'base64',
+      ),
+    ).toBe(dek);
   });
 
   it('re-wraps a data key under a password key the phone can open', async () => {
