@@ -72,6 +72,9 @@ const october = formatMonth('2026-10');
 const line = (text: string) => (_content: string, el: Element | null) =>
   el?.tagName === 'P' && el.textContent === text;
 
+/** The month line's parts are named "Part: amount", which the amount's own button is not. */
+const SEGMENT = /^(Spent so far|Bills still to come|Left in your monthly limit): /;
+
 /** A Wednesday: with weeks starting Monday the week runs 10-12 to 10-18. */
 const TODAY = '2026-10-14';
 
@@ -307,15 +310,15 @@ describe('DashboardScreen hero', () => {
     expect(within(hero).getByText(usdWhole(284_99))).toBeInTheDocument();
     expect(within(hero).getByText('bills to come')).toBeInTheDocument();
     expect(within(hero).queryByText('left in limit')).not.toBeInTheDocument();
-    // The segments only: the "?" beside the title is a button too.
-    expect(within(hero).getAllByRole('button', { name: /: / })).toHaveLength(2);
+    // The segments only: the "?" beside the title and the amount are buttons too.
+    expect(within(hero).getAllByRole('button', { name: SEGMENT })).toHaveLength(2);
   });
 
   it('draws only the track when nothing is spent or due', () => {
     renderDashboard(emptySnapshot(), TODAY);
     const hero = region('Available to spend');
-    // No segments; only the "?" beside the title is a button.
-    expect(within(hero).queryAllByRole('button', { name: /: / })).toHaveLength(0);
+    // No segments; the "?", the eye and the amount are the buttons.
+    expect(within(hero).queryAllByRole('button', { name: SEGMENT })).toHaveLength(0);
     expect(within(hero).getByText(`spent in ${october}`)).toBeInTheDocument();
     expect(within(hero).getByText('bills to come')).toBeInTheDocument();
     expect(within(hero).getAllByText(usdWhole(0))).toHaveLength(2);
@@ -1160,10 +1163,10 @@ describe('DashboardScreen with amounts hidden', () => {
   it('turns the month line into one plain grey line, as its lengths would give the amounts away', async () => {
     renderDashboard(monthData(), TODAY);
     const hero = region('Available to spend');
-    expect(within(hero).getAllByRole('button', { name: /: / })).toHaveLength(3);
+    expect(within(hero).getAllByRole('button', { name: SEGMENT })).toHaveLength(3);
 
     await userEvent.click(screen.getByRole('button', { name: 'Hide amounts' }));
-    expect(within(hero).queryAllByRole('button', { name: /: / })).toHaveLength(0);
+    expect(within(hero).queryAllByRole('button', { name: SEGMENT })).toHaveLength(0);
     expect(hero.querySelector('.bg-track')).toBeInTheDocument();
     expect(within(hero).getAllByText('••••')).toHaveLength(3);
   });
@@ -1183,7 +1186,7 @@ describe('DashboardScreen with amounts hidden', () => {
     await userEvent.click(eye);
     expect(within(hero).queryByText('Bills still to come')).not.toBeInTheDocument();
     expect(within(hero).getByText(`spent in ${october}`)).toBeInTheDocument();
-    for (const part of within(hero).getAllByRole('button', { name: /: / })) {
+    for (const part of within(hero).getAllByRole('button', { name: SEGMENT })) {
       expect(part).toHaveAttribute('aria-pressed', 'false');
     }
   });

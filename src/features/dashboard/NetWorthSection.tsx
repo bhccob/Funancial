@@ -1,4 +1,5 @@
-import { useMemo } from 'react';
+import { ChevronRight } from 'lucide-react';
+import { useId, useMemo, useState } from 'react';
 import { Sparkline } from '@/components/charts/Sparkline';
 import { HelpTip } from '@/components/ui/HelpTip';
 import { Section } from '@/components/ui/Section';
@@ -8,6 +9,7 @@ import { minorDigits } from '@/domain/money';
 import type { DataSnapshot } from '@/domain/snapshot';
 import type { FinanceView } from '@/domain/view';
 import { useCurrency, useMoney } from '@/store/useFinance';
+import { NetWorthSheet } from './NetWorthSheet';
 
 export interface NetWorthSectionProps {
   data: DataSnapshot;
@@ -15,11 +17,16 @@ export interface NetWorthSectionProps {
   today: LocalDate;
 }
 
-/** The number, how far it has moved this month, its 30-day line, and what it is made of. */
+/**
+ * The number (a button that opens what it is made of), how far it has moved this month, its
+ * 30-day line, and the same parts as a legend.
+ */
 export function NetWorthSection({ data, view, today }: NetWorthSectionProps) {
   const money = useMoney();
   const currency = useCurrency();
   const whole = (minor: number) => money(minor, { whole: true });
+  const amountId = useId();
+  const [open, setOpen] = useState(false);
 
   const trend = useMemo(() => netWorthSeries(data, today, 30).map((p) => p.value), [data, today]);
   const change = useMemo(() => netWorthChangeThisMonth(data, today), [data, today]);
@@ -50,9 +57,22 @@ export function NetWorthSection({ data, view, today }: NetWorthSectionProps) {
       help={<HelpTip pageId="net-worth" label="net worth" />}
       action={changeText}
     >
-      <p className="text-[34px] leading-tight font-extrabold tracking-[-0.035em] tabular-nums">
-        {money(view.netWorth)}
-      </p>
+      <button
+        type="button"
+        aria-label="Net worth: see and correct"
+        aria-describedby={amountId}
+        onClick={() => setOpen(true)}
+        className="flex min-h-11 items-center gap-1 text-left"
+      >
+        <span
+          id={amountId}
+          className="text-[34px] leading-tight font-extrabold tracking-[-0.035em] tabular-nums"
+        >
+          {money(view.netWorth)}
+        </span>
+        <ChevronRight aria-hidden="true" className="text-muted size-6 flex-none" />
+      </button>
+      <NetWorthSheet open={open} view={view} onClose={() => setOpen(false)} />
       <div className="mt-3">
         <Sparkline
           values={trend}

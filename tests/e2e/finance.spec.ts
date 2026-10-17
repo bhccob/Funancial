@@ -140,6 +140,29 @@ test('setting the actual cash balance records a correction', async ({ page }) =>
   await expect(page.getByRole('region', { name: 'Net worth' })).toContainText('Cash $900');
 });
 
+test("Home's Available to spend sheet corrects cash and keeps its place", async ({ page }) => {
+  await start(page);
+  await page.getByRole('button', { name: 'Available to spend: see and correct' }).click();
+  const sheet = page.getByRole('dialog', { name: 'Available to spend' });
+  const cash = sheet.getByRole('listitem').filter({ hasText: 'Cash' });
+  await expect(cash).toContainText('$1,000.00');
+  await cash.getByRole('button', { name: 'Correct' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Set actual balance' });
+  await expect(dialog.getByRole('radio', { name: 'Cash' })).toBeChecked();
+  await dialog.getByLabel('Actual balance').fill('900');
+  await dialog.getByRole('button', { name: 'Save' }).click();
+
+  // The sheet is still open with the new cash, and focus is back on the button that asked.
+  await expect(cash).toContainText('$900.00');
+  await expect(sheet.getByText('= Available to spend').locator('..')).toContainText('$5,900.00');
+  await expect(cash.getByRole('button', { name: 'Correct' })).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(available(page)).toContainText('$5,900.00');
+  await expect(
+    page.getByRole('button', { name: 'Available to spend: see and correct' }),
+  ).toBeFocused();
+});
+
 test('a monthly expense also becomes a subscription renewing next month', async ({ page }) => {
   await start(page);
   await addExpense(page, { amount: '1,200', category: 'Rent', note: 'Rent', repeat: 'Monthly' });

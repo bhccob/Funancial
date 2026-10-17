@@ -12,17 +12,17 @@ import {
   useToday,
 } from '@/store/useFinance';
 
-type Which = 'cash' | 'savings';
+export type Which = 'cash' | 'savings';
 const NAMES: Record<Which, string> = { cash: 'Cash', savings: 'Savings' };
 
-function ActualBalanceForm({ onDone }: { onDone(): void }) {
+function ActualBalanceForm({ initial, onDone }: { initial: Which; onDone(): void }) {
   const { setActualBalance } = useFinanceActions();
   const { buckets } = useFinanceView();
   const money = useMoney();
   const currency = useCurrency();
   const today = useToday();
   const run = useAction();
-  const [which, setWhich] = useState<Which>('cash');
+  const [which, setWhich] = useState<Which>(initial);
   const [actual, setActual] = useState<number | null>(null);
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
@@ -81,10 +81,19 @@ function ActualBalanceForm({ onDone }: { onDone(): void }) {
   );
 }
 
-export function ActualBalanceDialog({ open, onClose }: { open: boolean; onClose(): void }) {
+/** `initial` is the balance chosen when it opens: cash unless the caller knows better. */
+export function ActualBalanceDialog({
+  open,
+  initial = 'cash',
+  onClose,
+}: {
+  open: boolean;
+  initial?: Which;
+  onClose(): void;
+}) {
   return (
     <Dialog open={open} title="Set actual balance" onClose={onClose}>
-      {open && <ActualBalanceForm onDone={onClose} />}
+      {open && <ActualBalanceForm initial={initial} onDone={onClose} />}
     </Dialog>
   );
 }

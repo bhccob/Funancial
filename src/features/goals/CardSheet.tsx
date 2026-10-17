@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Sheet } from '@/components/ui/Sheet';
 import { debtBalance } from '@/domain/balances';
@@ -28,9 +28,16 @@ export function CardSheet({ debtId, onClose }: { debtId: string | null; onClose(
   const data = useApp((s) => s.data);
   const [pay, setPay] = useState<PayTarget | null>(null);
   const [edit, setEdit] = useState<DebtTarget | null>(null);
+  const editButton = useRef<HTMLButtonElement>(null);
 
   const debt = data.tables.debt.find((d) => d.id === debtId);
   const balance = debt ? debtBalance(debt, data, today) : 0;
+
+  // Paying the card off disables "Pay card", which is where the pay dialog hands focus back to, so
+  // it would fall to the page: "Edit card" takes it.
+  useEffect(() => {
+    if (pay === null && balance <= 0) editButton.current?.focus();
+  }, [pay, balance]);
 
   return (
     <>
@@ -59,7 +66,11 @@ export function CardSheet({ debtId, onClose }: { debtId: string | null; onClose(
               >
                 Pay card
               </Button>
-              <Button variant="secondary" onClick={() => setEdit({ kind: debt.kind, debt })}>
+              <Button
+                ref={editButton}
+                variant="secondary"
+                onClick={() => setEdit({ kind: debt.kind, debt })}
+              >
                 Edit card
               </Button>
             </div>

@@ -1,3 +1,4 @@
+import { ChevronRight } from 'lucide-react';
 import { useId, useState } from 'react';
 import { MonthLine } from '@/components/charts/MonthLine';
 import { HelpTip } from '@/components/ui/HelpTip';
@@ -9,6 +10,7 @@ import { cn } from '@/lib/cn';
 import { formatMonth } from '@/lib/format';
 import { useAmountsHidden } from '@/store/useAmountsHidden';
 import { useMoney } from '@/store/useFinance';
+import { AvailableSheet } from './AvailableSheet';
 import { HideAmountsButton } from './HideAmountsButton';
 
 /** The month line's three parts, in the order they are drawn. */
@@ -19,7 +21,8 @@ const LONG_AMOUNT = 11;
 
 /**
  * What is available to spend, huge, and under it one thin line for the month: spent so far, bills
- * still to come, and what is left of the monthly limit. Tapping a part of the line names it in the
+ * still to come, and what is left of the monthly limit. The label and the amount are one button
+ * that opens what the amount is made of. Tapping a part of the line names it in the
  * left key, with its exact amount; the idle keys are in whole units. While amounts are hidden the
  * line is one plain grey track, as the lengths of its parts would give the amounts away.
  */
@@ -28,6 +31,8 @@ export function HomeHero({ view, today }: { view: FinanceView; today: LocalDate 
   const hidden = useAmountsHidden((s) => s.hidden);
   const whole = (minor: number) => money(minor, { whole: true });
   const labelId = useId();
+  const amountId = useId();
+  const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
   // Hiding clears the selection, so a part tapped before does not come back when amounts are shown.
   const [wasHidden, setWasHidden] = useState(hidden);
@@ -69,24 +74,39 @@ export function HomeHero({ view, today }: { view: FinanceView; today: LocalDate 
 
   return (
     <section aria-labelledby={labelId}>
-      <div className="flex items-center gap-1">
-        <h2 id={labelId} className="text-muted text-sm font-bold">
-          Available to spend
-        </h2>
-        <HelpTip pageId="available" label="available to spend" />
-        {/* -my-3: the 44px target overhangs the label row instead of pushing the amount down. */}
-        <span className="-my-3 ml-auto">
-          <HideAmountsButton />
-        </span>
+      {/* The button's ::after covers this block, label row and amount. The "?" and the eye are
+          buttons of their own and sit above it, as a button cannot hold a button. */}
+      <div className="relative">
+        <div className="flex items-center gap-1 [&>button]:z-10">
+          <h2 id={labelId} className="text-muted text-sm font-bold">
+            Available to spend
+          </h2>
+          <HelpTip pageId="available" label="available to spend" />
+          {/* -my-3: the 44px target overhangs the label row instead of pushing the amount down. */}
+          <span className="relative z-10 -my-3 ml-auto">
+            <HideAmountsButton />
+          </span>
+        </div>
+        <button
+          type="button"
+          aria-label="Available to spend: see and correct"
+          aria-describedby={amountId}
+          onClick={() => setOpen(true)}
+          className="mt-1.5 flex items-center gap-1 text-left after:absolute after:inset-0 after:max-w-xs"
+        >
+          <span
+            id={amountId}
+            className={cn(
+              'leading-[1.05] font-extrabold tracking-[-0.045em] tabular-nums',
+              amount.length > LONG_AMOUNT ? 'text-[40px]' : 'text-[50px]',
+            )}
+          >
+            {amount}
+          </span>
+          <ChevronRight aria-hidden="true" className="text-muted size-7 flex-none" />
+        </button>
       </div>
-      <p
-        className={cn(
-          'mt-1.5 leading-[1.05] font-extrabold tracking-[-0.045em] tabular-nums',
-          amount.length > LONG_AMOUNT ? 'text-[40px]' : 'text-[50px]',
-        )}
-      >
-        {amount}
-      </p>
+      <AvailableSheet open={open} view={view} onClose={() => setOpen(false)} />
       {/* The line is 6px tall with a 44px tap area, so it keeps 20px clear above and below. */}
       <div className="mt-6">
         <MonthLine

@@ -1,4 +1,4 @@
-import { screen, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Debt } from '@/domain/entities';
@@ -8,6 +8,7 @@ import { formatDay } from '@/lib/format';
 import { useAmountsHidden } from '@/store/useAmountsHidden';
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
 import { makeDebt, makeProfile } from '@/test/fixtures';
+import { freshRealStore } from '@/test/realStore';
 import { CardSheet } from './CardSheet';
 
 const TODAY = '2026-10-14';
@@ -115,5 +116,50 @@ describe('CardSheet', () => {
     expect(fact('Limit used')).toHaveTextContent('Limit used21% of ••••');
     expect(within(sheet()).getByText(/Funancial keeps/)).toHaveTextContent('keeps •••• aside');
     expect(within(sheet()).queryByText(/\d,\d|\.\d\d/)).not.toBeInTheDocument();
+  });
+});
+
+describe('CardSheet focus after a payment', () => {
+  /** A real store, so a payment really changes what is owed. The Visa owes 318.40. */
+  async function renderPaying() {
+    const { store } = await freshRealStore();
+    await store.getState().put('profile', makeProfile({ openingDate: '2026-10-01', salary: null }));
+    await store
+      .getState()
+      .put(
+        'debt',
+        makeDebt({ id: 'visa', name: 'Visa', openingDate: '2026-10-01', openingBalance: 318_40 }),
+      );
+    renderWithStore(<CardSheet debtId="visa" onClose={vi.fn()} />, store);
+    await userEvent.click(within(sheet()).getByRole('button', { name: 'Pay card' }));
+    return within(screen.getByRole('dialog', { name: 'Pay Visa' }));
+  }
+  const paying = () => screen.queryByRole('dialog', { name: 'Pay Visa' });
+
+  it('goes to Edit card when the payment clears the card and Pay card is disabled', async () => {
+    const pay = await renderPaying();
+    // The amount starts at the whole balance.
+    await userEvent.click(pay.getByRole('button', { name: 'Pay' }));
+    await waitFor(() => expect(paying()).not.toBeInTheDocument());
+    expect(within(sheet()).getByRole('button', { name: 'Pay card' })).toBeDisabled();
+    expect(within(sheet()).getByRole('button', { name: 'Edit card' })).toHaveFocus();
+  });
+
+  it('goes back to Pay card after a part payment, as it does after Cancel', async () => {
+    const pay = await renderPaying();
+    const amount = pay.getByLabelText('Amount');
+    await userEvent.clear(amount);
+    await userEvent.type(amount, '100');
+    await userEvent.click(pay.getByRole('button', { name: 'Pay' }));
+    await waitFor(() => expect(paying()).not.toBeInTheDocument());
+    expect(within(sheet()).getByRole('button', { name: 'Pay card' })).toHaveFocus();
+
+    await userEvent.click(within(sheet()).getByRole('button', { name: 'Pay card' }));
+    await userEvent.click(
+      within(screen.getByRole('dialog', { name: 'Pay Visa' })).getByRole('button', {
+        name: 'Cancel',
+      }),
+    );
+    expect(within(sheet()).getByRole('button', { name: 'Pay card' })).toHaveFocus();
   });
 });
