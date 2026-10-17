@@ -52,3 +52,29 @@ el('hero-download-soon').hidden = !offer;
 el('hero-download-ios').hidden = offer;
 
 mountStaticPhones(el('stops'));
+
+/** Whether a WebGL 2 context can be made here, which is all Three.js (r163 and later) can use. */
+function hasWebgl(): boolean {
+  try {
+    const gl = document.createElement('canvas').getContext('webgl2');
+    // Let the probe's context go; the story makes its own.
+    gl?.getExtension('WEBGL_lose_context')?.loseContext();
+    return gl !== null;
+  } catch {
+    return false;
+  }
+}
+
+// The 3D story is an extra on top of a page that is whole without it. It starts after the first
+// paint, and only when motion is welcome and WebGL works: otherwise Three.js is never fetched.
+if (!matchMedia('(prefers-reduced-motion: reduce)').matches && hasWebgl()) {
+  const start = () =>
+    requestAnimationFrame(() => {
+      import('./story')
+        .then(({ startStory }) => startStory(el('stage')))
+        // The chunk did not arrive (offline, say): the page stays as it is.
+        .catch(() => undefined);
+    });
+  if (document.readyState === 'complete') start();
+  else addEventListener('load', start, { once: true });
+}

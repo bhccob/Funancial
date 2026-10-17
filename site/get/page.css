@@ -131,6 +131,16 @@ h2 {
   color: var(--page-muted);
 }
 
+/*
+ * Room for the still phone until the script draws it in, the size it will be (its width, less the
+ * 7px of frame on each side, at the screen's 540 by 1140): the stops below do not jump when it comes.
+ */
+.stop:not(:has(.phone))::after {
+  content: '';
+  width: min(250px, 68vw);
+  height: calc((min(250px, 68vw) - 14px) * 1140 / 540 + 14px);
+}
+
 .phone {
   width: min(250px, 68vw);
   padding: 7px;
@@ -309,4 +319,177 @@ h2 {
 
 .after li + li {
   margin-top: 6px;
+}
+
+/* ---- The 3D story ---- */
+
+/*
+ * site/get/story.ts puts `story-on` on <html> once it is running. Without it none of this applies,
+ * and the page above (the title, four stops with a still phone each, the download) is all there is.
+ * The story is the tall #story; #stage sticks to the screen while it scrolls past, and the stops
+ * become captions that fade over the 3D phone.
+ */
+
+.blob {
+  position: fixed;
+  z-index: -1;
+  border-radius: 50%;
+  filter: blur(70px);
+  opacity: 0.55;
+  pointer-events: none;
+  will-change: transform;
+}
+
+.blob-1 {
+  top: -10vw;
+  left: -12vw;
+  width: 52vw;
+  height: 52vw;
+  background: #c9dbff;
+}
+
+.blob-2 {
+  top: 30vh;
+  right: -10vw;
+  width: 44vw;
+  height: 44vw;
+  background: #e3d2ff;
+}
+
+.blob-3 {
+  top: 80vh;
+  left: 30vw;
+  width: 36vw;
+  height: 36vw;
+  background: #ffe2c4;
+  opacity: 0.4;
+}
+
+.story-on body::before {
+  /* The drifting shapes take over from the still backdrop. */
+  display: none;
+}
+
+.story-on #story {
+  height: 1000vh;
+}
+
+.story-on #stage {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow: hidden;
+}
+
+@supports (height: 100dvh) {
+  .story-on #stage {
+    height: 100dvh;
+  }
+}
+
+.story-canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.story-hint {
+  position: absolute;
+  bottom: 4vh;
+  left: 50%;
+  z-index: 1;
+  translate: -50% 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--page-muted);
+  pointer-events: none;
+}
+
+/* The title, its button and the end sit above the canvas. */
+.story-on .hero {
+  position: relative;
+  z-index: 1;
+}
+
+.story-on .stops {
+  position: absolute;
+  inset: 0;
+  display: block;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  pointer-events: none;
+}
+
+.story-on .stop .phone,
+.story-on .stop::after {
+  display: none;
+}
+
+/* A narrow screen: the phone is above and the captions under it. */
+.story-on .stop {
+  position: absolute;
+  right: 6vw;
+  bottom: 7vh;
+  left: 6vw;
+  display: block;
+  padding: 0;
+  text-align: center;
+  opacity: 0;
+}
+
+.story-on .end {
+  position: absolute;
+  right: 6vw;
+  bottom: 7vh;
+  left: 6vw;
+  z-index: 1;
+  padding: 0;
+  opacity: 0;
+  /* Not clickable while it is still fading in, so a tap on empty space cannot hit a hidden button. */
+  pointer-events: none;
+}
+
+.story-on .end.shown {
+  pointer-events: auto;
+}
+
+/* The QR code (only a computer shows it) is taller than the room under the phone. */
+.story-on .qr {
+  display: none;
+}
+
+@media (min-width: 760px) {
+  /* A computer or tablet: the captions beside the phone. */
+  .story-on .stop {
+    top: 50%;
+    right: auto;
+    bottom: auto;
+    left: 8vw;
+    max-width: 380px;
+    text-align: left;
+    transform: translateY(-50%);
+  }
+
+  .story-on .end {
+    top: 50%;
+    right: 8vw;
+    bottom: auto;
+    left: auto;
+    max-width: 400px;
+    justify-items: start;
+    text-align: left;
+    transform: translateY(-50%);
+  }
+
+  .story-on .download {
+    justify-items: start;
+  }
+
+  .story-on .qr {
+    display: grid;
+  }
 }
