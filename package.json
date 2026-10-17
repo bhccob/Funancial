@@ -36,6 +36,7 @@
     "@capacitor/share": "8.0.3",
     "@capgo/capacitor-native-biometric": "8.7.0",
     "@fontsource-variable/manrope": "5.3.0",
+    "@upstash/redis": "1.35.8",
     "date-fns": "4.4.0",
     "dexie": "4.4.6",
     "lucide-react": "1.57.0",
