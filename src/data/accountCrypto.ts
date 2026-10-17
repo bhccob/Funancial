@@ -17,10 +17,28 @@ import {
 
 export const KDF_ITERATIONS = 600_000;
 
+/** The most a copy may inflate to. Real data is a few MB; this stops a small file filling memory. */
+const MAX_INFLATED_BYTES = 64 * 1024 * 1024;
+
 /** A locked AES-GCM payload, both parts base64. */
 export type Sealed = { iv: string; ciphertext: string };
 
+/** The WebView has no `CompressionStream`, so a copy can be neither saved nor restored. */
+export class UnsupportedError extends Error {
+  constructor() {
+    super(
+      "This phone's browser engine is too old to save or restore your copy. Update Android System WebView.",
+    );
+    this.name = 'UnsupportedError';
+  }
+}
+
 const aesGcm = (iv: string) => ({ name: 'AES-GCM', iv: base64ToBytes(iv) });
+
+/** The username as the salt, the server and the stored account all spell it: NFKC, then lower-case. */
+export function canonicalUsername(name: string): string {
+  return name.normalize('NFKC').toLowerCase();
+}
 
 /**
  * One slow PBKDF2 pass makes `master`; HKDF then splits it into two keys that cannot be turned into
@@ -35,7 +53,7 @@ export async function deriveAccountKeys(
 ): Promise<{ authKey: string; kek: CryptoKey }> {
   const salt = await crypto.subtle.digest(
     'SHA-256',
-    utf8(`funancial-account:${username.normalize('NFKC').toLowerCase()}`),
+    utf8(`funancial-account:${canonicalUsername(username)}`),
   );
   const passKey = await crypto.subtle.importKey(
     'raw',
@@ -95,34 +113,65 @@ export async function unwrapDek(w: Sealed, kek: CryptoKey): Promise<CryptoKey & 
       await crypto.subtle.decrypt(aesGcm(w.iv), kek, base64ToBytes(w.ciphertext)),
     );
     const key = await crypto.subtle.importKey('raw', raw, 'AES-GCM', false, ['encrypt', 'decrypt']);
-    return Object.assign(key, { raw: bytesToBase64(raw) });
+    // Not enumerable, so a spread, `Object.keys` or `JSON.stringify` of the key can't leak it by accident.
+    Object.defineProperty(key, 'raw', { value: bytesToBase64(raw), enumerable: false });
+    return key as CryptoKey & { raw: string };
   } catch (e) {
     throw new DecryptError(e);
   }
 }
 
-async function throughStream(bytes: Bytes, stream: CompressionStream | DecompressionStream) {
-  const out = new Blob([bytes]).stream().pipeThrough(stream);
+function requireStream(name: 'CompressionStream' | 'DecompressionStream') {
+  if (typeof globalThis[name] === 'undefined') throw new UnsupportedError();
+}
+
+/** Passes bytes through, and errors the stream once more than `max` have gone by. */
+function capBytes(max: number) {
+  let seen = 0;
+  return new TransformStream<Uint8Array, Uint8Array>({
+    transform(chunk, controller) {
+      seen += chunk.byteLength;
+      if (seen > max) throw new Error('This copy is too large to open');
+      controller.enqueue(chunk);
+    },
+  });
+}
+
+async function throughStreams(bytes: Bytes, ...stages: GenericTransformStream[]) {
+  let out: ReadableStream = new Blob([bytes]).stream();
+  for (const stage of stages) out = out.pipeThrough(stage);
   return new Uint8Array(await new Response(out).arrayBuffer());
 }
 
 /** The snapshot as JSON, gzipped, then locked with the data key under a fresh IV. */
 export async function sealCopy(snapshot: DataSnapshot, dek: CryptoKey): Promise<Sealed> {
-  const packed = await throughStream(utf8(JSON.stringify(snapshot)), new CompressionStream('gzip'));
+  requireStream('CompressionStream');
+  const packed = await throughStreams(
+    utf8(JSON.stringify(snapshot)),
+    new CompressionStream('gzip'),
+  );
   const iv = randomBytes(12);
   const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, dek, packed);
   return { iv: bytesToBase64(iv), ciphertext: bytesToBase64(new Uint8Array(ciphertext)) };
 }
 
-/** Unlocks a sealed copy to its parsed JSON; `migrateSnapshot` validates it. Throws `DecryptError`. */
+/**
+ * Unlocks a sealed copy to its parsed JSON; `migrateSnapshot` validates it. Throws `DecryptError`
+ * for a wrong key or a damaged or oversized copy, and `UnsupportedError` on a WebView too old to gunzip.
+ */
 export async function openCopy(sealed: Sealed, dek: CryptoKey): Promise<unknown> {
+  requireStream('DecompressionStream');
   try {
     const packed = await crypto.subtle.decrypt(
       aesGcm(sealed.iv),
       dek,
       base64ToBytes(sealed.ciphertext),
     );
-    const json = await throughStream(new Uint8Array(packed), new DecompressionStream('gzip'));
+    const json = await throughStreams(
+      new Uint8Array(packed),
+      new DecompressionStream('gzip'),
+      capBytes(MAX_INFLATED_BYTES),
+    );
     return JSON.parse(new TextDecoder().decode(json));
   } catch (e) {
     throw new DecryptError(e);
