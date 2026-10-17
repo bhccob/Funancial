@@ -29,10 +29,18 @@ import {
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { drawScreen, loadScreenFont, SCREEN, TOKENS, type ScreenIndex } from './screens';
-import { caption, clamp, INTRO_END, OUTRO_START, timeline, type Frame } from './timeline';
+import {
+  caption,
+  clamp,
+  glideStep,
+  INTRO_END,
+  OUTRO_START,
+  timeline,
+  type Frame,
+} from './timeline';
 
-/** How far toward the scroll position the story moves on each frame: a heavy, slow follow. */
-const GLIDE = 0.06;
+/** No more than about 60 frames a second: a 120 Hz phone would only spend battery and heat on more. */
+const MIN_FRAME_MS = 15;
 
 /** The phone body in scene units, and the colours of its metal. */
 const BODY = { w: 1.6, h: 3.3, d: 0.2 } as const;
@@ -181,6 +189,9 @@ function run(stage: HTMLElement): () => void {
   const pmrem = new PMREMGenerator(renderer);
   const room = new RoomEnvironment();
   scene.environment = pmrem.fromScene(room, 0.04).texture;
+  // The map is made; the room and the generator that made it are not needed again.
+  room.dispose();
+  pmrem.dispose();
   const camera = new PerspectiveCamera(30, 1, 0.1, 100);
   const light = new DirectionalLight(0xffffff, 1.4);
   light.position.set(3, 4, 6);
@@ -231,12 +242,16 @@ function run(stage: HTMLElement): () => void {
   const measure = () => {
     heroHeight = hero.offsetHeight;
     if (stage.clientWidth !== width || stage.clientHeight !== height) {
+      const first = width === 0;
       width = stage.clientWidth;
       height = stage.clientHeight;
       renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
       renderer.setSize(width, height, false);
       camera.aspect = width / height;
       camera.updateProjectionMatrix();
+      // Resizing empties the canvas, and the next frame can be a while off: draw it again now (the
+      // very first size needs none: the first frame is on its way).
+      if (!first) renderer.render(scene, camera);
     }
     target = progress();
   };
@@ -258,6 +273,8 @@ function run(stage: HTMLElement): () => void {
     if (!(event.target instanceof Element) || !event.target.closest('a[href="#download"]')) return;
     event.preventDefault();
     showEnd();
+    // Where a link to a place would leave the focus: on the download, not on the page body.
+    end.querySelector<HTMLElement>('#download-link')?.focus({ preventScroll: true });
   };
   // The story is a pin: the block is already "in view", so the browser would never scroll to it.
   const onFocus = () => {
@@ -336,10 +353,13 @@ function run(stage: HTMLElement): () => void {
   };
 
   let frameId = 0;
+  let lastFrame = 0;
   const frame = (now: number) => {
     frameId = requestAnimationFrame(frame);
-    // Close enough is there: the glide would otherwise only approach the end for ever.
-    p = Math.abs(target - p) < 1e-4 ? target : p + (target - p) * GLIDE;
+    if (lastFrame && now - lastFrame < MIN_FRAME_MS) return;
+    // The first frame after a start or a return from hiding has no time behind it: it stands still.
+    p = glideStep(p, target, lastFrame ? now - lastFrame : 0);
+    lastFrame = now;
     const t = timeline(p);
     paint(t);
     pose(t, now);
@@ -351,14 +371,17 @@ function run(stage: HTMLElement): () => void {
   let onscreen = true;
   const sync = () => {
     const wanted = onscreen && !document.hidden;
-    if (wanted && !frameId) frameId = requestAnimationFrame(frame);
+    if (wanted && !frameId) {
+      lastFrame = 0;
+      frameId = requestAnimationFrame(frame);
+    }
     if (!wanted && frameId) {
       cancelAnimationFrame(frameId);
       frameId = 0;
     }
   };
-  const view = new IntersectionObserver(([entry]) => {
-    onscreen = entry?.isIntersecting ?? true;
+  const view = new IntersectionObserver((entries) => {
+    onscreen = entries.at(-1)?.isIntersecting ?? true;
     sync();
   });
   view.observe(stage);
@@ -383,8 +406,6 @@ function run(stage: HTMLElement): () => void {
     canvas.remove();
     hint.remove();
     blobs.forEach((blob) => blob.remove());
-    room.dispose();
-    pmrem.dispose();
     renderer.dispose();
     if (!contextLost) renderer.forceContextLoss();
   };

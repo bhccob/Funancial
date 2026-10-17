@@ -55,6 +55,13 @@ const captionOpacities = (page: Page) =>
     .locator('.stop')
     .evaluateAll((stops) => stops.map((stop) => Number(getComputedStyle(stop).opacity)));
 
+/** Makes the page believe its tab is hidden (or back), the way the browser tells it. */
+const setTabHidden = (page: Page, hidden: boolean) =>
+  page.evaluate((value) => {
+    Object.defineProperty(document, 'hidden', { configurable: true, get: () => value });
+    document.dispatchEvent(new Event('visibilitychange'));
+  }, hidden);
+
 /** The URLs of everything the page requests from now on. */
 function watchRequests(page: Page) {
   const urls: string[] = [];
@@ -469,6 +476,8 @@ test.describe('the 3D story, when motion is allowed', () => {
     await expect(page.locator('#download')).toHaveCSS('opacity', '1', GLIDE);
     await expect(page.getByRole('img', { name: 'QR code for this page' })).toBeInViewport();
     await expect(downloadLink(page)).toBeInViewport();
+    // Keyboard and screen-reader users land on the link, not on the page body.
+    await expect(downloadLink(page)).toBeFocused();
   });
 
   test('brings the download block up when its link takes the keyboard focus', async ({ page }) => {
@@ -484,19 +493,43 @@ test.describe('the 3D story, when motion is allowed', () => {
     await serveLatest(page);
     await page.goto('/get');
     await expect(page.locator('html')).toHaveClass(/story-on/, GLIDE);
-    const hide = (hidden: boolean) =>
-      page.evaluate((value) => {
-        Object.defineProperty(document, 'hidden', { configurable: true, get: () => value });
-        document.dispatchEvent(new Event('visibilitychange'));
-      }, hidden);
-
-    await hide(true);
+    await setTabHidden(page, true);
     await scrollStoryTo(page, 0.58);
     // Captions are set by the frame loop: if it ran, the third would be showing by now.
     await page.waitForTimeout(1000);
     expect(await captionOpacities(page)).toEqual([0, 0, 0, 0]);
-    await hide(false);
+    await setTabHidden(page, false);
     await expect.poll(() => captionOpacities(page), GLIDE).toEqual([0, 0, 1, 0]);
+  });
+
+  test('draws the scene again as soon as the screen is resized, so the canvas is never blank', async ({
+    page,
+  }) => {
+    // Resizing a WebGL canvas empties it. Reading the picture back is not reliable (the browser
+    // may already have taken it), so count draw calls instead: with the frame loop stopped (the
+    // tab "hidden"), the only thing that can draw is the resize itself.
+    await page.addInitScript(() => {
+      const w = window as unknown as { __draws: number };
+      w.__draws = 0;
+      const proto = WebGL2RenderingContext.prototype;
+      const drawElements = proto.drawElements;
+      proto.drawElements = function (...args: Parameters<typeof drawElements>) {
+        w.__draws++;
+        return drawElements.apply(this, args);
+      };
+    });
+    const draws = () => page.evaluate(() => (window as unknown as { __draws: number }).__draws);
+    await serveLatest(page);
+    await page.goto('/get');
+    await expect(page.locator('html')).toHaveClass(/story-on/, GLIDE);
+    await setTabHidden(page, true);
+    await page.waitForTimeout(300);
+    const before = await draws();
+    await page.waitForTimeout(300);
+    expect(await draws(), 'the loop is really stopped').toBe(before);
+
+    await page.setViewportSize({ width: 1100, height: 700 });
+    await expect.poll(draws).toBeGreaterThan(before);
   });
 
   test('goes back to the plain page if the WebGL context is taken away', async ({ page }) => {
@@ -519,17 +552,6 @@ test.describe('the 3D story, when motion is allowed', () => {
     await expect(downloadLink(page)).toBeVisible();
   });
 
-  test('keeps the QR code out from under the phone in a narrow computer window', async ({
-    page,
-  }) => {
-    await page.setViewportSize({ width: 375, height: 812 });
-    await serveLatest(page);
-    await page.goto('/get');
-    await expect(page.locator('html')).toHaveClass(/story-on/, GLIDE);
-    await expect(page.getByRole('img', { name: 'QR code for this page' })).toBeHidden();
-    await expect(downloadLink(page)).toBeVisible();
-  });
-
   test.describe('on a phone', () => {
     test.use({ userAgent: PIXEL, viewport: { width: 375, height: 812 }, colorScheme: 'light' });
 
@@ -548,6 +570,51 @@ test.describe('the 3D story, when motion is allowed', () => {
       );
       expect(overflow, 'pixels wider than the screen').toBeLessThanOrEqual(0);
     });
+  });
+});
+
+test.describe('in a narrow computer window', () => {
+  test.use({ viewport: { width: 700, height: 800 } });
+
+  test('keeps the still page, with the QR code, and never loads Three.js', async ({ page }) => {
+    const urls = watchRequests(page);
+    await serveLatest(page);
+    await page.goto('/get');
+    await expect(page.getByRole('img', { name: 'QR code for this page' })).toBeVisible();
+    await expect(page.getByText('Scan with your Android phone')).toBeVisible();
+    const phones = page.getByRole('img', { name: /^Funancial .* screen$/ });
+    await expect(phones).toHaveCount(4);
+    for (const phone of await phones.all()) await expect(phone).toBeVisible();
+    await page.waitForLoadState('load');
+    await page.evaluate(
+      () => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))),
+    );
+    expect(urls.filter((url) => STORY_CHUNK.test(url))).toEqual([]);
+    await expect(page.locator('html')).not.toHaveClass(/story-on/);
+    expect(await hasWebglCanvas(page)).toBe(false);
+  });
+});
+
+test.describe('the WebGL check', () => {
+  test('waits until the page has loaded, so it cannot delay the first paint', async ({ page }) => {
+    await page.addInitScript(() => {
+      const w = window as unknown as { __probeAt: number | undefined };
+      const getContext = HTMLCanvasElement.prototype.getContext;
+      HTMLCanvasElement.prototype.getContext = function (this: HTMLCanvasElement, type: string) {
+        if (type === 'webgl2') w.__probeAt ??= performance.now();
+        return getContext.call(this, type as '2d');
+      } as typeof getContext;
+    });
+    await serveLatest(page);
+    await page.goto('/get');
+    await expect(page.locator('html')).toHaveClass(/story-on/, GLIDE);
+    // The page's scripts run before the load event; the story starts a frame after it.
+    const { probeAt, loadedAt } = await page.evaluate(() => ({
+      probeAt: (window as unknown as { __probeAt: number }).__probeAt,
+      loadedAt: (performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming)
+        .loadEventStart,
+    }));
+    expect(probeAt).toBeGreaterThan(loadedAt);
   });
 });
 

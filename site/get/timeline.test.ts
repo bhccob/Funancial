@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { caption, INTRO_END, OUTRO_START, STOP_LENGTH, timeline } from './timeline';
+import {
+  caption,
+  FRAME_MS,
+  glideStep,
+  INTRO_END,
+  OUTRO_START,
+  STOP_LENGTH,
+  timeline,
+} from './timeline';
 
 /** The scroll position `fraction` of the way through stop `stop`. */
 const at = (stop: number, fraction: number) => INTRO_END + STOP_LENGTH * (stop + fraction);
@@ -72,5 +80,36 @@ describe('caption', () => {
         String(p),
       ).toEqual([0, 0, 0, 0]);
     }
+  });
+});
+
+describe('glideStep', () => {
+  it('moves 6% of the way in a 60 Hz frame, the glide that was approved', () => {
+    expect(glideStep(0.2, 1, FRAME_MS)).toBeCloseTo(0.2 + (1 - 0.2) * 0.06, 12);
+    expect(glideStep(0.9, 0.1, FRAME_MS)).toBeCloseTo(0.9 - (0.9 - 0.1) * 0.06, 12);
+  });
+
+  it('lands in the same place at any frame rate', () => {
+    const one = glideStep(0.2, 1, FRAME_MS);
+    const half = FRAME_MS / 2;
+    expect(Math.abs(glideStep(glideStep(0.2, 1, half), 1, half) - one)).toBeLessThan(1e-9);
+    const third = FRAME_MS / 3;
+    const three = glideStep(glideStep(glideStep(0.2, 1, third), 1, third), 1, third);
+    expect(Math.abs(three - one)).toBeLessThan(1e-9);
+  });
+
+  it('takes a long pause (a slow frame, a tab coming back) as 100 ms, so it never snaps', () => {
+    expect(glideStep(0, 1, 1000)).toBe(glideStep(0, 1, 100));
+    expect(glideStep(0, 1, 1000)).toBeLessThan(0.4);
+  });
+
+  it('stands still for no time at all, or a clock that went backwards', () => {
+    expect(glideStep(0.3, 1, 0)).toBe(0.3);
+    expect(glideStep(0.3, 1, -5)).toBe(0.3);
+  });
+
+  it('arrives once it is close enough, and stays', () => {
+    expect(glideStep(0.99995, 1, FRAME_MS)).toBe(1);
+    expect(glideStep(1, 1, FRAME_MS)).toBe(1);
   });
 });

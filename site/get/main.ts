@@ -67,9 +67,14 @@ function hasWebgl(): boolean {
 
 // The 3D story is an extra on top of a page that is whole without it. It starts after the first
 // paint, and only when motion is welcome and WebGL works: otherwise Three.js is never fetched.
-if (!matchMedia('(prefers-reduced-motion: reduce)').matches && hasWebgl()) {
+if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
   const start = () =>
     requestAnimationFrame(() => {
+      // A computer window too narrow for the story's layout keeps the still page, with its QR code
+      // to scan. A phone always gets the story, whatever its width.
+      if (platform === 'other' && !matchMedia('(min-width: 760px)').matches) return;
+      // The WebGL check waits for the first paint too: making a context is not free.
+      if (!hasWebgl()) return;
       import('./story')
         .then(({ startStory }) => startStory(el('stage')))
         // The chunk did not arrive (offline, say): the page stays as it is.

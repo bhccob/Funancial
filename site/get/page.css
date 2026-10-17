@@ -381,9 +381,10 @@ h2 {
   overflow: hidden;
 }
 
-@supports (height: 100dvh) {
+/* The small viewport: Android's URL bar sliding away mid-scroll does not resize the stage. */
+@supports (height: 100svh) {
   .story-on #stage {
-    height: 100dvh;
+    height: 100svh;
   }
 }
 
@@ -457,11 +458,6 @@ h2 {
   pointer-events: auto;
 }
 
-/* The QR code (only a computer shows it) is taller than the room under the phone. */
-.story-on .qr {
-  display: none;
-}
-
 @media (min-width: 760px) {
   /* A computer or tablet: the captions beside the phone. */
   .story-on .stop {
@@ -487,9 +483,5 @@ h2 {
 
   .story-on .download {
     justify-items: start;
-  }
-
-  .story-on .qr {
-    display: grid;
   }
 }

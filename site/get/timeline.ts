@@ -50,3 +50,19 @@ export function caption(frame: Frame, n: number): number {
   if (n !== frame.stop) return 0;
   return clamp((frame.local - 0.18) / 0.15) * (1 - clamp((frame.local - 0.8) / 0.12));
 }
+
+/** The story's glide: how much of the way to the scroll position it covers in 1/60 s. */
+export const GLIDE = 0.06;
+export const FRAME_MS = 1000 / 60;
+
+/**
+ * One step of the glide, `dt` milliseconds long: `p` moves toward `target` by the share GLIDE
+ * covers in a 60 Hz frame, scaled to the time that really passed, so a 120 Hz screen glides at the
+ * pace of a 60 Hz one. A pause longer than 100 ms (a slow frame, a tab coming back) counts as 100, so the
+ * story never snaps. Close enough is there: it would otherwise only approach for ever.
+ */
+export function glideStep(p: number, target: number, dt: number): number {
+  if (Math.abs(target - p) < 1e-4) return target;
+  const covered = 1 - Math.pow(1 - GLIDE, clamp(dt, 0, 100) / FRAME_MS);
+  return p + (target - p) * covered;
+}
