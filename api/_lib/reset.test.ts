@@ -1677,6 +1677,26 @@ describe('the Gmail mailer', () => {
     });
   });
 
+  it('makes, with the nodemailer installed, a transport to Gmail over TLS that keeps the timeouts', async () => {
+    const gmailMailerFromEnv = await real();
+    const nodemailer = (await vi.importActual<typeof import('nodemailer')>('nodemailer')).default;
+    createTransport.mockImplementation(nodemailer.createTransport);
+    vi.stubEnv('GMAIL_USER', 'owner@gmail.com');
+    vi.stubEnv('GMAIL_APP_PASSWORD', 'app-password-value');
+    gmailMailerFromEnv();
+
+    // Built only: nothing connects or sends until sendMail.
+    const made = createTransport.mock.results[0]?.value as { transporter: { options: unknown } };
+    expect(made.transporter.options).toMatchObject({
+      host: 'smtp.gmail.com',
+      port: 465,
+      secure: true,
+      connectionTimeout: 3000,
+      greetingTimeout: 3000,
+      socketTimeout: 3000,
+    });
+  });
+
   it('is null, and builds nothing, when either setting is missing', async () => {
     const gmailMailerFromEnv = await real();
     for (const [user, pass] of [
