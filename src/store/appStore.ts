@@ -6,7 +6,13 @@ import {
   exportPlainJson,
   readBackup,
 } from '@/data/backup';
-import { base64ToBytes, bytesToBase64, type Bytes } from '@/data/crypto';
+import {
+  base64ToBytes,
+  bytesToBase64,
+  decryptRecord,
+  encryptRecord,
+  type Bytes,
+} from '@/data/crypto';
 import type { Namespace } from '@/data/db';
 import { buildDemoSnapshot } from '@/data/demoSeed';
 import type { DeviceKeyring } from '@/data/keyring';
@@ -121,6 +127,17 @@ export interface AppState {
   /** Records that a backup file was saved just now, which is what "Last backup" shows. */
   markBackedUp(): Promise<void>;
   restoreBackup(text: string, passphrase: string): Promise<void>;
+  /** Replaces all data with `snapshot`, already validated (`migrateSnapshot`): what a backup and an account's copy both restore through. */
+  restoreSnapshot(snapshot: DataSnapshot): Promise<void>;
+  /** Runs `cb` after the app changed the data (a write, a removal, a restore). Returns an unsubscribe. */
+  onDataChange(cb: () => void): () => void;
+  /**
+   * A value kept in this namespace's metadata, locked with the data key. It sits beside the data,
+   * never in it: no snapshot, backup or upload holds it. `null` when nothing is kept under `name`.
+   */
+  getPrivate<T>(name: string): Promise<T | null>;
+  putPrivate(name: string, value: unknown): Promise<void>;
+  deletePrivate(name: string): Promise<void>;
   exportPlain(): { fileName: string; text: string };
   deleteAllData(): Promise<void>;
 }
@@ -255,8 +272,20 @@ export function createAppStore(deps: AppDeps): StoreApi<AppState> {
       set({ data: { ...data, tables: tables as DataSnapshot['tables'] } });
     }
 
+    const dataListeners = new Set<() => void>();
+    function notifyDataChange() {
+      for (const cb of dataListeners) {
+        try {
+          cb();
+        } catch (e) {
+          console.error('A data-change listener failed', e);
+        }
+      }
+    }
+
     function announceDataChange() {
       deps.channel.post({ type: 'reload', reason: 'data' });
+      notifyDataChange();
     }
 
     /**
@@ -616,12 +645,47 @@ export function createAppStore(deps: AppDeps): StoreApi<AppState> {
       },
 
       async restoreBackup(text, passphrase) {
-        const s = unlocked();
+        unlocked();
         const snapshot = await readBackup(text, passphrase); // throws before anything changes
+        await get().restoreSnapshot(snapshot);
+      },
+
+      async restoreSnapshot(snapshot) {
+        const s = unlocked();
         await s.repo.replaceAll(snapshot);
         set({ data: snapshot, skipped: [] });
         await settle();
         deps.channel.post({ type: 'reload', reason: 'restore' });
+        notifyDataChange();
+      },
+
+      onDataChange(cb) {
+        dataListeners.add(cb);
+        return () => void dataListeners.delete(cb);
+      },
+
+      async getPrivate<T>(name: string) {
+        const { backend, key } = unlocked();
+        const sealed = await backend.meta.get<{ iv: string; data: string }>(name);
+        if (!sealed) return null;
+        return decryptRecord<T>(key, name, {
+          iv: base64ToBytes(sealed.iv),
+          ciphertext: base64ToBytes(sealed.data).buffer,
+        });
+      },
+
+      async putPrivate(name, value) {
+        requireReal('keep an account');
+        const { backend, key } = unlocked();
+        const { iv, ciphertext } = await encryptRecord(key, name, value);
+        await backend.meta.put(name, {
+          iv: bytesToBase64(iv),
+          data: bytesToBase64(new Uint8Array(ciphertext)),
+        });
+      },
+
+      async deletePrivate(name) {
+        await unlocked().backend.meta.delete(name);
       },
 
       exportPlain() {

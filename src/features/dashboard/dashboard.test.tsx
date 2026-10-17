@@ -11,6 +11,7 @@ import { emptySnapshot, type DataSnapshot } from '@/domain/snapshot';
 import { applyRecords, dueGenerated } from '@/domain/sync';
 import { formatDay, formatMonth, formatMonthShort, formatWeekday } from '@/lib/format';
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
+import { fakeAccount, withAccount } from '@/test/fakeAccount';
 import { expectHelpTip } from '@/test/helpTip';
 import { fakeNotifier, onPhone, type FakeNotifier } from '@/test/fakeNotifier';
 import {
@@ -969,5 +970,34 @@ describe('DashboardScreen help tips', () => {
   it('explains Net worth, beside its title', async () => {
     renderDashboard(monthData(), TODAY);
     await expectHelpTip(region('Net worth'), 'net worth', 'net-worth');
+  });
+});
+
+describe('DashboardScreen account reminder', () => {
+  const ASK = 'Make an account so you can move to a new phone and keep everything.';
+
+  function renderWithAccount(namespace: 'real' | 'demo' = 'real') {
+    localStorage.clear();
+    return renderWithStore(
+      withAccount(
+        fakeAccount(),
+        <MemoryRouter>
+          <DashboardScreen />
+        </MemoryRouter>,
+      ),
+      createStubStore({ data: monthData(), namespace, today: '2026-10-14' }),
+    );
+  }
+
+  it('asks a real-data install without an account, once', async () => {
+    renderWithAccount();
+    expect(screen.getByText(ASK)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Not now' }));
+    expect(screen.queryByText(ASK)).not.toBeInTheDocument();
+  });
+
+  it('never asks in the demo', () => {
+    renderWithAccount('demo');
+    expect(screen.queryByText(ASK)).not.toBeInTheDocument();
   });
 });

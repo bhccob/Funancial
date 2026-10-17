@@ -13,6 +13,7 @@ import { PlatformProvider } from '@/platform/PlatformProvider';
 import type { Platform } from '@/platform/types';
 import { createWebPlatform } from '@/platform/web';
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
+import { fakeAccount, withAccount } from '@/test/fakeAccount';
 import { fakeNotifier, onPhone, type FakeNotifier } from '@/test/fakeNotifier';
 import { makeExpense, makeGoal, makeProfile, makeSettings } from '@/test/fixtures';
 import { SettingsScreen } from './SettingsScreen';
@@ -994,5 +995,21 @@ describe('Settings in the line style', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Change currency' }));
     const picker = screen.getByRole('dialog', { name: 'Change currency' });
     isLine(within(picker).getByLabelText('New currency'), 'New currency');
+  });
+});
+
+describe('Account', () => {
+  it('has its section for real data', () => {
+    renderWithStore(withAccount(fakeAccount(), <SettingsScreen />), createStubStore());
+    expect(screen.getByRole('heading', { name: 'Account' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Create account' })).toBeInTheDocument();
+  });
+
+  it('has none in the demo', () => {
+    renderWithStore(
+      withAccount(fakeAccount(), <SettingsScreen />),
+      createStubStore({ namespace: 'demo' }),
+    );
+    expect(screen.queryByRole('heading', { name: 'Account' })).not.toBeInTheDocument();
   });
 });

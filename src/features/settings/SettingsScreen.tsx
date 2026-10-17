@@ -5,6 +5,7 @@ import { RadioGroup } from '@/components/ui/RadioGroup';
 import { getThemePreference, setThemePreference, type ThemePreference } from '@/lib/theme';
 import { usePlatform } from '@/platform/PlatformProvider';
 import { useApp } from '@/store/AppStoreProvider';
+import { AccountSection } from './AccountSection';
 import { DataSection } from './DataSection';
 import { PreferencesSection } from './PreferencesSection';
 import { ProfileSection } from './ProfileSection';
@@ -42,6 +43,7 @@ export function SettingsScreen() {
     <div className="max-w-3xl">
       <PageHeader title="Settings" />
       {!demo && <ProfileSection />}
+      {!demo && <AccountSection />}
       <PreferencesSection />
       {/* Demo money never schedules reminders, so there is nothing to switch on. */}
       {notifier && !demo && <RemindersSection notifier={notifier} />}
