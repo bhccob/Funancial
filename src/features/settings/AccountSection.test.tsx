@@ -205,6 +205,19 @@ describe('Settings → Account with an account', () => {
     expect(screen.queryByText(/@/)).not.toBeInTheDocument();
   });
 
+  it('says when the copy is too big to save, and only then', () => {
+    const { unmount } = renderWithStore(
+      withAccount(fakeAccount(linkedAccount()), <AccountSection />),
+      createStubStore(),
+    );
+    expect(screen.queryByText(/too big/)).not.toBeInTheDocument();
+    unmount();
+    show(fakeAccount(linkedAccount({ tooBig: true })));
+    expect(
+      screen.getByText("Your copy is too big to save. Ask the app's owner for help."),
+    ).toBeInTheDocument();
+  });
+
   it('confirms before turning off and deleting the copy', async () => {
     const actions = show(fakeAccount(linkedAccount()));
     await userEvent.click(button('Turn off and delete my copy'));

@@ -190,7 +190,14 @@ export function rewrapPassword(dek: Uint8Array, kek: Uint8Array): Sealed {
 
 const fail = (status: number, error: string): Result => ({ status, body: { error } });
 const badRequest = () => fail(400, 'bad request');
-const unauthorized = () => fail(401, 'unauthorized');
+/**
+ * The two 401s of an account route, told apart so the phone can act on each: `moved` is a device
+ * token that no longer counts (another phone logged in, or the account is gone); `denied` is a
+ * password that is wrong, or a name that is not one (one body for both, so a name can't be probed).
+ * The shared token's own refusal, `unauthorized`, is answered before any of this runs (http.ts).
+ */
+const moved = () => fail(401, 'moved');
+const denied = () => fail(401, 'denied');
 
 const K = {
   user: (name: string) => `acct:u:${name}`,
@@ -418,7 +425,7 @@ export function createAccounts({ store, masterKey, now, mailer, waitUntil }: Acc
       if (over) return over;
 
       const account = await store.get<Account>(K.user(name));
-      if (!(await matches(account, authKey)) || !account) return unauthorized();
+      if (!(await matches(account, authKey)) || !account) return denied();
 
       // Read before anything changes, so a failed read never logs the old phone out.
       const firstRead = await ownCopy(account);
@@ -432,7 +439,7 @@ export function createAccounts({ store, masterKey, now, mailer, waitUntil }: Acc
       const before = await patch(name, { deviceTokenHash: hash }, (now) => matches(now, authKey));
       if (before === BUSY || !before) {
         await store.del(K.token(hash));
-        return before === BUSY ? busy() : unauthorized();
+        return before === BUSY ? busy() : denied();
       }
       await store.del(K.token(before.deviceTokenHash));
 
@@ -444,14 +451,22 @@ export function createAccounts({ store, masterKey, now, mailer, waitUntil }: Acc
         body: {
           deviceToken: token,
           wrappedPw: before.wrappedPw,
-          copy: copy ? { iv: copy.iv, ciphertext: copy.ciphertext, version: copy.version } : null,
+          copy: copy
+            ? {
+                iv: copy.iv,
+                ciphertext: copy.ciphertext,
+                version: copy.version,
+                savedAt: copy.savedAt,
+              }
+            : null,
+          email: before.email,
         },
       };
     },
 
     async putCopy(token: string | null, body: unknown): Promise<Result> {
       const account = await authed(token);
-      if (!account) return unauthorized();
+      if (!account) return moved();
       const text = (body as { ciphertext?: unknown } | null)?.ciphertext;
       if (typeof text === 'string' && Buffer.byteLength(text, 'base64') > MAX_COPY_BYTES) {
         return fail(413, 'too large');
@@ -486,12 +501,12 @@ export function createAccounts({ store, masterKey, now, mailer, waitUntil }: Acc
         // Deleted while this was written: no copy may outlive its account.
         if (!now) {
           await store.del(copyKey);
-          return unauthorized();
+          return moved();
         }
         // Taken over (or deleted and made again, which also gives a new token) meanwhile: this phone
         // has been replaced. The copy stays; the new phone's first upload is told its version (stale)
         // and goes on from it.
-        if (now.deviceTokenHash !== account.deviceTokenHash) return unauthorized();
+        if (now.deviceTokenHash !== account.deviceTokenHash) return moved();
         return { status: 200, body: { version: copy.version, savedAt: copy.savedAt } };
       } catch (err) {
         // A claim nobody will finish would turn the phone's next try into a wait; give it back.
@@ -502,14 +517,14 @@ export function createAccounts({ store, masterKey, now, mailer, waitUntil }: Acc
 
     async changePassword(token: string | null, body: unknown): Promise<Result> {
       const account = await authed(token);
-      if (!account) return unauthorized();
+      if (!account) return moved();
       const parsed = passwordBody.safeParse(body);
       if (!parsed.success) return badRequest();
       const { oldAuthKey, newAuthKey, newWrappedPw } = parsed.data;
       // The device token is no proof of the password, so guessing it here is limited like a log-in.
       const over = await throttle('password:user', account.username, 10, LOGIN_WINDOW);
       if (over) return over;
-      if (!(await matches(account, oldAuthKey))) return unauthorized();
+      if (!(await matches(account, oldAuthKey))) return denied();
 
       const authSalt = randomBytes(16);
       const changed = await patch(
@@ -522,7 +537,7 @@ export function createAccounts({ store, masterKey, now, mailer, waitUntil }: Acc
         (now) => matches(now, oldAuthKey),
       );
       if (changed === BUSY) return busy();
-      return changed ? { status: 204 } : unauthorized();
+      return changed ? { status: 204 } : denied();
     },
 
     /**
@@ -613,7 +628,7 @@ export function createAccounts({ store, masterKey, now, mailer, waitUntil }: Acc
 
     async deleteAccount(token: string | null): Promise<Result> {
       const account = await authed(token);
-      if (!account) return unauthorized();
+      if (!account) return moved();
       await store.srem(K.email(account.email), account.username);
       // One call, last: the copy goes with the account, so an upload that lands part-way is removed
       // with it, and one that lands after finds no account and takes its own copy back. If anything

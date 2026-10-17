@@ -194,7 +194,7 @@ describe('account routes', () => {
       copy: unknown;
     };
     expect(next.wrappedPw).toEqual(a.wrappedPw);
-    expect(next.copy).toEqual({ ...copy, version: 1 });
+    expect(next.copy).toEqual({ ...copy, version: 1, savedAt: expect.any(String) });
 
     const stale = await call(
       copyPUT,

@@ -2,7 +2,7 @@ import { deriveAccountKeys, newDek, sealCopy, wrapDek, type Sealed } from '@/dat
 import type { DataSnapshot } from '@/domain/snapshot';
 import { NetworkError, type AccountApi, type Reply } from '@/services/account';
 
-type Stored = Sealed & { version: number };
+type Stored = Sealed & { version: number; savedAt: string };
 type Account = {
   authKey: string;
   email: string;
@@ -59,36 +59,37 @@ export function fakeAccountApi() {
     logIn: (body) =>
       respond('logIn', null, body, () => {
         const account = accounts.get(body.username);
-        if (account?.authKey !== body.authKey) return reply(401, { error: 'unauthorized' });
+        if (account?.authKey !== body.authKey) return reply(401, { error: 'denied' });
         account.token = crypto.randomUUID();
         return reply(200, {
           deviceToken: account.token,
           wrappedPw: account.wrappedPw,
           copy: account.copy,
+          email: account.email,
         });
       }),
     putCopy: (token, body) =>
       respond('putCopy', token, body, () => {
         const account = byToken(token);
-        if (!account) return reply(401, { error: 'unauthorized' });
+        if (!account) return reply(401, { error: 'moved' });
         const stored = account.copy?.version ?? 0;
         if (body.baseVersion !== stored) return reply(409, { error: 'stale', version: stored });
-        account.copy = { iv: body.iv, ciphertext: body.ciphertext, version: stored + 1 };
-        return reply(200, { version: stored + 1, savedAt: new Date().toISOString() });
+        const savedAt = new Date().toISOString();
+        account.copy = { iv: body.iv, ciphertext: body.ciphertext, version: stored + 1, savedAt };
+        return reply(200, { version: stored + 1, savedAt });
       }),
     deleteAccount: (token) =>
       respond('deleteAccount', token, null, () => {
         const name = [...accounts].find(([, a]) => a.token === token)?.[0];
-        if (name === undefined) return reply(401, { error: 'unauthorized' });
+        if (name === undefined) return reply(401, { error: 'moved' });
         accounts.delete(name);
         return reply(204);
       }),
     changePassword: (token, body) =>
       respond('changePassword', token, body, () => {
         const account = byToken(token);
-        if (!account || account.authKey !== body.oldAuthKey) {
-          return reply(401, { error: 'unauthorized' });
-        }
+        if (!account) return reply(401, { error: 'moved' });
+        if (account.authKey !== body.oldAuthKey) return reply(401, { error: 'denied' });
         account.authKey = body.newAuthKey;
         account.wrappedPw = body.newWrappedPw;
         return reply(204);
@@ -112,6 +113,8 @@ export function fakeAccountApi() {
       snapshot?: DataSnapshot;
       copy?: Stored;
       version?: number;
+      savedAt?: string;
+      email?: string;
       iterations?: number;
     }) {
       const { authKey, kek } = await deriveAccountKeys(
@@ -123,11 +126,15 @@ export function fakeAccountApi() {
       const copy =
         options.copy ??
         (options.snapshot
-          ? { ...(await sealCopy(options.snapshot, dek.key)), version: options.version ?? 1 }
+          ? {
+              ...(await sealCopy(options.snapshot, dek.key)),
+              version: options.version ?? 1,
+              savedAt: options.savedAt ?? '2026-10-01T08:00:00.000Z',
+            }
           : null);
       accounts.set(options.username, {
         authKey,
-        email: 'seed@example.com',
+        email: options.email ?? 'seed@example.com',
         dek: dek.raw,
         wrappedPw: await wrapDek(dek.raw, kek),
         token: crypto.randomUUID(),

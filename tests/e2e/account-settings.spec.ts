@@ -29,8 +29,7 @@ async function mockAccountService(page: Page) {
     });
     if (name === 'signup') return route.fulfill({ json: { deviceToken: 'device-token-1' } });
     if (name === 'copy' && request.method() === 'PUT') {
-      if (state.refuseUploads)
-        return route.fulfill({ status: 401, json: { error: 'unauthorized' } });
+      if (state.refuseUploads) return route.fulfill({ status: 401, json: { error: 'moved' } });
       state.version += 1;
       return route.fulfill({ json: { version: state.version, savedAt: new Date().toISOString() } });
     }

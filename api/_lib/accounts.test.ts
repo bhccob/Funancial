@@ -256,6 +256,7 @@ describe('log-in', () => {
       deviceToken: expect.stringMatching(/^[A-Za-z0-9_-]{43}$/),
       wrappedPw,
       copy: null,
+      email: 'ada@example.com',
     });
   });
 
@@ -265,7 +266,13 @@ describe('log-in', () => {
     const c = copyOf();
     await put(accounts, token, 0, c);
     const res = await logIn(accounts, authKey);
-    expect(out(res).copy).toEqual({ ...c, version: 1 });
+    expect(out(res).copy).toEqual({ ...c, version: 1, savedAt: expect.any(String) });
+  });
+
+  it('returns the account email, to a phone that logs in and does not have it', async () => {
+    const { accounts } = setup();
+    const { authKey } = await join(accounts);
+    expect(out(await logIn(accounts, authKey)).email).toBe('ada@example.com');
   });
 
   it('answers a wrong key and an unknown user with the same 401 body', async () => {
@@ -275,7 +282,7 @@ describe('log-in', () => {
     const unknown = await logIn(accounts, authKey, 'grace');
     expect(wrong.status).toBe(401);
     expect(unknown).toEqual(wrong);
-    expect(JSON.stringify(wrong)).toBe('{"status":401,"body":{"error":"unauthorized"}}');
+    expect(JSON.stringify(wrong)).toBe('{"status":401,"body":{"error":"denied"}}');
   });
 
   it('refuses a malformed log-in with 400', async () => {
@@ -341,7 +348,7 @@ describe('log-in', () => {
 
     const res = await loggingIn;
     expect(res.status).toBe(200);
-    expect(out(res).copy).toEqual({ ...c, version: 1 });
+    expect(out(res).copy).toEqual({ ...c, version: 1, savedAt: expect.any(String) });
   });
 
   it('falls back to its first read when the read after the rotation fails', async () => {
@@ -358,7 +365,7 @@ describe('log-in', () => {
     // The log-in's first read is the 2nd, and the one after the rotation is the 3rd, which fails.
     const res = await logIn(accounts, authKey);
     expect(res.status).toBe(200);
-    expect(out(res).copy).toEqual({ ...c, version: 1 });
+    expect(out(res).copy).toEqual({ ...c, version: 1, savedAt: expect.any(String) });
   });
 
   it('keeps the token when the key is wrong', async () => {
@@ -491,7 +498,7 @@ describe('putCopy', () => {
     for (const bad of [null, '', 'garbage', b64(32).replace(/\+/g, '-'), token, 'A'.repeat(43)]) {
       expect(await put(accounts, bad, 0), String(bad)).toEqual({
         status: 401,
-        body: { error: 'unauthorized' },
+        body: { error: 'moved' },
       });
     }
   });
@@ -728,13 +735,27 @@ describe('changePassword', () => {
     expect((await put(accounts, token, 0)).status).toBe(200);
   });
 
+  it('tells a device token that no longer counts (moved) from a wrong password (denied)', async () => {
+    const { accounts } = setup();
+    const { authKey, token } = await join(accounts);
+    await logIn(accounts, authKey); // the first token is now old
+    const moved = { status: 401, body: { error: 'moved' } };
+    expect(await put(accounts, token, 0)).toEqual(moved);
+    expect(await change(accounts, token, authKey, b64(32))).toEqual(moved);
+    expect(await accounts.deleteAccount(token)).toEqual(moved);
+    const denied = { status: 401, body: { error: 'denied' } };
+    expect(await logIn(accounts, b64(32))).toEqual(denied);
+    const live = out<{ deviceToken: string }>(await logIn(accounts, authKey)).deviceToken;
+    expect(await change(accounts, live, b64(32), b64(32))).toEqual(denied);
+  });
+
   it('gives 401 for a wrong old key and changes nothing', async () => {
     const { store, accounts } = setup();
     const { authKey, token } = await join(accounts);
     const before = JSON.stringify(store.dump()['acct:u:ada']);
     expect(await change(accounts, token, b64(32), b64(32))).toEqual({
       status: 401,
-      body: { error: 'unauthorized' },
+      body: { error: 'denied' },
     });
     expect(JSON.stringify(store.dump()['acct:u:ada'])).toBe(before);
     expect((await logIn(accounts, authKey)).status).toBe(200);

@@ -14,9 +14,9 @@ const SEEN_KEY = 'funancial.account.reminded';
  */
 export function AccountReminder() {
   const real = useApp((s) => s.namespace === 'real');
-  const { loaded, state } = useAccount();
+  const { loaded, status } = useAccount();
   const [seen, setSeen] = useState(() => safeStorage.get(SEEN_KEY) === '1');
-  if (!real || !loaded || state || seen) return null;
+  if (!real || !loaded || status !== 'none' || seen) return null;
 
   const answer = () => {
     safeStorage.set(SEEN_KEY, '1');

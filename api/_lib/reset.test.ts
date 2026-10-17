@@ -590,7 +590,7 @@ describe('reset', () => {
     // The old password no longer logs in; the new one does, and opens the same data key.
     expect(await logIn(accounts, old.authKey)).toEqual({
       status: 401,
-      body: { error: 'unauthorized' },
+      body: { error: 'denied' },
     });
     const res = await logIn(accounts, fresh.authKey);
     expect(res.status).toBe(200);
@@ -890,7 +890,7 @@ describe('account writes are compare-and-set', () => {
 
     // It retries, finds the password is no longer the one it was given, and is turned away like
     // any wrong password: no token, none left behind, and the phone in use is untouched.
-    expect(await login).toEqual({ status: 401, body: { error: 'unauthorized' } });
+    expect(await login).toEqual({ status: 401, body: { error: 'denied' } });
     expect(tokenPointers(store)).toEqual(tokensBefore);
     expect((store.dump()['acct:u:ada'] as { deviceTokenHash: string }).deviceTokenHash).toBe(
       deviceBefore,
@@ -918,7 +918,7 @@ describe('account writes are compare-and-set', () => {
     expect(await accounts.reset(link, fresh.authKey, fresh.kek, IP)).toEqual({ status: 204 });
     held.open();
 
-    expect(await change).toEqual({ status: 401, body: { error: 'unauthorized' } });
+    expect(await change).toEqual({ status: 401, body: { error: 'denied' } });
     // The reset's password stands; the one the change was to set was never written.
     expect((await logIn(accounts, chosen)).status).toBe(401);
     expect((await logIn(accounts, fresh.authKey)).status).toBe(200);

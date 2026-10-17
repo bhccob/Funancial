@@ -368,7 +368,7 @@ function DeleteCopyDialog({ open, onClose }: { open: boolean; onClose(): void })
 type Opened = 'create' | 'login' | 'password' | 'delete' | null;
 
 function Loaded() {
-  const { state, status, lastSaved, offline } = useAccount();
+  const { status, username, email, savedAt, tooBig, offline } = useAccount();
   const { unlink } = useAccountActions();
   const run = useAction();
   const [opened, setOpened] = useState<Opened>(null);
@@ -376,7 +376,7 @@ function Loaded() {
 
   return (
     <div className="flex flex-col gap-5">
-      {state === null && (
+      {status === 'none' && (
         <>
           <p>Make an account so you can move to a new phone and keep everything.</p>
           <SaveNote />
@@ -394,16 +394,21 @@ function Loaded() {
         </>
       )}
 
-      {state !== null && status === 'linked' && (
+      {status === 'linked' && (
         <>
           <div className="flex flex-col gap-1">
-            <p className="font-bold">{state.username}</p>
-            {state.email && <p className="text-muted text-sm">{state.email}</p>}
+            <p className="font-bold">{username}</p>
+            {email && <p className="text-muted text-sm">{email}</p>}
             <p className="text-muted text-sm">
-              {lastSaved
-                ? `Last copy saved ${dateTime.format(new Date(lastSaved))}`
+              {savedAt
+                ? `Last copy saved ${dateTime.format(new Date(savedAt))}`
                 : 'No copy saved yet.'}
             </p>
+            {tooBig && (
+              <p className="text-danger text-sm font-bold">
+                Your copy is too big to save. Ask the app&apos;s owner for help.
+              </p>
+            )}
           </div>
           <div className="flex flex-wrap gap-3">
             <Button variant="secondary" onClick={() => setOpened('password')}>
@@ -416,7 +421,7 @@ function Loaded() {
         </>
       )}
 
-      {state !== null && status === 'moved' && (
+      {status === 'moved' && (
         <>
           <Banner tone="warning" title="Your account moved to another phone">
             This phone&apos;s data is still here. It is no longer saved to your account.
@@ -431,7 +436,11 @@ function Loaded() {
       )}
 
       <CreateAccountDialog open={opened === 'create'} onClose={close} />
-      <LogInDialog open={opened === 'login'} defaultUsername={state?.username} onClose={close} />
+      <LogInDialog
+        open={opened === 'login'}
+        defaultUsername={username ?? undefined}
+        onClose={close}
+      />
       <ChangePasswordDialog open={opened === 'password'} onClose={close} />
       <DeleteCopyDialog open={opened === 'delete'} onClose={close} />
     </div>

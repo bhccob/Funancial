@@ -43,7 +43,7 @@ const MAX_REBASES = 3;
 
 export type AccountState = {
   username: string;
-  /** `null` on a phone that logged in: the service does not send it back. */
+  /** `null` where the service did not say (an older service does not send it on log-in). */
   email: string | null;
   deviceToken: string;
   /** The data key's raw bytes, base64. Locks every copy; never leaves this phone except at sign-up. */
@@ -55,6 +55,8 @@ export type AccountState = {
   status: 'linked' | 'moved';
   /** Changes since the last saved copy. Kept, so a restart does not forget them. */
   dirty: boolean;
+  /** The service refused the copy as too large. No more tries until the data changes. */
+  tooBig: boolean;
 };
 
 const AccountStateSchema = z.object({
@@ -66,6 +68,7 @@ const AccountStateSchema = z.object({
   savedAt: z.string().nullable(),
   status: z.enum(['linked', 'moved']),
   dirty: z.boolean(),
+  tooBig: z.boolean().default(false),
 });
 
 /** What the screens read: `loaded` is false until this unlock's state has been read (no account then reads as unknown). */
@@ -82,6 +85,8 @@ export type AccountErrorCode =
   | 'too-new'
   | 'damaged'
   | 'unsupported'
+  | 'unreadable'
+  | 'moved'
   | 'locked'
   | 'demo'
   | 'linked'
@@ -99,6 +104,10 @@ const MESSAGES: Record<AccountErrorCode, string> = {
     "Your account's copy was saved by a newer Funancial. Update the app, then log in again.",
   damaged: "Your account's copy couldn't be opened. Try again later.",
   unsupported: "This phone's browser engine is too old to save or restore your copy.",
+  unreadable:
+    "Your account's copy couldn't be opened on this phone. Nothing was changed. Try again later, or update Android System WebView.",
+  moved:
+    "Your account moved to another phone, so this one can't change its password. Log in again first.",
   locked: 'Unlock Funancial first.',
   demo: "Demo money can't have an account.",
   linked: 'This phone already has an account.',
@@ -143,17 +152,23 @@ function minutesText(seconds: number | null): string {
   return minutes <= 1 ? 'a minute' : `${minutes} minutes`;
 }
 
-/** The error to show for an answer that was not the one wanted. `wrong`: what a 401 means for this call. */
+/** The `error` the service named in its answer, if it named one. */
+const errorName = (reply: Reply): unknown => (reply.body as { error?: unknown } | null)?.error;
+
+/**
+ * The error to show for an answer that was not the one wanted. `wrong`: what a 401 that says `denied`
+ * means for this call. Any other 401 (the shared token, say) is the service failing, not the person.
+ */
 function failed(reply: Reply, wrong?: string): AccountError {
   switch (reply.status) {
     case 400:
       return new AccountError('invalid');
     case 401:
-      return wrong ? new AccountError('wrong', wrong) : new AccountError('unavailable');
-    case 409: {
-      const error = (reply.body as { error?: unknown } | null)?.error;
-      return new AccountError(error === 'taken' ? 'taken' : 'busy');
-    }
+      return wrong && errorName(reply) === 'denied'
+        ? new AccountError('wrong', wrong)
+        : new AccountError('unavailable');
+    case 409:
+      return new AccountError(errorName(reply) === 'taken' ? 'taken' : 'busy');
     case 429:
       return new AccountError(
         'limited',
@@ -284,7 +299,7 @@ export function createAccountActions(
     const state = current();
     if (!state || state.status !== 'linked' || !open()) return;
     changes++;
-    if (!state.dirty) patch({ dirty: true });
+    if (!state.dirty || state.tooBig) patch({ dirty: true, tooBig: false });
     armSave();
   }
 
@@ -302,8 +317,9 @@ export function createAccountActions(
         return false;
       }
     }
-    if (reply.status === 401) {
+    if (reply.status === 401 && errorName(reply) === 'moved') {
       // Another phone logged in: this one is no longer the account's. Its data stays as it is.
+      // (Any other 401 is the service failing, such as a shared token it no longer accepts.)
       stopTimers();
       patch({ status: 'moved' });
       return false;
@@ -318,11 +334,14 @@ export function createAccountActions(
       retryIn(backoff(BUSY_RETRY, ++failures));
     } else if (reply.status === 429) {
       retryIn(Math.min(Math.max(reply.retryAfter ?? 60, 1), 900) * 1_000);
-    } else if (reply.status !== 400 && reply.status !== 413) {
-      // Waiting would not change a refusal of the copy itself; anything else may pass.
-      retryIn(backoff(FAILURE_RETRY, ++failures));
+    } else if (reply.status === 413) {
+      // Waiting would not make it smaller: it is tried again when the data changes.
+      patch({ tooBig: true });
+      notice();
+    } else if (reply.status === 400) {
       notice();
     } else {
+      retryIn(backoff(FAILURE_RETRY, ++failures));
       notice();
     }
     return false;
@@ -331,20 +350,24 @@ export function createAccountActions(
   async function attempt() {
     for (let rebases = 0; rebases < MAX_REBASES; rebases++) {
       const state = current();
-      if (!state || state.status !== 'linked' || !state.dirty || !open() || offline()) return;
+      if (!state || state.status !== 'linked' || !state.dirty || state.tooBig) return;
+      if (!open() || offline()) return;
       const mine = session;
       const token = state.deviceToken;
+      // Both read now, before any wait: what is sealed is the data that was open when this began (and
+      // holds everything announced up to `seen`), never what a lock or a switch to the demo left.
+      const seen = changes;
+      const data = app().data;
       let reply: Reply;
-      let seen: number;
       try {
-        const key = await importDek(state.dek);
-        // Read together: what is sealed holds everything announced up to `seen`.
-        seen = changes;
-        const sealedCopy = await sealCopy(app().data, key);
+        const sealedCopy = await sealCopy(data, await importDek(state.dek));
+        // The data may have closed while this was being sealed: then it is not this phone's to send.
+        if (mine !== session || !open() || current()?.deviceToken !== token) return;
         reply = await api.putCopy(token, { baseVersion: state.version, ...sealedCopy });
       } catch (e) {
         // Nothing came back: the phone's next signal, or the app going to the background, tries again.
         if (e instanceof NetworkError) return;
+        if (mine !== session) return;
         console.error('Preparing the copy failed', e instanceof Error ? e.name : e);
         return notice();
       }
@@ -352,7 +375,8 @@ export function createAccountActions(
       if (mine !== session || current()?.deviceToken !== token) return;
       if (!answered(reply, seen)) return;
     }
-    retryIn(backoff(BUSY_RETRY, 1));
+    // Stale answers over and over: ask again, but less and less often.
+    retryIn(backoff(FAILURE_RETRY, ++failures));
   }
 
   let running: Promise<void> | null = null;
@@ -445,12 +469,16 @@ export function createAccountActions(
       // The first try may have landed with its answer lost: then this name is ours, with the same
       // keys. An account of ours has no copy yet; one that has is someone's, and the name is taken.
       const again = await reach(() => api.logIn({ username: name, authKey }));
-      const parsed = again.status === 200 ? LoggedIn.safeParse(again.body) : null;
-      const key =
-        parsed?.success && !parsed.data.copy
-          ? await unwrapDek(parsed.data.wrappedPw, kek).catch(() => null)
-          : null;
-      if (!parsed?.success || !key) throw new AccountError('taken');
+      // Not our password: the name is someone else's. Anything else is the service, not the name.
+      if (again.status !== 200) {
+        throw errorName(again) === 'denied' ? new AccountError('taken') : failed(again);
+      }
+      const parsed = LoggedIn.safeParse(again.body);
+      if (!parsed.success) throw new AccountError('unavailable');
+      const key = parsed.data.copy
+        ? null
+        : await unwrapDek(parsed.data.wrappedPw, kek).catch(() => null);
+      if (!key) throw new AccountError('taken');
       deviceToken = parsed.data.deviceToken;
       dekRaw = key.raw;
     } else {
@@ -467,6 +495,7 @@ export function createAccountActions(
       savedAt: null,
       status: 'linked',
       dirty: true,
+      tooBig: false,
     });
     await flush();
   }
@@ -508,12 +537,19 @@ export function createAccountActions(
       try {
         snapshot = migrateSnapshot(await openCopy(copy, dek));
       } catch (e) {
-        // A copy that won't open counts as no copy: this phone's data goes up in its place.
-        if (!(e instanceof DecryptError)) {
-          if (e instanceof SchemaVersionError) throw new AccountError('too-new');
-          if (e instanceof UnsupportedError) throw new AccountError('unsupported', e.message);
-          throw new AccountError('damaged');
+        // A copy this phone can't open is never replaced, and nothing links to it: it may open on
+        // another phone, or after an update, and the data here is kept as it is.
+        if (e instanceof SchemaVersionError) throw new AccountError('too-new');
+        if (e instanceof UnsupportedError) throw new AccountError('unsupported', e.message);
+        if (e instanceof DecryptError) {
+          const cause = (e.cause as { name?: unknown } | null | undefined)?.name;
+          console.error(
+            'The account copy would not open',
+            typeof cause === 'string' ? cause : 'unknown',
+          );
+          throw new AccountError('unreadable');
         }
+        throw new AccountError('damaged');
       }
     }
 
@@ -527,9 +563,10 @@ export function createAccountActions(
       deviceToken,
       dek: dek.raw,
       version: copy?.version ?? 0,
-      savedAt: snapshot ? new Date().toISOString() : null,
+      savedAt: snapshot ? (copy?.savedAt ?? new Date().toISOString()) : null,
       status: 'linked',
       dirty: !snapshot,
+      tooBig: false,
     });
     if (!snapshot) void flush();
     return 'done';
@@ -552,6 +589,11 @@ export function createAccountActions(
         newWrappedPw,
       }),
     );
+    if (reply.status === 401 && errorName(reply) === 'moved') {
+      stopTimers();
+      patch({ status: 'moved' });
+      throw new AccountError('moved');
+    }
     if (reply.status !== 204) throw failed(reply, "That isn't your current password.");
   }
 
@@ -560,10 +602,13 @@ export function createAccountActions(
     requireOpen();
     const state = current();
     if (!state) throw new AccountError('unlinked');
-    const reply = await reach(() => api.deleteAccount(state.deviceToken));
-    // A 401 is a token that no longer counts (the account moved, or is gone): nothing here to delete.
-    if (reply.status !== 204 && reply.status !== 401) throw failed(reply);
+    // No copy may go up while the account is being taken down.
     stopTimers();
+    const reply = await reach(() => api.deleteAccount(state.deviceToken));
+    // A `moved` 401 is a token that no longer counts (the account moved, or is gone): nothing here to
+    // delete. Any other 401 is the service failing, and the link stays.
+    const gone = reply.status === 204 || (reply.status === 401 && errorName(reply) === 'moved');
+    if (!gone) throw failed(reply);
     await commit(null);
   }
 

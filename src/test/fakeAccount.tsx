@@ -13,6 +13,7 @@ export const linkedAccount = (over: Partial<AccountState> = {}): AccountState =>
   savedAt: '2026-10-14T10:00:00.000Z',
   status: 'linked',
   dirty: false,
+  tooBig: false,
   ...over,
 });
 

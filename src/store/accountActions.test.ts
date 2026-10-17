@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { deriveAccountKeys, openCopy, unwrapDek } from '@/data/accountCrypto';
+import { deriveAccountKeys, openCopy, UnsupportedError, unwrapDek } from '@/data/accountCrypto';
 import { readBackup } from '@/data/backup';
 import { base64ToBytes } from '@/data/crypto';
 import { emptySnapshot, type DataSnapshot } from '@/domain/snapshot';
@@ -42,6 +42,7 @@ beforeEach(() => {
   vi.stubGlobal('removeEventListener', target.removeEventListener.bind(target));
 });
 afterEach(() => {
+  vi.restoreAllMocks();
   vi.useRealTimers();
   vi.unstubAllGlobals();
 });
@@ -57,6 +58,33 @@ async function elapse(ms: number) {
 
 /** Time moves only when a test says so; the storage underneath keeps its own clock. */
 const clock = () => vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+
+/** Every toast shown from now on, even one that has gone by the time the test looks. */
+function collectToasts() {
+  const shown: string[] = [];
+  toastStore.subscribe((s, prev) => {
+    for (const t of s.toasts) if (!prev.toasts.includes(t)) shown.push(t.message);
+  });
+  return shown;
+}
+
+/**
+ * Holds the next `importKey`, which is the first thing an upload does, until the returned function
+ * is called; with `fail`, it then fails instead of importing.
+ */
+function holdNextImport(fail?: Error) {
+  const real = crypto.subtle.importKey.bind(crypto.subtle) as (
+    ...a: unknown[]
+  ) => Promise<CryptoKey>;
+  let release = () => {};
+  const held = new Promise<void>((resolve) => (release = resolve));
+  vi.spyOn(crypto.subtle, 'importKey').mockImplementationOnce((async (...args: unknown[]) => {
+    await held;
+    if (fail) throw fail;
+    return real(...args);
+  }) as typeof crypto.subtle.importKey);
+  return release;
+}
 
 const loaded = (a: AccountActions) => vi.waitFor(() => expect(a.view.getState().loaded).toBe(true));
 
@@ -346,7 +374,7 @@ describe('log-in', () => {
     expect(store.getState().data.tables.profile[0]!.name).toBe('Robin');
     expect(linkedState(actions)).toMatchObject({
       username: 'robin',
-      email: null,
+      email: 'seed@example.com',
       status: 'linked',
       version: 1,
       dirty: false,
@@ -408,22 +436,113 @@ describe('log-in', () => {
     expect(puts(server)[0]).toMatchObject({ baseVersion: 0 });
   });
 
-  it('treats a copy that will not open as no copy: the phone keeps its data and replaces it', async () => {
+  const COULD_NOT_OPEN =
+    "Your account's copy couldn't be opened on this phone. Nothing was changed. Try again later, or update Android System WebView.";
+  const unreadable = {
+    iv: 'AAAAAAAAAAAAAAAA',
+    ciphertext: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+    version: 3,
+    savedAt: '2026-10-01T08:00:00.000Z',
+  };
+
+  it.each([
+    ['a phone with data', true],
+    ['an empty install', false],
+  ])('never replaces a copy it could not open: %s', async (_name, withData) => {
+    const { actions, server, store } = await setup();
+    if (withData) await store.getState().put('expense', lunch('mine'));
+    await server.seed({ username: 'robin', password: ME.password, copy: unreadable });
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    await expect(actions.logIn(creds, { replace: true })).rejects.toMatchObject({
+      code: 'unreadable',
+      message: COULD_NOT_OPEN,
+    });
+    expect(linkedState(actions)).toBeNull();
+    expect(store.getState().data.tables.expense.map((e) => e.id)).toEqual(withData ? ['mine'] : []);
+
+    clock();
+    pause();
+    goOnline();
+    await elapse(10 * 60_000);
+    await actions.saveNow();
+    expect(puts(server)).toEqual([]);
+    expect(server.accounts.get('robin')!.copy).toEqual(unreadable);
+    // Only the name of what went wrong is logged, not the error with whatever it holds.
+    expect(logged).toHaveBeenCalledWith(expect.any(String), 'OperationError');
+  });
+
+  it('says so, and changes nothing, when this phone cannot unpack a copy', async () => {
     const { actions, server, store } = await setup();
     await store.getState().put('expense', lunch('mine'));
     await server.seed({
       username: 'robin',
       password: ME.password,
-      copy: {
-        iv: 'AAAAAAAAAAAAAAAA',
-        ciphertext: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
-        version: 3,
-      },
+      snapshot: snapshotWith('theirs'),
     });
-    await expect(actions.logIn(creds, { replace: true })).resolves.toBe('done');
+    const copy = { ...server.accounts.get('robin')!.copy! };
+    vi.stubGlobal('DecompressionStream', undefined);
+
+    await expect(actions.logIn(creds, { replace: true })).rejects.toMatchObject({
+      code: 'unsupported',
+      message: new UnsupportedError().message,
+    });
+    expect(linkedState(actions)).toBeNull();
     expect(store.getState().data.tables.expense.map((e) => e.id)).toEqual(['mine']);
-    await waitForPuts(server, 1);
-    expect(puts(server)[0]).toMatchObject({ baseVersion: 3 });
+    expect(puts(server)).toEqual([]);
+    expect(server.accounts.get('robin')!.copy).toEqual(copy);
+  });
+
+  it('takes the time of the copy as the time it was saved', async () => {
+    const { actions, server } = await setup();
+    await server.seed({
+      username: 'robin',
+      password: ME.password,
+      snapshot: snapshotWith('a'),
+      savedAt: '2026-09-30T08:00:00.000Z',
+    });
+    await actions.logIn(creds, { replace: false });
+    expect(linkedState(actions)!.savedAt).toBe('2026-09-30T08:00:00.000Z');
+  });
+
+  it('keeps the email the service returns, and none when it returns none', async () => {
+    const { actions, server } = await setup();
+    await server.seed({
+      username: 'robin',
+      password: ME.password,
+      snapshot: snapshotWith('a'),
+      email: 'robin@work.example',
+    });
+    await actions.logIn(creds, { replace: false });
+    expect(linkedState(actions)!.email).toBe('robin@work.example');
+    await actions.unlink();
+
+    server.script('logIn', (real) => {
+      const answer = real();
+      return { ...answer, body: { ...(answer.body as object), email: null } };
+    });
+    await actions.logIn(creds, { replace: true });
+    expect(linkedState(actions)!.email).toBeNull();
+  });
+
+  it('reads only a denied 401 as a wrong password: any other is the service failing', async () => {
+    const { actions, server } = await setup();
+    server.script(
+      'logIn',
+      answers(401, { error: 'unauthorized' }),
+      answers(401),
+      answers(401, { error: 'denied' }),
+    );
+    await expect(actions.logIn(creds, { replace: true })).rejects.toMatchObject({
+      code: 'unavailable',
+    });
+    await expect(actions.logIn(creds, { replace: true })).rejects.toMatchObject({
+      code: 'unavailable',
+    });
+    await expect(actions.logIn(creds, { replace: true })).rejects.toMatchObject({
+      code: 'wrong',
+      message: "That username and password don't match.",
+    });
   });
 
   it('a copy from a newer Funancial links nothing and changes nothing', async () => {
@@ -618,8 +737,7 @@ describe('another phone logs in', () => {
       'putCopy',
       () =>
         new Promise((resolve) => {
-          refuse = () =>
-            resolve({ status: 401, body: { error: 'unauthorized' }, retryAfter: null });
+          refuse = () => resolve({ status: 401, body: { error: 'moved' }, retryAfter: null });
         }),
     );
     await store.getState().put('expense', lunch('e1'));
@@ -937,5 +1055,253 @@ describe('turning the account off', () => {
     await actions.unlink();
     expect(linkedState(actions)).toBeNull();
     expect(server.calls).toHaveLength(calls);
+  });
+});
+
+/** A phone that is linked, with the clock in the test's hands. */
+async function linkedPhone({ pin = false } = {}) {
+  const t = await setup();
+  if (pin) await t.store.getState().setSecret('2468', 'pin');
+  await t.actions.signUp(ME);
+  clock();
+  return t;
+}
+
+describe('an upload being prepared when the data closes under it', () => {
+  async function preparing() {
+    const t = await linkedPhone({ pin: true });
+    await t.store.getState().put('expense', lunch('e1'));
+    return t;
+  }
+  /** Starts the upload and holds it at its first step, with the data still open. */
+  async function started(fail?: Error) {
+    const release = holdNextImport(fail);
+    await elapse(30_000);
+    return release;
+  }
+
+  it('is never sent once the app has locked: that is an empty snapshot over the copy', async () => {
+    const { server, store } = await preparing();
+    const release = await started();
+    store.getState().lock();
+    release();
+    await quiet();
+    expect(puts(server)).toHaveLength(1);
+  });
+
+  it('is never sent once the app has moved to the demo: that is demo money over the copy', async () => {
+    const { server, store } = await preparing();
+    const release = await started();
+    await store.getState().startDemo();
+    release();
+    await quiet();
+    expect(puts(server)).toHaveLength(1);
+  });
+
+  it('is never sent once everything was deleted', async () => {
+    const { server, store } = await preparing();
+    const release = await started();
+    await store.getState().deleteAllData();
+    release();
+    await quiet();
+    expect(puts(server)).toHaveLength(1);
+    expect(store.getState().phase).toBe('welcome');
+  });
+
+  it('says nothing when it fails after the app locked', async () => {
+    const { server, store } = await preparing();
+    const shown = collectToasts();
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const release = await started(new Error('boom'));
+    store.getState().lock();
+    release();
+    await quiet();
+    expect(puts(server)).toHaveLength(1);
+    expect(shown).toEqual([]);
+  });
+
+  it('still goes up once the data is open again and has what it should', async () => {
+    const { actions, server, store } = await preparing();
+    const release = await started();
+    store.getState().lock();
+    release();
+    await quiet();
+    vi.useRealTimers();
+    await store.getState().unlock('2468');
+    await waitForPuts(server, 2);
+    const copy = await opened(puts(server)[1]!, linkedState(actions)!.dek);
+    expect(copy.tables.expense.map((e) => e.id)).toEqual(['e1']);
+  });
+});
+
+describe('a save whose answer was lost', () => {
+  it('is found by the next try, which re-bases on it and loses nothing', async () => {
+    const { actions, server, store } = await linkedPhone();
+    server.script('putCopy', lostReply);
+    await store.getState().put('expense', lunch('e1'));
+    await elapse(30_000);
+    await waitForPuts(server, 2);
+    // The service has it; the phone was never told.
+    expect(server.accounts.get('robin')!.copy!.version).toBe(2);
+    expect(linkedState(actions)).toMatchObject({ version: 1, dirty: true, status: 'linked' });
+
+    goOnline();
+    await waitForPuts(server, 4);
+    expect(puts(server).map((p) => p.baseVersion)).toEqual([0, 1, 1, 2]);
+    await vi.waitFor(() =>
+      expect(linkedState(actions)).toMatchObject({ version: 3, dirty: false, status: 'linked' }),
+    );
+    const stored = server.accounts.get('robin')!.copy!;
+    const copy = await opened({ ...stored, baseVersion: 0 }, linkedState(actions)!.dek);
+    expect(copy.tables.expense.map((e) => e.id)).toEqual(['e1']);
+  });
+});
+
+describe('the two 401s', () => {
+  it('reads a refusal of the shared token as the service failing: it stays linked, says so once, tries again', async () => {
+    const { actions, server, store } = await linkedPhone();
+    const shown = collectToasts();
+    server.script('putCopy', answers(401, { error: 'unauthorized' }), answers(401));
+    await store.getState().put('expense', lunch('e1'));
+    await elapse(30_000);
+    await waitForPuts(server, 2);
+    expect(linkedState(actions)!.status).toBe('linked');
+    await elapse(36_000);
+    await waitForPuts(server, 3);
+    expect(linkedState(actions)!.status).toBe('linked');
+    await elapse(70_000);
+    await waitForPuts(server, 4);
+    await vi.waitFor(() =>
+      expect(linkedState(actions)).toMatchObject({ status: 'linked', version: 2, dirty: false }),
+    );
+    expect(shown).toEqual([SAVE_NOTICE]);
+  });
+
+  it('reads a 401 that says moved as a takeover', async () => {
+    const { actions, server, store } = await linkedPhone();
+    server.script('putCopy', answers(401, { error: 'moved' }));
+    await store.getState().put('expense', lunch('e1'));
+    await elapse(30_000);
+    await vi.waitFor(() => expect(linkedState(actions)!.status).toBe('moved'));
+  });
+
+  it('turning the account off is done only by a 204 or a moved: a refused shared token keeps the link', async () => {
+    const { actions, server } = await linkedPhone();
+    server.script('deleteAccount', answers(401, { error: 'unauthorized' }));
+    await expect(actions.deleteAccount()).rejects.toMatchObject({ code: 'unavailable' });
+    expect(linkedState(actions)!.status).toBe('linked');
+    expect(server.accounts.has('robin')).toBe(true);
+  });
+
+  it('a password change says moved, denied and a failing service three ways', async () => {
+    const { actions, server } = await linkedPhone();
+    const next = 'another long password';
+    server.script(
+      'changePassword',
+      answers(401, { error: 'denied' }),
+      answers(401, { error: 'unauthorized' }),
+      answers(401, { error: 'moved' }),
+    );
+    await expect(actions.changePassword(ME.password, next)).rejects.toMatchObject({
+      code: 'wrong',
+      message: "That isn't your current password.",
+    });
+    await expect(actions.changePassword(ME.password, next)).rejects.toMatchObject({
+      code: 'unavailable',
+    });
+    expect(linkedState(actions)!.status).toBe('linked');
+    await expect(actions.changePassword(ME.password, next)).rejects.toMatchObject({
+      code: 'moved',
+    });
+    expect(linkedState(actions)!.status).toBe('moved');
+  });
+
+  it('a sign-up that finds its name taken after a lost answer reads the claim log-in the same way', async () => {
+    const { actions, server } = await setup();
+    server.script('signUp', unreachable);
+    await server.seed({ username: 'robin', password: 'someone elses password' });
+    server.script('logIn', answers(401, { error: 'unauthorized' }));
+    await expect(actions.signUp(ME)).rejects.toMatchObject({ code: 'unavailable' });
+    expect(linkedState(actions)).toBeNull();
+  });
+});
+
+describe('smaller things', () => {
+  it('waits longer and longer when the service keeps saying stale', async () => {
+    const { server, store } = await linkedPhone();
+    server.script(
+      'putCopy',
+      ...Array.from({ length: 12 }, (_, i) => answers(409, { error: 'stale', version: 1 + i })),
+    );
+    await store.getState().put('expense', lunch('e1'));
+    await elapse(30_000);
+    await waitForPuts(server, 4); // three in a row, then it waits
+    await elapse(25_000);
+    expect(puts(server)).toHaveLength(4);
+    await elapse(10_000);
+    await waitForPuts(server, 7);
+    await elapse(50_000);
+    expect(puts(server)).toHaveLength(7);
+    await elapse(20_000);
+    await waitForPuts(server, 10);
+  });
+
+  it('stops trying a copy that is too big until the data changes', async () => {
+    const { actions, server, store } = await linkedPhone();
+    server.script('putCopy', answers(413, { error: 'too large' }));
+    await store.getState().put('expense', lunch('e1'));
+    await elapse(30_000);
+    await waitForPuts(server, 2);
+    await vi.waitFor(() =>
+      expect(linkedState(actions)).toMatchObject({ tooBig: true, dirty: true, status: 'linked' }),
+    );
+    pause();
+    goOnline();
+    await elapse(60 * 60_000);
+    await actions.saveNow();
+    expect(puts(server)).toHaveLength(2);
+
+    // Smaller data is worth a try.
+    await store.getState().remove('expense', 'e1');
+    expect(linkedState(actions)!.tooBig).toBe(false);
+    await elapse(30_000);
+    await waitForPuts(server, 3);
+    await vi.waitFor(() =>
+      expect(linkedState(actions)).toMatchObject({ tooBig: false, dirty: false }),
+    );
+  });
+
+  it('keeps that it was too big across a restart', async () => {
+    const { actions, server, store, deps } = await linkedPhone();
+    server.script('putCopy', answers(413, { error: 'too large' }));
+    await store.getState().put('expense', lunch('e1'));
+    await elapse(30_000);
+    await vi.waitFor(() => expect(linkedState(actions)!.tooBig).toBe(true));
+    vi.useRealTimers();
+    await vi.waitFor(async () => {
+      const again = createAppStore(deps);
+      await again.getState().boot();
+      expect(linkedState((await follow(again, server)).actions)!.tooBig).toBe(true);
+    });
+  });
+
+  it('does not let a save timer fire while the account is being deleted', async () => {
+    const { actions, server, store } = await linkedPhone();
+    await store.getState().put('expense', lunch('e1'));
+    let answer = () => {};
+    server.script(
+      'deleteAccount',
+      (real) =>
+        new Promise((resolve) => {
+          answer = () => resolve(real());
+        }),
+    );
+    const deleting = actions.deleteAccount();
+    await vi.waitFor(() => expect(server.sent('deleteAccount')).toHaveLength(1));
+    await elapse(60_000);
+    expect(puts(server)).toHaveLength(1);
+    answer();
+    await deleting;
+    expect(linkedState(actions)).toBeNull();
   });
 });
