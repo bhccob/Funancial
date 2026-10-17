@@ -60,11 +60,13 @@ export type Accounts = ReturnType<typeof createAccounts>;
 const MAX_COPY_BYTES = 1_000_000;
 const TAG_BYTES = 16;
 const LOGIN_WINDOW = 15 * 60;
-/** How long a name's failed log-ins are remembered after the last one: longer than the longest wait. */
-const LOGIN_FAILS_SECONDS = 15 * 60;
-/** Failed log-ins a name has before it must wait, 15 s, doubling with each one after, at most 10 min. */
-const LOGIN_FREE_FAILS = 5;
-const loginWait = (fails: number) => Math.min(600, 15 * 2 ** (fails - LOGIN_FREE_FAILS));
+/** How long a name's log-in tries are remembered after the last one: longer than the longest wait. */
+const LOGIN_TRIES_SECONDS = 15 * 60;
+/** The try from which a failure makes the name wait: 15 s, doubling with each one after, at most 10 min. */
+const LOGIN_WAIT_FROM = 5;
+const loginWait = (tries: number) => Math.min(600, 15 * 2 ** (tries - LOGIN_WAIT_FROM));
+const loginTries = (name: string) => `rl:login:fail:${name}`;
+const loginWaitKey = (name: string) => `rl:login:wait:${name}`;
 const HOUR = 60 * 60;
 const DAY = 24 * HOUR;
 /** Reset emails the owner's Gmail sends a day, for everyone: it is not for anyone to use as a relay. */
@@ -273,24 +275,29 @@ export function createAccounts({ store, masterKey, now, mailer, waitUntil }: Acc
     return r.ok ? null : { ...fail(429, 'too many attempts'), retryAfter: r.retryAfter };
   }
 
-  /** The 429 for a name still waiting after failed log-ins, else null. Costs no scrypt. */
+  const tooSoon = (retryAfter: number): Result => ({
+    ...fail(429, 'too many attempts'),
+    retryAfter,
+  });
+
+  /** The 429 for a name still waiting after failed log-ins, else null. Counts nothing. */
   async function loginWaiting(name: string): Promise<Result | null> {
-    const left = await store.ttl(`rl:login:wait:${name}`);
-    return left > 0 ? { ...fail(429, 'too many attempts'), retryAfter: left } : null;
+    const left = await store.ttl(loginWaitKey(name));
+    return left > 0 ? tooSoon(left) : null;
   }
 
   /**
-   * Counts a failed log-in against the name, whether or not it is an account's, so the answers and the
-   * waits are the same for both: from the 5th failure on, the name waits (`loginWait`).
+   * Counts this try against the name before any scrypt, so tries sent at once are counted too: null
+   * lets it check the password, else the 429 to send. From the 5th try, only the try that sets the
+   * next wait goes on (the wait stays if it fails); the others wait. A success clears both, so in
+   * effect failures are what count. A name with no account goes the same way, so nothing tells them apart.
    */
-  async function loginFailed(name: string): Promise<Result> {
-    const key = `rl:login:fail:${name}`;
+  async function loginTry(name: string): Promise<Result | null> {
     // The count and its lifetime in one step: a function cut off between two would leave one for ever.
-    const fails = await store.incr(key, LOGIN_FAILS_SECONDS);
-    if (fails >= LOGIN_FREE_FAILS) {
-      await store.setNx(`rl:login:wait:${name}`, fails, loginWait(fails));
-    }
-    return denied();
+    const tries = await store.incr(loginTries(name), LOGIN_TRIES_SECONDS);
+    if (tries < LOGIN_WAIT_FROM) return null;
+    if (await store.setNx(loginWaitKey(name), tries, loginWait(tries))) return null;
+    return tooSoon(Math.max(1, await store.ttl(loginWaitKey(name))));
   }
 
   /** Whether `authKey` is the account's; an absent account costs the same work and never matches. */
@@ -504,12 +511,15 @@ export function createAccounts({ store, masterKey, now, mailer, waitUntil }: Acc
       const parsed = loginBody.safeParse(body);
       if (!parsed.success) return badRequest();
       const { username: name, authKey } = parsed.data;
-      // Both before the account is read or any scrypt runs.
-      const over = (await throttle('login:ip', ip, 10, 60)) ?? (await loginWaiting(name));
+      // All before the account is read or any scrypt runs.
+      const over =
+        (await throttle('login:ip', ip, 10, 60)) ??
+        (await loginWaiting(name)) ??
+        (await loginTry(name));
       if (over) return over;
 
       const account = await store.get<Account>(K.user(name));
-      if (!(await matches(account, authKey)) || !account) return loginFailed(name);
+      if (!(await matches(account, authKey)) || !account) return denied();
 
       // Read before anything changes, so a failed read never logs the old phone out.
       const firstRead = await ownCopy(account);
@@ -526,8 +536,8 @@ export function createAccounts({ store, masterKey, now, mailer, waitUntil }: Acc
         return before === BUSY ? busy() : denied();
       }
       await store.del(K.token(before.deviceTokenHash));
-      // The log-in has happened: a count left behind only makes the next wait come sooner.
-      await store.del(`rl:login:fail:${name}`).catch(() => {});
+      // The log-in has happened: a count or wait left behind only makes the next wait come sooner.
+      await store.del(loginTries(name), loginWaitKey(name)).catch(() => {});
 
       // Read again: the old phone may have been acknowledged an upload since the first read, and the
       // new phone must start from it. If this read fails, the first one stands.

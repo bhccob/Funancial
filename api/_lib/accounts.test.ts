@@ -954,15 +954,48 @@ describe('rate limits', () => {
     expect(await store.ttl('rl:login:fail:ada')).toBe(900);
   });
 
-  it('clears the failures when a log-in succeeds', async () => {
+  it('clears the count and the wait when a log-in succeeds', async () => {
     const { store, accounts } = setup();
     const { authKey } = await join(accounts);
+    const left = () => Object.keys(store.dump()).filter((k) => /^rl:login:(fail|wait):/.test(k));
     await fail(accounts, 4);
     expect((await tryKey(accounts, authKey)).status).toBe(200);
-    expect(store.dump()['rl:login:fail:ada']).toBeUndefined();
+    expect(left()).toEqual([]);
+
+    // Past the 5th, a try sets the next wait before its check: a success takes that away too.
+    await fail(accounts, 5);
+    advance(15);
+    expect((await tryKey(accounts, authKey)).status).toBe(200);
+    expect(left()).toEqual([]);
+    expect((await tryKey(accounts, authKey)).status).toBe(200);
 
     await fail(accounts, 4);
     expect((await tryKey(accounts, authKey)).status).toBe(200);
+  });
+
+  it('runs at most 6 password checks for a burst of tries at one name from as many addresses', async () => {
+    for (const username of ['ada', 'nobody']) {
+      const { accounts } = setup(lagged);
+      await join(accounts);
+      const burst = async () => {
+        vi.mocked(scrypt).mockClear();
+        const answers = await Promise.all(
+          Array.from({ length: 40 }, () => tryKey(accounts, b64(32), username)),
+        );
+        const checks = vi.mocked(scrypt).mock.calls.length;
+        // Each check is a wrong password; every other try was told how long to wait.
+        expect(answers.filter((r) => r.status === 401)).toHaveLength(checks);
+        for (const r of answers.filter((r) => r.status !== 401)) {
+          expect(r.status).toBe(429);
+          expect(r.retryAfter).toBeGreaterThan(0);
+        }
+        return checks;
+      };
+      expect(await burst(), username).toBeLessThanOrEqual(6);
+      // Once its waits are over, the name is past its 5 free tries: one check for the next burst.
+      advance(600);
+      expect(await burst(), username).toBeLessThanOrEqual(1);
+    }
   });
 
   it('counts a name with no account exactly as a wrong password, so neither says which it is', async () => {
