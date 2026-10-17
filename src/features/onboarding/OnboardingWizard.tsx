@@ -21,6 +21,7 @@ import { useApp } from '@/store/AppStoreProvider';
 import {
   AccountError,
   emailProblem,
+  hasData,
   passwordProblem,
   usernameProblem,
 } from '@/store/accountActions';
@@ -128,6 +129,8 @@ export function OnboardingWizard({ onFinishing }: { onFinishing?(finishing: bool
   const setSecret = useApp((s) => s.setSecret);
   const biometricAvailable = useApp((s) => s.biometric !== 'unavailable');
   const enableBiometric = useApp((s) => s.enableBiometric);
+  const deleteAllData = useApp((s) => s.deleteAllData);
+  const emptyData = useApp((s) => !hasData(s.data));
   const { signUp } = useAccountActions();
   const account = useAccount();
   const run = useAction();
@@ -148,8 +151,9 @@ export function OnboardingWizard({ onFinishing }: { onFinishing?(finishing: bool
     password?: string;
     other?: string;
   }>({});
-  // The service did not answer though the phone thinks it is online: as good as offline.
-  const [unreachable, setUnreachable] = useState(false);
+  // The last try failed for a reason that isn't what was typed: nothing came back (as good as
+  // offline), or the service failed. Either way a down service must not block setup.
+  const [failure, setFailure] = useState<'offline' | 'service' | null>(null);
   const { busy: signingUp, guard } = useBusy();
 
   // A guess from where the phone is; the Select still offers every currency.
@@ -220,12 +224,17 @@ export function OnboardingWizard({ onFinishing }: { onFinishing?(finishing: bool
         go(2);
       } catch (err) {
         const code = err instanceof AccountError ? err.code : null;
-        if (code === 'taken') setAccountErrors({ username: errorMessage(err) });
-        else if (code === 'offline') {
-          // Nothing came back: say so once, in the one offline line that comes with the way on.
+        if (code === 'taken' || code === 'invalid') {
+          // The person's own input: theirs to fix, with no way round it.
+          setFailure(null);
+          setAccountErrors(
+            code === 'taken' ? { username: errorMessage(err) } : { other: errorMessage(err) },
+          );
+        } else {
+          // Say so once, in the one line that comes with the way on.
           setAccountErrors({});
-          setUnreachable(true);
-        } else setAccountErrors({ other: errorMessage(err) });
+          setFailure(code === 'offline' ? 'offline' : 'service');
+        }
       }
     });
   }
@@ -277,7 +286,17 @@ export function OnboardingWizard({ onFinishing }: { onFinishing?(finishing: bool
     else void finish();
   }
 
-  const offline = account.offline || unreachable;
+  const offline = account.offline || failure === 'offline';
+  // Back on the first step undoes "Create an account", but only while the data it made is still
+  // empty: no account (none made, none logged in to), nothing entered. Log in hides this row.
+  const canLeave = account.loaded && account.status === 'none' && emptyData;
+
+  async function backToWelcome() {
+    setBusy(true);
+    // The Delete all data path, which boots to the Welcome screen.
+    await run(deleteAllData);
+    setBusy(false);
+  }
 
   function render(shown: Step) {
     switch (shown) {
@@ -360,10 +379,12 @@ export function OnboardingWizard({ onFinishing }: { onFinishing?(finishing: bool
             >
               I already have an account
             </button>
-            {offline && (
+            {(offline || failure === 'service') && (
               <div className="flex flex-col items-start gap-3">
                 <p className="text-muted text-sm">
-                  You&apos;re offline. Create your account later in Settings.
+                  {offline
+                    ? "You're offline. Create your account later in Settings."
+                    : "Funancial's service isn't answering right now. You can make an account later in Settings."}
                 </p>
                 <Button
                   variant="secondary"
@@ -592,6 +613,8 @@ export function OnboardingWizard({ onFinishing }: { onFinishing?(finishing: bool
           <div className="flex items-center gap-3">
             {step > 1 && !done ? (
               <BackButton onClick={() => go(step - 1)} disabled={working} />
+            ) : step === 1 && canLeave ? (
+              <BackButton onClick={() => void backToWelcome()} disabled={working} />
             ) : (
               <span aria-hidden className="size-11 shrink-0" />
             )}

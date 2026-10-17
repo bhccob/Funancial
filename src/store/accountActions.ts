@@ -142,7 +142,7 @@ export const forgotProblem = (who: string): string | null =>
     : 'Enter your username or your email address.';
 
 /** Anything but the default settings. A phone with nothing else is an empty install. */
-function hasData(data: DataSnapshot): boolean {
+export function hasData(data: DataSnapshot): boolean {
   return Object.entries(data.tables).some(([name, rows]) => name !== 'settings' && rows.length > 0);
 }
 

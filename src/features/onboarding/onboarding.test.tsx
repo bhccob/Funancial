@@ -2,6 +2,7 @@ import { act, fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Toaster } from '@/components/ui/Toaster';
+import { emptySnapshot, type DataSnapshot } from '@/domain/snapshot';
 import { toastStore } from '@/lib/toast';
 import { AccountError } from '@/store/accountActions';
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
@@ -97,7 +98,6 @@ describe('the account step', () => {
     // The old first step is gone, and with it the checkbox.
     expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
     expect(screen.queryByText('Before we start')).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Back' })).not.toBeInTheDocument();
   });
 
   it('has no way to skip while online', () => {
@@ -193,26 +193,66 @@ describe('the account step', () => {
     expect(screen.getByLabelText('Username')).toHaveAttribute('aria-invalid', 'true');
     expect(screen.getByText('Step 1 of 6')).toBeInTheDocument();
     expect(screen.getByLabelText('Username')).toHaveValue('Robin');
+    expect(screen.queryByRole('button', { name: 'Skip for now' })).not.toBeInTheDocument();
   });
 
+  // `unavailable` is any 5xx (a 503 "not set up" too) and a refused shared token (401 unauthorized).
   it.each([
-    ['unavailable', "Funancial's service isn't answering right now. Try again in a moment."],
-    ['busy', 'Funancial is busy right now. Try again in a moment.'],
+    ['unavailable', new AccountError('unavailable')],
+    ['limited', new AccountError('limited', 'Too many tries. Try again in 60 minutes.')],
+    ['busy', new AccountError('busy')],
   ] as const)(
-    'shows a calm line when the service says %s, and lets the person try again',
-    async (code, message) => {
+    'offers the skip, with one calm line, when the service fails (%s), and still lets the person try again',
+    async (_, error) => {
       const account = fakeAccount();
-      account.signUp.mockRejectedValueOnce(new AccountError(code));
+      account.signUp.mockRejectedValueOnce(error);
       renderWizard({ account });
       await fillAccount();
       await next();
-      expect(await screen.findByRole('alert')).toHaveTextContent(message);
-      expect(screen.queryByRole('button', { name: 'Skip for now' })).not.toBeInTheDocument();
+      expect(
+        await screen.findByText(
+          "Funancial's service isn't answering right now. You can make an account later in Settings.",
+        ),
+      ).toBeInTheDocument();
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+      expect(screen.queryByText(/You're offline/)).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Skip for now' })).toBeEnabled();
 
+      // Or the next try makes the account.
       await next();
+      expect(account.signUp).toHaveBeenCalledTimes(2);
       expect(await screen.findByText('Step 2 of 6')).toBeInTheDocument();
     },
   );
+
+  it('skips to the next step from a failed service, without asking it again', async () => {
+    const account = fakeAccount();
+    account.signUp.mockRejectedValue(new AccountError('unavailable'));
+    renderWizard({ account });
+    await fillAccount();
+    await next();
+    await userEvent.click(await screen.findByRole('button', { name: 'Skip for now' }));
+    expect(screen.getByText('Step 2 of 6')).toBeInTheDocument();
+    expect(account.signUp).toHaveBeenCalledTimes(1);
+  });
+
+  it('offers no skip for what the person typed, and takes back one an earlier failure offered', async () => {
+    const account = fakeAccount();
+    account.signUp
+      .mockRejectedValueOnce(new AccountError('unavailable'))
+      .mockRejectedValueOnce(new AccountError('invalid'));
+    renderWizard({ account });
+    await fillAccount();
+    await next();
+    expect(await screen.findByRole('button', { name: 'Skip for now' })).toBeInTheDocument();
+
+    await next();
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Check what you typed and try again.',
+    );
+    expect(screen.queryByRole('button', { name: 'Skip for now' })).not.toBeInTheDocument();
+    expect(screen.queryByText(/isn't answering/)).not.toBeInTheDocument();
+  });
 
   it('offers the skip too when nothing comes back, though the phone thinks it is online', async () => {
     const account = fakeAccount();
@@ -327,6 +367,43 @@ describe('the account step', () => {
   it('waits for the phone to read whether it has an account', () => {
     renderWizard({ account: fakeAccount(null, false) });
     expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled();
+  });
+
+  describe('Back, to the Welcome screen', () => {
+    const back = () => screen.queryByRole('button', { name: 'Back' });
+
+    it('erases the still-empty data "Create an account" made, by the Delete all data path', async () => {
+      const { store } = renderWizard();
+      await userEvent.click(back()!);
+      expect(store.getState().deleteAllData).toHaveBeenCalledTimes(1);
+    });
+
+    it('is not offered with an account, with data, or before the phone has read its account', () => {
+      const data = emptySnapshot();
+      const withData = {
+        ...data,
+        tables: { ...data.tables, transaction: [{ id: 't1' }] },
+      } as unknown as DataSnapshot;
+      for (const options of [
+        { account: fakeAccount(linkedAccount()) },
+        { account: fakeAccount(linkedAccount({ status: 'moved' })) },
+        { account: fakeAccount(null, false) },
+        { store: createStubStore({ data: withData }) },
+      ]) {
+        const { unmount } = renderWizard(options);
+        expect(back()).not.toBeInTheDocument();
+        unmount();
+      }
+    });
+
+    it('waits while the account is being made', async () => {
+      const account = fakeAccount();
+      account.signUp.mockReturnValue(new Promise(() => {}));
+      renderWizard({ account });
+      await fillAccount();
+      await next();
+      expect(back()).toBeDisabled();
+    });
   });
 });
 

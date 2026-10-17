@@ -23,6 +23,21 @@ test('a new user sets up money, salary and a PIN, then lands on Home', async ({ 
   await expect(page.getByRole('heading', { level: 1, name: 'Home' })).toBeVisible();
 });
 
+test('Back on the first step returns to Welcome, where the demo can still be tried', async ({
+  page,
+}) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Create an account' }).click();
+  await expect(page.getByText('Step 1 of 6')).toBeVisible();
+  await page.getByRole('button', { name: 'Back' }).click();
+  await expect(page.getByRole('button', { name: 'Create an account' })).toBeVisible();
+
+  // The empty data the tap made is gone, so a reload stays on Welcome rather than in setup.
+  await page.reload();
+  await page.getByRole('button', { name: 'Try with demo money' }).click();
+  await expect(page.getByText("You're exploring with demo money")).toBeVisible();
+});
+
 test.describe('in the Netherlands', () => {
   // The time zone is the location signal, even on an English (US) phone.
   test.use({ timezoneId: 'Europe/Amsterdam' });

@@ -209,7 +209,7 @@ test('setup offline offers Skip for now, and asks the service for nothing', asyn
   expect(service.seen).toEqual([]);
 });
 
-test('a service that is down shows a calm line, and setup goes on once it answers', async ({
+test('a service that is down shows a calm line with Skip, and setup goes on once it answers', async ({
   page,
 }) => {
   const service = await mockAccountService(page);
@@ -220,11 +220,13 @@ test('a service that is down shows a calm line, and setup goes on once it answer
   await page.getByLabel('Email (for "forgot password")').fill(ME.email);
   await page.getByLabel('Password', { exact: true }).fill(ME.password);
   await page.getByRole('button', { name: 'Next' }).click();
-  await expect(page.getByRole('alert')).toHaveText(
-    "Funancial's service isn't answering right now. Try again in a moment.",
-  );
-  // It is the service that is down, not the phone: no skip, and the form is as it was.
-  await expect(page.getByRole('button', { name: 'Skip for now' })).toBeHidden();
+  await expect(
+    page.getByText(
+      "Funancial's service isn't answering right now. You can make an account later in Settings.",
+    ),
+  ).toBeVisible();
+  // A down service never blocks setup: the way on is there, and the form is as it was.
+  await expect(page.getByRole('button', { name: 'Skip for now' })).toBeVisible();
   await expect(page.getByLabel('Username')).toHaveValue(ME.username);
 
   service.state.down = false;
