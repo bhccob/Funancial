@@ -54,6 +54,21 @@ describe('memoryKvStore', () => {
     expect(await store.incr('n')).toBe(1);
   });
 
+  it("starts a key's lifetime again with 'renew', and gives a lifetime to one that had none", async () => {
+    let now = T0;
+    const store = memoryKvStore(() => now);
+    await store.incr('n');
+    await store.expire('n', 60, 'renew');
+    expect(await store.ttl('n')).toBe(60);
+    now += 50_000;
+    await store.expire('n', 60, 'renew');
+    expect(await store.ttl('n')).toBe(60);
+    now += 50_000;
+    expect(await store.incr('n')).toBe(2);
+    await store.expire('missing', 60, 'renew');
+    expect(await store.ttl('missing')).toBe(-2);
+  });
+
   it('keeps sets of strings, and an emptied set is gone', async () => {
     const store = memoryKvStore();
     await store.sadd('s', 'a');
@@ -192,9 +207,12 @@ describe('upstashKvStore', () => {
     const { calls, store } = fake();
     await store.expire('rl:x', 900);
     expect(await store.ttl('rl:x')).toBe(12);
+    // With 'renew', a plain EXPIRE: the lifetime starts again whatever it was.
+    await store.expire('rl:y', 900, 'renew');
     expect(calls).toEqual([
       ['expire', 'rl:x', 900, 'NX'],
       ['ttl', 'rl:x'],
+      ['expire', 'rl:y', 900, undefined],
     ]);
   });
 

@@ -18,8 +18,11 @@ export interface KvStore {
   compareAndSet(key: string, expected: unknown, next: unknown): Promise<boolean>;
   del(...keys: string[]): Promise<void>;
   incr(key: string): Promise<number>;
-  /** Arms a lifetime on a key that has none (EXPIRE NX); one that has a lifetime keeps it. */
-  expire(key: string, seconds: number): Promise<void>;
+  /**
+   * Arms a lifetime on a key that has none (EXPIRE NX); one that has a lifetime keeps it. With
+   * `'renew'` the lifetime starts again from now either way (EXPIRE).
+   */
+  expire(key: string, seconds: number, renew?: 'renew'): Promise<void>;
   /** Seconds left: -1 for a key with no lifetime, -2 for a missing key. */
   ttl(key: string): Promise<number>;
   sadd(key: string, member: string): Promise<void>;
@@ -68,8 +71,8 @@ export function upstashKvStore(redis: UpstashClient): KvStore {
       if (keys.length) await redis.del(...keys);
     },
     incr: (key) => redis.incr(key),
-    async expire(key, seconds) {
-      await redis.expire(key, seconds, 'NX');
+    async expire(key, seconds, renew) {
+      await (renew ? redis.expire(key, seconds) : redis.expire(key, seconds, 'NX'));
     },
     ttl: (key) => redis.ttl(key),
     async sadd(key, member) {
@@ -142,9 +145,9 @@ export function memoryKvStore(now: () => number = Date.now): KvStore & {
       data.set(key, { value: String(n), expiresAt: e?.expiresAt });
       return n;
     },
-    async expire(key, seconds) {
+    async expire(key, seconds, renew) {
       const e = entry(key);
-      if (e && e.expiresAt === undefined) e.expiresAt = now() + seconds * 1000;
+      if (e && (renew || e.expiresAt === undefined)) e.expiresAt = now() + seconds * 1000;
     },
     async ttl(key) {
       const e = entry(key);
