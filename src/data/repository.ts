@@ -3,6 +3,7 @@ import {
   CURRENT_SCHEMA_VERSION,
   emptySnapshot,
   SCHEMAS,
+  SchemaVersionError,
   SnapshotSchema,
   TABLES,
   type DataSnapshot,
@@ -55,6 +56,9 @@ export function createRepository(backend: StorageBackend, key: CryptoKey): Repos
   return {
     async loadAll() {
       const fromVersion = await storedVersion();
+      // An older build must not open, and so rewrite, what a newer one saved: it would drop what it
+      // does not know. Nothing is read or written.
+      if (fromVersion > CURRENT_SCHEMA_VERSION) throw new SchemaVersionError(fromVersion);
       const snapshot = emptySnapshot();
       const skipped: SkippedRecord[] = [];
       const upgraded: TableRecord[] = [];

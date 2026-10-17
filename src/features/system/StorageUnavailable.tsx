@@ -12,10 +12,16 @@ const COPY = {
     heading: "Funancial can't open its storage",
     body: "Something went wrong opening Funancial's encrypted storage on this phone. Close Funancial completely and open it again. Your data stays on this phone.",
   },
+  newer: {
+    heading: 'Funancial needs an update',
+    body: 'This data was saved by a newer version of Funancial. Install the latest version to open it.',
+  },
 };
 
-export function StorageUnavailable() {
-  const { heading, body } = COPY[usePlatform().kind];
+/** The storage can't be opened, or (`newer`) holds data this version is too old to open safely. */
+export function StorageUnavailable({ newer = false }: { newer?: boolean }) {
+  const platform = usePlatform().kind;
+  const { heading, body } = COPY[newer ? 'newer' : platform];
   return (
     <main className="grid min-h-dvh place-items-center px-4">
       <Card className="flex max-w-md flex-col gap-3">

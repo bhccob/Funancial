@@ -35,6 +35,18 @@ describe('Root', () => {
     ).toBeInTheDocument();
   });
 
+  it('asks for the latest version when the data was saved by a newer one', () => {
+    renderWithStore(<Root />, createStubStore({ phase: 'updateNeeded' }));
+    expect(
+      screen.getByRole('heading', { level: 1, name: 'Funancial needs an update' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'This data was saved by a newer version of Funancial. Install the latest version to open it.',
+      ),
+    ).toBeInTheDocument();
+  });
+
   it('shows the welcome screen on first run', () => {
     renderWithStore(<Root />, createStubStore({ phase: 'welcome' }));
     expect(screen.getByRole('button', { name: 'Try with demo money' })).toBeInTheDocument();

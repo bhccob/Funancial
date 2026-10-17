@@ -22,7 +22,12 @@ import {
   type LockMode,
   type SecretKind,
 } from '@/data/keys';
-import { createRepository, type Repository, type SkippedRecord } from '@/data/repository';
+import {
+  createRepository,
+  type LoadResult,
+  type Repository,
+  type SkippedRecord,
+} from '@/data/repository';
 import type { StorageBackend, StorageProvider } from '@/data/storage';
 import type { LocalDate } from '@/domain/dates';
 import { defaultSettings } from '@/domain/entities';
@@ -31,6 +36,7 @@ import type { GameContext } from '@/domain/game/types';
 import { dueGenerated } from '@/domain/sync';
 import {
   emptySnapshot,
+  SchemaVersionError,
   type DataSnapshot,
   type EntityOf,
   type RecordKey,
@@ -41,7 +47,8 @@ import type { SyncMessage } from '@/lib/broadcast';
 import type { SafeStorage } from '@/lib/safeStorage';
 import type { BiometricVault } from '@/platform/types';
 
-export type Phase = 'booting' | 'unavailable' | 'welcome' | 'locked' | 'unlocked';
+/** `updateNeeded`: the data was saved by a newer Funancial than this one, and is left as it is. */
+export type Phase = 'booting' | 'unavailable' | 'updateNeeded' | 'welcome' | 'locked' | 'unlocked';
 
 export interface AppDeps {
   kdfIterations: number;
@@ -202,12 +209,31 @@ export function createAppStore(deps: AppDeps): StoreApi<AppState> {
   let biometricRead: Promise<'ok' | 'cancelled' | 'changed'> | null = null;
 
   return createStore<AppState>()((set, get) => {
+    /**
+     * What `repo` holds, or `null` when a newer Funancial saved it: then nothing was read or
+     * written, the session is closed to writes, and the person is told to update.
+     */
+    async function loadOrRefuse(repo: Repository): Promise<LoadResult | null> {
+      try {
+        return await repo.loadAll();
+      } catch (e) {
+        if (!(e instanceof SchemaVersionError)) throw e;
+        if (session) {
+          session.repo = null;
+          session.key = null;
+        }
+        set({ phase: 'updateNeeded', data: emptySnapshot(), skipped: [] });
+        return null;
+      }
+    }
+
     async function openWith(key: CryptoKey) {
       if (!session) throw new Error('No open database');
       session.key = key;
       session.repo = createRepository(session.backend, key);
-      const { snapshot, skipped } = await session.repo.loadAll();
-      set({ data: snapshot, skipped, phase: 'unlocked' });
+      const loaded = await loadOrRefuse(session.repo);
+      if (!loaded) return;
+      set({ data: loaded.snapshot, skipped: loaded.skipped, phase: 'unlocked' });
       // The data is open; a failed catch-up (e.g. storage full) retries on the next focus.
       await get()
         .sync()
@@ -555,8 +581,8 @@ export function createAppStore(deps: AppDeps): StoreApi<AppState> {
 
       async refresh() {
         if (get().phase !== 'unlocked' || !session?.repo) return;
-        const { snapshot, skipped } = await session.repo.loadAll();
-        set({ data: snapshot, skipped });
+        const loaded = await loadOrRefuse(session.repo);
+        if (loaded) set({ data: loaded.snapshot, skipped: loaded.skipped });
       },
 
       async remove(table, id) {
