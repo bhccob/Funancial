@@ -49,6 +49,15 @@ describe('createAndroidPlatform', () => {
     });
   });
 
+  it.each(['', 'x', '0', '-1', '8.5'])(
+    'has no app version when the build number is %j, rather than a made-up one',
+    async (build) => {
+      app.getInfo.mockResolvedValue({ build, version: '0.8' });
+
+      await expect((await createAndroidPlatform()).appVersion()).resolves.toBeNull();
+    },
+  );
+
   it.each([
     ['onResume', 'resume'],
     ['onPause', 'pause'],

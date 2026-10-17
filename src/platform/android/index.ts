@@ -26,9 +26,11 @@ export async function createAndroidPlatform(): Promise<Platform> {
       listen((run) => App.addListener('pause', run), cb, 'the app going to the background'),
     onResume: (cb) => listen((run) => App.addListener('resume', run), cb, 'the app coming back'),
     appVersion: async () => {
-      // `build` is the versionCode (a string over the bridge), `version` the versionName.
+      // `build` is the versionCode (a string over the bridge), `version` the versionName. A
+      // build number that is not a whole number above 0 is no version, so no update is offered.
       const { build, version } = await App.getInfo();
-      return { code: Number(build), name: version };
+      const code = Number(build);
+      return Number.isInteger(code) && code > 0 ? { code, name: version } : null;
     },
     biometric: androidBiometric,
     notifier: createAndroidNotifier(),

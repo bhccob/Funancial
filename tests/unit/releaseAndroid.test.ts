@@ -1,7 +1,7 @@
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   buildLatest,
   KEYSTORE_HELP,
@@ -9,6 +9,7 @@ import {
   readVersion,
   refuseUnlessNewer,
   releaseDir,
+  runThenRestore,
   webBuildEnv,
 } from '../../scripts/release-android.mjs';
 import { LatestSchema } from '../../src/domain/update';
@@ -135,6 +136,93 @@ describe('webBuildEnv', () => {
 
   it('leaves both flags out of the debug-safe build, even if the shell had them', () => {
     expect(webBuildEnv(base)).toEqual({ PATH: 'p' });
+  });
+});
+
+describe('runThenRestore', () => {
+  it('restores after the steps succeed', () => {
+    const calls: string[] = [];
+    runThenRestore(
+      () => calls.push('steps'),
+      () => calls.push('restore'),
+    );
+    expect(calls).toEqual(['steps', 'restore']);
+  });
+
+  it('restores when a step fails, and the failure of the step is the one reported', () => {
+    const calls: string[] = [];
+    const restore = () => calls.push('restore');
+    expect(() =>
+      runThenRestore(() => {
+        calls.push('steps');
+        throw new Error('The Gradle release build failed. See the output above.');
+      }, restore),
+    ).toThrow('The Gradle release build failed. See the output above.');
+    expect(calls).toEqual(['steps', 'restore']);
+  });
+
+  it('does not let a restore that fails too hide the step that failed first', () => {
+    const shown = vi.spyOn(console, 'error').mockImplementation(() => {});
+    expect(() =>
+      runThenRestore(
+        () => {
+          throw new Error('The web build failed.');
+        },
+        () => {
+          throw new Error('The plain web rebuild failed.');
+        },
+      ),
+    ).toThrow('The web build failed.');
+    expect(shown).toHaveBeenCalledWith('The plain web rebuild failed.');
+    shown.mockRestore();
+  });
+
+  it('reports a restore that fails after the steps went well', () => {
+    expect(() =>
+      runThenRestore(
+        () => {},
+        () => {
+          throw new Error('The plain web rebuild failed.');
+        },
+      ),
+    ).toThrow('The plain web rebuild failed.');
+  });
+});
+
+describe('the release flow', () => {
+  // release() builds, spawns Gradle and exits the process, so its order is pinned from its source.
+  const source = read('scripts/release-android.mjs');
+  const flow = source.slice(source.indexOf('function release()'));
+  const at = (text: string, from = 0) => {
+    const index = flow.indexOf(text, from);
+    expect(index, text).toBeGreaterThan(-1);
+    return index;
+  };
+
+  it('puts every step that follows the release-flagged web build inside runThenRestore', () => {
+    const wrapped = at('runThenRestore(');
+    const web = at("run('The web build'");
+    const gradle = at('assembleRelease');
+    const latest = at("'latest.json'", gradle);
+    const plain = at('webBuildEnv(process.env)', latest);
+    expect(wrapped).toBeLessThan(web);
+    expect(web).toBeLessThan(gradle);
+    // The plain rebuild is the restore argument: after the steps, in the same call.
+    expect(plain).toBeGreaterThan(latest);
+    expect(flow.slice(plain)).toContain("'npx cap sync android'");
+    // Nothing flagged runs before the wrapper starts.
+    expect(flow.slice(0, wrapped)).not.toContain('The web build');
+  });
+
+  it('stops a step by throwing, since an exit would skip the restore', () => {
+    const steps = flow.slice(at('runThenRestore('), at('webBuildEnv(process.env)'));
+    expect(steps).not.toMatch(/\bfail\(/);
+    const run = source.slice(
+      source.indexOf('function run('),
+      source.indexOf('export function runThenRestore'),
+    );
+    expect(run).toContain('throw');
+    expect(run).not.toMatch(/\bfail\(/);
   });
 });
 

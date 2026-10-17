@@ -56,6 +56,15 @@ function setup(installed: number | null = 8, over: Partial<Platform> = {}) {
 /** Lets a check that has started finish, so a test can say nothing appeared. */
 const settle = () => act(() => new Promise((resolve) => setTimeout(resolve, 20)));
 
+/** A fetch that answers when the test says so, to make two checks overlap. */
+function pending(body: unknown) {
+  let answer!: () => void;
+  const response = new Promise<Response>((resolve) => {
+    answer = () => resolve(new Response(JSON.stringify(body)));
+  });
+  return { response, answer };
+}
+
 const notice = () => screen.queryByRole('status');
 
 describe('a debug build', () => {
@@ -89,12 +98,17 @@ describe('a release build', () => {
     setup(8);
 
     expect(await screen.findByText('Version 0.9 is ready')).toBeInTheDocument();
-    expect(screen.getByText('What is new in 9.')).toBeInTheDocument();
+    // Long notes stay three lines, so the banner cannot push the page down.
+    expect(screen.getByText('What is new in 9.')).toHaveClass('line-clamp-3');
     expect(screen.getByRole('link', { name: 'Update' })).toHaveAttribute(
       'href',
       'https://funancial.vercel.app/get/funancial-0.9.apk',
     );
     expect(fetchMock).toHaveBeenCalledWith(PAGE, expect.anything());
+    // The button's name starts with the words on it, for people who speak them to a switch or voice control.
+    expect(
+      screen.getByRole('button', { name: 'Not now, hide the update notice' }),
+    ).toHaveTextContent('Not now');
   });
 
   it('says nothing when the phone is already up to date', async () => {
@@ -119,7 +133,7 @@ describe('a release build', () => {
     const { unmount, mount } = setup(8);
     await screen.findByText('Version 0.9 is ready');
 
-    await userEvent.click(screen.getByRole('button', { name: 'Hide the update notice' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Not now, hide the update notice' }));
     expect(notice()).toBeNull();
     expect(localStorage.getItem('funancial.update.dismissed')).toBe('9');
 
@@ -134,7 +148,7 @@ describe('a release build', () => {
   it('shows again for a version newer than the one that was hidden', async () => {
     const { resume } = setup(8);
     await screen.findByText('Version 0.9 is ready');
-    await userEvent.click(screen.getByRole('button', { name: 'Hide the update notice' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Not now, hide the update notice' }));
 
     published = latest(10);
     resume();
@@ -156,6 +170,36 @@ describe('a release build', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it('applies only the newest of two overlapping checks, whichever answers last', async () => {
+    const slow = pending(latest(9));
+    fetchMock.mockImplementationOnce(() => slow.response);
+    published = latest(10);
+    const { resume } = setup(8);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+
+    resume();
+    expect(await screen.findByText('Version 0.10 is ready')).toBeInTheDocument();
+    slow.answer();
+    await settle();
+
+    expect(screen.getByText('Version 0.10 is ready')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Update' })).toHaveAttribute('href', latest(10).apkUrl);
+  });
+
+  it('does nothing with a check that finishes after the app is gone', async () => {
+    const slow = pending(latest(9));
+    fetchMock.mockImplementationOnce(() => slow.response);
+    const { unmount } = setup(8);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+
+    unmount();
+    slow.answer();
+    await settle();
+
+    expect(notice()).toBeNull();
+    expect(consoleError).not.toHaveBeenCalled();
+  });
+
   it('stops checking once it is gone', async () => {
     const { resume, unmount } = setup(8);
     await screen.findByText('Version 0.9 is ready');
@@ -170,6 +214,10 @@ describe('a release build', () => {
 
   it.each([
     ['an apkUrl on another origin', { ...latest(9), apkUrl: 'https://evil.example/a.apk' }],
+    [
+      'an apkUrl with a user name and password',
+      { ...latest(9), apkUrl: 'https://user:pw@funancial.vercel.app/get/a.apk' },
+    ],
     ['an http apkUrl', { ...latest(9), apkUrl: 'http://funancial.vercel.app/get/a.apk' }],
     ['a versionCode that is not a number', { ...latest(9), versionCode: '9' }],
     ['huge notes', { ...latest(9), notes: 'x'.repeat(100_000) }],

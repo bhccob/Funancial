@@ -92,6 +92,9 @@ describe('fetchLatest', () => {
     ['http instead of https', 'http://funancial.vercel.app/get/funancial-0.9.apk'],
     ['another port', 'https://funancial.vercel.app:8443/get/funancial-0.9.apk'],
     ['a javascript: link', 'javascript:alert(1)'],
+    ['a data: link', 'data:text/html,<script>alert(1)</script>'],
+    ['a protocol-relative link', '//evil.example/a.apk'],
+    ['the right host with a user name and password', 'https://user:pw@funancial.vercel.app/a.apk'],
   ])('refuses an apkUrl on %s', async (_, apkUrl) => {
     answer({ ...latest, apkUrl });
     await expect(fetchLatest(PAGE, fetchMock)).resolves.toBeNull();

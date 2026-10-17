@@ -73,6 +73,13 @@ describe('LatestSchema', () => {
     ['an apkUrl that is not a URL', { apkUrl: 'funancial-0.9.apk' }],
     ['a javascript: apkUrl', { apkUrl: 'javascript:alert(1)' }],
     ['a file: apkUrl', { apkUrl: 'file:///sdcard/funancial.apk' }],
+    ['a data: apkUrl', { apkUrl: 'data:application/vnd.android.package-archive;base64,AAAA' }],
+    ['a protocol-relative apkUrl', { apkUrl: '//evil.example/a.apk' }],
+    [
+      'an apkUrl with a user name and password',
+      { apkUrl: 'https://user:pw@funancial.vercel.app/a.apk' },
+    ],
+    ['an apkUrl with only a user name', { apkUrl: 'https://user@funancial.vercel.app/a.apk' }],
     ['a sha256 in capitals', { sha256: 'A'.repeat(64) }],
     ['a sha256 that is too short', { sha256: 'a'.repeat(63) }],
     ['a zero size', { size: 0 }],

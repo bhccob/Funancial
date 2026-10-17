@@ -143,14 +143,41 @@ export function readLatest(dir) {
   return latest;
 }
 
-/** Runs a command to the end with its output shown, or stops saying `what` failed. */
+/**
+ * Runs a command to the end with its output shown, or throws saying `what` failed. It throws rather
+ * than exits so that `runThenRestore` still gets to run after a failed step.
+ */
 function run(what, command, args, options) {
   const result = spawnSync(command, args, { stdio: 'inherit', ...options });
   if (result.status !== 0) {
-    fail(
-      `${what} failed${result.error ? `: ${result.error.message}` : ''}. See the output above.`,
-      result.status ?? 1,
+    throw Object.assign(
+      new Error(
+        `${what} failed${result.error ? `: ${result.error.message}` : ''}. See the output above.`,
+      ),
+      { exitCode: result.status ?? 1 },
     );
+  }
+}
+
+/**
+ * Runs `steps`, then `restore` whether or not they threw. When `steps` threw, that failure is the
+ * one reported: a `restore` that fails too only prints its message, so the step that went wrong
+ * first is still the one named. When `steps` went well, a failing `restore` is reported.
+ * @param {() => void} steps
+ * @param {() => void} restore
+ */
+export function runThenRestore(steps, restore) {
+  let done = false;
+  try {
+    steps();
+    done = true;
+  } finally {
+    try {
+      restore();
+    } catch (error) {
+      if (done) throw error;
+      console.error(error instanceof Error ? error.message : String(error));
+    }
   }
 }
 
@@ -174,59 +201,74 @@ function release() {
   requireJava();
 
   const updateUrl = `${ORIGIN}/${channel === 'test' ? 'get/test' : 'get'}/latest.json`;
-  // The shell runs npm (a .cmd file on Windows); .env.local still feeds the build its keys.
-  const env = webBuildEnv(process.env, updateUrl);
-  run('The web build', 'npm run build', [], { cwd: ROOT, shell: true, env });
-  run('Copying the web build into the Android project', 'npx cap sync android', [], {
-    cwd: ROOT,
-    shell: true,
-  });
-  // Gradle writes to the same place every time. Without this, a build that fails to sign could
-  // leave the last release's APK there to be picked up as this one.
-  const built = join(ANDROID_DIR, 'app', 'build', 'outputs', 'apk', 'release', 'app-release.apk');
-  rmSync(built, { force: true });
-  const gradle = gradleCommand(process.platform);
-  run('The Gradle release build', gradle.command, [...gradle.args, 'assembleRelease'], {
-    cwd: ANDROID_DIR,
-  });
-
-  if (!existsSync(built)) {
-    fail(
-      `Gradle finished but ${built} is missing. Is the release build signed (keystore.properties)?`,
-    );
-  }
   const apkFile = `funancial-${name}.apk`;
-  mkdirSync(dir, { recursive: true });
-  copyFileSync(built, join(dir, apkFile));
-  const apk = readFileSync(join(dir, apkFile));
-  const sha256 = createHash('sha256').update(apk).digest('hex');
-  // latest.json goes last, so it never names an APK that is not there yet.
-  const latest = buildLatest({
-    code,
-    name,
-    notes,
-    origin: ORIGIN,
-    channel,
-    apkFile,
-    sha256,
-    size: apk.length,
-  });
-  writeFileSync(join(dir, 'latest.json'), `${JSON.stringify(latest, null, 2)}\n`);
-
-  // The release flags are now in dist/ and the Android assets. Leave a plain build there, so an
-  // install from Android Studio on the owner's phone cannot carry the update check.
   const done = `Built ${apkFile} (versionCode ${code}) for the ${channel} channel in ${releaseDir(channel)}.`;
-  const plain = webBuildEnv(process.env);
-  run(
-    `${done} The plain web rebuild (run \`npm run android:sync\` before installing on your own phone)`,
-    'npm run build',
-    [],
-    { cwd: ROOT, shell: true, env: plain },
+  let sha256 = '';
+  // From the first release-flagged build on, dist/ and the Android assets carry the release flags.
+  // Whatever happens after that, they are rebuilt without them, so an install from Android Studio
+  // on the owner's phone cannot carry the update check.
+  runThenRestore(
+    () => {
+      // The shell runs npm (a .cmd file on Windows); .env.local still feeds the build its keys.
+      const env = webBuildEnv(process.env, updateUrl);
+      run('The web build', 'npm run build', [], { cwd: ROOT, shell: true, env });
+      run('Copying the web build into the Android project', 'npx cap sync android', [], {
+        cwd: ROOT,
+        shell: true,
+      });
+      // Gradle writes to the same place every time. Without this, a build that fails to sign could
+      // leave the last release's APK there to be picked up as this one.
+      const built = join(
+        ANDROID_DIR,
+        'app',
+        'build',
+        'outputs',
+        'apk',
+        'release',
+        'app-release.apk',
+      );
+      rmSync(built, { force: true });
+      const gradle = gradleCommand(process.platform);
+      run('The Gradle release build', gradle.command, [...gradle.args, 'assembleRelease'], {
+        cwd: ANDROID_DIR,
+      });
+
+      if (!existsSync(built)) {
+        throw new Error(
+          `Gradle finished but ${built} is missing. Is the release build signed (keystore.properties)?`,
+        );
+      }
+      mkdirSync(dir, { recursive: true });
+      copyFileSync(built, join(dir, apkFile));
+      const apk = readFileSync(join(dir, apkFile));
+      sha256 = createHash('sha256').update(apk).digest('hex');
+      // latest.json goes last, so it never names an APK that is not there yet.
+      const latest = buildLatest({
+        code,
+        name,
+        notes,
+        origin: ORIGIN,
+        channel,
+        apkFile,
+        sha256,
+        size: apk.length,
+      });
+      writeFileSync(join(dir, 'latest.json'), `${JSON.stringify(latest, null, 2)}\n`);
+    },
+    () => {
+      const plain = webBuildEnv(process.env);
+      run(
+        `The plain web rebuild after the release build (run \`npm run android:sync\` before installing on your own phone)`,
+        'npm run build',
+        [],
+        { cwd: ROOT, shell: true, env: plain },
+      );
+      run('Copying that plain web build into the Android project', 'npx cap sync android', [], {
+        cwd: ROOT,
+        shell: true,
+      });
+    },
   );
-  run('Copying that plain web build into the Android project', 'npx cap sync android', [], {
-    cwd: ROOT,
-    shell: true,
-  });
 
   console.log(
     `${done}\nsha256 ${sha256}\n` +
@@ -239,6 +281,9 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   try {
     release();
   } catch (error) {
-    fail(error instanceof Error ? error.message : String(error));
+    fail(
+      error instanceof Error ? error.message : String(error),
+      error instanceof Error && 'exitCode' in error ? Number(error.exitCode) : 1,
+    );
   }
 }

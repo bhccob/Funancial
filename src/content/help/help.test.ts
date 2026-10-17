@@ -155,6 +155,12 @@ describe('help copy says what the code does', () => {
     expect(answer).not.toMatch(/exchange rates|symbol/);
   });
 
+  it('opens the price-service line by setting the update check apart from it', () => {
+    expect(LEGAL.privacy.join(' ')).toContain(
+      "Apart from the update check below, the only network calls go to the app's own price service.",
+    );
+  });
+
   it('says an app installed from the download page checks it for a newer version, and sends nothing', () => {
     expect(LEGAL.privacy).toContain(
       'An app installed from the download page also checks that page for a newer version. That check carries nothing about you.',

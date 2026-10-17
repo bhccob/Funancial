@@ -25,13 +25,16 @@ export function useUpdateOffer(): { offer: Latest | null; dismiss(): void } {
 
   useEffect(() => {
     if (!isReleaseBuild()) return;
-    let live = true;
+    // Numbers the checks. A check applies its answer only if no newer one started since (or the
+    // app is gone, which bumps it), so a slow old answer cannot replace a newer one.
+    let latestCheck = 0;
     const check = async () => {
+      const mine = ++latestCheck;
       try {
         const installed = await platform.appVersion();
         if (!installed) return;
         const latest = await fetchLatest(updateUrl());
-        if (live && latest) setFound({ latest, installed: installed.code });
+        if (mine === latestCheck && latest) setFound({ latest, installed: installed.code });
       } catch (e) {
         // A notice is a convenience; the next resume tries again.
         console.error('Could not check for an update', e);
@@ -40,7 +43,7 @@ export function useUpdateOffer(): { offer: Latest | null; dismiss(): void } {
     void check();
     const stop = platform.onResume(() => void check());
     return () => {
-      live = false;
+      latestCheck++;
       stop();
     };
   }, [platform]);

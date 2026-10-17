@@ -9,7 +9,19 @@ export const LatestSchema = z.object({
   versionCode: z.number().int().positive(),
   versionName: z.string().regex(/^[A-Za-z0-9._+-]{1,20}$/),
   notes: z.string().trim().min(1).max(500),
-  apkUrl: z.url({ protocol: /^https?$/ }),
+  apkUrl: z
+    .url({ protocol: /^https?$/ })
+    // A user name or password in the link would let the host in it read differently from the
+    // one the person sees, and has no place in a download from our own page.
+    .refine((url) => {
+      try {
+        const { username, password } = new URL(url);
+        return !username && !password;
+      } catch {
+        // Refinements still run on a string z.url refused, and that one is already an issue.
+        return false;
+      }
+    }),
   sha256: z.string().regex(/^[0-9a-f]{64}$/),
   size: z.number().int().positive(),
 });

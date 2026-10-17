@@ -16,7 +16,7 @@ export function UpdateBanner() {
       title={`Version ${offer.versionName} is ready`}
       action={
         <div className="flex gap-2">
-          <Button variant="banner" aria-label="Hide the update notice" onClick={dismiss}>
+          <Button variant="banner" aria-label="Not now, hide the update notice" onClick={dismiss}>
             Not now
           </Button>
           <a
@@ -29,7 +29,7 @@ export function UpdateBanner() {
       }
       className="mb-4"
     >
-      {offer.notes}
+      <p className="line-clamp-3">{offer.notes}</p>
     </Banner>
   );
 }
