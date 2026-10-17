@@ -22,6 +22,7 @@ function AppearanceSection() {
   return (
     <Section title="Appearance">
       <RadioGroup
+        variant="underline"
         legend="Theme"
         value={theme}
         options={THEMES}

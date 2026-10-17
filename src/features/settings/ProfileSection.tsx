@@ -40,6 +40,7 @@ function ProfileForm({ profile }: { profile: Profile }) {
   return (
     <form className="flex max-w-xl flex-col gap-5" onSubmit={submit} noValidate>
       <TextField
+        variant="line"
         label="Name"
         autoComplete="given-name"
         value={name}
@@ -48,13 +49,20 @@ function ProfileForm({ profile }: { profile: Profile }) {
       <CurrencyRow current={profile.currency} />
       <div className="grid gap-5 sm:grid-cols-[1fr_8rem]">
         <MoneyField
+          variant="line"
           label="Monthly take-home pay"
           currency={profile.currency}
           value={salary}
           onChange={setSalary}
           hint="Leave empty if you don't have a regular salary."
         />
-        <Select label="Pay day" value={payDay} onChange={setPayDay} options={DAY_OPTIONS} />
+        <Select
+          variant="line"
+          label="Pay day"
+          value={payDay}
+          onChange={setPayDay}
+          options={DAY_OPTIONS}
+        />
       </div>
       <Button type="submit" className="self-start" disabled={busy}>
         Save

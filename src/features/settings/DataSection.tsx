@@ -4,6 +4,7 @@ import { Banner } from '@/components/ui/Banner';
 import { Button } from '@/components/ui/Button';
 import { Section } from '@/components/ui/Section';
 import { Dialog } from '@/components/ui/Dialog';
+import { lineLabel } from '@/components/ui/lineField';
 import { TextField } from '@/components/ui/TextField';
 import { EraseDialog } from '@/features/system/EraseDialog';
 import { validateSecret } from '@/data/keys';
@@ -80,11 +81,12 @@ function BackupDialog({ open, onClose }: { open: boolean; onClose(): void }) {
   return (
     <Dialog open={open} title="Create encrypted backup" onClose={close}>
       {open && (
-        <form className="flex flex-col gap-4" onSubmit={submit} noValidate>
+        <form className="flex flex-col gap-5" onSubmit={submit} noValidate>
           <p className="text-muted text-sm">
             If you forget this passphrase, the backup can't be opened.
           </p>
           <TextField
+            variant="line"
             label="Backup passphrase"
             type="password"
             autoComplete="new-password"
@@ -95,6 +97,7 @@ function BackupDialog({ open, onClose }: { open: boolean; onClose(): void }) {
             onChange={(e) => setPass(e.target.value)}
           />
           <TextField
+            variant="line"
             label="Confirm passphrase"
             type="password"
             autoComplete="new-password"
@@ -144,10 +147,10 @@ function RestoreForm() {
   }
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-5">
       <h3 className="font-bold">Restore from backup</h3>
-      <div className="flex flex-col gap-1.5">
-        <label htmlFor={fileId} className="text-sm font-bold">
+      <div className="flex flex-col gap-0.5">
+        <label htmlFor={fileId} className={lineLabel}>
           Backup file
         </label>
         <input
@@ -161,6 +164,7 @@ function RestoreForm() {
         />
       </div>
       <TextField
+        variant="line"
         label="Passphrase for this backup"
         type="password"
         autoComplete="off"

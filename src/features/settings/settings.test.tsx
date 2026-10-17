@@ -618,7 +618,7 @@ describe('Preferences', () => {
 
   it('saves the first day of the week', async () => {
     renderWithStore(<SettingsScreen />, createStubStore({ data: snapshotWith() }));
-    await userEvent.selectOptions(screen.getByLabelText('Week starts on'), 'Sunday');
+    await userEvent.click(screen.getByRole('radio', { name: 'Sunday' }));
     expect(finance.updateSettings).toHaveBeenCalledWith({ weekStartsOn: 0 });
   });
 });
@@ -897,5 +897,102 @@ describe('Security: failures are visible', () => {
     await userEvent.type(within(dialog).getByLabelText('Confirm PIN'), '2468');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Storage is full.');
+  });
+});
+
+describe('Settings in the line style', () => {
+  const isLine = (el: HTMLElement, label: string) => {
+    expect(el, label).toHaveClass('border-b', 'font-extrabold');
+    expect(el, label).not.toHaveClass('rounded-md');
+  };
+  const isTab = (name: string, on: boolean) =>
+    expect(screen.getByText(name)).toHaveClass(on ? 'border-text' : 'border-transparent');
+  const tabsOf = (legend: string) =>
+    within(screen.getByRole('group', { name: legend }))
+      .getAllByRole('radio')
+      .map((r) => r.closest('label')?.textContent);
+
+  it('has line fields in the profile', () => {
+    const data = snapshotWith();
+    data.tables.profile.push(makeProfile({ name: 'Sam', salary: null }));
+    renderWithStore(<SettingsScreen />, createStubStore({ data }));
+    for (const label of ['Name', 'Monthly take-home pay', 'Pay day']) {
+      isLine(screen.getByLabelText(label), label);
+    }
+  });
+
+  it('has underline tabs for the week, warning style, theme and lock method', () => {
+    renderWithStore(
+      <SettingsScreen />,
+      createStubStore({ lockMode: 'device', data: snapshotWith() }),
+    );
+    // Two choices are tabs, not a select, and still radios.
+    expect(screen.queryByLabelText('Week starts on')).not.toBeInTheDocument();
+    expect(tabsOf('Week starts on')).toEqual(['Monday', 'Sunday']);
+    expect(tabsOf('Warning style')).toEqual(['Gentle', 'Motivational', 'Strict']);
+    expect(tabsOf('Theme')).toEqual(['System', 'Light', 'Dark']);
+    expect(tabsOf('Lock method')).toEqual(['No lock', 'PIN', 'Passphrase']);
+    isTab('Monday', true);
+    isTab('Sunday', false);
+    isTab('Motivational', true);
+    isTab('Gentle', false);
+    isTab('No lock', true);
+    // Not the boxed well.
+    expect(screen.getByText('Monday').closest('div')).not.toHaveClass('bg-surface-2');
+  });
+
+  it('has the auto-lock as a line select', () => {
+    renderWithStore(
+      <SettingsScreen />,
+      createStubStore({
+        lockMode: 'pin',
+        data: snapshotWith(makeSettings({ autoLockMinutes: 5 })),
+      }),
+    );
+    isLine(screen.getByLabelText('Auto-lock'), 'Auto-lock');
+    expect(screen.getByLabelText('Auto-lock')).toHaveValue('5');
+  });
+
+  it('has a line select for the reminder time', () => {
+    const fresh = makeSettings().reminders;
+    renderWithStore(
+      onPhone(fakeNotifier(), <SettingsScreen />),
+      createStubStore({
+        data: snapshotWith(makeSettings({ reminders: { ...fresh, enabled: true } })),
+      }),
+    );
+    isLine(screen.getByLabelText('At'), 'At');
+  });
+
+  it('has line fields in the currency, PIN, backup, restore and erase dialogs', async () => {
+    renderWithStore(<SettingsScreen />, createStubStore({ lockMode: 'pin', data: snapshotWith() }));
+    isLine(screen.getByLabelText('Passphrase for this backup'), 'Passphrase for this backup');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Create encrypted backup' }));
+    let dialog = screen.getByRole('dialog', { name: 'Create encrypted backup' });
+    for (const label of ['Backup passphrase', 'Confirm passphrase']) {
+      isLine(within(dialog).getByLabelText(label), label);
+    }
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+
+    await userEvent.click(screen.getByRole('button', { name: 'Change PIN' }));
+    dialog = screen.getByRole('dialog', { name: 'Change PIN' });
+    for (const label of ['Current PIN', 'New PIN', 'Confirm PIN']) {
+      isLine(within(dialog).getByLabelText(label), label);
+    }
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+
+    await userEvent.click(screen.getByRole('button', { name: 'Delete all data' }));
+    dialog = screen.getByRole('dialog', { name: 'Delete all data?' });
+    isLine(within(dialog).getByLabelText('Type DELETE to confirm'), 'Type DELETE to confirm');
+  });
+
+  it('has a line select in the currency picker', async () => {
+    const data = snapshotWith();
+    data.tables.profile.push(makeProfile({ currency: 'USD' }));
+    renderWithStore(<SettingsScreen />, createStubStore({ data }));
+    await userEvent.click(screen.getByRole('button', { name: 'Change currency' }));
+    const picker = screen.getByRole('dialog', { name: 'Change currency' });
+    isLine(within(picker).getByLabelText('New currency'), 'New currency');
   });
 });
