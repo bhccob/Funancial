@@ -133,6 +133,9 @@ test('tells the story in plain sections, and what the app asks for', async ({ pa
     await expect(page.getByRole('heading', { name: caption })).toBeVisible();
   }
   await expect(page.getByText('First release for friends.')).toBeVisible();
+  await expect(
+    page.getByText('An account keeps a locked copy so you can move phones.'),
+  ).toBeVisible();
   for (const permission of [
     'INTERNET',
     'POST_NOTIFICATIONS',

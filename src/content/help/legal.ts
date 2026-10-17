@@ -6,8 +6,12 @@ export const LEGAL: {
 } = {
   privacy: [
     'Your data lives on your phone, encrypted.',
-    'There is no account and no analytics. Funancial does not know who you are, and it does not track how you use it.',
-    "Apart from the update check below, the only network calls go to the app's own price service. They fetch prices, exchange rates, dividends, news, symbol searches and price history, and they read a product link when you paste one. They carry only what is needed to look something up: a symbol, the text you type in search, a currency pair, a start date, or a pasted link. Never your amounts, balances or notes.",
+    "There are no analytics, and Funancial doesn't track how you use it.",
+    "Apart from the update check below, the only network calls go to the app's own price service. They fetch prices, exchange rates, dividends, news, symbol searches, price history and company logos (by symbol), and they read a product link when you paste one. They carry only what is needed to look something up: a symbol, the text you type in search, a currency pair, a start date, or a pasted link. Never your amounts, balances or notes.",
+    "An account is optional. If you make one, a locked copy of your data is also kept on the app's service, so you can move to a new phone.",
+    'Your email is used only for "forgot password".',
+    'Because "forgot password" brings your data back, the service can unlock the copy. Only the app\'s owner runs it.',
+    '"Delete all data" erases this phone only. An account\'s locked copy stays on the service until you delete it (Settings, Account, Turn off and delete my copy) or ask the app\'s owner to remove it.',
     'An app installed from the download page also checks that page for a newer version. That check carries nothing about you.',
     "A backup is a file you choose where to save, encrypted with your passphrase. Funancial doesn't keep your passphrase, so if you lose it, nobody can open the backup.",
   ],
@@ -16,6 +20,7 @@ export const LEGAL: {
     "It isn't financial advice. It shows your own numbers, and you decide.",
     'Prices, exchange rates, dividend dates and news come from outside sources and can be late or wrong. Check anything that matters before you act on it.',
     'Your backups and your passphrase are yours to keep safe, because only you have them.',
+    'If you make an account, its locked copy is kept on a service one person runs, as is, with no promise it will always be there, so keep making backups.',
   ],
   disclaimers: [
     {

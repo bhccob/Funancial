@@ -27,7 +27,7 @@ describe('the page copy', () => {
     'Scan with your Android phone',
     'Funancial is Android-only for now.',
     'Safe and simple',
-    'Your money stays on your phone, encrypted. No account, no ads.',
+    'Your money lives on your phone, encrypted. An account keeps a locked copy so you can move phones. No ads.',
     'Not financial advice.',
     'Tap Download, then open the file.',
     'If Android asks, allow your browser to install apps.',

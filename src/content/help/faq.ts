@@ -25,7 +25,7 @@ export const FAQ: Array<{ q: string; a: string }> = [
   },
   {
     q: 'Is my data sent anywhere?',
-    a: 'Your data stays on your phone, encrypted. The few lookups that do leave it are listed on the Privacy page.',
+    a: 'Your data lives on your phone, encrypted. An account keeps a locked copy so you can move phones. The lookups that leave your phone are listed on the Privacy page.',
   },
   {
     q: 'Is demo money mixed with my real data?',
@@ -33,7 +33,11 @@ export const FAQ: Array<{ q: string; a: string }> = [
   },
   {
     q: 'How do I move to a new phone?',
-    a: 'Make a backup in Settings, move the file to the new phone, and restore it there with your passphrase.',
+    a: 'Install Funancial on the new phone, tap "I have an account" and log in. Your data comes back. Without an account, make a backup in Settings, move the file to the new phone, and restore it there with your passphrase.',
+  },
+  {
+    q: 'I forgot my password',
+    a: 'On the log-in screen, tap "Forgot password?" and type your username or email. Funancial emails you a link to choose a new password, and your data is still there.',
   },
   {
     q: 'What if I forget my backup passphrase?',

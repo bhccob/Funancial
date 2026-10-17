@@ -210,7 +210,7 @@ export const HELP_PAGES: HelpPage[] = [
   {
     id: 'privacy',
     title: 'Privacy',
-    summary: 'What stays on your phone',
+    summary: 'Where your data lives',
     group: 'more',
     body: LEGAL.privacy,
   },
