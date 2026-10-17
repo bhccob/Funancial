@@ -612,19 +612,25 @@ export function createAccountActions(
     throw failed(reply);
   }
 
-  /** Removes the account and its copy from the service and stops saving. The data on the phone stays. */
-  async function deleteAccount(): Promise<void> {
+  /**
+   * Removes the account and its copy from the service and stops saving. The data on the phone stays.
+   * `deleted`: the service removed them. `moved`: this phone's token no longer counted (another phone
+   * logged in, or the account is gone), so nothing was deleted; the account, if there is one, is on
+   * the other phone. The link is forgotten either way.
+   */
+  async function deleteAccount(): Promise<'deleted' | 'moved'> {
     requireOpen();
     const state = current();
     if (!state) throw new AccountError('unlinked');
     // No copy may go up while the account is being taken down.
     stopTimers();
     const reply = await reach(() => api.deleteAccount(state.deviceToken));
-    // A `moved` 401 is a token that no longer counts (the account moved, or is gone): nothing here to
-    // delete. Any other 401 is the service failing, and the link stays.
-    const gone = reply.status === 204 || (reply.status === 401 && errorName(reply) === 'moved');
-    if (!gone) throw failed(reply);
+    // A `moved` 401 is a token that no longer counts (the account moved, or is gone): nothing was
+    // deleted. Any other 401 is the service failing, and the link stays.
+    const moved = reply.status === 401 && errorName(reply) === 'moved';
+    if (reply.status !== 204 && !moved) throw failed(reply);
     await commit(null);
+    return moved ? 'moved' : 'deleted';
   }
 
   /** Keeps using this phone without an account: forgets the link, and leaves the service alone. */

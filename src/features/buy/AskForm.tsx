@@ -255,7 +255,9 @@ export function AskForm() {
         <Button type="submit" size="lg" disabled={busy}>
           Ask
         </Button>
-        <p className="text-muted text-sm font-semibold">Your numbers stay on your phone.</p>
+        <p className="text-muted text-sm font-semibold">
+          Your numbers stay with your data, encrypted.
+        </p>
       </div>
     </form>
   );

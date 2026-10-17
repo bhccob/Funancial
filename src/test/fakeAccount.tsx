@@ -26,7 +26,7 @@ export function fakeAccount(state: AccountState | null = null, loaded = true) {
     signUp: vi.fn<AccountActions['signUp']>(async () => {}),
     logIn: vi.fn<AccountActions['logIn']>(async () => 'done'),
     changePassword: vi.fn<AccountActions['changePassword']>(async () => {}),
-    deleteAccount: vi.fn<AccountActions['deleteAccount']>(async () => {}),
+    deleteAccount: vi.fn<AccountActions['deleteAccount']>(async () => 'deleted'),
     unlink: vi.fn<AccountActions['unlink']>(async () => {}),
     forgot: vi.fn<AccountActions['forgot']>(async () => {}),
     saveNow: vi.fn<AccountActions['saveNow']>(async () => {}),

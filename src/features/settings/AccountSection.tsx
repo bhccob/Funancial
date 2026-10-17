@@ -326,8 +326,15 @@ function DeleteCopyDialog({ open, onClose }: { open: boolean; onClose(): void })
     setError(undefined);
     await guard(async () => {
       try {
-        await deleteAccount();
-        toast('success', 'Your account and its copy are deleted.');
+        if ((await deleteAccount()) === 'deleted') {
+          toast('success', 'Your account and its copy are deleted.');
+        } else {
+          // The service was never asked to delete anything: say so, not "deleted".
+          toast(
+            'info',
+            'This phone was no longer signed in, so nothing was deleted. If you use your account on another phone, delete it from there.',
+          );
+        }
         close();
       } catch (err) {
         setError(errorMessage(err));

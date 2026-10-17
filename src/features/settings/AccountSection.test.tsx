@@ -311,6 +311,38 @@ describe('Settings → Account with an account', () => {
     expect(actions.deleteAccount).toHaveBeenCalledTimes(1);
   });
 
+  it('says the account and its copy are deleted only when they were', async () => {
+    const actions = fakeAccount(linkedAccount());
+    actions.deleteAccount.mockResolvedValue('deleted');
+    show(actions);
+    await userEvent.click(button('Turn off and delete my copy'));
+    const dialog = screen.getByRole('dialog', { name: 'Turn off and delete my copy?' });
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Delete my copy' }));
+    expect(toastStore.getState().toasts).toEqual([
+      expect.objectContaining({
+        tone: 'success',
+        message: 'Your account and its copy are deleted.',
+      }),
+    ]);
+    expect(screen.queryByRole('dialog', { name: 'Turn off and delete my copy?' })).toBeNull();
+  });
+
+  it('says plainly that nothing was deleted when this phone was no longer signed in', async () => {
+    const actions = fakeAccount(linkedAccount());
+    actions.deleteAccount.mockResolvedValue('moved');
+    show(actions);
+    await userEvent.click(button('Turn off and delete my copy'));
+    const dialog = screen.getByRole('dialog', { name: 'Turn off and delete my copy?' });
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Delete my copy' }));
+    const toasts = toastStore.getState().toasts;
+    expect(toasts).toHaveLength(1);
+    expect(toasts[0]!.tone).toBe('info');
+    expect(toasts[0]!.message).toBe(
+      'This phone was no longer signed in, so nothing was deleted. If you use your account on another phone, delete it from there.',
+    );
+    expect(screen.queryByRole('dialog', { name: 'Turn off and delete my copy?' })).toBeNull();
+  });
+
   it('keeps the dialog and says why when the copy could not be deleted', async () => {
     const actions = fakeAccount(linkedAccount());
     actions.deleteAccount.mockRejectedValue(new AccountError('offline'));

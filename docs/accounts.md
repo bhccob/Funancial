@@ -26,7 +26,9 @@ Accepting Upstash's terms (step 1) and Google's (step 2) is your click. Claude c
 That is all. Vercel adds the database's address and password to the project by itself (you will see
 `KV_REST_API_URL` and `KV_REST_API_TOKEN` appear under Settings → Environment Variables). **Don't add
 anything by hand for the database.** Vercel's screens change now and then, so if a button is named a
-little differently, pick the closest one.
+little differently, pick the closest one. If the variables Vercel added aren't named
+`KV_REST_API_URL` and `KV_REST_API_TOKEN` (for example, a prefix was added), tell Claude. Keep those
+two to yourself like the master key: a leak of the database password is as serious (step 5).
 
 ## 2. Set up the Gmail that sends "forgot password" emails
 
@@ -91,7 +93,7 @@ away, and that the reset page shows its "expired" message for a made-up link.
 
 | Name | What it is | What it protects | If it's lost or leaks |
 | --- | --- | --- | --- |
-| `KV_REST_API_URL`, `KV_REST_API_TOKEN` | The database's address and password. Vercel adds them. | The locked copies and the account records. | Someone could read or delete the locked copies. They are still locked, so they can't open them without the key. Rotate it in Upstash. |
+| `KV_REST_API_URL`, `KV_REST_API_TOKEN` | The database's address and password. Vercel adds them. | The locked copies and the account records. | **As serious as a leaked master key.** Someone could read and delete every locked copy. The token can also write, so they could make the service unlock the copies for them. Tell Claude at once: the token has to be replaced in Upstash and in Vercel. |
 | `SERVER_MASTER_KEY` | The master key you made in step 3. | Lets the service unlock a copy for "forgot password". With it and a stolen database, someone could open every copy. | **Lost:** email resets can't restore old data. **Leaked:** tell Claude. Replacing it has a cost (see step 3), so don't do it on your own. |
 | `GMAIL_USER` | The Gmail address that sends the emails. | Not a secret by itself. It's the "from" address. | Nothing to protect. |
 | `GMAIL_APP_PASSWORD` | A Google app password for that address. | Lets the service send "forgot password" emails from your Gmail. | Someone could send email as that Gmail. Delete the app password in your Google account and make a new one. |
@@ -128,15 +130,20 @@ is the only change). Below, `<username>` stands for it.
 5. Delete `acct:t:<deviceTokenHash>`, using the value you wrote down. It is their phone's pass.
 6. Open `acct:e:<email>`, using the email you wrote down. It lists the usernames that use that email.
    Remove `<username>` from it. If it was the only one, the entry disappears.
-7. Search for `acct:*<username>*`. Nothing of theirs should be left, except `acct:cl:` entries that
-   vanish within a minute.
+7. Search for `acct:*<username>*` to check steps 3 and 4 worked. It should show only `acct:cl:`
+   entries, which vanish within a minute. It can't see `acct:t:`, `acct:e:` or `acct:r:`, because
+   those are named after a hash, the email or a reset code, not the username. It also matches other
+   people's names that contain the text (a search for `sam` finds `samuel`): leave those alone.
 
-**If you skip one, nothing breaks.** This is what each leftover does:
+**If you skip one, the service still works, but two leftovers stay the friend's personal data.**
+This is what each leftover does:
 
 - `acct:t:<deviceTokenHash>`: it points at a username with no account, so the service answers as if
   their phone had moved, and reads nothing. Harmless clutter.
 - The username in `acct:e:<email>`: "forgot password" skips a name with no account. If someone later
-  makes an account with that username and another email, it is skipped for that email too.
+  makes an account with that username and another email, it is skipped for that email too. But the
+  entry's name is the friend's email address, so it keeps their email address in the database. That
+  is personal data, not just clutter, so don't skip step 6.
 - `acct:c:<username>`: no one can reach it, since it is only handed out to a log-in on the account,
   and a new account with the same username ignores it. But it is still the friend's data, so delete
   it.

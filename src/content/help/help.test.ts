@@ -119,16 +119,18 @@ describe('glossary, FAQ and legal text', () => {
 
   it('say what an account keeps, who can open it and what the email is for', () => {
     const privacy = LEGAL.privacy.join(' ');
-    // An account is optional now, so "no account" would be false.
-    expect(privacy).not.toMatch(/no account/i);
+    // Setup asks for an account unless the phone is offline, so neither "no account" nor "optional" is true.
+    expect(privacy).not.toMatch(/no account|optional/i);
     expect(privacy).not.toMatch(/does not know who you are/i);
     expect(privacy).toMatch(
-      /the app also sends a locked copy of your data to that service, and keeps it there/i,
+      /If you have an account, the app also sends a locked copy of your data to that service, and keeps it there/,
     );
     expect(privacy).toMatch(/so you can move to a new phone/i);
     expect(privacy).toMatch(/email is used only for "forgot password"/i);
-    expect(privacy).toMatch(/the service can unlock the copy/i);
-    expect(privacy).toMatch(/only the app's owner runs/i);
+    // Plain that the owner could read the money data, not only that the owner runs the service.
+    expect(privacy).toMatch(
+      /the service can unlock the copy, so the app's owner, who runs it, could read it/,
+    );
   });
 
   it("calls the server the app's own service on the Privacy page, never the price service", () => {
@@ -148,6 +150,8 @@ describe('glossary, FAQ and legal text', () => {
     const line = LEGAL.privacy.find((l) => /Delete all data/.test(l))!;
     expect(line).toMatch(/erases this phone only/);
     expect(line).toMatch(/copy stays on the service until you delete it/);
+    // Only the phone that holds the account can delete it; a phone the account moved from cannot.
+    expect(line).toMatch(/delete it from the phone you use it on/);
     expect(line).toContain('Turn off and delete my copy');
     expect(line).toMatch(/ask the app's owner to remove it/);
   });

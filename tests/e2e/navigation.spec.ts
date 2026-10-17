@@ -89,7 +89,7 @@ test('mobile: Home has a Buy it? action in History’s place, and it opens the A
   await expect(page.getByRole('link', { name: 'History' })).toHaveCount(1);
   await page.getByRole('link', { name: 'Buy it?' }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Should I buy it?' })).toBeVisible();
-  await expect(page.getByText('Your numbers stay on your phone.')).toBeVisible();
+  await expect(page.getByText('Your numbers stay with your data, encrypted.')).toBeVisible();
 });
 
 test('mobile: the Menu lists Buy it? under Your money, no longer marked Soon', async ({

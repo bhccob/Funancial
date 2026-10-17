@@ -95,7 +95,7 @@ describe('the Ask form', () => {
     ]);
     expect(screen.getByRole('group', { name: 'How soon?' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Ask' })).toBeInTheDocument();
-    expect(screen.getByText('Your numbers stay on your phone.')).toBeInTheDocument();
+    expect(screen.getByText('Your numbers stay with your data, encrypted.')).toBeInTheDocument();
   });
 
   it('steps the quantity with a - and a +', async () => {

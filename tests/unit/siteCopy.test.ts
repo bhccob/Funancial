@@ -34,6 +34,7 @@ describe('the page copy', () => {
     'Tap Install, open Funancial, and try demo money first.',
     'Turn on JavaScript to see the download button.',
     "Android asks before installing apps that don't come from the Play Store, and that's normal for an app shared between friends.",
+    'to look up prices, to keep your locked copy if you have an account, and to check for a new version.',
     'It may wake the phone for a moment to show one.',
     'Older phones list this as a fingerprint permission.',
   ])('says %s', (line) => {

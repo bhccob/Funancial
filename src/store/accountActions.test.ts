@@ -1007,7 +1007,7 @@ describe('turning the account off', () => {
     await store.getState().put('expense', lunch('e1'));
     await actions.signUp(ME);
     const token = linkedState(actions)!.deviceToken;
-    await actions.deleteAccount();
+    await expect(actions.deleteAccount()).resolves.toBe('deleted');
 
     expect(server.sent('deleteAccount')).toHaveLength(1);
     expect(server.calls.find((c) => c.route === 'deleteAccount')!.token).toBe(token);
@@ -1040,11 +1040,11 @@ describe('turning the account off', () => {
     expect(server.accounts.has('robin')).toBe(true);
   });
 
-  it('lets a phone that has moved turn the account off without touching the other phone', async () => {
+  it('tells a phone that has moved nothing was deleted, and still forgets its link', async () => {
     const { actions, server } = await setup();
     await actions.signUp(ME);
     await server.api.logIn({ username: 'robin', authKey: server.accounts.get('robin')!.authKey });
-    await actions.deleteAccount();
+    await expect(actions.deleteAccount()).resolves.toBe('moved');
     expect(linkedState(actions)).toBeNull();
     expect(server.accounts.has('robin')).toBe(true);
   });
