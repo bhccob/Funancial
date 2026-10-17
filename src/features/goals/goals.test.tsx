@@ -1,12 +1,13 @@
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Toaster } from '@/components/ui/Toaster';
 import { formatMoney } from '@/domain/money';
 import { emptySnapshot } from '@/domain/snapshot';
 import { formatDate } from '@/lib/format';
 import { toastStore } from '@/lib/toast';
+import { useAmountsHidden } from '@/store/useAmountsHidden';
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
 import { makeDebt, makeGoal, makeProfile, makeTransaction } from '@/test/fixtures';
 import { GoalsScreen } from './GoalsScreen';
@@ -164,6 +165,27 @@ describe('Debts', () => {
     await userEvent.click(within(dialog).getByRole('button', { name: 'Delete' }));
     expect(actions.deleteDebt).toHaveBeenCalledWith('card-1');
     expect(await screen.findByText(HISTORY)).toBeInTheDocument();
+  });
+});
+
+describe('with amounts hidden', () => {
+  afterEach(() => useAmountsHidden.setState({ hidden: false }));
+
+  it('hides the rows but not what a form is editing', async () => {
+    useAmountsHidden.setState({ hidden: true });
+    renderGoals();
+    expect(row('New bike').getByText('•••• of ••••')).toBeInTheDocument();
+    expect(row('Visa').getByText('••••')).toBeInTheDocument();
+
+    await userEvent.click(row('New bike').getByRole('button', { name: 'Edit New bike' }));
+    const goal = screen.getByRole('dialog', { name: 'Edit goal' });
+    expect(within(goal).getByLabelText('Target')).toHaveValue('1,200.00');
+    expect(within(goal).getByLabelText('Saved so far')).toHaveValue('450.00');
+    await userEvent.click(within(goal).getByRole('button', { name: 'Cancel' }));
+
+    await userEvent.click(row('Visa').getByRole('button', { name: 'Pay card' }));
+    const pay = screen.getByRole('dialog', { name: 'Pay Visa' });
+    expect(within(pay).getByLabelText('Amount')).toHaveValue('230.00');
   });
 });
 

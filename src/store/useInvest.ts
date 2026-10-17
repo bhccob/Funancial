@@ -6,6 +6,7 @@ import { usePlatform } from '@/platform/PlatformProvider';
 import { market } from '@/services/market';
 import { useApp, useAppStore } from './AppStoreProvider';
 import { createInvestActions, type InvestActions, type RefreshResult } from './investActions';
+import { HIDDEN_AMOUNT, useAmountsHidden } from './useAmountsHidden';
 import { useCurrency } from './useFinance';
 
 /** Prices newer than this are not fetched again when the screen opens or the app comes back. */
@@ -43,19 +44,20 @@ export function useInvestMoney(): {
 } {
   const profile = useCurrency();
   const settings = useApp((s) => s.data.tables.settings[0]);
+  const hidden = useAmountsHidden((s) => s.hidden);
   const rate = investRate(settings, profile);
   const currency = (rate !== null && settings?.investCurrency) || profile;
   return useMemo(() => {
     const convert = (minor: number) => convertMinor(minor, profile, currency, rate ?? 1);
     const formatConverted = (minor: number, opts?: MoneyFormatOptions) =>
-      formatMoney(minor, currency, undefined, opts);
+      hidden ? HIDDEN_AMOUNT : formatMoney(minor, currency, undefined, opts);
     return {
       currency,
       convert,
       formatConverted,
       format: (minor, opts) => formatConverted(convert(minor), opts),
     };
-  }, [profile, currency, rate]);
+  }, [profile, currency, rate, hidden]);
 }
 
 /**

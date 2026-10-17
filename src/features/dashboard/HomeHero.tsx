@@ -7,6 +7,7 @@ import { monthKey } from '@/domain/periods';
 import type { FinanceView } from '@/domain/view';
 import { cn } from '@/lib/cn';
 import { formatMonth } from '@/lib/format';
+import { useAmountsHidden } from '@/store/useAmountsHidden';
 import { useMoney } from '@/store/useFinance';
 
 /** The month line's three parts, in the order they are drawn. */
@@ -18,10 +19,12 @@ const LONG_AMOUNT = 11;
 /**
  * What is available to spend, huge, and under it one thin line for the month: spent so far, bills
  * still to come, and what is left of the monthly limit. Tapping a part of the line names it in the
- * left key, with its exact amount; the idle keys are in whole units.
+ * left key, with its exact amount; the idle keys are in whole units. While amounts are hidden the
+ * line is one plain grey track, as the lengths of its parts would give the amounts away.
  */
 export function HomeHero({ view, today }: { view: FinanceView; today: LocalDate }) {
   const money = useMoney();
+  const hidden = useAmountsHidden((s) => s.hidden);
   const whole = (minor: number) => money(minor, { whole: true });
   const labelId = useId();
   const [selected, setSelected] = useState<string | null>(null);
@@ -46,7 +49,7 @@ export function HomeHero({ view, today }: { view: FinanceView; today: LocalDate 
           },
         ]),
   ];
-  const chosen = parts.find((p) => p.key === selected && p.amount > 0);
+  const chosen = hidden ? undefined : parts.find((p) => p.key === selected && p.amount > 0);
 
   const amount = money(view.available);
   const leftKey =
@@ -77,7 +80,7 @@ export function HomeHero({ view, today }: { view: FinanceView; today: LocalDate 
       <div className="mt-6">
         <MonthLine
           label="This month's money"
-          segments={parts.map((p) => ({
+          segments={(hidden ? [] : parts).map((p) => ({
             key: p.key,
             label: `${p.name}: ${whole(p.amount)}`,
             amount: p.amount,

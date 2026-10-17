@@ -1,7 +1,7 @@
 import { act, cleanup, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ReminderSettings } from '@/domain/entities';
 import { EXAMPLES } from '@/domain/examples';
 import { computeGameView } from '@/domain/game/engine';
@@ -10,6 +10,7 @@ import { formatMoney } from '@/domain/money';
 import { emptySnapshot, type DataSnapshot } from '@/domain/snapshot';
 import { applyRecords, dueGenerated } from '@/domain/sync';
 import { formatDay, formatMonth, formatMonthShort, formatWeekday } from '@/lib/format';
+import { useAmountsHidden } from '@/store/useAmountsHidden';
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
 import { fakeAccount, withAccount } from '@/test/fakeAccount';
 import { expectHelpTip } from '@/test/helpTip';
@@ -228,8 +229,8 @@ describe('DashboardScreen top line', () => {
     // The name is plain text in a line that ends in an ellipsis; nothing squeezes it ahead of the date.
     expect(name).not.toHaveClass('truncate');
     expect(name.parentElement).toHaveClass('truncate');
-    // Below 400px the date is dropped altogether rather than shown as a stub.
-    expect(date).toHaveClass('hidden', 'min-[400px]:inline');
+    // Below 440px the date is dropped altogether rather than shown as a stub.
+    expect(date).toHaveClass('hidden', 'min-[440px]:inline');
   });
 });
 
@@ -999,5 +1000,95 @@ describe('DashboardScreen account reminder', () => {
   it('never asks in the demo', () => {
     renderWithAccount('demo');
     expect(screen.queryByText(ASK)).not.toBeInTheDocument();
+  });
+});
+
+describe('DashboardScreen with amounts hidden', () => {
+  afterEach(() => {
+    localStorage.clear();
+    useAmountsHidden.setState({ hidden: false });
+  });
+
+  const RUN = /\d[\d.,]*\d|\d/g;
+  /**
+   * Every run of digits that is read on the page, in its text and in the names it gives to
+   * assistive tech (the month line's parts are named with their amounts): "1,320.00", "21", "88".
+   * Each text node on its own, as neighbours ("3" beside "40") would run together into one.
+   */
+  const digitRuns = () => {
+    const read: string[] = [];
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      read.push(node.nodeValue ?? '');
+    }
+    for (const el of document.body.querySelectorAll('[aria-label],[aria-valuetext]')) {
+      read.push(el.getAttribute('aria-label') ?? '', el.getAttribute('aria-valuetext') ?? '');
+    }
+    return read.flatMap((text) => text.match(RUN) ?? []);
+  };
+  /** The digits an amount is written with, whole and exact: ["1,320", "1,320.00"]. */
+  const writtenAs = (minor: number) =>
+    [usd(minor), usdWhole(minor)].flatMap((text) => text.match(RUN) ?? []);
+
+  it('has the eye at the top, beside the quests link', () => {
+    renderDashboard(monthData(), TODAY);
+    const eye = screen.getByRole('button', { name: 'Hide amounts' });
+    const quests = screen.getByRole('link', { name: /Open quests$/ });
+    expect(eye.compareDocumentPosition(quests) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+    expect(eye.parentElement).toBe(quests.parentElement);
+  });
+
+  it('shows no amount and four bullets in their place after the eye is pressed', async () => {
+    renderDashboard(monthData(), TODAY);
+    // Available, spent so far, bills to come, what is left, the Visa, a subscription, net worth, goals.
+    const known = [
+      6_395_01, 1_320_00, 284_99, 180_00, 230_00, 15_99, 39_00, 6_450_00, 3_000_00, 10_000_00,
+    ];
+    expect(digitRuns()).toEqual(
+      expect.arrayContaining(['6,395.01', '1,320', '284.99', '6,450.00']),
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: 'Hide amounts' }));
+
+    const runs = digitRuns();
+    for (const minor of known) {
+      for (const written of writtenAs(minor)) expect(runs, written).not.toContain(written);
+    }
+    expect(screen.getAllByText('••••').length).toBeGreaterThan(4);
+    // Names, dates and counts stay.
+    expect(screen.getByText('Streamflix')).toBeInTheDocument();
+    expect(screen.getByText('Emergency fund')).toBeInTheDocument();
+    expect(screen.getByText(`spent in ${october}`)).toBeInTheDocument();
+    expect(screen.getByText('Hi, Test Player')).toBeInTheDocument();
+  });
+
+  it('shows the amounts again when the eye is pressed again', async () => {
+    renderDashboard(monthData(), TODAY);
+    await userEvent.click(screen.getByRole('button', { name: 'Hide amounts' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Show amounts' }));
+    expect(digitRuns()).toContain('1,320');
+    expect(screen.queryByText('••••')).not.toBeInTheDocument();
+  });
+
+  it('turns the month line into one plain grey line, as its lengths would give the amounts away', async () => {
+    renderDashboard(monthData(), TODAY);
+    const hero = region('Available to spend');
+    expect(within(hero).getAllByRole('button', { name: /: / })).toHaveLength(3);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Hide amounts' }));
+    expect(within(hero).queryAllByRole('button', { name: /: / })).toHaveLength(0);
+    expect(hero.querySelector('.bg-track')).toBeInTheDocument();
+    expect(within(hero).getAllByText('••••')).toHaveLength(3);
+  });
+
+  it('does not keep naming a month-line part that was tapped before the amounts were hidden', async () => {
+    renderDashboard(monthData(), TODAY);
+    const hero = region('Available to spend');
+    await userEvent.click(
+      within(hero).getByRole('button', { name: `Bills still to come: ${usdWhole(284_99)}` }),
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Hide amounts' }));
+    expect(within(hero).queryByText('Bills still to come')).not.toBeInTheDocument();
+    expect(within(hero).getByText(`spent in ${october}`)).toBeInTheDocument();
   });
 });
