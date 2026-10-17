@@ -25,7 +25,8 @@ const aesGcm = (iv: string) => ({ name: 'AES-GCM', iv: base64ToBytes(iv) });
 /**
  * One slow PBKDF2 pass makes `master`; HKDF then splits it into two keys that cannot be turned into
  * each other: `authKey` goes to the server, `kek` stays here. The salt comes from the username so
- * log-in needs no first request. HKDF's own salt is left empty, as `master` is already uniform.
+ * log-in needs no first request. Both inputs are NFKC-normalised first, so a keyboard's choice of
+ * accent encoding can't change the keys. HKDF's own salt is left empty, as `master` is already uniform.
  */
 export async function deriveAccountKeys(
   username: string,
@@ -34,11 +35,15 @@ export async function deriveAccountKeys(
 ): Promise<{ authKey: string; kek: CryptoKey }> {
   const salt = await crypto.subtle.digest(
     'SHA-256',
-    utf8(`funancial-account:${username.toLowerCase()}`),
+    utf8(`funancial-account:${username.normalize('NFKC').toLowerCase()}`),
   );
-  const passKey = await crypto.subtle.importKey('raw', utf8(password), 'PBKDF2', false, [
-    'deriveBits',
-  ]);
+  const passKey = await crypto.subtle.importKey(
+    'raw',
+    utf8(password.normalize('NFKC')),
+    'PBKDF2',
+    false,
+    ['deriveBits'],
+  );
   const master = await crypto.subtle.deriveBits(
     { name: 'PBKDF2', hash: 'SHA-256', salt, iterations },
     passKey,

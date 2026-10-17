@@ -36,6 +36,26 @@ describe('deriveAccountKeys', () => {
     expect((await deriveAccountKeys('grace', PASSWORD, FAST)).authKey).not.toBe(a.authKey);
   });
 
+  it("doesn't depend on how a keyboard encodes an accent (NFKC)", async () => {
+    const composed = 'café au lait';
+    const decomposed = 'café au lait';
+    expect(composed).not.toBe(decomposed);
+
+    const a = await deriveAccountKeys('ada', composed, FAST);
+    const b = await deriveAccountKeys('ada', decomposed, FAST);
+    expect(b.authKey).toBe(a.authKey);
+    expect(await exportKek(b.kek)).toBe(await exportKek(a.kek));
+
+    const c = await deriveAccountKeys('josé', PASSWORD, FAST);
+    const d = await deriveAccountKeys('josé', PASSWORD, FAST);
+    expect(d.authKey).toBe(c.authKey);
+    expect(await exportKek(d.kek)).toBe(await exportKek(c.kek));
+
+    // Case is folded after normalising, so a capital accented letter still matches.
+    const e = await deriveAccountKeys('JOSÉ', PASSWORD, FAST);
+    expect(e.authKey).toBe(c.authKey);
+  });
+
   it('makes a 44-character base64 authKey', async () => {
     const { authKey } = await deriveAccountKeys('ada', PASSWORD, FAST);
     expect(authKey).toMatch(/^[A-Za-z0-9+/]{43}=$/);
