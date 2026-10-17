@@ -120,6 +120,11 @@ The APK and `latest.json` are git-ignored local files that a build on Vercel wou
 site is built here and uploaded as it is. Older `funancial-*.apk` files stay in `site/public/get` and
 are uploaded again each time; delete the ones nobody needs before you build.
 
+> **Keep the Vercel project unconnected from GitHub.** The APK and `latest.json` are git-ignored, so a
+> build that Git triggers on Vercel would not have them, and the live download page would lose its
+> file and its update notice. The project is not connected today: every deploy so far came from the
+> command line, as above. Do not add a Git integration to it.
+
 ## Your own phone
 
 Your own phone stays on `npm run android:run` debug builds. A debug build is signed with a different

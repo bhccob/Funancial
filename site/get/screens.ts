@@ -59,7 +59,9 @@ function roundRect(
   r: number,
 ) {
   g.beginPath();
-  g.roundRect(x, y, w, h, r);
+  // Browsers before 2022 have no roundRect; square corners beat no screen.
+  if (typeof g.roundRect === 'function') g.roundRect(x, y, w, h, r);
+  else g.rect(x, y, w, h);
 }
 
 function text(

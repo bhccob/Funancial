@@ -31,7 +31,7 @@ export default defineConfig({
     },
     {
       name: 'site',
-      testMatch: SITE_SPECS,
+      testMatch: '**/e2e/site/**/*.spec.ts',
       use: {
         ...devices['Desktop Chrome'],
         viewport: { width: 1280, height: 800 },

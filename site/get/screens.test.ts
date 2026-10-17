@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { drawScreen, SCREEN } from './screens';
 
 /** A 2D context that remembers the text it was asked to draw and every method it was called with. */
-function stubContext() {
+function stubContext(missing: string[] = []) {
   const texts: string[] = [];
   const calls: string[] = [];
   const state: Record<string, unknown> = {};
@@ -10,6 +10,7 @@ function stubContext() {
     get: (_target, key) => {
       if (typeof key !== 'string') return undefined;
       if (key in state) return state[key];
+      if (missing.includes(key)) return undefined;
       return (...args: unknown[]) => {
         calls.push(key);
         if (key === 'fillText') texts.push(String(args[0]));
@@ -61,6 +62,18 @@ describe('drawScreen', () => {
     const { g, texts } = stubContext();
     drawScreen(g, index, 1);
     expect(texts).toEqual(expect.arrayContaining([...expected]));
+  });
+
+  it('draws plain rectangles where the browser has no roundRect', () => {
+    for (const index of INDEXES) {
+      const { g, texts, calls } = stubContext(['roundRect']);
+      drawScreen(g, index, 1);
+      expect(texts.length).toBeGreaterThan(0);
+      expect(calls).not.toContain('roundRect');
+    }
+    const { g, calls } = stubContext(['roundRect']);
+    drawScreen(g, 1, 1);
+    expect(calls).toContain('rect');
   });
 
   it('treats progress outside 0 to 1 like the nearest end', () => {

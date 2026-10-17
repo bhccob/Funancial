@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest';
 
 const read = (path: string) => readFileSync(new URL(`../../${path}`, import.meta.url), 'utf8');
 const page = read('site/get/index.html');
+// The same text however prettier broke the lines.
+const text = page.replace(/\s+/g, ' ');
 const manifest = read('android/app/src/main/AndroidManifest.xml');
 
 describe('the page copy', () => {
@@ -30,8 +32,12 @@ describe('the page copy', () => {
     'Tap Download, then open the file.',
     'If Android asks, allow your browser to install apps.',
     'Tap Install, open Funancial, and try demo money first.',
-  ])('says %s', (text) => {
-    expect(page).toContain(text);
+    'Turn on JavaScript to see the download button.',
+    "Android asks before installing apps that don't come from the Play Store, and that's normal for an app shared between friends.",
+    'It may wake the phone for a moment to show one.',
+    'Older phones list this as a fingerprint permission.',
+  ])('says %s', (line) => {
+    expect(text).toContain(line);
   });
 
   it('keeps itself out of search engines', () => {
@@ -39,15 +45,33 @@ describe('the page copy', () => {
   });
 });
 
-describe('what the app asks for', () => {
-  const declared = [...manifest.matchAll(/<uses-permission\b[^>]*>/g)]
+describe('what the page says the app asks for', () => {
+  // Added when Gradle merges the plugins' manifests into the app's (see
+  // android/app/build/intermediates/merged_manifests), so they are not in our own file. The page
+  // words them inside the reminders and unlock lines.
+  const FROM_PLUGINS = ['WAKE_LOCK', 'USE_FINGERPRINT'];
+
+  const declared = [...manifest.matchAll(/<uses-permission\s[^>]*>/g)]
     .map(([tag]) => tag)
     .filter((tag) => !tag.includes('tools:node="remove"'))
     .map((tag) => /android\.permission\.(\w+)/.exec(tag)?.[1]);
 
-  it('has an entry on the page for each permission in AndroidManifest.xml, and no other', () => {
-    const listed = [...page.matchAll(/data-permission="(\w+)"/g)].map(([, name]) => name);
+  it('covers the permissions in the source AndroidManifest.xml and the two plugins add, and no other', () => {
+    const listed = [...page.matchAll(/data-permission="([\w ]+)"/g)].flatMap(([, names]) =>
+      names!.split(' '),
+    );
     expect(declared.length).toBeGreaterThan(0);
-    expect(listed.toSorted()).toEqual(declared.toSorted());
+    expect(listed.toSorted()).toEqual([...declared, ...FROM_PLUGINS].toSorted());
+  });
+
+  it('has the two plugin permissions where the plugins say so', () => {
+    // The notifications plugin's own manifest declares the wake lock.
+    expect(
+      read('node_modules/@capacitor/local-notifications/android/src/main/AndroidManifest.xml'),
+    ).toContain('android.permission.WAKE_LOCK');
+    // The biometric plugin uses androidx.biometric, whose manifest declares USE_FINGERPRINT.
+    expect(read('node_modules/@capgo/capacitor-native-biometric/android/build.gradle')).toContain(
+      'androidx.biometric:biometric',
+    );
   });
 });

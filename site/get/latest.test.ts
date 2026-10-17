@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { loadLatest, metaLine } from './latest';
 
 const LATEST = {
@@ -12,6 +12,8 @@ const LATEST = {
 
 const answer = (body: string, status = 200) =>
   vi.fn<typeof fetch>(async () => new Response(body, { status }));
+
+afterEach(() => vi.useRealTimers());
 
 describe('loadLatest', () => {
   it('reads the absolute /get/latest.json, which a /get without a slash would not find relatively', async () => {
@@ -33,6 +35,37 @@ describe('loadLatest', () => {
     ).toBeNull();
   });
 
+  describe('in a browser without AbortSignal.timeout', () => {
+    const timeout = AbortSignal.timeout;
+    const without = () =>
+      Object.defineProperty(AbortSignal, 'timeout', { value: undefined, configurable: true });
+    afterEach(() =>
+      Object.defineProperty(AbortSignal, 'timeout', { value: timeout, configurable: true }),
+    );
+
+    it('still reads the release', async () => {
+      without();
+      expect(await loadLatest(answer(JSON.stringify(LATEST)))).toEqual(LATEST);
+    });
+
+    it('still gives up after five seconds', async () => {
+      without();
+      vi.useFakeTimers();
+      const stuck = vi.fn<typeof fetch>(
+        (_url, init) =>
+          new Promise((_resolve, reject) =>
+            init?.signal?.addEventListener('abort', () => reject(new DOMException('aborted'))),
+          ),
+      );
+      const result = loadLatest(stuck);
+      await vi.advanceTimersByTimeAsync(4999);
+      expect(stuck.mock.calls[0]?.[1]?.signal?.aborted).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(stuck.mock.calls[0]?.[1]?.signal?.aborted).toBe(true);
+      expect(await result).toBeNull();
+    });
+  });
+
   it('is null when the request fails', async () => {
     const offline = vi.fn<typeof fetch>(async () => {
       throw new TypeError('Failed to fetch');
@@ -42,10 +75,10 @@ describe('loadLatest', () => {
 });
 
 describe('metaLine', () => {
-  it('names the version and the size in MB, with one decimal', () => {
-    expect(metaLine(LATEST)).toBe('Version 0.8 · 9.0 MB');
+  it('names the version and the size in decimal MB, as Android shows it, with one decimal', () => {
+    expect(metaLine(LATEST)).toBe('Version 0.8 · 9.4 MB');
     expect(metaLine({ ...LATEST, versionName: '1.2', size: 12_345_678 })).toBe(
-      'Version 1.2 · 11.8 MB',
+      'Version 1.2 · 12.3 MB',
     );
   });
 });

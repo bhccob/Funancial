@@ -2,6 +2,9 @@
 @import '@fontsource-variable/manrope';
 @import './tokens.css';
 
+/* The download page's words and classes are not the app's: keep them out of the app's CSS. */
+@source not '../../site';
+
 @custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));
 
 @layer base {

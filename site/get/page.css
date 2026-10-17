@@ -3,6 +3,14 @@
 /* The app's colours and font, as CSS variables on :root. */
 @import '../../src/styles/tokens.css';
 
+:root {
+  /*
+   * Body copy. A step darker than the app's muted grey: the blurred backdrop is as dark as
+   * #d4e1fe in places, and this still reads at 4.5:1 or better on all of it (site e2e checks).
+   */
+  --page-muted: #5d5d69;
+}
+
 *,
 *::before,
 *::after {
@@ -34,8 +42,8 @@ body::before {
   inset: 0;
   z-index: -1;
   background:
-    radial-gradient(56vmax 56vmax at -8% -6%, rgb(201 219 255 / 0.75), transparent 70%),
-    radial-gradient(48vmax 48vmax at 108% 42%, rgb(227 210 255 / 0.75), transparent 70%),
+    radial-gradient(56vmax 56vmax at -8% -6%, rgb(201 219 255 / 0.6), transparent 70%),
+    radial-gradient(48vmax 48vmax at 108% 42%, rgb(227 210 255 / 0.6), transparent 70%),
     radial-gradient(40vmax 40vmax at 34% 104%, rgb(255 226 196 / 0.6), transparent 70%);
 }
 
@@ -73,7 +81,14 @@ h2 {
 .subline {
   margin-top: 12px;
   font-size: clamp(17px, 2.2vw, 20px);
-  color: var(--color-text-muted);
+  color: var(--page-muted);
+}
+
+.hero-download {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  margin-top: 20px;
 }
 
 /* ---- The four stops, as plain sections with a still phone each ---- */
@@ -99,7 +114,8 @@ h2 {
   font-weight: 800;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--color-xp-text);
+  /* The app's violet, a little darker so it too holds on the backdrop. */
+  color: color-mix(in srgb, var(--color-xp-text) 80%, black);
 }
 
 .caption h2 {
@@ -112,7 +128,7 @@ h2 {
   max-width: 28ch;
   margin-inline: auto;
   font-size: 18px;
-  color: var(--color-text-muted);
+  color: var(--page-muted);
 }
 
 .phone {
@@ -211,6 +227,15 @@ h2 {
   box-shadow: 0 10px 30px rgb(20 20 25 / 0.18);
 }
 
+/* The one under the title: smaller, still a 48px target. */
+.btn.compact {
+  min-width: 0;
+  min-height: 48px;
+  padding: 0 24px;
+  font-size: 15px;
+  box-shadow: 0 6px 20px rgb(20 20 25 / 0.16);
+}
+
 /* On a computer the QR code is the main way; the file is the quieter second. */
 .btn.quiet {
   min-height: 48px;
@@ -233,7 +258,7 @@ h2 {
 
 .meta {
   font-size: 14px;
-  color: var(--color-text-muted);
+  color: var(--page-muted);
 }
 
 /* ---- What's new, safe and simple, how to install ---- */
@@ -261,7 +286,7 @@ h2 {
 .after li {
   font-size: 17px;
   line-height: 1.65;
-  color: var(--color-text-muted);
+  color: var(--page-muted);
 }
 
 .after p + p {

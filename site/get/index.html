@@ -6,6 +6,14 @@
     <meta name="robots" content="noindex, nofollow" />
     <meta name="description" content="Funancial, a budget app that stays on your phone." />
     <title>Funancial</title>
+    <noscript>
+      <style>
+        /* Without scripts the button would say "Coming soon" for ever. */
+        #hero-download-soon {
+          display: none;
+        }
+      </style>
+    </noscript>
   </head>
   <body>
     <main>
@@ -14,6 +22,18 @@
           <header class="hero">
             <h1>Funancial</h1>
             <p class="subline">A budget app that stays on your phone.</p>
+            <div class="hero-download">
+              <a class="btn compact" id="hero-download-link" href="#" hidden
+                >Download for Android</a
+              >
+              <button class="btn compact" id="hero-download-soon" type="button" disabled>
+                Coming soon
+              </button>
+              <p class="note" id="hero-download-ios" hidden>Funancial is Android-only for now.</p>
+              <noscript
+                ><p class="note">Turn on JavaScript to see the download button.</p></noscript
+              >
+            </div>
           </header>
 
           <div id="stops" class="stops">
@@ -49,6 +69,7 @@
 
           <section class="end" id="download" aria-labelledby="download-title">
             <h2 id="download-title">Get it on your phone.</h2>
+            <noscript><p class="note">Turn on JavaScript to see the download button.</p></noscript>
             <div class="download" id="download-area" hidden>
               <div class="qr" id="download-qr" hidden>
                 <img
@@ -91,14 +112,16 @@
             <li data-permission="INTERNET">
               <strong>The internet</strong>, to look up prices and to check for a new version.
             </li>
-            <li data-permission="POST_NOTIFICATIONS">
-              <strong>Notifications</strong>, to show the reminders you set.
+            <li data-permission="POST_NOTIFICATIONS WAKE_LOCK">
+              <strong>Notifications</strong>, to show the reminders you set. It may wake the phone
+              for a moment to show one.
             </li>
             <li data-permission="RECEIVE_BOOT_COMPLETED">
               <strong>Start after a restart</strong>, to bring your reminders back.
             </li>
-            <li data-permission="USE_BIOMETRIC">
-              <strong>Fingerprint or face unlock</strong>, if you turn it on.
+            <li data-permission="USE_BIOMETRIC USE_FINGERPRINT">
+              <strong>Fingerprint or face unlock</strong>, if you turn it on. Older phones list this
+              as a fingerprint permission.
             </li>
           </ul>
         </section>
