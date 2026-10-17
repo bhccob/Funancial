@@ -3,8 +3,9 @@ import { useRef, useState } from 'react';
 export const BIOMETRIC_FAILED =
   "Fingerprint or face unlock couldn't be turned on. You can try again in Settings.";
 
-/** Said wherever an account is made, in setup and in Settings. */
-export const SAVE_NOTE = 'A locked copy of your data is kept so you can move to a new phone.';
+/** Said wherever an account is made, in setup and in Settings: where a friend agrees to it. */
+export const SAVE_NOTE =
+  'A locked copy of your data is kept so you can move to a new phone. The app\'s owner runs the service and could unlock it, which is how "forgot password" brings your data back.';
 
 export const FORGOT_LEAD =
   "Type your username or the email you signed up with. We'll email you a link to choose a new password.";

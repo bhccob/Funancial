@@ -9,7 +9,7 @@ const manifest = read('android/app/src/main/AndroidManifest.xml');
 
 describe('the page copy', () => {
   it.each([
-    'A budget app that stays on your phone.',
+    'A budget app that lives on your phone.',
     '01 · Home',
     'See what you can still spend.',
     'One number that already counts your bills, cards and limits.',
@@ -27,7 +27,7 @@ describe('the page copy', () => {
     'Scan with your Android phone',
     'Funancial is Android-only for now.',
     'Safe and simple',
-    'Your money lives on your phone, encrypted. An account keeps a locked copy so you can move phones. No ads.',
+    'Your money lives on your phone, encrypted. An account keeps a locked copy so you can move phones. The app\'s owner could unlock it, which is how "forgot password" brings your data back. No ads.',
     'Not financial advice.',
     'Tap Download, then open the file.',
     'If Android asks, allow your browser to install apps.',
@@ -39,6 +39,13 @@ describe('the page copy', () => {
     'Older phones list this as a fingerprint permission.',
   ])('says %s', (line) => {
     expect(text).toContain(line);
+  });
+
+  it('no longer says the app stays on the phone, in the hero or the description', () => {
+    expect(text).not.toMatch(/stays on your phone/i);
+    expect(page).toContain(
+      '<meta name="description" content="Funancial, a budget app that lives on your phone." />',
+    );
   });
 
   it('keeps itself out of search engines', () => {

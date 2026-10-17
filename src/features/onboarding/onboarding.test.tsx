@@ -92,8 +92,11 @@ describe('the account step', () => {
     for (const label of ['Username', 'Email (for "forgot password")', 'Password']) {
       expect(screen.getByLabelText(label)).toHaveClass('border-b', 'font-extrabold');
     }
+    // Where a friend agrees to the account: that the owner could unlock the copy, and why.
     expect(
-      screen.getByText('A locked copy of your data is kept so you can move to a new phone.'),
+      screen.getByText(
+        'A locked copy of your data is kept so you can move to a new phone. The app\'s owner runs the service and could unlock it, which is how "forgot password" brings your data back.',
+      ),
     ).toBeInTheDocument();
     // The old first step is gone, and with it the checkbox.
     expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();

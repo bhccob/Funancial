@@ -122,7 +122,7 @@ test('tells the story in plain sections, and what the app asks for', async ({ pa
   await serveLatest(page);
   await page.goto('/get');
   await expect(page.getByRole('heading', { level: 1, name: 'Funancial' })).toBeVisible();
-  await expect(page.getByText('A budget app that stays on your phone.')).toBeVisible();
+  await expect(page.getByText('A budget app that lives on your phone.')).toBeVisible();
   for (const caption of [
     'See what you can still spend.',
     'Limits that tap you on the shoulder.',
@@ -135,6 +135,9 @@ test('tells the story in plain sections, and what the app asks for', async ({ pa
   await expect(page.getByText('First release for friends.')).toBeVisible();
   await expect(
     page.getByText('An account keeps a locked copy so you can move phones.'),
+  ).toBeVisible();
+  await expect(
+    page.getByText('The app\'s owner could unlock it, which is how "forgot password" brings'),
   ).toBeVisible();
   for (const permission of [
     'INTERNET',

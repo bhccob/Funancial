@@ -129,7 +129,7 @@ describe('glossary, FAQ and legal text', () => {
     expect(privacy).toMatch(/email is used only for "forgot password"/i);
     // Plain that the owner could read the money data, not only that the owner runs the service.
     expect(privacy).toMatch(
-      /the service can unlock the copy, so the app's owner, who runs it, could read it/,
+      /the service can unlock the copy, so the app's owner, who runs it, and anyone who got into the owner's Vercel account could read it/,
     );
   });
 

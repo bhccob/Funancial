@@ -44,7 +44,9 @@ describe('Settings → Account without an account', () => {
     expect(button('Create account')).toBeInTheDocument();
     expect(button('Log in')).toBeInTheDocument();
     expect(
-      screen.getByText('A locked copy of your data is kept so you can move to a new phone.'),
+      screen.getByText(
+        'A locked copy of your data is kept so you can move to a new phone. The app\'s owner runs the service and could unlock it, which is how "forgot password" brings your data back.',
+      ),
     ).toBeInTheDocument();
     expect(screen.queryByText(/offline/)).not.toBeInTheDocument();
   });

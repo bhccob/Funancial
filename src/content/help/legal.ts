@@ -10,7 +10,7 @@ export const LEGAL: {
     "Apart from the update check below, the only network calls go to the app's own service. Its lookups fetch prices, exchange rates, dividends, news, symbol searches, price history and company logos (by symbol), and read a product link when you paste one. A lookup carries only what is needed to look something up: a symbol, the text you type in search, a currency pair, a start date, or a pasted link. Never your amounts, balances or notes.",
     'If you have an account, the app also sends a locked copy of your data to that service, and keeps it there, so you can move to a new phone.',
     'Your email is used only for "forgot password".',
-    'Because "forgot password" brings your data back, the service can unlock the copy, so the app\'s owner, who runs it, could read it.',
+    'Because "forgot password" brings your data back, the service can unlock the copy, so the app\'s owner, who runs it, and anyone who got into the owner\'s Vercel account could read it.',
     '"Delete all data" erases this phone only. An account\'s locked copy stays on the service until you delete it from the phone you use it on (Settings, Account, Turn off and delete my copy) or ask the app\'s owner to remove it.',
     'An app installed from the download page also checks that page for a newer version. That check carries nothing about you.',
     "A backup is a file you choose where to save, encrypted with your passphrase. Funancial doesn't keep your passphrase, so if you lose it, nobody can open the backup.",
