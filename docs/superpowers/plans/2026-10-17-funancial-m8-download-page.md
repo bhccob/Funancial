@@ -51,7 +51,7 @@
 - **Page copy (verbatim):**
   - Title `Funancial`, subline `A budget app that stays on your phone.`
   - The four stops: `01 · Home` / `See what you can still spend.` / `One number that already counts your bills, cards and limits.`, then `02 · Budget` / `Limits that tap you on the shoulder.` / `Warnings at 80%, 100% and 120%, before it gets out of hand.`, then `03 · Buy it?` / `Ask before you buy.` / `A meter weighs the purchase against your own numbers.`, then `04 · Levels` / `Level up as you go.` / `Badges, coins and quests for staying on track.`
-  - The end: `Get it on your phone.`, the button `Download for Android`, and the meta line `Version {versionName} · {size in MB, one decimal} MB`.
+  - The end: `Get it on your phone.`, the button `Download for Android`, and the meta line `Version {versionName} · {size in decimal MB (bytes ÷ 1,000,000), one decimal} MB`.
   - On a computer: `Scan with your Android phone`. On an iPhone: `Funancial is Android-only for now.`
   - The safe section: `Safe and simple`, `Your money stays on your phone, encrypted. No account, no ads.`, `Not financial advice.`
 - **Commits** end with your model's `Co-Authored-By: Claude <Model> 5.5 <noreply@anthropic.com>` trailer.
@@ -211,7 +211,7 @@
   - **`drawScreen`:** it runs at progress 0, 0.5 and 1 for each index against a stub 2D context, without throwing.
   - **e2e** (`tests/e2e/site/get.spec.ts`, with `page.route('**/get/latest.json')` serving a fixture with versionName `0.8` and size `9437184`):
     - The page has `noindex`.
-    - An Android UA sees `Download for Android`, whose `href` is the fixture's `apkUrl`, with `Version 0.8 · 9.0 MB`.
+    - An Android UA sees `Download for Android`, whose `href` is the fixture's `apkUrl`, with `Version 0.8 · 9.4 MB`.
     - A desktop UA sees the QR image (alt `QR code for this page`) and `Scan with your Android phone`, plus a direct download link.
     - An iPhone UA sees `Funancial is Android-only for now.` and no download button.
     - With a 404 for `latest.json`, the button reads `Coming soon` and is disabled.
