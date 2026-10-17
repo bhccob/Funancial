@@ -16,6 +16,7 @@ import {
   MasterKeyMismatch,
   rewrapPassword,
   unwrapServer,
+  type Account,
   type Accounts,
   type Result,
   type Sealed,
@@ -136,11 +137,19 @@ describe('sign-up', () => {
   it('wraps the sent data key under the master key, and it unwraps back to that key', async () => {
     const { store, accounts } = setup();
     const { dek } = await join(accounts);
-    const account = store.dump()['acct:u:ada'] as { wrappedServer: Sealed; keyId: string };
+    const account = store.dump()['acct:u:ada'] as Account;
     expect(unwrapServer(account, MASTER).toString('base64')).toBe(dek);
     expect(account.wrappedServer.ciphertext).not.toContain(dek);
     // A different master key opens nothing.
     expect(() => unwrapServer(account, randomBytes(32))).toThrow();
+    // It is bound to its account: in a record with another name, email or birth it doesn't open.
+    for (const changed of [
+      { username: 'grace' },
+      { email: 'mallory@example.com' },
+      { createdAt: '2026-10-17T12:00:01.000Z' },
+    ]) {
+      expect(() => unwrapServer({ ...account, ...changed }, MASTER)).toThrow();
+    }
   });
 
   it('refuses a taken username in any spelling of it, and leaves the first account alone', async () => {
@@ -188,7 +197,7 @@ describe('sign-up', () => {
   it('marks the account with the master key that wrapped its data key', async () => {
     const { store, accounts } = setup();
     await join(accounts);
-    const account = store.dump()['acct:u:ada'] as { keyId: string; wrappedServer: Sealed };
+    const account = store.dump()['acct:u:ada'] as Account;
     const idOf = (key: Uint8Array) =>
       createHmac('sha256', key).update('funancial key id').digest().subarray(0, 8).toString('hex');
     expect(account.keyId).toBe(idOf(MASTER));
@@ -991,21 +1000,37 @@ describe('with the phone module', () => {
     }
   });
 
-  it('opens a data key the phone wrapped, and the phone opens one the server wrapped (AES-GCM tag last)', async () => {
+  it('seals wrappedServer as WebCrypto does (AES-GCM tag last), bound to the JSON of [username, email, createdAt]', async () => {
     const { store, accounts } = setup();
     const { dek } = await join(accounts);
+    const account = store.dump()['acct:u:ada'] as Account;
+    const key = await aesKey(MASTER);
+    const additionalData = new TextEncoder().encode(
+      JSON.stringify(['ada', 'ada@example.com', '2026-10-17T12:00:00.000Z']),
+    );
+    const bytes = (b64text: string) => Uint8Array.from(Buffer.from(b64text, 'base64'));
 
-    // Server to phone: wrappedServer is ciphertext then the 16-byte tag, as WebCrypto reads it.
-    const account = store.dump()['acct:u:ada'] as { wrappedServer: Sealed };
-    expect((await unwrapDek(account.wrappedServer, await aesKey(MASTER))).raw).toBe(dek);
+    // Server to WebCrypto: ciphertext then the 16-byte tag, under that additional data.
+    const opened = await crypto.subtle.decrypt(
+      { name: 'AES-GCM', iv: bytes(account.wrappedServer.iv), additionalData },
+      key,
+      bytes(account.wrappedServer.ciphertext),
+    );
+    expect(Buffer.from(opened).toString('base64')).toBe(dek);
 
-    // Phone to server.
-    const fromPhone = await wrapDek(dek, await aesKey(MASTER));
-    expect(
-      unwrapServer({ wrappedServer: fromPhone, keyId: masterKeyId(MASTER) }, MASTER).toString(
-        'base64',
-      ),
-    ).toBe(dek);
+    // WebCrypto to server.
+    const iv = randomBytes(12);
+    const sealed = await crypto.subtle.encrypt(
+      { name: 'AES-GCM', iv, additionalData },
+      key,
+      bytes(dek),
+    );
+    const wrappedServer = {
+      iv: iv.toString('base64'),
+      ciphertext: Buffer.from(sealed).toString('base64'),
+    };
+    expect(unwrapServer({ ...account, wrappedServer }, MASTER).toString('base64')).toBe(dek);
+    expect(account.keyId).toBe(masterKeyId(MASTER));
   });
 
   it('re-wraps a data key under a password key the phone can open', async () => {

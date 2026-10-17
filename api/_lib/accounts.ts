@@ -3,6 +3,7 @@ import {
   createDecipheriv,
   createHash,
   createHmac,
+  hkdfSync,
   randomBytes,
   scrypt,
   timingSafeEqual,
@@ -27,7 +28,7 @@ export type Account = {
   authSalt: string;
   /** The data key locked with the password's `kek`; the server can't open it. */
   wrappedPw: Sealed;
-  /** The data key locked with `SERVER_MASTER_KEY`, for an email reset. */
+  /** The data key locked with `SERVER_MASTER_KEY`, for an email reset; bound to the account (`serverAad`). */
   wrappedServer: Sealed;
   /** Which master key wrapped `wrappedServer` (see `masterKeyId`). */
   keyId: string;
@@ -121,8 +122,11 @@ const passwordBody = z.object({
 });
 
 const sha256 = (text: string) => createHash('sha256').update(text).digest('hex');
-const sameText = (a: string, b: string) =>
-  a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b));
+/** Constant-time; compares bytes, so a stored value as long in letters but not in bytes is unequal, not a throw. */
+function sameText(a: string, b: string) {
+  const [x, y] = [Buffer.from(a), Buffer.from(b)];
+  return x.length === y.length && timingSafeEqual(x, y);
+}
 
 const hashAuth = (authKey: string, salt: Uint8Array) =>
   new Promise<Buffer>((resolve, reject) =>
@@ -136,20 +140,22 @@ const DUMMY_SALT = randomBytes(16);
 const DUMMY_HASH = randomBytes(32);
 
 /** AES-256-GCM in WebCrypto's layout, which the phone reads: the ciphertext, then the tag. */
-function wrap(key: Uint8Array, plain: Uint8Array): Sealed {
+function wrap(key: Uint8Array, plain: Uint8Array, aad?: Uint8Array): Sealed {
   const ivBytes = randomBytes(12);
   const cipher = createCipheriv('aes-256-gcm', key, ivBytes, { authTagLength: TAG_BYTES });
+  if (aad) cipher.setAAD(aad);
   const ciphertext = Buffer.concat([cipher.update(plain), cipher.final(), cipher.getAuthTag()]);
   return { iv: ivBytes.toString('base64'), ciphertext: ciphertext.toString('base64') };
 }
 
-/** Throws when `key` didn't lock it, or it was changed. */
-function unwrap(key: Uint8Array, sealed: Sealed): Buffer {
+/** Throws when `key` didn't lock it, it was changed, or `aad` isn't what it was locked with. */
+function unwrap(key: Uint8Array, sealed: Sealed, aad?: Uint8Array): Buffer {
   const all = Buffer.from(sealed.ciphertext, 'base64');
   if (all.length < TAG_BYTES) throw new Error('sealed data is too short');
   const decipher = createDecipheriv('aes-256-gcm', key, Buffer.from(sealed.iv, 'base64'), {
     authTagLength: TAG_BYTES,
   });
+  if (aad) decipher.setAAD(aad);
   decipher.setAuthTag(all.subarray(all.length - TAG_BYTES));
   return Buffer.concat([
     decipher.update(all.subarray(0, all.length - TAG_BYTES)),
@@ -174,13 +180,25 @@ export class MasterKeyMismatch extends Error {
   }
 }
 
-/** The account's raw data key, opened with the master key; throws `MasterKeyMismatch` for another key. */
+type Owner = Pick<Account, 'username' | 'email' | 'createdAt'>;
+
+/**
+ * What `wrappedServer` is bound to, as AES-GCM additional data: a JSON array, so no two accounts
+ * encode alike. A data key moved into another record, or a record whose email was changed, won't open.
+ */
+const serverAad = ({ username, email, createdAt }: Owner) =>
+  Buffer.from(JSON.stringify([username, email, createdAt]));
+
+/**
+ * The account's raw data key, opened with the master key; throws `MasterKeyMismatch` for another key,
+ * and throws when the record's name, email or `createdAt` isn't the one it was locked for.
+ */
 export function unwrapServer(
-  account: Pick<Account, 'wrappedServer' | 'keyId'>,
+  account: Pick<Account, 'wrappedServer' | 'keyId'> & Owner,
   masterKey: Uint8Array,
 ) {
   if (account.keyId !== masterKeyId(masterKey)) throw new MasterKeyMismatch();
-  return unwrap(masterKey, account.wrappedServer);
+  return unwrap(masterKey, account.wrappedServer, serverAad(account));
 }
 
 /** The data key locked with a password's raw `kek`, as the phone's `wrapDek` does. */
@@ -217,13 +235,19 @@ const busy = (): Result => fail(409, 'busy');
 const BUSY = 'busy';
 
 /**
- * What a reset link is for: the account's name, the `createdAt` of the account it was made for, and
- * the `authSalt` it had then. A new password gives a new salt, so a link made before one is dead.
+ * What a reset link is for: the account's name, the `createdAt` of the account it was made for, the
+ * `authSalt` it had then and the address it was mailed to. A new password gives a new salt, so a link
+ * made before one is dead. `tag` (see `resetTag`) is what only the service can make: the database
+ * alone can't write a link the service honours.
  */
-type ResetLink = { username: string; createdAt: string; authSalt: string };
+type ResetLink = Pick<Account, 'username' | 'createdAt' | 'authSalt' | 'email'> & { tag: string };
 
 export function createAccounts({ store, masterKey, now, mailer, waitUntil }: AccountDeps) {
   if (masterKey.length !== 32) throw new Error('the master key must be 32 bytes');
+  // A key of its own for reset tags, so the wrapping key is used for nothing else.
+  const tagKey = Buffer.from(
+    hkdfSync('sha256', masterKey, new Uint8Array(0), 'funancial reset tag', 32),
+  );
 
   const stamp = () => new Date(now()).toISOString();
   const newToken = () => randomBytes(32).toString('base64url');
@@ -299,17 +323,35 @@ export function createAccounts({ store, masterKey, now, mailer, waitUntil }: Acc
       ([key, value]) => JSON.stringify(account[key as keyof Account]) === JSON.stringify(value),
     );
 
+  /** HMAC-SHA256 over a link's token hash and the account fields it is for, as JSON (unambiguous). */
+  const resetTag = (hash: string, a: Omit<ResetLink, 'tag'>) =>
+    createHmac('sha256', tagKey)
+      .update(JSON.stringify([hash, a.username, a.createdAt, a.authSalt, a.email]))
+      .digest('hex');
+
   /**
-   * The account a reset token is for, if the link is unused and unexpired, the account is the one it
-   * was made for, and its password hasn't changed since.
+   * Whether a link still fits the account as it is now: the same email, `createdAt` and `authSalt`,
+   * and a tag the service made for this token and those fields. Checked again on each write's try.
+   */
+  const linkFits = (hash: string, link: ResetLink, account: Account) =>
+    link.email === account.email &&
+    link.createdAt === account.createdAt &&
+    link.authSalt === account.authSalt &&
+    typeof link.tag === 'string' &&
+    sameText(link.tag, resetTag(hash, account));
+
+  /**
+   * The account a reset token is for, if the link is unused and unexpired, the service made it, the
+   * account is the one it was made for, and neither its password nor its email changed since. Any
+   * other link is answered as an expired one.
    */
   async function liveReset(token: string) {
     const hash = sha256(token);
     const link = await store.get<ResetLink>(K.reset(hash));
     const account = link ? await store.get<Account>(K.user(link.username)) : null;
-    const live =
-      link && account && account.createdAt === link.createdAt && account.authSalt === link.authSalt;
-    return live ? { hash, account } : null;
+    // Another master key can't check the tag either: a setup problem to name, not an expired link.
+    if (account && account.keyId !== masterKeyId(masterKey)) throw new MasterKeyMismatch();
+    return link && account && linkFits(hash, link, account) ? { hash, link, account } : null;
   }
 
   /** Says in the log that a mail did not go, in one word: no address, no link, no message. */
@@ -333,12 +375,15 @@ export function createAccounts({ store, masterKey, now, mailer, waitUntil }: Acc
         return false;
       }
       const token = newToken();
-      const link: ResetLink = {
+      const hash = sha256(token);
+      const fields = {
         username: account.username,
         createdAt: account.createdAt,
         authSalt: account.authSalt,
+        email: account.email,
       };
-      await store.set(K.reset(sha256(token)), link, RESET_SECONDS);
+      const link: ResetLink = { ...fields, tag: resetTag(hash, fields) };
+      await store.set(K.reset(hash), link, RESET_SECONDS);
       await mailer?.send(
         account.email,
         'Choose a new Funancial password',
@@ -386,17 +431,22 @@ export function createAccounts({ store, masterKey, now, mailer, waitUntil }: Acc
 
       const token = newToken();
       const authSalt = randomBytes(16);
+      const createdAt = stamp();
       const account: Account = {
         username: name,
         email: address,
         authHash: (await hashAuth(authKey, authSalt)).toString('base64'),
         authSalt: authSalt.toString('base64'),
         wrappedPw,
-        wrappedServer: wrap(masterKey, Buffer.from(dek, 'base64')),
+        wrappedServer: wrap(
+          masterKey,
+          Buffer.from(dek, 'base64'),
+          serverAad({ username: name, email: address, createdAt }),
+        ),
         keyId: masterKeyId(masterKey),
         deviceTokenHash: sha256(token),
         version: 1,
-        createdAt: stamp(),
+        createdAt,
       };
       // One step, so two sign-ups for a name can't both win. A retried write that already took
       // effect sees the name taken; this attempt's token hash is its nonce, so an account with it is ours.
@@ -607,9 +657,8 @@ export function createAccounts({ store, masterKey, now, mailer, waitUntil }: Acc
             authHash: (await hashAuth(parsed.data.newAuthKey, authSalt)).toString('base64'),
             wrappedPw: rewrapPassword(dek, Buffer.from(parsed.data.kek, 'base64')),
           },
-          // The link is for this account and this password: a change in between kills it.
-          (now) =>
-            now.createdAt === live.account.createdAt && now.authSalt === live.account.authSalt,
+          // The link is for this account, this password and this email: a change in between kills it.
+          (now) => linkFits(live.hash, live.link, now),
         );
       } catch (err) {
         // The friend can try the same link again.

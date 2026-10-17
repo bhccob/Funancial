@@ -14,12 +14,14 @@ describe("the owner's setup guide", () => {
     expect(guide.trimEnd().split('\n').at(-1)).toBe("Then tell Claude it's done.");
   });
 
-  it('says a leaked database token is as serious as a leaked master key, as it can write too', () => {
+  it('says a leaked database token reads locked copies it cannot unlock, can delete or block them, and is serious', () => {
     const row = guide.split('\n').find((line) => line.startsWith('| `KV_REST_API_URL`'))!;
-    expect(row).toMatch(/can also write/);
-    expect(row).toMatch(/unlock/);
-    expect(row).toMatch(/as serious as a leaked master key/i);
-    expect(row).not.toMatch(/still locked|can't open them/);
+    expect(row).toMatch(/read every copy, but the copies stay locked/);
+    expect(row).toMatch(/can't unlock one without the master key/);
+    expect(row).toMatch(/delete the copies, or block them/);
+    expect(row).toMatch(/\*\*Serious\.\*\*.*Tell Claude at once/);
+    expect(row).not.toMatch(/as serious as a leaked master key|make the service unlock/i);
+    expect(text).not.toContain('a leak of the database password is as serious');
   });
 
   it("tells the owner to say so if Vercel's variable names differ", () => {

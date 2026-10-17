@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash, createHmac, hkdfSync, randomBytes } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 // The phone's own module, by relative path: the cross tests hold the server to its formats.
 import {
@@ -11,7 +11,13 @@ import {
 import { OPTIONS as forgotOPTIONS, POST as forgotPOST } from '../forgot.js';
 import { POST as signupPOST } from '../signup.js';
 import { GET as resetGET, POST as resetPOST } from '../reset.js';
-import { createAccounts, MasterKeyMismatch, type Accounts, type Result } from './accounts.js';
+import {
+  createAccounts,
+  MasterKeyMismatch,
+  type Account,
+  type Accounts,
+  type Result,
+} from './accounts.js';
 import { fakeMailer, gmailMailerFromEnv, type Mailer } from './mailer.js';
 import { rateLimit } from './rateLimit.js';
 import { kvStoreFromEnv, memoryKvStore, type KvStore } from './store.js';
@@ -328,6 +334,8 @@ describe('forgot', () => {
       username: 'ada',
       createdAt: '2026-10-17T12:00:00.000Z',
       authSalt,
+      email: 'ada@example.com',
+      tag: expect.stringMatching(/^[0-9a-f]{64}$/),
     });
     expect(await store.ttl(key)).toBe(1800);
     expect(JSON.stringify(store.dump())).not.toContain(token);
@@ -706,7 +714,9 @@ describe('reset', () => {
     const token = await linkFor(accounts, mail);
     const before = JSON.stringify(store.dump()['acct:u:ada']);
 
+    // Named as the setup problem it is, not taken for an expired link (the tag needs the key too).
     const wrongKey = createAccounts({ store, masterKey: randomBytes(32), now: () => clock });
+    await expect(wrongKey.resetInfo(token, IP)).rejects.toBeInstanceOf(MasterKeyMismatch);
     await expect(wrongKey.reset(token, b64(32), b64(32), IP)).rejects.toBeInstanceOf(
       MasterKeyMismatch,
     );
@@ -837,6 +847,120 @@ describe('reset', () => {
     expect(stored.iv).toMatch(/^[A-Za-z0-9+/]{16}$/);
     expect(Buffer.from(stored.ciphertext, 'base64')).toHaveLength(48);
     expect((await unwrapDek(stored, fresh.keys.kek)).raw).toBe(dek.raw);
+  });
+});
+
+describe('the database alone unlocks no copy', () => {
+  type Fields = Pick<Account, 'username' | 'createdAt' | 'authSalt' | 'email'>;
+  const tagOf = (key: Uint8Array, hash: string, a: Fields) =>
+    createHmac('sha256', key)
+      .update(JSON.stringify([hash, a.username, a.createdAt, a.authSalt, a.email]))
+      .digest('hex');
+  // The scheme the brief fixes: a key of its own, made from the master key with HKDF.
+  const TAG_KEY = Buffer.from(
+    hkdfSync('sha256', MASTER, new Uint8Array(0), 'funancial reset tag', 32),
+  );
+
+  it('refuses a reset link written straight into the store without the tag only the master key makes', async () => {
+    const { store, accounts } = setup();
+    await join(accounts);
+    const account = store.dump()['acct:u:ada'] as Account;
+    const fields: Fields = {
+      username: account.username,
+      createdAt: account.createdAt,
+      authSalt: account.authSalt,
+      email: account.email,
+    };
+    const forge = async (tag?: (hash: string) => unknown) => {
+      const token = randomBytes(32).toString('base64url');
+      const hash = sha(token);
+      await store.set(`acct:r:${hash}`, tag ? { ...fields, tag: tag(hash) } : fields, 1800);
+      return token;
+    };
+    const before = JSON.stringify(store.dump()['acct:u:ada']);
+
+    const forged = [
+      await forge(), // a link as it was before tags
+      await forge(() => '0'.repeat(64)),
+      await forge(() => 7),
+      await forge(() => 'é'.repeat(64)), // as long in letters, not in bytes
+      await forge((hash) => tagOf(MASTER, hash, fields)), // the wrapping key itself makes no tag
+      await forge(() => tagOf(TAG_KEY, sha('another token'), fields)), // another link's tag
+    ];
+    for (const token of forged) {
+      expect(await accounts.resetInfo(token, IP)).toEqual(GONE);
+      expect(await accounts.reset(token, b64(32), b64(32), IP)).toEqual(GONE);
+    }
+    expect(JSON.stringify(store.dump()['acct:u:ada'])).toBe(before);
+
+    // Only the master key's derived tag key makes a link the service honours.
+    const real = await forge((hash) => tagOf(TAG_KEY, hash, fields));
+    expect(await accounts.resetInfo(real, IP)).toEqual({ status: 200, body: { username: 'ada' } });
+  });
+
+  it("can't unlock a copy by changing an account's email in the store and asking for a link", async () => {
+    const { store, accounts, mail } = setup();
+    await joinAsPhone(accounts);
+    const genuine = await linkFor(accounts, mail);
+    const account = store.dump()['acct:u:ada'] as Account;
+    await store.set('acct:u:ada', { ...account, email: 'mallory@example.com' });
+    // A link mailed to the real address dies with the change, like an expired one.
+    expect(await accounts.resetInfo(genuine, IP)).toEqual(GONE);
+    expect(await accounts.reset(genuine, b64(32), b64(32), IP)).toEqual(GONE);
+
+    const token = await linkFor(accounts, mail);
+    expect(mail.sent.at(-1)?.to).toBe('mallory@example.com');
+    const mallory = await newPassword('mallory chose this');
+    await expect(accounts.reset(token, mallory.authKey, mallory.kek, IP)).rejects.toThrow();
+
+    // The data key was never locked again under the new kek: nothing changed, and it logs no one in.
+    const after = store.dump()['acct:u:ada'] as Account;
+    expect(after.wrappedPw).toEqual(account.wrappedPw);
+    expect(after.authHash).toBe(account.authHash);
+    expect(await logIn(accounts, mallory.authKey)).toEqual({
+      status: 401,
+      body: { error: 'denied' },
+    });
+  });
+
+  it("won't open one account's server-locked data key copied into another account's record", async () => {
+    const { store, accounts, mail } = setup();
+    await joinAsPhone(accounts);
+    await join(accounts, { username: 'mallory', email: 'mallory@example.com' }, '198.51.100.2');
+    const victim = store.dump()['acct:u:ada'] as Account;
+    const attacker = store.dump()['acct:u:mallory'] as Account;
+    await store.set('acct:u:mallory', {
+      ...attacker,
+      wrappedServer: victim.wrappedServer,
+      keyId: victim.keyId,
+    });
+
+    const token = await linkFor(accounts, mail, 'mallory');
+    const keys = await newPassword('mallory chose this');
+    await expect(accounts.reset(token, keys.authKey, keys.kek, IP)).rejects.toThrow();
+    expect((store.dump()['acct:u:mallory'] as Account).wrappedPw).toEqual(attacker.wrappedPw);
+  });
+
+  it('still runs sign-up, a password change, forgot, reset and log-in, and the last password opens the data key', async () => {
+    const { accounts, mail } = setup();
+    const { keys, dek, token: device } = await joinAsPhone(accounts);
+    const changed = await deriveAccountKeys('ada', 'a changed password', FAST);
+    expect(
+      await accounts.changePassword(device, {
+        oldAuthKey: keys.authKey,
+        newAuthKey: changed.authKey,
+        newWrappedPw: await wrapDek(dek.raw, changed.kek),
+      }),
+    ).toEqual({ status: 204 });
+    expect((await logIn(accounts, changed.authKey)).status).toBe(200);
+
+    const token = await linkFor(accounts, mail);
+    const fresh = await newPassword();
+    expect(await accounts.reset(token, fresh.authKey, fresh.kek, IP)).toEqual({ status: 204 });
+    const res = await logIn(accounts, fresh.authKey);
+    expect(res.status).toBe(200);
+    const wrappedPw = out<{ wrappedPw: { iv: string; ciphertext: string } }>(res).wrappedPw;
+    expect((await unwrapDek(wrappedPw, fresh.keys.kek)).raw).toBe(dek.raw);
   });
 });
 
