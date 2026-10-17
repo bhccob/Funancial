@@ -3,6 +3,7 @@ import { makeDebt, makeExpense, makeLimit, makeProfile, makeSubscription } from 
 import { bucketBalances } from './balances';
 import {
   availableBalance,
+  cardPayment,
   categoryBreakdown,
   limitLabel,
   limitStatus,
@@ -176,6 +177,30 @@ describe('upcomingBills for a card with no minimum set', () => {
       }),
     ];
     expect(upcomingBills(d, '2026-10-14').map((b) => b.amount)).toEqual([500_00]);
+  });
+});
+
+describe('cardPayment', () => {
+  const pays = (overrides: Parameters<typeof makeDebt>[0], balance: number) =>
+    cardPayment(makeDebt(overrides), balance);
+
+  it('is the whole balance for a card paid in full, or one with no minimum on file', () => {
+    expect(pays({ payInFull: true, minimumPayment: 25_00 }, 230_00)).toEqual({
+      inFull: true,
+      amount: 230_00,
+    });
+    expect(pays({ payInFull: false, minimumPayment: 0 }, 230_00)).toEqual({
+      inFull: true,
+      amount: 230_00,
+    });
+  });
+
+  it('is the minimum otherwise, but never more than is owed', () => {
+    expect(pays({ payInFull: false, minimumPayment: 25_00 }, 230_00)).toEqual({
+      inFull: false,
+      amount: 25_00,
+    });
+    expect(pays({ payInFull: false, minimumPayment: 25_00 }, 12_00).amount).toBe(12_00);
   });
 });
 

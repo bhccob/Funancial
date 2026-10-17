@@ -1,6 +1,6 @@
 import { debtBalance, type Buckets } from './balances';
 import type { LocalDate } from './dates';
-import type { BudgetLimit, Category, Expense } from './entities';
+import type { BudgetLimit, Category, Debt, Expense } from './entities';
 import {
   dayOfMonth,
   dayRange,
@@ -85,6 +85,8 @@ export type Bill = {
   amount: number;
   kind: 'subscription' | 'card';
   refId: string;
+  /** Cards only: the payment is the whole balance, not the minimum. */
+  inFull?: boolean;
 };
 
 /**
@@ -101,6 +103,15 @@ export function nextDueDate(today: LocalDate, dueDay: number | null): LocalDate 
   }
   const [ny, nm] = m === 12 ? [y + 1, 1] : [y, m + 1];
   return `${ny}-${pad(nm)}-${pad(Math.min(dueDay, daysInMonth(ny, nm)))}`;
+}
+
+/**
+ * What a card's next payment is: the whole balance when it is paid in full or has no minimum on
+ * file, else its minimum (never more than is owed).
+ */
+export function cardPayment(debt: Debt, balance: number): { amount: number; inFull: boolean } {
+  const inFull = debt.payInFull || debt.minimumPayment <= 0;
+  return { inFull, amount: inFull ? balance : Math.min(debt.minimumPayment, balance) };
 }
 
 /**
@@ -124,16 +135,14 @@ export function upcomingBills(
     if (debt.kind !== 'credit_card') continue;
     const balance = debtBalance(debt, data, today);
     if (balance <= 0) continue;
+    const { amount, inFull } = cardPayment(debt, balance);
     bills.push({
       date: nextDueDate(today, debt.dueDay),
       name: debt.name,
-      // Without a minimum on file, the whole balance is what's due.
-      amount:
-        debt.payInFull || debt.minimumPayment <= 0
-          ? balance
-          : Math.min(debt.minimumPayment, balance),
+      amount,
       kind: 'card',
       refId: debt.id,
+      inFull,
     });
   }
   return bills.sort((a, b) => a.date.localeCompare(b.date) || a.name.localeCompare(b.name));

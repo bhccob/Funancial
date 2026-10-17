@@ -578,16 +578,62 @@ describe('DashboardScreen coming up', () => {
     renderDashboard(monthData(), TODAY);
     const bills = region('Coming up');
     // 15.99 + 230 + 39
-    expect(within(bills).getByRole('link', { name: usd(284_99) })).toHaveAttribute(
+    expect(within(bills).getByRole('link', { name: `${usd(284_99)} this month` })).toHaveAttribute(
       'href',
       '/subscriptions',
     );
     const rows = within(bills).getAllByRole('listitem');
     expect(rows.map((r) => r.textContent)).toEqual([
       `${formatMonthShort('2026-10-20')}20StreamflixSubscription · in 6 days${usd(15_99)}`,
-      `${formatMonthShort('2026-10-21')}21VisaCard · in 7 days${usd(230_00)}`,
+      // A card's block reads DUE, the day, then the month.
+      `DUE21${formatMonthShort('2026-10-21')}Visa card paymentPay the full balance · in 7 days${usd(230_00)}`,
       `${formatMonthShort('2026-10-28')}28FitHub GymSubscription · in 14 days${usd(39_00)}`,
     ]);
+  });
+
+  it('makes every row a button with a chevron', () => {
+    renderDashboard(monthData(), TODAY);
+    const rows = within(region('Coming up')).getAllByRole('listitem');
+    expect(rows).toHaveLength(3);
+    for (const r of rows) {
+      expect(within(r).getByRole('button')).toHaveClass('min-h-11');
+      expect(r.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
+    }
+  });
+
+  it('says "Minimum payment" for a card that is not paid in full', () => {
+    const data = monthData();
+    data.tables.debt = [
+      makeDebt({
+        id: 'visa',
+        name: 'Visa',
+        openingBalance: 230_00,
+        openingDate: '2026-09-01',
+        dueDay: 21,
+        payInFull: false,
+        minimumPayment: 25_00,
+      }),
+    ];
+    renderDashboard(data, TODAY);
+    const row = within(region('Coming up')).getByRole('button', { name: /Visa card payment/ });
+    expect(row).toHaveTextContent(`Minimum payment · in 7 days${usd(25_00)}`);
+  });
+
+  it('opens the card sheet from the card row, and the editor from a subscription row', async () => {
+    renderDashboard(monthData(), TODAY);
+    await userEvent.click(
+      within(region('Coming up')).getByRole('button', { name: /Visa card payment/ }),
+    );
+    const sheet = screen.getByRole('dialog', { name: 'Visa credit card' });
+    expect(within(sheet).getByText('Credit card')).toBeInTheDocument();
+    expect(within(sheet).getByRole('button', { name: 'Pay card' })).toBeEnabled();
+    expect(within(sheet).getByRole('button', { name: 'Edit card' })).toBeEnabled();
+    await userEvent.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog', { name: 'Visa credit card' })).not.toBeInTheDocument();
+
+    await userEvent.click(within(region('Coming up')).getByRole('button', { name: /Streamflix/ }));
+    const edit = screen.getByRole('dialog', { name: 'Edit subscription' });
+    expect(within(edit).getByLabelText('Name')).toHaveValue('Streamflix');
   });
 
   it('shows no more than four bills', () => {

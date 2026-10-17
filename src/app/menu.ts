@@ -45,7 +45,7 @@ export const MENU_GROUPS: MenuGroup[] = [
   {
     title: 'Your money',
     items: [
-      { path: '/subscriptions', label: 'Subscriptions', icon: Repeat, color: '#2a78d6' },
+      { path: '/subscriptions', label: 'Bills & cards', icon: Repeat, color: '#2a78d6' },
       { path: '/goals', label: 'Goals', icon: Target, color: '#128a60' },
       { path: '/history', label: 'History', icon: Clock, color: '#d9541e' },
       { path: '/freeze', label: 'Salary freeze', icon: Snowflake, color: '#4458d6' },

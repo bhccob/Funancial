@@ -11,7 +11,13 @@ import { topDialog } from '@/lib/dialogStack';
 import { formatDay } from '@/lib/format';
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
 import { INBOX_NOW, inboxData } from '@/test/inboxData';
-import { makeGoal, makeLedgerEntry, makeProfile, makeSubscription } from '@/test/fixtures';
+import {
+  makeDebt,
+  makeGoal,
+  makeLedgerEntry,
+  makeProfile,
+  makeSubscription,
+} from '@/test/fixtures';
 import { MENU_GROUPS } from './menu';
 import { appRouteObjects } from './router';
 
@@ -151,7 +157,7 @@ describe('Menu sheet', () => {
         .map((a) => a.getAttribute('href')),
     ).toEqual(MENU_GROUPS.flatMap((g) => g.items.map((i) => i.path)));
 
-    expect(row(sheet, 'Subscriptions')).toHaveTextContent(`2 active · ${usd(25_99)}/mo`);
+    expect(row(sheet, 'Bills & cards')).toHaveTextContent(`2 active · ${usd(25_99)}/mo`);
     expect(row(sheet, 'Goals')).toHaveTextContent('2 goals · 33% saved');
     expect(row(sheet, 'History')).toHaveTextContent('Every entry, searchable');
     expect(row(sheet, 'Salary freeze')).toHaveTextContent(
@@ -174,6 +180,25 @@ describe('Menu sheet', () => {
     }
   });
 
+  it('adds the number of credit cards to the Bills & cards row, when there are any', async () => {
+    const data = liveData();
+    data.tables.debt.push(
+      makeDebt({ kind: 'credit_card' }),
+      makeDebt({ kind: 'credit_card' }),
+      makeDebt({ kind: 'loan' }),
+    );
+    renderAt('/', data);
+    expect(row(await openMenu(), 'Bills & cards')).toHaveTextContent(
+      `2 active · ${usd(25_99)}/mo · 2 cards`,
+    );
+    cleanup();
+
+    const oneCard = emptySnapshot();
+    oneCard.tables.debt.push(makeDebt({ kind: 'credit_card' }));
+    renderAt('/', oneCard);
+    expect(row(await openMenu(), 'Bills & cards')).toHaveTextContent(/^Bills & cards1 card$/);
+  });
+
   it('shows the level the player has reached on the Quests row', async () => {
     const data = emptySnapshot();
     data.tables.ledger.push(makeLedgerEntry({ coins: 0, xp: levelStart(3) }));
@@ -185,7 +210,7 @@ describe('Menu sheet', () => {
   it('says so when there is nothing yet', async () => {
     renderAt('/');
     const sheet = await openMenu();
-    expect(row(sheet, 'Subscriptions')).toHaveTextContent('None yet');
+    expect(row(sheet, 'Bills & cards')).toHaveTextContent('None yet');
     expect(row(sheet, 'Goals')).toHaveTextContent('None yet');
     expect(row(sheet, 'Salary freeze')).toHaveTextContent('None right now');
     expect(row(sheet, 'Shop')).toHaveTextContent('0 coins to spend');
@@ -251,7 +276,7 @@ describe('Menu sheet', () => {
     expect(row(sheet, 'Inbox')).not.toHaveTextContent('Soon');
     expect(row(sheet, 'Help')).not.toHaveTextContent('Soon');
     expect(row(sheet, 'Quests')).not.toHaveTextContent('Soon');
-    expect(row(sheet, 'Subscriptions')).not.toHaveTextContent('Soon');
+    expect(row(sheet, 'Bills & cards')).not.toHaveTextContent('Soon');
     expect(row(sheet, 'Settings')).not.toHaveTextContent('Soon');
     expect(within(sheet).queryAllByText('Soon')).toHaveLength(
       MENU_GROUPS.flatMap((g) => g.items).filter((i) => i.soon).length,

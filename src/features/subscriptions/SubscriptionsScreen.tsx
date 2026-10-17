@@ -7,6 +7,8 @@ import { Section } from '@/components/ui/Section';
 import type { Cycle, Subscription } from '@/domain/entities';
 import { localDay } from '@/domain/game/activity';
 import { monthKey } from '@/domain/periods';
+import { CardSheet } from '@/features/goals/CardSheet';
+import { BillRow } from '@/features/shared/BillRow';
 import { paidWithLabel } from '@/features/shared/paidWith';
 import { cn } from '@/lib/cn';
 import { daysUntil, formatDay, relativeDays } from '@/lib/format';
@@ -52,10 +54,12 @@ export function SubscriptionsScreen() {
   const run = useAction();
   // undefined = dialog closed, null = adding a new one.
   const [editing, setEditing] = useState<Subscription | null | undefined>(undefined);
+  const [cardId, setCardId] = useState<string | null>(null);
 
   const byRenewal = (a: Subscription, b: Subscription) =>
     a.nextRenewal.localeCompare(b.nextRenewal) || a.name.localeCompare(b.name);
   const active = subscriptions.filter((s) => s.status === 'active').sort(byRenewal);
+  const cards = view.bills.filter((b) => b.kind === 'card');
   const cancelled = subscriptions
     .filter((s) => s.status === 'cancelled')
     .sort((a, b) => a.name.localeCompare(b.name));
@@ -63,17 +67,38 @@ export function SubscriptionsScreen() {
   return (
     <div>
       <PageHeader
-        title="Subscriptions & bills"
+        title="Bills & cards"
         action={
           <Button size="sm" onClick={() => setEditing(null)}>
             Add
           </Button>
         }
       >
-        {`${money(view.subscriptionsMonthly)} a month · ${active.length} active`}
+        {`${money(view.billsTotal)} due this month`}
       </PageHeader>
 
-      <Section title="Active">
+      {cards.length > 0 && (
+        <Section title="Card payments">
+          <ul className="divide-border divide-y">
+            {cards.map((bill) => (
+              <BillRow
+                key={bill.refId}
+                date={bill.date}
+                due
+                title={bill.name}
+                subline={`${bill.inFull ? 'Full balance' : 'Minimum payment'} · ${relativeDays(today, bill.date)}`}
+                amount={money(bill.amount)}
+                onOpen={() => setCardId(bill.refId)}
+              />
+            ))}
+          </ul>
+        </Section>
+      )}
+
+      <Section
+        title="Active"
+        action={active.length > 0 ? `${money(view.subscriptionsMonthly)} a month` : undefined}
+      >
         {active.length > 0 ? (
           <ul className="divide-border -my-4 divide-y">
             {active.map((sub) => {
@@ -179,6 +204,7 @@ export function SubscriptionsScreen() {
       )}
 
       <SubscriptionDialog sub={editing} onClose={() => setEditing(undefined)} />
+      <CardSheet debtId={cardId} onClose={() => setCardId(null)} />
     </div>
   );
 }
