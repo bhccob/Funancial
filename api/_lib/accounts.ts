@@ -46,6 +46,11 @@ export type AccountDeps = {
   masterKey: Uint8Array;
   now: () => number;
   mailer?: Mailer;
+  /**
+   * Keeps the request's function alive for the promise after the answer has gone (Vercel's
+   * `waitUntil`). Without it `forgot` does its work before it answers.
+   */
+  waitUntil?: (promise: Promise<unknown>) => void;
 };
 
 export type Accounts = ReturnType<typeof createAccounts>;
@@ -55,6 +60,13 @@ const MAX_COPY_BYTES = 1_000_000;
 const TAG_BYTES = 16;
 const LOGIN_WINDOW = 15 * 60;
 const HOUR = 60 * 60;
+const DAY = 24 * HOUR;
+/** Reset emails the owner's Gmail sends a day, for everyone: it is not for anyone to use as a relay. */
+const SENDS_PER_DAY = 300;
+/** Accounts one email address can be mailed about in one request. */
+const MAIL_PER_ADDRESS = 3;
+/** Tries at writing the account record against others changing it, before it answers busy. */
+const WRITE_TRIES = 3;
 /**
  * How long a writer's claim on a version lasts; one that died mid-write is let go after this. Safe
  * only because a function is cut off after `maxDuration` (10 s, in vercel.json): no live writer
@@ -193,11 +205,17 @@ const K = {
 };
 
 const gone = (): Result => fail(410, 'gone');
+const busy = (): Result => fail(409, 'busy');
+/** What `patch` answers when the record kept changing under it. */
+const BUSY = 'busy';
 
-/** What a reset link is for: the account's name, and the `createdAt` of the account it was made for. */
-type ResetLink = { username: string; createdAt: string };
+/**
+ * What a reset link is for: the account's name, the `createdAt` of the account it was made for, and
+ * the `authSalt` it had then. A new password gives a new salt, so a link made before one is dead.
+ */
+type ResetLink = { username: string; createdAt: string; authSalt: string };
 
-export function createAccounts({ store, masterKey, now, mailer }: AccountDeps) {
+export function createAccounts({ store, masterKey, now, mailer, waitUntil }: AccountDeps) {
   if (masterKey.length !== 32) throw new Error('the master key must be 32 bytes');
 
   const stamp = () => new Date(now()).toISOString();
@@ -238,44 +256,90 @@ export function createAccounts({ store, masterKey, now, mailer }: AccountDeps) {
   }
 
   /**
-   * Changes fields on the stored record as it is now (not as a slow step earlier read it). Returns the
-   * record before, or null if it's gone or, given `createdAt`, is another account of that name.
+   * Changes fields on the stored record as it is now (not as a slow step earlier read it), and only if
+   * nothing changed it between the read and the write: otherwise it reads again, up to 3 times, so no
+   * request can write back an old copy of what another changed. Returns the record before; null if
+   * it's gone or, given `createdAt`, is another account of that name; `BUSY` if it never won.
    */
   async function patch(name: string, fields: Partial<Account>, createdAt?: string) {
-    const current = await store.get<Account>(K.user(name));
-    if (!current || (createdAt !== undefined && current.createdAt !== createdAt)) return null;
-    await store.set(K.user(name), { ...current, ...fields });
-    return current;
+    for (let attempt = 0; attempt < WRITE_TRIES; attempt++) {
+      const current = await store.get<Account>(K.user(name));
+      if (!current || (createdAt !== undefined && current.createdAt !== createdAt)) return null;
+      if (await store.compareAndSet(K.user(name), current, { ...current, ...fields }))
+        return current;
+    }
+    return BUSY;
   }
 
-  /** The account a reset token is for, if the link is unused, unexpired, and the account is the one it was made for. */
+  /**
+   * The account a reset token is for, if the link is unused and unexpired, the account is the one it
+   * was made for, and its password hasn't changed since.
+   */
   async function liveReset(token: string) {
     const hash = sha256(token);
     const link = await store.get<ResetLink>(K.reset(hash));
     const account = link ? await store.get<Account>(K.user(link.username)) : null;
-    return link && account && account.createdAt === link.createdAt ? { hash, account } : null;
+    const live =
+      link && account && account.createdAt === link.createdAt && account.authSalt === link.authSalt;
+    return live ? { hash, account } : null;
   }
 
-  /** Emails `account` a new link. Nothing in here may tell a caller that the account exists. */
+  /** Says in the log that a mail did not go, in one word: no address, no link, no message. */
+  function logMailFailure(err: unknown) {
+    const code = (err as { code?: unknown } | null)?.code;
+    console.error(
+      '[api] reset email failed:',
+      typeof code === 'string' && /^[A-Z_]{3,20}$/.test(code) ? code : 'unknown',
+    );
+  }
+
+  /** Emails `account` a new link. False when the day's cap is used up, and nothing was made or sent. */
   async function sendLink(account: Account) {
-    const token = newToken();
-    const link: ResetLink = { username: account.username, createdAt: account.createdAt };
     try {
+      if (!(await rateLimit(store, 'forgot:global', 'all', SENDS_PER_DAY, DAY)).ok) {
+        console.error('[api] reset email skipped: cap');
+        return false;
+      }
+      const token = newToken();
+      const link: ResetLink = {
+        username: account.username,
+        createdAt: account.createdAt,
+        authSalt: account.authSalt,
+      };
       await store.set(K.reset(sha256(token)), link, RESET_SECONDS);
       await mailer?.send(
         account.email,
         'Choose a new Funancial password',
-        `Hi ${account.username}, tap the link to choose a new password. It works for 30 minutes.\n\n` +
+        'Hi,\n\ntap the link to choose a new Funancial password. It works for 30 minutes.\n\n' +
           `${SITE}/reset?token=${token}\n\n` +
           "If you didn't ask for this, ignore this email.",
       );
     } catch (err) {
-      // A 503 here would tell a known name from an unknown one, so it goes to the log, in one word.
-      const code = (err as { code?: unknown } | null)?.code;
-      console.error(
-        '[api] reset email failed:',
-        typeof code === 'string' && /^[A-Z_]{3,20}$/.test(code) ? code : 'unknown',
-      );
+      logMailFailure(err);
+    }
+    return true;
+  }
+
+  /**
+   * What `forgot` does after it has answered: finds the accounts `subject` (a username or an email
+   * address) names, and mails each a link. Never rejects: whatever goes wrong is a line in the log,
+   * as nothing here may reach the answer.
+   */
+  async function mailLinks(subject: string) {
+    try {
+      const byEmail = subject.includes('@');
+      const names = byEmail ? await store.smembers(K.email(subject)) : [subject];
+      let mailed = 0;
+      for (const name of names) {
+        if (mailed === MAIL_PER_ADDRESS) break;
+        const account = await store.get<Account>(K.user(name));
+        // A set can name an account that is gone, or one that has since taken another address.
+        if (!account || (byEmail && account.email !== subject)) continue;
+        mailed++;
+        if (!(await sendLink(account))) break;
+      }
+    } catch (err) {
+      logMailFailure(err);
     }
   }
 
@@ -339,9 +403,9 @@ export function createAccounts({ store, masterKey, now, mailer }: AccountDeps) {
       const hash = sha256(token);
       await store.set(K.token(hash), name);
       const before = await patch(name, { deviceTokenHash: hash });
-      if (!before) {
+      if (before === BUSY || !before) {
         await store.del(K.token(hash));
-        return unauthorized();
+        return before === BUSY ? busy() : unauthorized();
       }
       await store.del(K.token(before.deviceTokenHash));
 
@@ -426,17 +490,15 @@ export function createAccounts({ store, masterKey, now, mailer }: AccountDeps) {
         authHash: (await hashAuth(newAuthKey, authSalt)).toString('base64'),
         wrappedPw: newWrappedPw,
       });
+      if (changed === BUSY) return busy();
       return changed ? { status: 204 } : unauthorized();
     },
 
     /**
      * Emails a reset link to the account named by `who` (a username), or to each account that uses it
      * (an email address). Always `{ok:true}`, whether or not there is one; the limits count the name
-     * asked about, not the account, so a 429 says nothing either.
-     *
-     * shortcut: a known name takes the time of sending and an unknown one doesn't, so timing can tell
-     * them apart; the limits cap the tries at 3 per name and 10 per address an hour, so move the send
-     * to a background task (waitUntil) only if that is not enough.
+     * asked about, not the account, so a 429 says nothing either. It answers before it has looked
+     * for the account, so neither the answer nor its timing says whether there is one.
      */
     async forgot(who: unknown, ip: string): Promise<Result> {
       if (!mailer) return fail(503, 'not configured');
@@ -448,14 +510,11 @@ export function createAccounts({ store, masterKey, now, mailer }: AccountDeps) {
         (await throttle('forgot:subject', subject, 3, HOUR));
       if (over) return over;
 
-      const names = subject.includes('@') ? await store.smembers(K.email(subject)) : [subject];
-      for (const name of names) {
-        const account = await store.get<Account>(K.user(name));
-        // A set can name an account that is gone, or one that has since taken another address.
-        if (account && (!subject.includes('@') || account.email === subject)) {
-          await sendLink(account);
-        }
-      }
+      // The answer is the same and as quick whether or not there is an account: the lookup, the
+      // link and the mail come after it. A function stays alive for `waitUntil`.
+      const work = mailLinks(subject);
+      if (waitUntil) waitUntil(work);
+      else await work;
       return { status: 200, body: { ok: true } };
     },
 
@@ -491,10 +550,11 @@ export function createAccounts({ store, masterKey, now, mailer }: AccountDeps) {
         (await store.setNx(used, nonce, RESET_SECONDS)) || (await store.get(used)) === nonce;
       if (!won) return gone();
 
+      let changed;
       try {
         const dek = unwrapServer(live.account, masterKey);
         const authSalt = randomBytes(16);
-        const changed = await patch(
+        changed = await patch(
           live.account.username,
           {
             authSalt: authSalt.toString('base64'),
@@ -503,12 +563,16 @@ export function createAccounts({ store, masterKey, now, mailer }: AccountDeps) {
           },
           live.account.createdAt,
         );
-        if (!changed) return gone();
       } catch (err) {
         // The friend can try the same link again.
         await store.del(used).catch(() => {});
         throw err;
       }
+      if (changed === BUSY) {
+        await store.del(used).catch(() => {});
+        return busy();
+      }
+      if (!changed) return gone();
       // The claim already makes the link one-use; this tidies it away.
       await store.del(K.reset(live.hash)).catch(() => {});
       return { status: 204 };

@@ -13,7 +13,9 @@ import { POST as signupPOST } from '../signup.js';
 import { GET as resetGET, POST as resetPOST } from '../reset.js';
 import { createAccounts, MasterKeyMismatch, type Accounts, type Result } from './accounts.js';
 import { fakeMailer, gmailMailerFromEnv, type Mailer } from './mailer.js';
+import { rateLimit } from './rateLimit.js';
 import { kvStoreFromEnv, memoryKvStore, type KvStore } from './store.js';
+import { waitUntil } from '@vercel/functions';
 
 // The routes build their store and mailer from the environment; here those are fakes.
 vi.mock('./store.js', async (orig) => ({
@@ -24,6 +26,8 @@ vi.mock('./mailer.js', async (orig) => ({
   ...(await orig<typeof import('./mailer.js')>()),
   gmailMailerFromEnv: vi.fn(),
 }));
+// The routes hand the work after their answer to Vercel; here the promise is kept for the test to await.
+vi.mock('@vercel/functions', () => ({ waitUntil: vi.fn() }));
 const sendMail = vi.fn();
 const createTransport = vi.hoisted(() => vi.fn());
 vi.mock('nodemailer', () => ({ default: { createTransport } }));
@@ -33,15 +37,23 @@ const MASTER = randomBytes(32);
 const IP = '203.0.113.7';
 const FAST = 1_000;
 const HOUR = 3600;
+const DAY = 24 * HOUR;
 const SUBJECT = 'Choose a new Funancial password';
 
 let clock = T0;
 const advance = (seconds: number) => {
   clock += seconds * 1000;
 };
+// What `forgot` left to do after it answered: the lookup, the link and the mail run in the background.
+let pending: Promise<unknown>[] = [];
+const settled = async () => {
+  await Promise.all(pending);
+};
 beforeEach(() => {
   clock = T0;
+  pending = [];
 });
+const background = (promise: Promise<unknown>) => void pending.push(promise);
 
 // Every call waits a moment first, so requests started together really interleave their store calls.
 const lagged = (store: KvStore): KvStore =>
@@ -78,6 +90,7 @@ function setup(through: (store: KvStore) => KvStore = (store) => store) {
     masterKey: MASTER,
     now: () => clock,
     mailer: mail,
+    waitUntil: background,
   });
   return { store, accounts, mail };
 }
@@ -134,6 +147,7 @@ const tokenIn = (text: string) => /token=([A-Za-z0-9_-]{43})$/m.exec(text)?.[1] 
 async function linkFor(accounts: Accounts, mail: ReturnType<typeof fakeMailer>, who = 'ada') {
   const before = mail.sent.length;
   expect(await accounts.forgot(who, IP)).toEqual(OK);
+  await settled();
   const token = tokenIn(mail.sent[before]?.text ?? '');
   expect(token).toHaveLength(43);
   return token;
@@ -150,6 +164,7 @@ describe('forgot', () => {
     const { accounts, mail } = setup();
     await join(accounts);
     expect(await accounts.forgot('Ada', IP)).toEqual(OK);
+    await settled();
 
     expect(mail.sent).toHaveLength(1);
     const [email] = mail.sent;
@@ -158,11 +173,13 @@ describe('forgot', () => {
     expect(email).toEqual({
       to: 'ada@example.com',
       subject: SUBJECT,
+      // No name in it: the page says which account the link is for.
       text:
-        'Hi ada, tap the link to choose a new password. It works for 30 minutes.\n\n' +
+        'Hi,\n\ntap the link to choose a new Funancial password. It works for 30 minutes.\n\n' +
         `https://funancial.vercel.app/reset?token=${token}\n\n` +
         "If you didn't ask for this, ignore this email.",
     });
+    expect(email?.text).not.toContain('ada');
   });
 
   it('emails a known email address too, in any spelling of it or of the name', async () => {
@@ -171,6 +188,7 @@ describe('forgot', () => {
     for (const who of ['ADA@example.COM', 'ada@example.com', 'ＡＤＡ']) {
       expect(await accounts.forgot(who, IP)).toEqual(OK);
     }
+    await settled();
     expect(mail.sent.map((m) => m.to)).toEqual(Array(3).fill('ada@example.com'));
     // Each link is its own.
     expect(new Set(mail.sent.map((m) => tokenIn(m.text))).size).toBe(3);
@@ -184,6 +202,51 @@ describe('forgot', () => {
       expect(await accounts.forgot(who, IP)).toEqual(known);
     }
     expect(known).toEqual(OK);
+    await settled();
+    expect(mail.sent).toHaveLength(1);
+  });
+
+  it('answers at once for a known name while the mail is never sent, and the same as for an unknown one', async () => {
+    // The mailer never settles, as a stalled Gmail would not: the answer must not wait for it.
+    const stalled: Mailer = { send: () => new Promise<void>(() => {}) };
+    const accounts = createAccounts({
+      store: memoryKvStore(() => clock),
+      masterKey: MASTER,
+      now: () => clock,
+      mailer: stalled,
+      waitUntil: background,
+    });
+    await join(accounts);
+    const late = new Promise<string>((resolve) => setTimeout(() => resolve('waited'), 500));
+
+    const known = await Promise.race([accounts.forgot('ada', IP), late]);
+    const unknown = await Promise.race([accounts.forgot('nobody', IP), late]);
+    expect(known).toEqual(OK);
+    expect(unknown).toEqual(OK);
+    // The work is handed over to run after the answer.
+    expect(pending).toHaveLength(2);
+  });
+
+  it('hands the lookup, the link and the mail to waitUntil, and they still happen', async () => {
+    const { store, accounts, mail } = setup();
+    await join(accounts);
+    expect(await accounts.forgot('ada', IP)).toEqual(OK);
+    expect(pending).toHaveLength(1);
+    await settled();
+    expect(mail.sent).toHaveLength(1);
+    expect(Object.keys(store.dump()).filter((k) => k.startsWith('acct:r:'))).toHaveLength(1);
+  });
+
+  it('waits for the work itself where there is no waitUntil', async () => {
+    const mail = fakeMailer();
+    const accounts = createAccounts({
+      store: memoryKvStore(() => clock),
+      masterKey: MASTER,
+      now: () => clock,
+      mailer: mail,
+    });
+    await join(accounts);
+    expect(await accounts.forgot('ada', IP)).toEqual(OK);
     expect(mail.sent).toHaveLength(1);
   });
 
@@ -192,19 +255,66 @@ describe('forgot', () => {
     await join(accounts, { username: 'ada' });
     await join(accounts, { username: 'grace' }, '198.51.100.9');
     expect(await accounts.forgot('ada@example.com', IP)).toEqual(OK);
+    await settled();
 
     expect(mail.sent).toHaveLength(2);
-    const greeted = mail.sent.map((m) => /^Hi (\S+),/.exec(m.text)?.[1]).sort();
-    expect(greeted).toEqual(['ada', 'grace']);
     expect(mail.sent.every((m) => m.to === 'ada@example.com' && m.subject === SUBJECT)).toBe(true);
     // Each link opens its own account.
+    const names = [];
     for (const m of mail.sent) {
-      const name = /^Hi (\S+),/.exec(m.text)?.[1];
-      expect(await accounts.resetInfo(tokenIn(m.text), IP)).toEqual({
-        status: 200,
-        body: { username: name },
-      });
+      const info = await accounts.resetInfo(tokenIn(m.text), IP);
+      names.push(out<{ username: string }>(info).username);
     }
+    expect(names.sort()).toEqual(['ada', 'grace']);
+  });
+
+  it('mails at most 3 accounts for one address in one request', async () => {
+    const { accounts, mail } = setup();
+    for (const [i, name] of ['ada', 'grace', 'alan', 'edsger', 'barbara'].entries()) {
+      await join(accounts, { username: name }, `198.51.100.${i + 1}`);
+    }
+    expect(await accounts.forgot('ada@example.com', IP)).toEqual(OK);
+    await settled();
+    expect(mail.sent).toHaveLength(3);
+  });
+
+  it('stops sending after 300 emails a day, still answering 200, and says so in the log', async () => {
+    const spies = (['error', 'log', 'info', 'warn', 'debug'] as const).map((m) =>
+      vi.spyOn(console, m).mockImplementation(() => {}),
+    );
+    const { store, accounts, mail } = setup();
+    await join(accounts);
+    // 299 sent already today.
+    for (let i = 0; i < 299; i++) await rateLimit(store, 'forgot:global', 'all', 300, DAY);
+
+    expect(await accounts.forgot('ada', IP)).toEqual(OK);
+    await settled();
+    expect(mail.sent).toHaveLength(1);
+    expect(spies[0]).not.toHaveBeenCalled();
+
+    // The 301st is not sent, and its link is not made either.
+    expect(await accounts.forgot('ada', IP)).toEqual(OK);
+    await settled();
+    expect(mail.sent).toHaveLength(1);
+    expect(Object.keys(store.dump()).filter((k) => k.startsWith('acct:r:'))).toHaveLength(1);
+    expect(spies[0]?.mock.calls).toEqual([['[api] reset email skipped: cap']]);
+
+    // A day later it sends again.
+    advance(DAY + 1);
+    expect(await accounts.forgot('ada', IP)).toEqual(OK);
+    await settled();
+    expect(mail.sent).toHaveLength(2);
+    spies.forEach((spy) => spy.mockRestore());
+  });
+
+  it('counts only emails actually sent against the daily cap', async () => {
+    const { store, accounts } = setup();
+    await join(accounts);
+    await accounts.forgot('nobody', IP);
+    await accounts.forgot('ada', IP);
+    await accounts.forgot('ada@example.com', IP);
+    await settled();
+    expect(store.dump()['rl:forgot:global:all']).toBe(2);
   });
 
   it('keeps only a hash of the token, which lives 30 minutes', async () => {
@@ -213,7 +323,12 @@ describe('forgot', () => {
     const token = await linkFor(accounts, mail);
 
     const key = `acct:r:${sha(token)}`;
-    expect(store.dump()[key]).toEqual({ username: 'ada', createdAt: '2026-10-17T12:00:00.000Z' });
+    const { authSalt } = store.dump()['acct:u:ada'] as { authSalt: string };
+    expect(store.dump()[key]).toEqual({
+      username: 'ada',
+      createdAt: '2026-10-17T12:00:00.000Z',
+      authSalt,
+    });
     expect(await store.ttl(key)).toBe(1800);
     expect(JSON.stringify(store.dump())).not.toContain(token);
   });
@@ -228,10 +343,12 @@ describe('forgot', () => {
     expect(known).toEqual({ status: 429, body: { error: 'too many attempts' }, retryAfter: HOUR });
     // Saying nothing of the account: an unknown name gets the same.
     expect(await accounts.forgot('nobody', IP)).toEqual(known);
+    await settled();
     expect(mail.sent).toHaveLength(3);
 
     advance(HOUR + 1);
     expect(await accounts.forgot('ada', IP)).toEqual(OK);
+    await settled();
     expect(mail.sent).toHaveLength(4);
   });
 
@@ -267,6 +384,7 @@ describe('forgot', () => {
         status: 400,
         body: { error: 'bad request' },
       });
+    await settled();
     expect(mail.sent).toHaveLength(0);
     for (let i = 0; i < 3; i++) expect((await accounts.forgot('ada', IP)).status).toBe(200);
   });
@@ -297,16 +415,37 @@ describe('forgot', () => {
       masterKey: MASTER,
       now: () => clock,
       mailer: failing,
+      waitUntil: background,
     });
     await join(accounts);
 
     expect(await accounts.forgot('ada', IP)).toEqual(OK);
     expect(await accounts.forgot('nobody', IP)).toEqual(OK);
+    await settled();
 
     // The owner can see that mail failed, and why in a word; nothing of the address or the link.
     const [error, ...others] = spies;
     expect(error?.mock.calls).toEqual([['[api] reset email failed:', 'EAUTH']]);
     for (const spy of others) expect(spy).not.toHaveBeenCalled();
+    spies.forEach((spy) => spy.mockRestore());
+  });
+
+  it('answers 200, and logs one word, when the lookup itself fails after the answer', async () => {
+    const spies = (['error', 'log', 'info', 'warn', 'debug'] as const).map((m) =>
+      vi.spyOn(console, m).mockImplementation(() => {}),
+    );
+    const secret = b64(32);
+    const { accounts, mail } = setup((s) =>
+      around(s, 'smembers', async () => {
+        throw new Error(`connection refused for ${secret}`);
+      }),
+    );
+    await join(accounts);
+    expect(await accounts.forgot('ada@example.com', IP)).toEqual(OK);
+    await settled();
+    expect(mail.sent).toHaveLength(0);
+    expect(spies[0]?.mock.calls).toEqual([['[api] reset email failed:', 'unknown']]);
+    expect(JSON.stringify(spies.map((s) => s.mock.calls))).not.toContain(secret);
     spies.forEach((spy) => spy.mockRestore());
   });
 
@@ -320,6 +459,7 @@ describe('forgot', () => {
     await store.sadd('acct:e:ada@example.com', 'ada');
 
     expect(await accounts.forgot('ada@example.com', IP)).toEqual(OK);
+    await settled();
     expect(mail.sent).toHaveLength(0);
   });
 });
@@ -550,7 +690,7 @@ describe('reset', () => {
   it('gives the link back when the store fails part-way, so the friend can try again', async () => {
     let failOnce = true;
     const { accounts, mail } = setup((s) =>
-      around(s, 'set', async ([key], run) => {
+      around(s, 'compareAndSet', async ([key], run) => {
         if (failOnce && key === 'acct:u:ada' && clock > T0) {
           failOnce = false;
           throw new Error('connection reset');
@@ -565,6 +705,42 @@ describe('reset', () => {
     await expect(accounts.reset(token, authKey, kek, IP)).rejects.toThrow('connection reset');
     expect(await accounts.reset(token, authKey, kek, IP)).toEqual({ status: 204 });
     expect((await logIn(accounts, authKey)).status).toBe(200);
+  });
+
+  it('kills an older link once a newer one has been used', async () => {
+    const { accounts, mail } = setup();
+    await join(accounts);
+    const first = await linkFor(accounts, mail);
+    const second = await linkFor(accounts, mail);
+    expect(second).not.toBe(first);
+    expect((await accounts.resetInfo(first, IP)).status).toBe(200);
+
+    expect(await accounts.reset(second, b64(32), b64(32), IP)).toEqual({ status: 204 });
+    expect(await accounts.resetInfo(first, IP)).toEqual(GONE);
+    expect(await accounts.reset(first, b64(32), b64(32), IP)).toEqual(GONE);
+  });
+
+  it('kills a link made before a password change', async () => {
+    const { accounts, mail } = setup();
+    const { authKey, token: device } = await join(accounts);
+    const link = await linkFor(accounts, mail);
+    const changed = await accounts.changePassword(device, {
+      oldAuthKey: authKey,
+      newAuthKey: b64(32),
+      newWrappedPw: { iv: b64(12), ciphertext: b64(48) },
+    });
+    expect(changed).toEqual({ status: 204 });
+
+    expect(await accounts.resetInfo(link, IP)).toEqual(GONE);
+    expect(await accounts.reset(link, b64(32), b64(32), IP)).toEqual(GONE);
+  });
+
+  it('leaves a link alone when someone logs in, which does not change the password', async () => {
+    const { accounts, mail } = setup();
+    const { authKey } = await join(accounts);
+    const link = await linkFor(accounts, mail);
+    expect((await logIn(accounts, authKey)).status).toBe(200);
+    expect((await accounts.resetInfo(link, IP)).status).toBe(200);
   });
 
   it('limits attempts: the 21st in an hour is 429, from that address only', async () => {
@@ -635,6 +811,115 @@ describe('reset', () => {
   });
 });
 
+describe('account writes are compare-and-set', () => {
+  const BUSY = { status: 409, body: { error: 'busy' } };
+  const newWrapped = () => ({ iv: b64(12), ciphertext: b64(48) });
+
+  it('cannot let a log-in restore the old password when a reset lands between its read and its write', async () => {
+    // Hold the first write to the account record: the log-in's, which rotates the device token.
+    let hit!: () => void;
+    let open!: () => void;
+    const reached = new Promise<void>((resolve) => (hit = resolve));
+    const opened = new Promise<void>((resolve) => (open = resolve));
+    let held = false;
+    const hold = async (args: unknown[], run: () => Promise<unknown>) => {
+      if (args[0] === 'acct:u:ada' && !held) {
+        held = true;
+        hit();
+        await opened;
+      }
+      return run();
+    };
+    const { accounts, mail } = setup((s) => around(around(s, 'set', hold), 'compareAndSet', hold));
+    const { authKey: oldKey } = await join(accounts);
+    const link = await linkFor(accounts, mail);
+
+    // The log-in has read the record, with the old password in it, and waits to write it back.
+    const login = logIn(accounts, oldKey);
+    await Promise.race([reached, new Promise((resolve) => setTimeout(resolve, 1000))]);
+    const fresh = resetKeys();
+    expect(await accounts.reset(link, fresh.authKey, fresh.kek, IP)).toEqual({ status: 204 });
+    open();
+    expect((await login).status).toBe(200);
+
+    // Both landed: the new password works, the old one does not.
+    expect((await logIn(accounts, fresh.authKey)).status).toBe(200);
+    expect((await logIn(accounts, oldKey)).status).toBe(401);
+  });
+
+  it('reads again and writes on top of what another writer changed meanwhile', async () => {
+    let calls = 0;
+    const { store, accounts } = setup((s) =>
+      around(s, 'compareAndSet', async ([key], run) => {
+        if (key === 'acct:u:ada' && ++calls === 1) {
+          // Another request changes the record after this one read it.
+          const now = (await s.get('acct:u:ada')) as Record<string, unknown>;
+          await s.set('acct:u:ada', { ...now, deviceTokenHash: 'taken-over' });
+        }
+        return run();
+      }),
+    );
+    const { authKey, token } = await join(accounts);
+    const wrappedPw = newWrapped();
+
+    expect(
+      await accounts.changePassword(token, {
+        oldAuthKey: authKey,
+        newAuthKey: b64(32),
+        newWrappedPw: wrappedPw,
+      }),
+    ).toEqual({ status: 204 });
+    expect(calls).toBe(2);
+    expect(store.dump()['acct:u:ada']).toMatchObject({ deviceTokenHash: 'taken-over', wrappedPw });
+  });
+
+  it('gives up after 3 tries with 409 busy, and changes nothing', async () => {
+    let calls = 0;
+    let losing = true;
+    const { store, accounts, mail } = setup((s) =>
+      around(s, 'compareAndSet', async (_args, run) => {
+        calls++;
+        return losing ? false : run();
+      }),
+    );
+    const { authKey, token } = await join(accounts);
+    const link = await linkFor(accounts, mail);
+    const before = JSON.stringify(store.dump()['acct:u:ada']);
+    const tokens = Object.keys(store.dump()).filter((k) => k.startsWith('acct:t:'));
+
+    expect(
+      await accounts.changePassword(token, {
+        oldAuthKey: authKey,
+        newAuthKey: b64(32),
+        newWrappedPw: newWrapped(),
+      }),
+    ).toEqual(BUSY);
+    expect(calls).toBe(3);
+
+    // A log-in takes no new token, and the old phone's still works.
+    expect(await logIn(accounts, authKey)).toEqual(BUSY);
+    expect(Object.keys(store.dump()).filter((k) => k.startsWith('acct:t:'))).toEqual(tokens);
+
+    // A reset gives its link back.
+    const fresh = resetKeys();
+    expect(await accounts.reset(link, fresh.authKey, fresh.kek, IP)).toEqual(BUSY);
+    expect(JSON.stringify(store.dump()['acct:u:ada'])).toBe(before);
+    expect((await put(accounts, token, 0)).status).toBe(200);
+
+    losing = false;
+    expect(await accounts.reset(link, fresh.authKey, fresh.kek, IP)).toEqual({ status: 204 });
+  });
+
+  it('wins on the third try', async () => {
+    let losses = 2;
+    const { accounts } = setup((s) =>
+      around(s, 'compareAndSet', async (_args, run) => (losses-- > 0 ? false : run())),
+    );
+    const { authKey } = await join(accounts);
+    expect((await logIn(accounts, authKey)).status).toBe(200);
+  });
+});
+
 describe('secrets', () => {
   const spied = () =>
     (['log', 'info', 'warn', 'error', 'debug'] as const).map((m) =>
@@ -701,8 +986,13 @@ describe('the routes', () => {
     wrappedPw: { iv: b64(12), ciphertext: b64(48) },
   });
 
+  /** The work `forgot` handed to Vercel after it answered. */
+  const afterAnswer = () =>
+    Promise.all(vi.mocked(waitUntil).mock.calls.map(([promise]) => promise));
+
   beforeEach(() => {
     mail.sent.length = 0;
+    vi.mocked(waitUntil).mockClear();
     vi.mocked(kvStoreFromEnv).mockReturnValue(memoryKvStore());
     vi.mocked(gmailMailerFromEnv).mockReturnValue(mail);
     vi.stubEnv('FUNANCIAL_ACCESS_TOKEN', TOKEN);
@@ -718,6 +1008,7 @@ describe('the routes', () => {
     expect((await call(signupPOST, 'POST', '/api/signup', account(), shared)).status).toBe(200);
     const res = await call(forgotPOST, 'POST', '/api/forgot', { who: 'ada' }, shared);
     expect(res.status).toBe(200);
+    await afterAnswer();
     return tokenIn(mail.sent[0]?.text ?? '');
   }
 
@@ -751,9 +1042,24 @@ describe('the routes', () => {
       expect(res.headers.get('Cache-Control')).toBe('no-store');
       expect(await res.text()).toBe('{"ok":true}');
     }
+    await afterAnswer();
     expect(mail.sent).toHaveLength(2);
     expect((await call(forgotPOST, 'POST', '/api/forgot', { who: 7 }, shared)).status).toBe(400);
     expect((await call(forgotPOST, 'POST', '/api/forgot', 'not json', shared)).status).toBe(400);
+  });
+
+  it('/api/forgot answers before a stalled mailer finishes, handing its work to waitUntil', async () => {
+    expect((await call(signupPOST, 'POST', '/api/signup', account(), shared)).status).toBe(200);
+    vi.mocked(gmailMailerFromEnv).mockReturnValue({ send: () => new Promise<void>(() => {}) });
+    const late = new Promise<string>((resolve) => setTimeout(() => resolve('waited'), 1000));
+
+    const res = await Promise.race([
+      call(forgotPOST, 'POST', '/api/forgot', { who: 'ada' }, shared),
+      late,
+    ]);
+    expect(res).toBeInstanceOf(Response);
+    expect(await (res as Response).text()).toBe('{"ok":true}');
+    expect(waitUntil).toHaveBeenCalledTimes(1);
   });
 
   it('/api/forgot says 503 not configured without Gmail, while the other routes carry on', async () => {
@@ -884,14 +1190,24 @@ describe('the routes', () => {
   it('answer 503 with only the kind of error logged when the store fails', async () => {
     const secret = b64(32);
     const failing = Object.fromEntries(
-      ['get', 'set', 'setNx', 'del', 'incr', 'expire', 'ttl', 'sadd', 'smembers', 'srem'].map(
-        (name) => [
-          name,
-          async () => {
-            throw new Error(`connection refused for token ${secret}`);
-          },
-        ],
-      ),
+      [
+        'get',
+        'set',
+        'setNx',
+        'compareAndSet',
+        'del',
+        'incr',
+        'expire',
+        'ttl',
+        'sadd',
+        'smembers',
+        'srem',
+      ].map((name) => [
+        name,
+        async () => {
+          throw new Error(`connection refused for token ${secret}`);
+        },
+      ]),
     ) as unknown as KvStore;
     vi.mocked(kvStoreFromEnv).mockReturnValue(failing);
     const spies = spied();
@@ -930,9 +1246,13 @@ describe('the Gmail mailer', () => {
     const mailer = gmailMailerFromEnv();
     await mailer?.send('ada@example.com', 'Subject line', 'Body text');
 
+    // A stalled Gmail must end in the caller's catch well before the function's 10 s are up.
     expect(createTransport).toHaveBeenCalledWith({
       service: 'gmail',
       auth: { user: 'owner@gmail.com', pass: 'app-password-value' },
+      connectionTimeout: 3000,
+      greetingTimeout: 3000,
+      socketTimeout: 3000,
     });
     expect(sendMail).toHaveBeenCalledWith({
       from: 'Funancial <owner@gmail.com>',

@@ -23,6 +23,8 @@ const DONE = 'Your password is changed. Log in on your phone with the new one.';
 const LATER = 'Something went wrong. Try again in a moment.';
 
 const token = new URLSearchParams(location.search).get('token');
+// Read, so no longer needed in the address bar: not in the history, a screenshot, or a copied link.
+history.replaceState(null, '', location.pathname);
 let username = '';
 let busy = false;
 

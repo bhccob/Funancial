@@ -350,14 +350,24 @@ describe('account routes', () => {
   it('answer 503 without details, and log only the kind of error, when the store fails, on every route', async () => {
     const secret = b64(32);
     const failing = Object.fromEntries(
-      ['get', 'set', 'setNx', 'del', 'incr', 'expire', 'ttl', 'sadd', 'smembers', 'srem'].map(
-        (name) => [
-          name,
-          async () => {
-            throw new Error(`connection refused for token ${secret}`);
-          },
-        ],
-      ),
+      [
+        'get',
+        'set',
+        'setNx',
+        'compareAndSet',
+        'del',
+        'incr',
+        'expire',
+        'ttl',
+        'sadd',
+        'smembers',
+        'srem',
+      ].map((name) => [
+        name,
+        async () => {
+          throw new Error(`connection refused for token ${secret}`);
+        },
+      ]),
     ) as unknown as KvStore;
     vi.mocked(kvStoreFromEnv).mockReturnValue(failing);
     const spies = spiedConsole();

@@ -1,3 +1,4 @@
+import { waitUntil } from '@vercel/functions';
 import { createAccounts, MasterKeyMismatch, type Accounts, type Result } from './accounts.js';
 import { bearerToken, clientIp, empty, guard, json, readJson } from './http.js';
 import { gmailMailerFromEnv } from './mailer.js';
@@ -14,7 +15,13 @@ function accountsFromEnv(): Accounts | null {
   const store = kvStoreFromEnv();
   const masterKey = Buffer.from(process.env.SERVER_MASTER_KEY ?? '', 'base64');
   return store && masterKey.length === 32
-    ? createAccounts({ store, masterKey, now: Date.now, mailer: gmailMailerFromEnv() ?? undefined })
+    ? createAccounts({
+        store,
+        masterKey,
+        now: Date.now,
+        mailer: gmailMailerFromEnv() ?? undefined,
+        waitUntil,
+      })
     : null;
 }
 

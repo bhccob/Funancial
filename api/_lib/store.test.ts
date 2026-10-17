@@ -66,6 +66,34 @@ describe('memoryKvStore', () => {
     expect(store.dump()).toEqual({});
   });
 
+  it('writes with compareAndSet only where the key still holds what was read, and says whether it wrote', async () => {
+    const store = memoryKvStore();
+    await store.set('acct', { name: 'ada', n: 1 });
+    // Compared by value, as the JSON text set would write.
+    expect(await store.compareAndSet('acct', { name: 'ada', n: 1 }, { name: 'ada', n: 2 })).toBe(
+      true,
+    );
+    expect(await store.get('acct')).toEqual({ name: 'ada', n: 2 });
+    // A stale read loses, and writes nothing.
+    expect(await store.compareAndSet('acct', { name: 'ada', n: 1 }, { name: 'ada', n: 9 })).toBe(
+      false,
+    );
+    expect(await store.get('acct')).toEqual({ name: 'ada', n: 2 });
+    // An absent key is not something that was read.
+    expect(await store.compareAndSet('missing', null, 1)).toBe(false);
+    expect(await store.get('missing')).toBeNull();
+  });
+
+  it('lets only one of two compareAndSet calls from the same read win', async () => {
+    const store = memoryKvStore();
+    await store.set('acct', { n: 0 });
+    const results = await Promise.all([
+      store.compareAndSet('acct', { n: 0 }, { n: 1 }),
+      store.compareAndSet('acct', { n: 0 }, { n: 2 }),
+    ]);
+    expect(results.sort()).toEqual([false, true]);
+  });
+
   it('deletes several keys at once', async () => {
     const store = memoryKvStore();
     await store.set('a', 1);
@@ -109,6 +137,13 @@ describe('upstashKvStore', () => {
       },
       sadd: async (key: string, member: string) => {
         data.set(key, JSON.stringify([...JSON.parse(data.get(key) ?? '[]'), member]));
+        return 1;
+      },
+      eval: async (script: string, keys: string[], args: string[]) => {
+        calls.push(['eval', script, keys, args]);
+        // What the script does: SET only if GET still gives the first argument.
+        if (data.get(keys[0] ?? '') !== args[0]) return 0;
+        data.set(keys[0] ?? '', args[1] ?? '');
         return 1;
       },
       smembers: async (key: string) => JSON.parse(data.get(key) ?? '[]') as string[],
@@ -161,6 +196,22 @@ describe('upstashKvStore', () => {
       ['expire', 'rl:x', 900, 'NX'],
       ['ttl', 'rl:x'],
     ]);
+  });
+
+  it('runs compareAndSet as one EVAL of GET-compare-SET over the JSON text', async () => {
+    const { calls, data, store } = fake();
+    await store.set('acct', { n: 1 });
+    expect(await store.compareAndSet('acct', { n: 1 }, { n: 2 })).toBe(true);
+    expect(data.get('acct')).toBe('{"n":2}');
+    expect(await store.compareAndSet('acct', { n: 1 }, { n: 3 })).toBe(false);
+    expect(data.get('acct')).toBe('{"n":2}');
+
+    const [, script, keys, args] = calls.find((c) => c[0] === 'eval') ?? [];
+    expect(script).toBe(
+      "if redis.call('GET', KEYS[1]) == ARGV[1] then redis.call('SET', KEYS[1], ARGV[2]) return 1 else return 0 end",
+    );
+    expect(keys).toEqual(['acct']);
+    expect(args).toEqual(['{"n":1}', '{"n":2}']);
   });
 
   it('counts, deletes and keeps sets', async () => {

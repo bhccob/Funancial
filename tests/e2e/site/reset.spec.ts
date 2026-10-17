@@ -23,6 +23,9 @@ test('a friend chooses a new password from the emailed link', async ({ page }) =
   await expect(page).toHaveTitle('Choose a new password');
   await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', /noindex/);
   await expect(page.getByRole('heading', { name: 'Choose a new password for ada' })).toBeVisible();
+  // The token was read, and is out of the address bar.
+  expect(new URL(page.url()).pathname).toBe('/reset');
+  expect(page.url()).not.toContain(TOKEN);
 
   await page.getByLabel('New password').fill(PASSWORD);
   await page.getByLabel('Type it again').fill(PASSWORD);

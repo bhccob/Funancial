@@ -13,7 +13,14 @@ export function gmailMailerFromEnv(): Mailer | null {
   const user = process.env.GMAIL_USER;
   const pass = process.env.GMAIL_APP_PASSWORD;
   if (!user || !pass) return null;
-  const transport = nodemailer.createTransport({ service: 'gmail', auth: { user, pass } });
+  // A stalled Gmail must end in the caller's catch long before the function's 10 s are up.
+  const transport = nodemailer.createTransport({
+    service: 'gmail',
+    auth: { user, pass },
+    connectionTimeout: 3000,
+    greetingTimeout: 3000,
+    socketTimeout: 3000,
+  });
   return {
     async send(to, subject, text) {
       await transport.sendMail({ from: `Funancial <${user}>`, to, subject, text });

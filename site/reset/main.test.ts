@@ -75,6 +75,23 @@ describe('the reset page', () => {
     expect(submit()).toBeEnabled();
   });
 
+  it('takes the token out of the address bar once it has read it, before asking about it', async () => {
+    let seen = '';
+    fetchMock.mockImplementation(async (url) => {
+      seen = location.search;
+      return reply(String(url).includes(TOKEN) ? (info as Answer) : { status: 410 });
+    });
+    await open();
+    await screen.findByText('Choose a new password for ada');
+
+    // The request carried it; the address bar no longer does (nor does history).
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(`/api/reset?token=${TOKEN}`);
+    expect(seen).toBe('');
+    expect(location.pathname).toBe('/reset');
+    expect(location.search).toBe('');
+    expect(location.href).not.toContain(TOKEN);
+  });
+
   it('shows the name as the service spells it, in the form the keys are derived from', async () => {
     info = { status: 200, body: { username: 'ＡＤＡ' } };
     await open();

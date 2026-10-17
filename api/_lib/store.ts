@@ -10,6 +10,12 @@ export interface KvStore {
   set(key: string, value: unknown, ex?: number): Promise<void>;
   /** Writes only where the key is absent, in one step; says whether it wrote. */
   setNx(key: string, value: unknown, ex?: number): Promise<boolean>;
+  /**
+   * Writes `next` only where the key still holds `expected` (compared as the JSON text `set` would
+   * write), in one step; says whether it wrote. A record read earlier and written back whole is safe
+   * with it: if anything changed it in between, this loses and the caller reads again.
+   */
+  compareAndSet(key: string, expected: unknown, next: unknown): Promise<boolean>;
   del(...keys: string[]): Promise<void>;
   incr(key: string): Promise<number>;
   /** Arms a lifetime on a key that has none (EXPIRE NX); one that has a lifetime keeps it. */
@@ -23,8 +29,11 @@ export interface KvStore {
 
 export type UpstashClient = Pick<
   Redis,
-  'get' | 'set' | 'del' | 'incr' | 'expire' | 'ttl' | 'sadd' | 'smembers' | 'srem'
+  'get' | 'set' | 'del' | 'incr' | 'expire' | 'ttl' | 'sadd' | 'smembers' | 'srem' | 'eval'
 >;
+
+const COMPARE_AND_SET =
+  "if redis.call('GET', KEYS[1]) == ARGV[1] then redis.call('SET', KEYS[1], ARGV[2]) return 1 else return 0 end";
 
 /**
  * The client is made with automatic deserialisation off, and values go in and out as JSON text here:
@@ -46,6 +55,14 @@ export function upstashKvStore(redis: UpstashClient): KvStore {
         ex ? { nx: true, ex } : { nx: true },
       );
       return done !== null;
+    },
+    async compareAndSet(key, expected, next) {
+      const wrote = await redis.eval(
+        COMPARE_AND_SET,
+        [key],
+        [JSON.stringify(expected), JSON.stringify(next)],
+      );
+      return Number(wrote) === 1;
     },
     async del(...keys) {
       if (keys.length) await redis.del(...keys);
@@ -107,6 +124,13 @@ export function memoryKvStore(now: () => number = Date.now): KvStore & {
     async setNx(key, value, ex) {
       if (entry(key)) return false;
       data.set(key, { value: JSON.stringify(value), ...expiry(ex) });
+      return true;
+    },
+    async compareAndSet(key, expected, next) {
+      const e = entry(key);
+      if (!e || e.value !== JSON.stringify(expected)) return false;
+      // As SET does, this drops any lifetime the key had.
+      data.set(key, { value: JSON.stringify(next) });
       return true;
     },
     async del(...keys) {
