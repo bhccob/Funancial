@@ -97,7 +97,7 @@ away, and that the reset page shows its "expired" message for a made-up link.
 | `SERVER_MASTER_KEY` | The master key you made in step 3. | Lets the service unlock a copy for "forgot password". With it and a stolen database, someone could open every copy. | **Lost:** email resets can't restore old data. **Leaked:** tell Claude. Replacing it has a cost (see step 3), so don't do it on your own. |
 | `GMAIL_USER` | The Gmail address that sends the emails. | Not a secret by itself. It's the "from" address. | Nothing to protect. |
 | `GMAIL_APP_PASSWORD` | A Google app password for that address. | Lets the service send "forgot password" emails from your Gmail. | Someone could send email as that Gmail. Delete the app password in your Google account and make a new one. |
-| `FUNANCIAL_ACCESS_TOKEN` | Already set from earlier. | It keeps strangers' requests out. | **Leave them alone.** |
+| `FUNANCIAL_ACCESS_TOKEN` | Already set from earlier. | It keeps strangers' requests out. | **Leave it alone.** |
 
 Claude only ever checks that the names are listed (`npx vercel env ls` prints names, not values). It
 never pulls, prints or asks for the values.
