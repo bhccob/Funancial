@@ -38,7 +38,8 @@ export type Account = {
   createdAt: string;
 };
 
-type Copy = Sealed & { version: number; savedAt: string };
+/** `createdAt` is the account's: a copy left by an earlier account of the same name never counts. */
+type Copy = Sealed & { version: number; savedAt: string; createdAt: string };
 
 export type AccountDeps = {
   store: KvStore;
@@ -205,6 +206,12 @@ export function createAccounts({ store, masterKey, now }: AccountDeps) {
     return account !== null && equal;
   }
 
+  /** The account's stored copy, or null: one left by an earlier account of the same name is no copy of this one. */
+  async function ownCopy(account: Pick<Account, 'username' | 'createdAt'>) {
+    const copy = await store.get<Copy>(K.copy(account.username));
+    return copy && copy.createdAt === account.createdAt ? copy : null;
+  }
+
   /** The account a Bearer device token belongs to, or null. */
   async function authed(token: string | null) {
     if (!token || !TOKEN.test(token)) return null;
@@ -273,7 +280,7 @@ export function createAccounts({ store, masterKey, now }: AccountDeps) {
       if (!(await matches(account, authKey)) || !account) return unauthorized();
 
       // Read before anything changes, so a failed read never logs the old phone out.
-      const copy = await store.get<Copy>(K.copy(name));
+      const firstRead = await ownCopy(account);
 
       // A new token ends the old phone's: that is the takeover. The pointer goes in first, so a
       // failure part-way leaves the old token working rather than none.
@@ -287,6 +294,9 @@ export function createAccounts({ store, masterKey, now }: AccountDeps) {
       }
       await store.del(K.token(before.deviceTokenHash));
 
+      // Read again: the old phone may have been acknowledged an upload since the first read, and the
+      // new phone must start from it. If this read fails, the first one stands.
+      const copy = await ownCopy(before).catch(() => firstRead);
       return {
         status: 200,
         body: {
@@ -311,7 +321,7 @@ export function createAccounts({ store, masterKey, now }: AccountDeps) {
       // The 409s say where the phone stands: `stale` means re-base on `version`, `busy` means
       // another write from this version is in flight (or stuck): try again later.
       const copyKey = K.copy(account.username);
-      const stored = (await store.get<Copy>(copyKey))?.version ?? 0;
+      const stored = (await ownCopy(account))?.version ?? 0;
       if (baseVersion !== stored) return { status: 409, body: { error: 'stale', version: stored } };
       // Of two writers from the same version only the first claim wins. A retried write that already
       // took effect sees the claim taken, so the claim holds a nonce: finding ours means we won.
@@ -322,7 +332,13 @@ export function createAccounts({ store, masterKey, now }: AccountDeps) {
       if (!won) return { status: 409, body: { error: 'busy', version: stored } };
 
       try {
-        const copy: Copy = { iv: ivText, ciphertext, version: baseVersion + 1, savedAt: stamp() };
+        const copy: Copy = {
+          iv: ivText,
+          ciphertext,
+          version: baseVersion + 1,
+          savedAt: stamp(),
+          createdAt: account.createdAt,
+        };
         await store.set(copyKey, copy);
         const now = await store.get<Account>(K.user(account.username));
         // Deleted while this was written: no copy may outlive its account.

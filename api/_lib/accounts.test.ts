@@ -318,6 +318,49 @@ describe('log-in', () => {
     expect((await put(accounts, token, 0)).status).toBe(200);
   });
 
+  it('answers with the newest copy: an upload acknowledged between its first read and the rotation is not missed', async () => {
+    const g = gate();
+    let reads = 0;
+    const { accounts } = setup((s) =>
+      around(s, 'get', async ([key], run) => {
+        const value = await run();
+        // Hold the log-in's own first read of the copy, after it has been taken.
+        if (key === 'acct:c:ada' && ++reads === 1) {
+          g.hit();
+          await g.opened;
+        }
+        return value;
+      }),
+    );
+    const { authKey, token } = await join(accounts);
+    const loggingIn = logIn(accounts, authKey);
+    await g.reached; // the log-in has read "no copy" and not rotated the token yet
+    const c = copyOf();
+    expect((await put(accounts, token, 0, c)).status).toBe(200); // acknowledged to the old phone
+    g.open();
+
+    const res = await loggingIn;
+    expect(res.status).toBe(200);
+    expect(out(res).copy).toEqual({ ...c, version: 1 });
+  });
+
+  it('falls back to its first read when the read after the rotation fails', async () => {
+    let reads = 0;
+    const { accounts } = setup((s) =>
+      around(s, 'get', async ([key], run) => {
+        if (key === 'acct:c:ada' && ++reads === 3) throw new Error('store down');
+        return run();
+      }),
+    );
+    const { authKey, token } = await join(accounts);
+    const c = copyOf();
+    await put(accounts, token, 0, c); // reads 1 (the version check)
+    // The log-in's first read is the 2nd, and the one after the rotation is the 3rd, which fails.
+    const res = await logIn(accounts, authKey);
+    expect(res.status).toBe(200);
+    expect(out(res).copy).toEqual({ ...c, version: 1 });
+  });
+
   it('keeps the token when the key is wrong', async () => {
     const { accounts } = setup();
     const { token } = await join(accounts);
@@ -374,6 +417,7 @@ describe('putCopy', () => {
       ...winner,
       version: 1,
       savedAt: '2026-10-17T12:00:00.000Z',
+      createdAt: '2026-10-17T12:00:00.000Z',
     });
     // Retried after the race, the loser is stale and learns the version to re-base on.
     expect(await put(accounts, token, 0)).toEqual({
@@ -514,6 +558,89 @@ describe('putCopy', () => {
       body: { error: 'stale', version: 1 },
     });
     expect((await put(accounts, second, 1)).status).toBe(200);
+  });
+});
+
+describe('a copy left by an earlier account of the same name', () => {
+  const OLD = '2026-10-17T12:00:00.000Z';
+
+  it('is not handed to the new account, and does not block its first upload (an upload held while the account was deleted and made again)', async () => {
+    const g = gate();
+    let held = false;
+    const { store, accounts } = setup((s) =>
+      around(s, 'set', async ([key], run) => {
+        if (key === 'acct:c:ada' && !held) {
+          held = true;
+          g.hit();
+          await g.opened;
+        }
+        return run();
+      }),
+    );
+    const { token } = await join(accounts);
+    const upload = put(accounts, token, 0);
+    await g.reached;
+    expect(await accounts.deleteAccount(token)).toEqual({ status: 204 });
+    advance(1); // the new account has its own creation time
+    const again = await join(accounts, {}, '198.51.100.20');
+    expect(again.res.status).toBe(200);
+    g.open();
+    expect((await upload).status).toBe(401); // the old phone's token is gone
+    // The old account's copy did land, under the old creation time.
+    expect(store.dump()['acct:c:ada']).toMatchObject({ version: 1, createdAt: OLD });
+
+    // A second phone logs in to the new account: no copy, and its first upload is from base 0.
+    const res = await logIn(accounts, again.authKey, 'ada', '198.51.100.21');
+    expect(res.status).toBe(200);
+    expect(out(res).copy).toBeNull();
+    const first = await put(accounts, out<{ deviceToken: string }>(res).deviceToken, 0);
+    expect(first).toMatchObject({ status: 200, body: { version: 1 } });
+    expect(store.dump()['acct:c:ada']).toMatchObject({
+      version: 1,
+      createdAt: '2026-10-17T12:00:01.000Z',
+    });
+  });
+
+  it('is ignored too when the function that wrote it was killed before it could clean up', async () => {
+    const g = gate();
+    let held = false;
+    let dying = false;
+    const { store, accounts } = setup((s) =>
+      around(
+        around(s, 'set', async ([key], run) => {
+          if (key === 'acct:c:ada' && !held) {
+            held = true;
+            g.hit();
+            await g.opened;
+          }
+          return run();
+        }),
+        'get',
+        async ([key], run) => {
+          // The check after the write is where the function dies.
+          if (dying && key === 'acct:u:ada') throw new Error('killed');
+          return run();
+        },
+      ),
+    );
+    const { token } = await join(accounts);
+    const upload = put(accounts, token, 0);
+    await g.reached;
+    expect(await accounts.deleteAccount(token)).toEqual({ status: 204 });
+    dying = true;
+    g.open();
+    await expect(upload).rejects.toThrow('killed');
+    dying = false;
+    // No account is left, and its copy is.
+    expect(acctKeys(store)).toEqual(['acct:c:ada']);
+
+    advance(1);
+    const again = await join(accounts, {}, '198.51.100.20');
+    expect(again.res.status).toBe(200);
+    const res = await logIn(accounts, again.authKey, 'ada', '198.51.100.21');
+    expect(out(res).copy).toBeNull();
+    const first = await put(accounts, out<{ deviceToken: string }>(res).deviceToken, 0);
+    expect(first).toMatchObject({ status: 200, body: { version: 1 } });
   });
 });
 
