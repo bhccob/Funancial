@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { sha256 } from 'hash-wasm';
 
 const TOKEN = 'T'.repeat(43);
 const PASSWORD = 'a brand new password';
@@ -49,9 +50,11 @@ test('a friend chooses a new password from the emailed link', async ({ page }) =
   expect(Object.keys(sent).sort()).toEqual(['kek', 'newAuthKey', 'token']);
   expect(sent.token).toBe(TOKEN);
   // Argon2id (64 MiB, 3 passes) from the built page's own WASM gives what Node's Argon2id and HKDF
-  // give for ada and this password (`independently` in api/_lib/accounts.test.ts), as the app does.
-  expect(sent.newAuthKey).toBe('lZxv41bid5O0MjkLF1yeGhyvPux4SnnbRdw+3PaAiq4=');
-  expect(sent.kek).toBe('rVlb6vjMQaTT2CAzWvIHDx4oZlpcOTTaQSp1gApAqCs=');
+  // give for ada and this password (`independently` in api/_lib/accounts.test.ts), as the app does,
+  // checked by their SHA-256 so the keys, which look like real secrets, are not in the repo.
+  expect(await sha256(`${sent.newAuthKey} ${sent.kek}`)).toBe(
+    '69f1094909f5a745ce82f5ea776857362a933fe598357171df5c24836722b7b4',
+  );
   expect(posts[0]!.headers['x-funancial-token']).toBeUndefined();
   expect(posts[0]!.body).not.toContain(PASSWORD);
 

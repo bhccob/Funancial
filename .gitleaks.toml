@@ -8,8 +8,10 @@ title = "Funcial"
 [extend]
 useDefault = true
 
+# Since 2026-10-18 the files check these values by their SHA-256 and no longer hold them, but their
+# history still does, and the weekly and manual runs scan the whole history.
 [[allowlists]]
-description = "Stand-in values in unit tests: public test vectors and a fake secret"
+description = "Stand-in values in unit tests' history: public test vectors and a fake secret"
 targetRules = ["generic-api-key"]
 paths = [
   # The Argon2id known answers: public vectors, derived from a made-up name and password.
