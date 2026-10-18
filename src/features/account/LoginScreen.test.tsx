@@ -98,8 +98,8 @@ describe('LoginScreen', () => {
       'unreadable',
       "Your account's copy couldn't be opened on this phone. Nothing was changed. Try again later, or update Android System WebView.",
     ],
-    ['unavailable', "Funancial's service isn't answering right now. Try again in a moment."],
-    ['busy', 'Funancial is busy right now. Try again in a moment.'],
+    ['unavailable', "Funcial's service isn't answering right now. Try again in a moment."],
+    ['busy', 'Funcial is busy right now. Try again in a moment.'],
     ['offline', "You're offline. Try again when you're connected."],
   ] as const)('shows what the account layer says for %s', async (code, message) => {
     const actions = fakeAccount();
@@ -176,7 +176,7 @@ describe('LoginScreen', () => {
       const { store, onHold } = await loggedIn();
       expect(screen.queryByLabelText('Password')).not.toBeInTheDocument();
       expect(screen.getByRole('heading', { level: 1, name: 'Lock this phone' })).toHaveFocus();
-      expect(screen.getByText('Choose a PIN to open Funancial on this phone.')).toBeInTheDocument();
+      expect(screen.getByText('Choose a PIN to open Funcial on this phone.')).toBeInTheDocument();
       expect(screen.queryByText(/Your data is here/)).not.toBeInTheDocument();
       await userEvent.type(screen.getByLabelText('Choose a PIN'), '2468');
       await userEvent.type(screen.getByLabelText('Confirm PIN'), '2468');

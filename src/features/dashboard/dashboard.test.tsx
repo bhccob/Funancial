@@ -853,7 +853,7 @@ describe('DashboardScreen salary and freeze', () => {
 describe('DashboardScreen reminders invitation', () => {
   const INVITE = 'Get reminders for bills, renewals and a daily nudge to log spending.';
   const BLOCKED =
-    'Notifications are blocked for Funancial. Turn them on in Android Settings → Apps → Funancial → Notifications.';
+    'Notifications are blocked for Funcial. Turn them on in Android Settings → Apps → Funcial → Notifications.';
   /** Nobody has been asked yet: off, and not prompted. */
   const fresh = makeSettings().reminders;
 

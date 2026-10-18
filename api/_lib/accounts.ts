@@ -84,7 +84,7 @@ const CLAIM_SECONDS = 60;
 /** How long an emailed reset link works. */
 const RESET_SECONDS = 30 * 60;
 /** Where the link in a reset email points (the page is site/reset). */
-const SITE = 'https://funancial.vercel.app';
+const SITE = 'https://funcial.vercel.app';
 
 const USERNAME = /^[a-z0-9._-]{3,30}$/;
 const TOKEN = /^[A-Za-z0-9_-]{43}$/;
@@ -428,8 +428,8 @@ export function createAccounts({ store, masterKey, now, mailer, waitUntil }: Acc
       await store.set(K.reset(hash), link, RESET_SECONDS);
       await mailer?.send(
         account.email,
-        'Choose a new Funancial password',
-        'Hi,\n\ntap the link to choose a new Funancial password. It works for 30 minutes.\n\n' +
+        'Choose a new Funcial password',
+        'Hi,\n\ntap the link to choose a new Funcial password. It works for 30 minutes.\n\n' +
           // In the fragment, which a browser never sends: it is in no request log, the page's own included.
           `${SITE}/reset#token=${token}\n\n` +
           "If you didn't ask for this, ignore this email.",

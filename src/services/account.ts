@@ -4,7 +4,7 @@ import type { Sealed } from '@/data/accountCrypto';
 /** The service could not be reached: offline, a timeout or a dropped connection. */
 export class NetworkError extends Error {
   constructor() {
-    super("Couldn't reach Funancial's service.");
+    super("Couldn't reach Funcial's service.");
     this.name = 'NetworkError';
   }
 }

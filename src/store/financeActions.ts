@@ -454,7 +454,7 @@ export function createFinanceActions(store: StoreApi<AppState>) {
 
     deleteTransaction: (id: string) => state().remove('transaction', id),
 
-    /** Corrects drift: records the difference between what you have and what Funancial thinks. */
+    /** Corrects drift: records the difference between what you have and what Funcial thinks. */
     async setActualBalance(
       bucket: Extract<Bucket, 'cash' | 'savings'>,
       actual: number,

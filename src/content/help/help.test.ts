@@ -102,9 +102,9 @@ describe('glossary, FAQ and legal text', () => {
 
   it('carry the three disclaimers', () => {
     expect(LEGAL.disclaimers.map((d) => d.text)).toEqual([
-      'Funancial is not financial advice. It shows your own numbers so you can decide.',
+      'Funcial is not financial advice. It shows your own numbers so you can decide.',
       'Market prices are delayed and may be out of date.',
-      "Headlines come from a third party. Funancial doesn't check them.",
+      "Headlines come from a third party. Funcial doesn't check them.",
     ]);
   });
 
@@ -235,7 +235,7 @@ describe('help copy says what the code does', () => {
 
   it("says the app doesn't keep the passphrase, not that it keeps no copy of the backup", () => {
     const privacy = LEGAL.privacy.join(' ');
-    expect(privacy).toContain("Funancial doesn't keep your passphrase");
+    expect(privacy).toContain("Funcial doesn't keep your passphrase");
     expect(privacy).not.toMatch(/keeps no copy/);
   });
 

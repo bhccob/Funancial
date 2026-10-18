@@ -23,7 +23,7 @@ export function gmailMailerFromEnv(): Mailer | null {
   });
   return {
     async send(to, subject, text) {
-      await transport.sendMail({ from: `Funancial <${user}>`, to, subject, text });
+      await transport.sendMail({ from: `Funcial <${user}>`, to, subject, text });
     },
   };
 }

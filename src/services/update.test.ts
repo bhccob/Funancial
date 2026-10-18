@@ -2,12 +2,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Latest } from '@/domain/update';
 import { fetchLatest, isReleaseBuild, updateUrl } from './update';
 
-const PAGE = 'https://funancial.vercel.app/get/latest.json';
+const PAGE = 'https://funcial.vercel.app/get/latest.json';
 const latest: Latest = {
   versionCode: 9,
   versionName: '0.9',
   notes: 'A new look for the budget screen.',
-  apkUrl: 'https://funancial.vercel.app/get/funancial-0.9.apk',
+  apkUrl: 'https://funcial.vercel.app/get/funcial-0.9.apk',
   sha256: 'a'.repeat(63) + '0',
   size: 12_345_678,
 };
@@ -40,8 +40,8 @@ describe('the build flags', () => {
   it('checks the download page unless a build names another place', () => {
     vi.stubEnv('VITE_UPDATE_URL', '');
     expect(updateUrl()).toBe(PAGE);
-    vi.stubEnv('VITE_UPDATE_URL', 'https://funancial.vercel.app/get/test/latest.json');
-    expect(updateUrl()).toBe('https://funancial.vercel.app/get/test/latest.json');
+    vi.stubEnv('VITE_UPDATE_URL', 'https://funcial.vercel.app/get/test/latest.json');
+    expect(updateUrl()).toBe('https://funcial.vercel.app/get/test/latest.json');
   });
 });
 
@@ -86,15 +86,15 @@ describe('fetchLatest', () => {
   });
 
   it.each([
-    ['another host', 'https://evil.example/get/funancial-0.9.apk'],
-    ['a look-alike host', 'https://funancial.vercel.app.evil.example/funancial-0.9.apk'],
-    ['a host hidden behind credentials', 'https://funancial.vercel.app@evil.example/a.apk'],
-    ['http instead of https', 'http://funancial.vercel.app/get/funancial-0.9.apk'],
-    ['another port', 'https://funancial.vercel.app:8443/get/funancial-0.9.apk'],
+    ['another host', 'https://evil.example/get/funcial-0.9.apk'],
+    ['a look-alike host', 'https://funcial.vercel.app.evil.example/funcial-0.9.apk'],
+    ['a host hidden behind credentials', 'https://funcial.vercel.app@evil.example/a.apk'],
+    ['http instead of https', 'http://funcial.vercel.app/get/funcial-0.9.apk'],
+    ['another port', 'https://funcial.vercel.app:8443/get/funcial-0.9.apk'],
     ['a javascript: link', 'javascript:alert(1)'],
     ['a data: link', 'data:text/html,<script>alert(1)</script>'],
     ['a protocol-relative link', '//evil.example/a.apk'],
-    ['the right host with a user name and password', 'https://user:pw@funancial.vercel.app/a.apk'],
+    ['the right host with a user name and password', 'https://user:pw@funcial.vercel.app/a.apk'],
   ])('refuses an apkUrl on %s', async (_, apkUrl) => {
     answer({ ...latest, apkUrl });
     await expect(fetchLatest(PAGE, fetchMock)).resolves.toBeNull();
@@ -103,7 +103,7 @@ describe('fetchLatest', () => {
   it('refuses an https apkUrl from an http page too', async () => {
     answer(latest);
     await expect(
-      fetchLatest('http://funancial.vercel.app/get/latest.json', fetchMock),
+      fetchLatest('http://funcial.vercel.app/get/latest.json', fetchMock),
     ).resolves.toBeNull();
   });
 

@@ -98,18 +98,17 @@ const MESSAGES: Record<AccountErrorCode, string> = {
   taken: 'That username is taken. Try another one.',
   wrong: "That username and password don't match.",
   limited: 'Too many tries. Try again in a little while.',
-  busy: 'Funancial is busy right now. Try again in a moment.',
-  unavailable: "Funancial's service isn't answering right now. Try again in a moment.",
+  busy: 'Funcial is busy right now. Try again in a moment.',
+  unavailable: "Funcial's service isn't answering right now. Try again in a moment.",
   invalid: 'Check what you typed and try again.',
-  'too-new':
-    "Your account's copy was saved by a newer Funancial. Update the app, then log in again.",
+  'too-new': "Your account's copy was saved by a newer Funcial. Update the app, then log in again.",
   damaged: "Your account's copy couldn't be opened. Try again later.",
   unsupported: "This phone's browser engine is too old to save or restore your copy.",
   unreadable:
     "Your account's copy couldn't be opened on this phone. Nothing was changed. Try again later, or update Android System WebView.",
   moved:
     "Your account moved to another phone, so this one can't change its password. Log in again first.",
-  locked: 'Unlock Funancial first.',
+  locked: 'Unlock Funcial first.',
   demo: "Demo money can't have an account.",
   linked: 'This phone already has an account.',
   unlinked: 'This phone has no account.',
@@ -414,7 +413,7 @@ export function createAccountActions(
   /** One of these at a time: a second tap before the first answers must not start a second sign-up. */
   function exclusive<A extends unknown[], R>(job: (...args: A) => Promise<R>) {
     return async (...args: A): Promise<R> => {
-      if (working) throw new AccountError('busy', 'Funancial is still working on your last tap.');
+      if (working) throw new AccountError('busy', 'Funcial is still working on your last tap.');
       working = true;
       try {
         return await job(...args);

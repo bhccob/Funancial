@@ -104,7 +104,7 @@ function CardFacts({ debt, balance }: { debt: Debt; balance: number }) {
       </dl>
       {balance > 0 && (
         <p className="bg-surface-2 text-muted rounded-xl px-3.5 py-3 text-[13px] leading-snug font-semibold">
-          {`Buying with this card adds to what you owe. Your cash only drops when you pay the card, so Funancial keeps ${money(amount)} aside for ${due}.`}
+          {`Buying with this card adds to what you owe. Your cash only drops when you pay the card, so Funcial keeps ${money(amount)} aside for ${due}.`}
         </p>
       )}
     </>

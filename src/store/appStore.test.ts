@@ -239,7 +239,7 @@ describe('backup and restore', () => {
   it('creates a dated backup without yet recording it, since nothing is saved', async () => {
     const { store } = await freshStore();
     const { fileName, text } = await store.getState().createBackup('correct horse');
-    expect(fileName).toMatch(/^funancial-backup-\d{4}-\d{2}-\d{2}\.funbak$/);
+    expect(fileName).toMatch(/^funcial-backup-\d{4}-\d{2}-\d{2}\.funbak$/);
     expect(JSON.parse(text).format).toBe('funancial-backup');
     expect(store.getState().data.tables.settings[0]?.lastBackupAt).toBeNull();
   });
@@ -294,7 +294,7 @@ describe('backup and restore', () => {
     const { store } = await freshStore();
     await store.getState().put('expense', makeExpense({ id: 'e1', note: 'coffee' }));
     const { fileName, text } = store.getState().exportPlain();
-    expect(fileName).toMatch(/^funancial-export-\d{4}-\d{2}-\d{2}\.json$/);
+    expect(fileName).toMatch(/^funcial-export-\d{4}-\d{2}-\d{2}\.json$/);
     expect(JSON.parse(text).data.tables.expense[0].note).toBe('coffee');
   });
 });
@@ -490,7 +490,7 @@ describe('backup when storage is full', () => {
   it('does not fail a saved backup because its date could not be recorded', async () => {
     const { store } = await freshStore();
     const { fileName, text } = await store.getState().createBackup('correct horse');
-    expect(fileName).toMatch(/^funancial-backup-\d{4}-\d{2}-\d{2}\.funbak$/);
+    expect(fileName).toMatch(/^funcial-backup-\d{4}-\d{2}-\d{2}\.funbak$/);
     expect(JSON.parse(text).format).toBe('funancial-backup');
 
     store.setState({ put: vi.fn().mockRejectedValue(new Error('quota')) });
@@ -748,7 +748,7 @@ describe('private values', () => {
     await store.getState().setSecret('2468', 'pin');
     store.getState().lock();
     await expect(store.getState().getPrivate('funancial.account')).rejects.toThrow(
-      'Funancial is locked',
+      'Funcial is locked',
     );
     await store.getState().unlock('2468');
     await store.getState().startDemo();

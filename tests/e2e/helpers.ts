@@ -73,7 +73,7 @@ export async function onboard(page: Page, opts: OnboardOptions = {}) {
   }
   await page.getByRole('button', { name: 'Start my adventure' }).click();
   await expect(page.getByRole('heading', { level: 1, name: /^You're all set/ })).toBeVisible();
-  await page.getByRole('button', { name: 'Open Funancial' }).click();
+  await page.getByRole('button', { name: 'Open Funcial' }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Home' })).toBeVisible();
 }
 

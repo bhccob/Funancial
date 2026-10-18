@@ -55,7 +55,7 @@ function ActualBalanceForm({ initial, onDone }: { initial: Which; onDone(): void
           { value: 'savings', label: 'Savings' },
         ]}
       />
-      <p className="text-sm font-semibold tabular-nums">{`Funancial thinks: ${money(computed)}`}</p>
+      <p className="text-sm font-semibold tabular-nums">{`Funcial thinks: ${money(computed)}`}</p>
       <MoneyField
         variant="line"
         label="Actual balance"

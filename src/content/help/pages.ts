@@ -89,7 +89,7 @@ export const HELP_PAGES: HelpPage[] = [
     body: [
       'A limit is the most you want to spend on one category, or on everything, in a week or a month.',
       'Every expense counts toward its limit by its date. Subscriptions and card purchases count too.',
-      'Funancial warns you as you pass each warning point, so you hear about it on the way, not after. You can pick how gentle or strict the words are in Settings.',
+      'Funcial warns you as you pass each warning point, so you hear about it on the way, not after. You can pick how gentle or strict the words are in Settings.',
       'A limit you reserve holds back what is left of it, and Available to spend leaves that money out.',
     ],
     exampleIds: ['LIM-1'],
@@ -100,7 +100,7 @@ export const HELP_PAGES: HelpPage[] = [
     summary: 'What a freeze takes away',
     group: 'numbers',
     body: [
-      'A salary freeze is a stretch of days when you are not paid. Funancial takes those days off your expected pay in each month they fall in.',
+      'A salary freeze is a stretch of days when you are not paid. Funcial takes those days off your expected pay in each month they fall in.',
       'A day is worth your monthly pay divided by the days in that month. A freeze that crosses two months can lose a different amount in each.',
       'Bills and subscriptions do not stop during a freeze. They still count in Available to spend.',
     ],
@@ -126,7 +126,7 @@ export const HELP_PAGES: HelpPage[] = [
     group: 'numbers',
     body: [
       'A subscription is a bill that repeats. Once its renewal falls in the current month it is an upcoming bill: it lowers Available to spend, and your cash stays where it is.',
-      'On the renewal day Funancial records the charge as an expense, and your cash drops. The next renewal moves forward by one cycle.',
+      'On the renewal day Funcial records the charge as an expense, and your cash drops. The next renewal moves forward by one cycle.',
       'Renewals count toward your limits like any other expense.',
     ],
     exampleIds: ['SUB-1'],
@@ -173,7 +173,7 @@ export const HELP_PAGES: HelpPage[] = [
     summary: 'How the meter is worked out',
     group: 'how',
     body: [
-      'Tell Funancial what you want and what it costs. It checks the purchase against your own numbers and gives you a buy meter.',
+      'Tell Funcial what you want and what it costs. It checks the purchase against your own numbers and gives you a buy meter.',
       'The meter moves with what the purchase does to your limits, your available balance, your emergency fund and your goals, and with how much you need it. What you say in About you counts too. The zones below say what the meter means.',
       `Some things keep the meter out of the Buy zone, whatever else it says. A guard caps the meter at ${GUARD_CAP}. A guard applies when the purchase needs money you don't have, when it leaves your available balance below zero, or when it is something you don't need and it drops your emergency fund under a month.`,
       'If a limit is in the way but a cheaper one would fit, the answer can say so.',
@@ -198,7 +198,7 @@ export const HELP_PAGES: HelpPage[] = [
     title: 'Words',
     summary: 'Glossary: what the terms mean',
     group: 'more',
-    body: ['The words Funancial uses, in plain language.'],
+    body: ['The words Funcial uses, in plain language.'],
   },
   {
     id: 'faq',

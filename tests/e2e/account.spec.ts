@@ -222,7 +222,7 @@ test('a service that is down shows a calm line with Skip, and setup goes on once
   await page.getByRole('button', { name: 'Next' }).click();
   await expect(
     page.getByText(
-      "Funancial's service isn't answering right now. You can make an account later in Settings.",
+      "Funcial's service isn't answering right now. You can make an account later in Settings.",
     ),
   ).toBeVisible();
   // A down service never blocks setup: the way on is there, and the form is as it was.

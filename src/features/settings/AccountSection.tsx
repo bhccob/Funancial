@@ -334,7 +334,7 @@ function DeleteCopyDialog({ open, onClose }: { open: boolean; onClose(): void })
     <Dialog
       open={open}
       title="Turn off and delete my copy?"
-      description="Your account and its locked copy are removed from Funancial's service, and this phone stops saving. The data on this phone stays."
+      description="Your account and its locked copy are removed from Funcial's service, and this phone stops saving. The data on this phone stays."
       onClose={close}
       actions={
         <>

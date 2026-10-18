@@ -6,7 +6,7 @@ const LATEST = {
   versionCode: 8,
   versionName: '0.8',
   notes: 'First release for friends.',
-  apkUrl: 'https://funancial.vercel.app/get/funancial-0.8.apk',
+  apkUrl: 'https://funcial.vercel.app/get/funcial-0.8.apk',
   sha256: 'a'.repeat(63) + '0',
   size: 9_437_184,
 };

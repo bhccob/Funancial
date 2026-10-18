@@ -32,7 +32,7 @@ export function Sidebar({ className }: { className?: string }) {
       )}
     >
       <p className="px-2.5 text-[19px] font-extrabold tracking-tight">
-        Fun<span className="text-accent-text">ancial</span>
+        Fun<span className="text-accent-text">cial</span>
       </p>
       <nav aria-label="All sections" className="flex flex-col gap-6">
         <ButtonLink to="/add" size="md">

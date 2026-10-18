@@ -547,7 +547,7 @@ describe('log-in', () => {
     });
   });
 
-  it('a copy from a newer Funancial links nothing and changes nothing', async () => {
+  it('a copy from a newer Funcial links nothing and changes nothing', async () => {
     const { actions, server, store } = await setup();
     const newer = { ...snapshotWith('x'), schemaVersion: 999 };
     await server.seed({ username: 'robin', password: ME.password, snapshot: newer });

@@ -131,7 +131,7 @@ test('setting the actual cash balance records a correction', async ({ page }) =>
   await page.goto('/history');
   await page.getByRole('button', { name: 'Set actual balance' }).click();
   const dialog = page.getByRole('dialog', { name: 'Set actual balance' });
-  await expect(dialog.getByText('Funancial thinks: $1,000.00')).toBeVisible();
+  await expect(dialog.getByText('Funcial thinks: $1,000.00')).toBeVisible();
   await dialog.getByLabel('Actual balance').fill('900');
   await dialog.getByRole('button', { name: 'Save' }).click();
   await expect(page.getByText('Balance correction')).toBeVisible();

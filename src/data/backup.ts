@@ -16,8 +16,8 @@ const AAD = utf8(`${FORMAT}:v${VERSION}`);
 /** Upper bound on PBKDF2 work a file may ask for, so a hostile file can't hang the app. */
 const MAX_ITERATIONS = 10_000_000;
 
-const NOT_A_BACKUP = "This file isn't a Funancial backup.";
-const TOO_NEW = 'This backup was made by a newer version of Funancial.';
+const NOT_A_BACKUP = "This file isn't a Funcial backup.";
+const TOO_NEW = 'This backup was made by a newer version of Funcial.';
 const WRONG_PASSPHRASE =
   "That passphrase didn't open this backup. Check it, or the file may be damaged.";
 
@@ -132,9 +132,9 @@ export function exportPlainJson(snapshot: DataSnapshot, now: Date = new Date()):
 }
 
 export function backupFileName(now: Date): string {
-  return `funancial-backup-${toLocalDate(now)}.funbak`;
+  return `funcial-backup-${toLocalDate(now)}.funbak`;
 }
 
 export function exportFileName(now: Date): string {
-  return `funancial-export-${toLocalDate(now)}.json`;
+  return `funcial-export-${toLocalDate(now)}.json`;
 }

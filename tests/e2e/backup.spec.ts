@@ -15,7 +15,7 @@ test('backup → leave demo → restore round-trip', async ({ page }) => {
   const downloading = page.waitForEvent('download');
   await dialog.getByRole('button', { name: 'Create backup' }).click();
   const download = await downloading;
-  expect(download.suggestedFilename()).toMatch(/^funancial-backup-\d{4}-\d{2}-\d{2}\.funbak$/);
+  expect(download.suggestedFilename()).toMatch(/^funcial-backup-\d{4}-\d{2}-\d{2}\.funbak$/);
   const file = await download.path();
 
   await page.getByRole('button', { name: 'Start for real' }).click();

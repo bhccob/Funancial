@@ -249,7 +249,7 @@ function DeleteAllButton() {
       <EraseDialog
         open={open}
         title="Delete all data?"
-        description="This erases everything Funancial stores on this device. Make a backup first if you might want it back."
+        description="This erases everything Funcial stores on this device. Make a backup first if you might want it back."
         onClose={() => setOpen(false)}
       />
     </>
@@ -324,7 +324,7 @@ export function DataSection() {
                 onExport={() =>
                   void run(() =>
                     platform.files.save(
-                      `funancial-expenses-${today}.csv`,
+                      `funcial-expenses-${today}.csv`,
                       expensesToCsv(data, data.tables.profile[0]?.currency ?? 'USD'),
                       'text/csv',
                     ),

@@ -47,7 +47,7 @@ export function WelcomeScreen({ onHold }: { onHold?(held: boolean): void }) {
           <>
             <div className="flex flex-1 flex-col gap-2 pt-[16dvh]">
               <h1 className="text-[56px] leading-none font-extrabold tracking-[-0.045em] outline-none">
-                Fun<span className="text-accent-text">ancial</span>
+                Fun<span className="text-accent-text">cial</span>
               </h1>
               <p className="text-lg font-bold">Level up your real financial life.</p>
             </div>
@@ -63,7 +63,7 @@ export function WelcomeScreen({ onHold }: { onHold?(held: boolean): void }) {
               </Button>
             </div>
             <p className="text-muted px-2 text-center text-sm">
-              Funancial helps you track and plan your money. It isn&apos;t financial advice.
+              Funcial helps you track and plan your money. It isn&apos;t financial advice.
             </p>
           </>
         );

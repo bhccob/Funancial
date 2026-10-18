@@ -139,7 +139,7 @@ describe('after Log in', () => {
 });
 
 describe('at the end of setup', () => {
-  it('shows "You\'re all set" after the profile is saved, and Home only once the person opens Funancial', async () => {
+  it('shows "You\'re all set" after the profile is saved, and Home only once the person opens Funcial', async () => {
     const store = createStubStore({
       phase: 'unlocked',
       namespace: 'real',
@@ -167,7 +167,7 @@ describe('at the end of setup', () => {
     expect(store.getState().putMany).toHaveBeenCalled();
     expect(screen.queryByRole('heading', { name: 'Home' })).not.toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole('button', { name: 'Open Funancial' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Open Funcial' }));
     expect(await heading('Home')).toBeInTheDocument();
   });
 });

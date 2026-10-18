@@ -12,7 +12,7 @@ vi.mock('@capacitor/filesystem', async (importOriginal) => ({
 }));
 vi.mock('@capacitor/share', () => ({ Share: { share: native.share } }));
 
-const URI = 'file:///data/user/0/app.funancial/cache/funancial-backup-2026-10-15.funbak';
+const URI = 'file:///data/user/0/app.funancial/cache/funcial-backup-2026-10-15.funbak';
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -23,20 +23,20 @@ beforeEach(() => {
 describe('androidFiles.save', () => {
   it('writes to the cache and opens the share sheet', async () => {
     const outcome = await androidFiles.save(
-      'funancial-backup-2026-10-15.funbak',
+      'funcial-backup-2026-10-15.funbak',
       'ENCRYPTED',
       'application/octet-stream',
     );
 
     expect(outcome).toBe('saved');
     expect(native.writeFile).toHaveBeenCalledExactlyOnceWith({
-      path: 'funancial-backup-2026-10-15.funbak',
+      path: 'funcial-backup-2026-10-15.funbak',
       data: 'ENCRYPTED',
       directory: Directory.Cache,
       encoding: Encoding.UTF8,
     });
     expect(native.share).toHaveBeenCalledExactlyOnceWith({
-      title: 'funancial-backup-2026-10-15.funbak',
+      title: 'funcial-backup-2026-10-15.funbak',
       files: [URI],
       dialogTitle: 'Save or send your file',
     });

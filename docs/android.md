@@ -1,4 +1,4 @@
-# Funancial on an Android phone
+# Funcial on an Android phone
 
 This puts the app on your own phone over a USB cable, and lets the phone reload as you edit. It is a
 debug build for personal use. Signed release builds for friends are in `docs/release.md`.
@@ -118,4 +118,4 @@ using that port makes Vite pick a different one.
   could not be decrypted on another phone. The encrypted backup file is how you back up.
 - **Seeing the app's console.** Capacitor's native logging is off, because it would log sensitive
   plugin results. To see the console, connect the phone, open `chrome://inspect` in Chrome on the
-  computer, and choose Inspect under Funancial.
+  computer, and choose Inspect under Funcial.

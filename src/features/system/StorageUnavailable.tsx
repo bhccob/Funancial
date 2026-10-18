@@ -5,16 +5,16 @@ import { usePlatform } from '@/platform/PlatformProvider';
 
 const COPY = {
   web: {
-    heading: "Funancial can't save data here",
-    body: 'Your browser is blocking storage (this can happen in private windows). Open Funancial in a normal window to continue.',
+    heading: "Funcial can't save data here",
+    body: 'Your browser is blocking storage (this can happen in private windows). Open Funcial in a normal window to continue.',
   },
   android: {
-    heading: "Funancial can't open its storage",
-    body: "Something went wrong opening Funancial's encrypted storage on this phone. Close Funancial completely and open it again. Your data stays on this phone.",
+    heading: "Funcial can't open its storage",
+    body: "Something went wrong opening Funcial's encrypted storage on this phone. Close Funcial completely and open it again. Your data stays on this phone.",
   },
   newer: {
-    heading: 'Funancial needs an update',
-    body: 'This data was saved by a newer version of Funancial. Install the latest version to open it.',
+    heading: 'Funcial needs an update',
+    body: 'This data was saved by a newer version of Funcial. Install the latest version to open it.',
   },
 };
 

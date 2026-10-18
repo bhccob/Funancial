@@ -49,7 +49,7 @@ function NewPhonePin({ onDone }: { onDone(): void }) {
       <ScreenHeader
         eyebrow="Almost there"
         title="Lock this phone"
-        lead="Choose a PIN to open Funancial on this phone."
+        lead="Choose a PIN to open Funcial on this phone."
         focus
       />
       <form className="flex flex-col gap-5" onSubmit={submit} noValidate>

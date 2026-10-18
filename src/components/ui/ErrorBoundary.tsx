@@ -25,7 +25,7 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, { failed: 
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
-    console.error('Funancial crashed', error, info.componentStack);
+    console.error('Funcial crashed', error, info.componentStack);
   }
 
   render() {

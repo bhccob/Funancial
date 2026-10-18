@@ -64,7 +64,7 @@ describe('CardSheet', () => {
     renderSheet();
     expect(
       within(sheet()).getByText(
-        `Buying with this card adds to what you owe. Your cash only drops when you pay the card, so Funancial keeps ${usd(318_40)} aside for ${formatDay('2026-10-21')}.`,
+        `Buying with this card adds to what you owe. Your cash only drops when you pay the card, so Funcial keeps ${usd(318_40)} aside for ${formatDay('2026-10-21')}.`,
       ),
     ).toBeInTheDocument();
   });
@@ -72,7 +72,7 @@ describe('CardSheet', () => {
   it('says the minimum, and keeps that amount aside, when the card is not paid in full', () => {
     renderSheet({ payInFull: false, minimumPayment: 25_00 });
     expect(fact('You pay')).toHaveTextContent(`You pay${usd(25_00)} minimum`);
-    expect(within(sheet()).getByText(/Funancial keeps/)).toHaveTextContent(
+    expect(within(sheet()).getByText(/Funcial keeps/)).toHaveTextContent(
       `keeps ${usd(25_00)} aside`,
     );
   });
@@ -86,7 +86,7 @@ describe('CardSheet', () => {
   it('has nothing to pay, and no note, when nothing is owed', () => {
     renderSheet({ openingBalance: 0 });
     expect(within(sheet()).getByRole('button', { name: 'Pay card' })).toBeDisabled();
-    expect(within(sheet()).queryByText(/Funancial keeps/)).not.toBeInTheDocument();
+    expect(within(sheet()).queryByText(/Funcial keeps/)).not.toBeInTheDocument();
   });
 
   it('opens the pay dialog from Pay card', async () => {
@@ -114,7 +114,7 @@ describe('CardSheet', () => {
     renderSheet();
     expect(fact('You owe')).toHaveTextContent('You owe••••');
     expect(fact('Limit used')).toHaveTextContent('Limit used21% of ••••');
-    expect(within(sheet()).getByText(/Funancial keeps/)).toHaveTextContent('keeps •••• aside');
+    expect(within(sheet()).getByText(/Funcial keeps/)).toHaveTextContent('keeps •••• aside');
     expect(within(sheet()).queryByText(/\d,\d|\.\d\d/)).not.toBeInTheDocument();
   });
 });

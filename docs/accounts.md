@@ -1,9 +1,10 @@
 # Setting up accounts (for the owner)
 
 Accounts let a friend move to a new phone and keep everything. Their data is kept as a locked copy
-on the Funancial service, which is the `funancial` project on your Vercel. For that to work the
-service needs three things from you: a database, a Gmail address that sends "forgot password" emails,
-and a master key. This page walks you through them, click by click.
+on the Funcial service, which is the `funancial` project on your Vercel (the project keeps its old
+name; only the name people see changed). For that to work the service needs three things from you: a
+database, a Gmail address that sends "forgot password" emails, and a master key. This page walks you
+through them, click by click.
 
 You type every secret yourself, straight into Vercel. **Claude never needs to see any of them.**
 Don't paste one into the chat, into a file in this project, or into a commit.
@@ -19,7 +20,7 @@ Accepting Upstash's terms (step 1) and Google's (step 2) is your click. Claude c
 3. Click **Create Database** (or **Browse Marketplace**), choose **Upstash**, then **Upstash for
    Redis**, and click **Continue**.
 4. Pick the **Free** plan, choose the region closest to you, and give it any name (for example
-   `funancial-accounts`).
+   `funcial-accounts`).
 5. Read Upstash's terms and, if you agree, accept them and click **Create**.
 6. When it asks which project to connect to, pick **funancial** and keep **Production** ticked.
 
@@ -44,7 +45,7 @@ dedicate to this (a fresh one is ideal).
    Verification is on.)
 3. Open [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords). (Or search
    "App passwords" in the box at the top of your Google account page.)
-4. Type a name, for example `Funancial`, and click **Create**.
+4. Type a name, for example `Funcial`, and click **Create**.
 5. Google shows a password of 16 letters, in four groups. **It is shown once.** Copy it, and save it
    in your password manager right away.
 6. In Vercel, open the **funancial** project, then click **Environment Variables** in the left sidebar.
@@ -71,7 +72,7 @@ it on this computer. Nobody else ever sees it.
 
 3. It prints one line of 44 letters, numbers and symbols, ending in `=`. Select that line with the
    mouse and press Ctrl+C to copy it.
-4. **First**, save it in your password manager, named for example `Funancial SERVER_MASTER_KEY`. Do
+4. **First**, save it in your password manager, named for example `Funcial SERVER_MASTER_KEY`. Do
    this before anything else.
 5. In Vercel, open the **funancial** project, then click **Environment Variables** in the left sidebar.
 6. Click to add one. Key `SERVER_MASTER_KEY`, value: paste the line. Make sure **Production** is

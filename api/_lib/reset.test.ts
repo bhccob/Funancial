@@ -43,7 +43,7 @@ const IP = '203.0.113.7';
 const FAST = { memorySize: 8, iterations: 1, parallelism: 1 };
 const HOUR = 3600;
 const DAY = 24 * HOUR;
-const SUBJECT = 'Choose a new Funancial password';
+const SUBJECT = 'Choose a new Funcial password';
 
 let clock = T0;
 const advance = (seconds: number) => {
@@ -180,9 +180,9 @@ describe('forgot', () => {
       subject: SUBJECT,
       // No name in it: the page says which account the link is for.
       text:
-        'Hi,\n\ntap the link to choose a new Funancial password. It works for 30 minutes.\n\n' +
+        'Hi,\n\ntap the link to choose a new Funcial password. It works for 30 minutes.\n\n' +
         // In the fragment, which a browser never sends: no request log gets it.
-        `https://funancial.vercel.app/reset#token=${token}\n\n` +
+        `https://funcial.vercel.app/reset#token=${token}\n\n` +
         "If you didn't ask for this, ignore this email.",
     });
     expect(email?.text).not.toContain('ada');
@@ -1655,7 +1655,7 @@ describe('the Gmail mailer', () => {
   const real = async () =>
     (await vi.importActual<typeof import('./mailer.js')>('./mailer.js')).gmailMailerFromEnv;
 
-  it('sends from "Funancial <GMAIL_USER>" through Gmail, reading the environment when it is called', async () => {
+  it('sends from "Funcial <GMAIL_USER>" through Gmail, reading the environment when it is called', async () => {
     const gmailMailerFromEnv = await real();
     vi.stubEnv('GMAIL_USER', 'owner@gmail.com');
     vi.stubEnv('GMAIL_APP_PASSWORD', 'app-password-value');
@@ -1671,7 +1671,7 @@ describe('the Gmail mailer', () => {
       socketTimeout: 3000,
     });
     expect(sendMail).toHaveBeenCalledWith({
-      from: 'Funancial <owner@gmail.com>',
+      from: 'Funcial <owner@gmail.com>',
       to: 'ada@example.com',
       subject: 'Subject line',
       text: 'Body text',

@@ -254,7 +254,7 @@ export function mountStaticPhones(container: HTMLElement): void {
     canvas.width = SCREEN.w;
     canvas.height = SCREEN.h;
     canvas.setAttribute('role', 'img');
-    canvas.setAttribute('aria-label', `Funancial ${NAMES[index as ScreenIndex]} screen`);
+    canvas.setAttribute('aria-label', `Funcial ${NAMES[index as ScreenIndex]} screen`);
     const frame = document.createElement('div');
     frame.className = 'phone';
     frame.append(canvas);

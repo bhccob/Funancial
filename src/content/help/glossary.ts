@@ -46,8 +46,7 @@ export const GLOSSARY: Array<{ term: string; meaning: string }> = [
   { term: 'Net worth', meaning: 'Everything you have, minus everything you owe.' },
   {
     term: 'Passive income',
-    meaning:
-      'Money that comes in without work, like dividends. Funancial keeps it in its own place.',
+    meaning: 'Money that comes in without work, like dividends. Funcial keeps it in its own place.',
   },
   {
     term: 'Portfolio value',
@@ -70,7 +69,7 @@ export const GLOSSARY: Array<{ term: string; meaning: string }> = [
   },
   {
     term: 'Salary freeze',
-    meaning: 'Days when you are not paid. Funancial lowers your expected pay for them.',
+    meaning: 'Days when you are not paid. Funcial lowers your expected pay for them.',
   },
   { term: 'Streak', meaning: 'How many days, weeks or months in a row you keep a habit.' },
   {

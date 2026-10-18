@@ -21,9 +21,9 @@ const input = {
   code: 8,
   name: '0.8',
   notes: 'First release for friends.',
-  origin: 'https://funancial.vercel.app',
+  origin: 'https://funcial.vercel.app',
   channel: 'live' as const,
-  apkFile: 'funancial-0.8.apk',
+  apkFile: 'funcial-0.8.apk',
   sha256: SHA,
   size: 12_345_678,
 };
@@ -56,9 +56,9 @@ describe('releaseDir', () => {
 
 describe('buildLatest', () => {
   it('points live releases at /get and test releases at /get/test', () => {
-    expect(buildLatest(input).apkUrl).toBe('https://funancial.vercel.app/get/funancial-0.8.apk');
+    expect(buildLatest(input).apkUrl).toBe('https://funcial.vercel.app/get/funcial-0.8.apk');
     expect(buildLatest({ ...input, channel: 'test' }).apkUrl).toBe(
-      'https://funancial.vercel.app/get/test/funancial-0.8.apk',
+      'https://funcial.vercel.app/get/test/funcial-0.8.apk',
     );
   });
 
@@ -127,10 +127,10 @@ describe('webBuildEnv', () => {
   const base = { PATH: 'p', VITE_RELEASE: 'stray', VITE_UPDATE_URL: 'https://stray.example' };
 
   it('marks a release build and keeps the rest of the environment', () => {
-    expect(webBuildEnv(base, 'https://funancial.vercel.app/get/latest.json')).toEqual({
+    expect(webBuildEnv(base, 'https://funcial.vercel.app/get/latest.json')).toEqual({
       PATH: 'p',
       VITE_RELEASE: '1',
-      VITE_UPDATE_URL: 'https://funancial.vercel.app/get/latest.json',
+      VITE_UPDATE_URL: 'https://funcial.vercel.app/get/latest.json',
     });
   });
 

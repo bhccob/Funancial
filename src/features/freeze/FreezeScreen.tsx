@@ -165,7 +165,7 @@ export function FreezeScreen() {
               </ButtonLink>
             }
           >
-            A freeze lowers your expected pay, so Funancial needs your monthly take-home pay.
+            A freeze lowers your expected pay, so Funcial needs your monthly take-home pay.
           </EmptyState>
         </div>
       </div>

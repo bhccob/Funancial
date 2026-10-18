@@ -53,7 +53,7 @@ import type { SyncMessage } from '@/lib/broadcast';
 import type { SafeStorage } from '@/lib/safeStorage';
 import type { BiometricVault } from '@/platform/types';
 
-/** `updateNeeded`: the data was saved by a newer Funancial than this one, and is left as it is. */
+/** `updateNeeded`: the data was saved by a newer Funcial than this one, and is left as it is. */
 export type Phase = 'booting' | 'unavailable' | 'updateNeeded' | 'welcome' | 'locked' | 'unlocked';
 
 export interface AppDeps {
@@ -212,7 +212,7 @@ export function createAppStore(deps: AppDeps): StoreApi<AppState> {
   }
 
   function unlocked(): Session & { repo: Repository; key: CryptoKey } {
-    if (!session?.repo || !session.key) throw new Error('Funancial is locked');
+    if (!session?.repo || !session.key) throw new Error('Funcial is locked');
     return session as Session & { repo: Repository; key: CryptoKey };
   }
 
@@ -227,7 +227,7 @@ export function createAppStore(deps: AppDeps): StoreApi<AppState> {
 
   return createStore<AppState>()((set, get) => {
     /**
-     * What `repo` holds, or `null` when a newer Funancial saved it: then nothing was read or
+     * What `repo` holds, or `null` when a newer Funcial saved it: then nothing was read or
      * written, the session is closed to writes, and the person is told to update.
      */
     async function loadOrRefuse(repo: Repository): Promise<LoadResult | null> {

@@ -40,7 +40,7 @@ export const androidBiometric: BiometricVault = {
     try {
       const { value } = await NativeBiometric.getSecureData({
         key: slot,
-        title: 'Unlock Funancial',
+        title: 'Unlock Funcial',
         negativeButtonText: 'Use PIN',
       });
       return { status: 'ok', secret: value };

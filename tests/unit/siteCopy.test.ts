@@ -25,13 +25,13 @@ describe('the page copy', () => {
     'Get it on your phone.',
     'Download for Android',
     'Scan with your Android phone',
-    'Funancial is Android-only for now.',
+    'Funcial is Android-only for now.',
     'Safe and simple',
     'Your money lives on your phone, encrypted. An account keeps a locked copy so you can move phones. The app\'s owner could unlock it, which is how "forgot password" brings your data back. No ads.',
     'Not financial advice.',
     'Tap Download, then open the file.',
     'If Android asks, allow your browser to install apps.',
-    'Tap Install, open Funancial, and try demo money first.',
+    'Tap Install, open Funcial, and try demo money first.',
     'Turn on JavaScript to see the download button.',
     "Android asks before installing apps that don't come from the Play Store, and that's normal for an app shared between friends.",
     'to look up prices, to keep your locked copy if you have an account, and to check for a new version.',
@@ -44,7 +44,7 @@ describe('the page copy', () => {
   it('no longer says the app stays on the phone, in the hero or the description', () => {
     expect(text).not.toMatch(/stays on your phone/i);
     expect(page).toContain(
-      '<meta name="description" content="Funancial, a budget app that lives on your phone." />',
+      '<meta name="description" content="Funcial, a budget app that lives on your phone." />',
     );
   });
 

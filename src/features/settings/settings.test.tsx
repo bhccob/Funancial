@@ -202,7 +202,7 @@ describe('Data', () => {
       createStubStore({
         data: snapshotWith(),
         createBackup: vi.fn(async () => ({
-          fileName: 'funancial-backup-2026-10-14.funbak',
+          fileName: 'funcial-backup-2026-10-14.funbak',
           text: 'X',
         })),
       }),
@@ -222,7 +222,7 @@ describe('Data', () => {
     await userEvent.click(within(dialog).getByRole('button', { name: 'Create backup' }));
     expect(store.getState().createBackup).toHaveBeenCalledWith('correct horse');
     expect(downloadText).toHaveBeenCalledWith(
-      'funancial-backup-2026-10-14.funbak',
+      'funcial-backup-2026-10-14.funbak',
       'X',
       'application/octet-stream',
     );
@@ -234,7 +234,7 @@ describe('Data', () => {
     const store = createStubStore({
       data: snapshotWith(),
       createBackup: vi.fn(async () => ({
-        fileName: 'funancial-backup-2026-10-15.funbak',
+        fileName: 'funcial-backup-2026-10-15.funbak',
         text: 'ENCRYPTED',
       })),
     });
@@ -244,7 +244,7 @@ describe('Data', () => {
 
     await vi.waitFor(() =>
       expect(save).toHaveBeenCalledExactlyOnceWith(
-        'funancial-backup-2026-10-15.funbak',
+        'funcial-backup-2026-10-15.funbak',
         'ENCRYPTED',
         'application/octet-stream',
       ),
@@ -313,7 +313,7 @@ describe('Data', () => {
     ['Export unencrypted copy', 'export.json', '{}', 'application/json'],
     [
       'Export expenses (CSV)',
-      'funancial-expenses-2026-10-14.csv',
+      'funcial-expenses-2026-10-14.csv',
       'date,amount,currency,category,payment_method,card,note,subscription\r\n',
       'text/csv',
     ],
@@ -367,9 +367,7 @@ describe('Data', () => {
     await userEvent.click(within(confirm).getByRole('button', { name: 'Restore' }));
 
     expect(restoreBackup).toHaveBeenCalledWith('not a backup', 'correct horse');
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      "This file isn't a Funancial backup.",
-    );
+    expect(await screen.findByRole('alert')).toHaveTextContent("This file isn't a Funcial backup.");
   });
 
   it('narrows the backup file picker to .funbak on the web only', () => {
@@ -406,7 +404,7 @@ describe('Data', () => {
     const dialog = screen.getByRole('dialog', { name: 'Export an unprotected copy?' });
     await userEvent.click(within(dialog).getByRole('button', { name: 'Export' }));
     expect(downloadText).toHaveBeenCalledWith(
-      'funancial-expenses-2026-10-14.csv',
+      'funcial-expenses-2026-10-14.csv',
       'date,amount,currency,category,payment_method,card,note,subscription\r\n' +
         '2026-10-14,12.50,USD,food,cash,,,\r\n',
       'text/csv',
@@ -626,7 +624,7 @@ describe('Preferences', () => {
 
 describe('Reminders', () => {
   const BLOCKED =
-    'Notifications are blocked for Funancial. Turn them on in Android Settings → Apps → Funancial → Notifications.';
+    'Notifications are blocked for Funcial. Turn them on in Android Settings → Apps → Funcial → Notifications.';
   const MASTER = 'Reminders on this phone';
   const OTHERS = [
     ['Daily nudge to log spending', 'dailyLog'],

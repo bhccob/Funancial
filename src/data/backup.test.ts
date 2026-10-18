@@ -9,6 +9,7 @@ import {
   InvalidBackupError,
   readBackup,
 } from './backup';
+import { bytesToBase64 } from './crypto';
 import { WrongSecretError } from './keys';
 
 const FAST = { iterations: 1_000 };
@@ -61,7 +62,7 @@ describe('encrypted backup', () => {
   it('rejects truncated text and other files with a plain message', async () => {
     const text = await createBackup(sampleSnapshot(), PASS, FAST);
     await expect(readBackup(text.slice(0, 40), PASS)).rejects.toThrow(
-      new InvalidBackupError("This file isn't a Funancial backup."),
+      new InvalidBackupError("This file isn't a Funcial backup."),
     );
     await expect(readBackup('{"format":"something-else"}', PASS)).rejects.toBeInstanceOf(
       InvalidBackupError,
@@ -72,11 +73,11 @@ describe('encrypted backup', () => {
   it('rejects backups from a newer version', async () => {
     const text = await createBackup(sampleSnapshot(), PASS, FAST);
     const newer = JSON.stringify({ ...JSON.parse(text), version: 2 });
-    await expect(readBackup(newer, PASS)).rejects.toThrow(/newer version of Funancial/);
+    await expect(readBackup(newer, PASS)).rejects.toThrow(/newer version of Funcial/);
 
     const futureData = { ...sampleSnapshot(), schemaVersion: 99 };
     const futureText = await createBackup(futureData, PASS, FAST);
-    await expect(readBackup(futureText, PASS)).rejects.toThrow(/newer version of Funancial/);
+    await expect(readBackup(futureText, PASS)).rejects.toThrow(/newer version of Funcial/);
   });
 
   it('refuses absurd key-derivation settings instead of hanging', async () => {
@@ -102,14 +103,46 @@ describe('plain export', () => {
 
 describe('file names', () => {
   it('are dated by the local day', () => {
-    expect(backupFileName(new Date(2026, 9, 14, 23, 30))).toBe(
-      'funancial-backup-2026-10-14.funbak',
-    );
-    expect(exportFileName(new Date(2026, 0, 2))).toBe('funancial-export-2026-01-02.json');
+    expect(backupFileName(new Date(2026, 9, 14, 23, 30))).toBe('funcial-backup-2026-10-14.funbak');
+    expect(exportFileName(new Date(2026, 0, 2))).toBe('funcial-export-2026-01-02.json');
   });
 });
 
 describe('older backups', () => {
+  it('restores a file saved before the rename (funancial-backup-….funbak): only its contents count', async () => {
+    // Built by hand with the strings the app used then, so renaming the format marker or the
+    // additional data cannot pass by changing both sides of a round trip.
+    const text = new TextEncoder();
+    const snap = sampleSnapshot();
+    const salt = new Uint8Array(16).fill(7);
+    const iv = new Uint8Array(12).fill(9);
+    const material = await crypto.subtle.importKey('raw', text.encode(PASS), 'PBKDF2', false, [
+      'deriveKey',
+    ]);
+    const key = await crypto.subtle.deriveKey(
+      { name: 'PBKDF2', hash: 'SHA-256', salt, iterations: 1_000 },
+      material,
+      { name: 'AES-GCM', length: 256 },
+      false,
+      ['encrypt'],
+    );
+    const sealed = await crypto.subtle.encrypt(
+      { name: 'AES-GCM', iv, additionalData: text.encode('funancial-backup:v1') },
+      key,
+      text.encode(JSON.stringify(snap)),
+    );
+    const b64 = bytesToBase64;
+    const file = JSON.stringify({
+      format: 'funancial-backup',
+      version: 1,
+      createdAt: '2026-10-14T10:00:00.000Z',
+      kdf: { name: 'PBKDF2', hash: 'SHA-256', iterations: 1_000, salt: b64(salt) },
+      cipher: { name: 'AES-GCM', iv: b64(iv) },
+      data: b64(new Uint8Array(sealed)),
+    });
+    expect(await readBackup(file, PASS)).toEqual(snap);
+  });
+
   it('restores a v1 backup with subscription anchor days', async () => {
     const v1 = emptySnapshot() as unknown as DataSnapshot;
     v1.schemaVersion = 1;

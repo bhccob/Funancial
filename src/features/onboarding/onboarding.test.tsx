@@ -220,7 +220,7 @@ describe('the account step', () => {
       await next();
       expect(
         await screen.findByText(
-          "Funancial's service isn't answering right now. You can make an account later in Settings.",
+          "Funcial's service isn't answering right now. You can make an account later in Settings.",
         ),
       ).toBeInTheDocument();
       expect(screen.queryByRole('alert')).not.toBeInTheDocument();
@@ -533,10 +533,10 @@ describe('OnboardingWizard', () => {
     expect(lockedAt).toBeLessThan(onboardedAt ?? 0);
     expect(store.getState().enableBiometric).not.toHaveBeenCalled();
 
-    // The app is held on this screen while it shows the last step, and let go by Open Funancial.
+    // The app is held on this screen while it shows the last step, and let go by Open Funcial.
     expect(onFinishing).toHaveBeenLastCalledWith(true);
     expect(onFinishing).not.toHaveBeenCalledWith(false);
-    await userEvent.click(screen.getByRole('button', { name: 'Open Funancial' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Open Funcial' }));
     expect(onFinishing).toHaveBeenLastCalledWith(false);
   });
 

@@ -236,13 +236,13 @@ describe('the Available to spend sheet', () => {
     await userEvent.click(correctSavings);
     let dialog = screen.getByRole('dialog', { name: 'Set actual balance' });
     expect(within(dialog).getByRole('radio', { name: 'Savings' })).toBeChecked();
-    expect(within(dialog).getByText(`Funancial thinks: ${usd(3_000_00)}`)).toBeInTheDocument();
+    expect(within(dialog).getByText(`Funcial thinks: ${usd(3_000_00)}`)).toBeInTheDocument();
     await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
 
     await userEvent.click(within(row(sheet, 'Cash')).getByRole('button', { name: 'Correct Cash' }));
     dialog = screen.getByRole('dialog', { name: 'Set actual balance' });
     expect(within(dialog).getByRole('radio', { name: 'Cash' })).toBeChecked();
-    expect(within(dialog).getByText(`Funancial thinks: ${usd(3_680_00)}`)).toBeInTheDocument();
+    expect(within(dialog).getByText(`Funcial thinks: ${usd(3_680_00)}`)).toBeInTheDocument();
   });
 
   it('puts a correction into the rows, the total and Home', async () => {

@@ -131,6 +131,6 @@ export function installAndLaunch(adb, serial) {
     stdio: 'inherit',
   });
   if (start.status !== 0) {
-    fail('The app is installed but did not start. Open Funancial on the phone.', start.status ?? 1);
+    fail('The app is installed but did not start. Open Funcial on the phone.', start.status ?? 1);
   }
 }

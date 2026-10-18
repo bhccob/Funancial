@@ -392,7 +392,7 @@ export function OnboardingWizard({ onFinishing }: { onFinishing?(finishing: bool
                     ? "You're offline. Create your account later in Settings."
                     : failure === 'keys'
                       ? "This phone couldn't make your keys. Close other apps and try again, or make an account later in Settings."
-                      : "Funancial's service isn't answering right now. You can make an account later in Settings."}
+                      : "Funcial's service isn't answering right now. You can make an account later in Settings."}
                 </p>
                 <Button
                   variant="secondary"
@@ -464,7 +464,7 @@ export function OnboardingWizard({ onFinishing }: { onFinishing?(finishing: bool
             <ScreenHeader
               eyebrow="Your income"
               title="Your salary"
-              lead="So Funancial knows when money comes in."
+              lead="So Funcial knows when money comes in."
             />
             <Switch
               label="I don't have a regular salary"
@@ -550,8 +550,8 @@ export function OnboardingWizard({ onFinishing }: { onFinishing?(finishing: bool
           <>
             <ScreenHeader
               eyebrow="Keep it private"
-              title="Lock Funancial?"
-              lead="Without a lock, anyone using this device can open Funancial. You can change this later in Settings."
+              title="Lock Funcial?"
+              lead="Without a lock, anyone using this device can open Funcial. You can change this later in Settings."
             />
             <RadioGroup<LockChoice>
               variant="underline"
@@ -610,7 +610,7 @@ export function OnboardingWizard({ onFinishing }: { onFinishing?(finishing: bool
   const progress = done ? 100 : Math.round(((step - 1) / STEPS) * 1000) / 10;
   const working = busy || signingUp;
   let label = 'Next';
-  if (done) label = 'Open Funancial';
+  if (done) label = 'Open Funcial';
   else if (step === 1 && signingUp) label = 'Creating…';
   else if (step === STEPS) label = busy ? 'Setting up…' : 'Start my adventure';
 

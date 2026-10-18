@@ -15,9 +15,9 @@ describe('createWebPlatform', () => {
     expect(platform.notifier).toBeNull();
 
     await expect(
-      platform.files.save('funancial-export.json', '{}', 'application/json'),
+      platform.files.save('funcial-export.json', '{}', 'application/json'),
     ).resolves.toBe('saved');
-    expect(downloadText).toHaveBeenCalledWith('funancial-export.json', '{}', 'application/json');
+    expect(downloadText).toHaveBeenCalledWith('funcial-export.json', '{}', 'application/json');
   });
 
   it('has no app version, since a web page is not an installed build', async () => {

@@ -14,7 +14,7 @@ export async function startApp(
   try {
     await start(root);
   } catch (e) {
-    console.error('Starting Funancial failed', e);
+    console.error('Starting Funcial failed', e);
     root.render(<CrashScreen />);
   }
   return root;
