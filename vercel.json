@@ -32,7 +32,7 @@
       ]
     },
     {
-      "source": "/reset/",
+      "source": "/reset/(.*)",
       "headers": [
         { "key": "Cache-Control", "value": "no-cache" },
         {

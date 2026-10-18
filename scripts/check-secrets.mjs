@@ -2,7 +2,7 @@
 // `npm run hooks:install`). It refuses a commit that stages a file named like a secret, or adds a line
 // shaped like a key or a secret assignment. It prints each hit as `file:line` and never the line, so a
 // real value that gets this far does not also land in a terminal log. `git commit --no-verify` skips it;
-// the gitleaks job in .github/workflows/security.yml is the check that cannot be skipped.
+// the gitleaks job in .github/workflows/security.yml is the check that is not on the committer's machine.
 import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 
@@ -14,7 +14,20 @@ const KEY_SHAPES = [
   /ghp_[A-Za-z0-9]{36}/,
   /xox[baprs]-/,
 ];
-const SECRET_ASSIGNMENT = /(TOKEN|SECRET|PASSWORD|MASTER_KEY|API_KEY)\s*=\s*\S{12,}/;
+// The assignment rule is the blunt one, so it is narrowed. It skips test code, where a literal is a
+// stand-in (every e2e spec and API test here has one), and a value that is plainly code: an env read
+// with nothing after it, a regex literal, a call. A quoted literal anywhere else, and an env read with
+// a fallback literal after `??`, are still refused. The key shapes above are never skipped.
+// shortcut: a call is taken as code whatever its arguments are, and a password with spaces in it
+// (`abcd efgh ijkl mnop`) is not seen; gitleaks in CI is the check for both.
+const SECRET_ASSIGNMENT = /(?:TOKEN|SECRET|PASSWORD|MASTER_KEY|API_KEY)\s*=\s*(?=\S{12,})/g;
+const TEST_PATH = /\.(test|spec)\.[cm]?[jt]sx?$|(^|\/)tests\//;
+const CODE_VALUE = [
+  /^(process\.env|import\.meta)(\.[\w$]+|\[[^\]]+\])*[;,)]*$/,
+  /^\/[^/\s].*\/[dgimsuvy]*[;,)]*$/,
+  /^(await\s+)?[A-Za-z_$][\w$.]*\(.*\)[;,]*$/,
+];
+const isCode = (value) => CODE_VALUE.some((shape) => shape.test(value.trim()));
 
 /** The same names .gitignore keeps out, for a file someone staged with `git add -f`. */
 export function isSecretFileName(path) {
@@ -33,7 +46,10 @@ export function isSecretFileName(path) {
 /** Whether an added line looks like a secret. `.env.example` is where the variable names live. */
 export function isSecretLine(text, path) {
   if (KEY_SHAPES.some((shape) => shape.test(text))) return true;
-  return path.split('/').pop() !== '.env.example' && SECRET_ASSIGNMENT.test(text);
+  if (TEST_PATH.test(path) || path.split('/').pop() === '.env.example') return false;
+  return [...text.matchAll(SECRET_ASSIGNMENT)].some(
+    (assignment) => !isCode(text.slice(assignment.index + assignment[0].length)),
+  );
 }
 
 /**

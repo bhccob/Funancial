@@ -1,10 +1,10 @@
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
-import { isSecretFileName, scanDiff } from '../../scripts/check-secrets.mjs';
+import { isSecretFileName, isSecretLine, scanDiff } from '../../scripts/check-secrets.mjs';
 
 const SCRIPT = fileURLToPath(new URL('../../scripts/check-secrets.mjs', import.meta.url));
 
@@ -110,6 +110,59 @@ describe('scanDiff', () => {
     expect(scanDiff(diffOf('api/.env.example', [`${NAME}=${LONG}`]))).toEqual([]);
     expect(scanDiff(diffOf('.env.example', [`X=${KEYS['an AWS access key id']}`]))).toHaveLength(1);
   });
+
+  describe('the secret assignment rule', () => {
+    const TEST_LITERAL = `const TOKEN = '${LONG}';`;
+
+    it.each([
+      'api/_lib/accounts.test.ts',
+      'site/reset/main.test.ts',
+      'tests/e2e/buy.spec.ts',
+      'tests/unit/helpers.ts',
+      'src/features/c.spec.tsx',
+      'deep/tests/d.ts',
+    ])('lets a test literal through in %s', (path) => {
+      expect(scanDiff(diffOf(path, [TEST_LITERAL]))).toEqual([]);
+    });
+
+    it.each([
+      'src/a.ts',
+      'api/_lib/accounts.ts',
+      'scripts/x.mjs',
+      'testing/a.ts',
+      'src/contest.ts',
+    ])('still refuses the same line in %s, which is not test code', (path) => {
+      expect(scanDiff(diffOf(path, [TEST_LITERAL]))).toHaveLength(1);
+    });
+
+    it.each(Object.entries(KEYS))('still catches %s in a test file', (_name, key) => {
+      expect(scanDiff(diffOf('tests/e2e/a.spec.ts', [`const k = '${key}';`]))).toHaveLength(1);
+      expect(scanDiff(diffOf('api/_lib/a.test.ts', [`const k = '${key}';`]))).toHaveLength(1);
+    });
+
+    it.each([
+      'const TOKEN = process.env.FUNANCIAL_ACCESS_TOKEN;',
+      'const API_KEY = import.meta.env.VITE_API_KEY;',
+      "const MASTER_KEY = process.env['SERVER_MASTER_KEY'],",
+      'const TOKEN = /^[A-Za-z0-9_-]{43}$/;',
+      'const SECRET = readSecretFromTheDisk();',
+      'const PASSWORD = await derivePasswordHash(user, salt);',
+    ])('lets a value that is code through: %s', (line) => {
+      expect(scanDiff(diffOf('src/a.ts', [line]))).toEqual([]);
+    });
+
+    it.each([
+      "const TOKEN = process.env.X ?? 'abcdefghijklmnopqrst';",
+      "const TOKEN = process.env.X || 'abcdefghijklmnopqrst';",
+      "const TOKEN = 'abcdefghijklmnopqrst';",
+      "const TOKEN = '/abcdefghijklmnop/';",
+      'const PASSWORD = "correct-horse-battery-staple";',
+      `export API_KEY=${LONG}`,
+      `const TOKEN = ${LONG}.${LONG}`,
+    ])('still refuses a literal, even next to code: %s', (line) => {
+      expect(scanDiff(diffOf('src/a.ts', [line]))).toHaveLength(1);
+    });
+  });
 });
 
 describe('isSecretFileName', () => {
@@ -127,6 +180,8 @@ describe('isSecretFileName', () => {
     'android/keystore.properties',
     '.superpowers/sdd/notes.md',
     'android/.idea/workspace.xml',
+    'tests/e2e/.env.local',
+    'api/_lib/server.test.pem',
   ])('refuses %s', (path) => {
     expect(isSecretFileName(path)).toBe(true);
   });
@@ -203,5 +258,39 @@ describe('the --staged command', () => {
     const outside = mkdtempSync(join(tmpdir(), 'check-secrets-none-'));
     dirs.push(outside);
     expect(run(outside, '--staged').status).toBe(2);
+  });
+});
+
+describe('the repository itself', () => {
+  const root = fileURLToPath(new URL('../..', import.meta.url));
+
+  // The hook must let the repo's own files through, or the way out is --no-verify, which also skips
+  // the real check. Every tracked file, as it is in the working tree, with every rule.
+  it('has no tracked file, name or line, that the check would refuse', () => {
+    const listed = spawnSync('git', ['ls-files', '-z'], {
+      cwd: root,
+      encoding: 'utf8',
+      maxBuffer: 64 * 1024 * 1024,
+    });
+    expect(listed.status).toBe(0);
+    const paths = listed.stdout.split('\0').filter((path) => path && existsSync(join(root, path)));
+
+    const hits: string[] = [];
+    let linesRead = 0;
+    for (const path of paths) {
+      if (isSecretFileName(path)) hits.push(path);
+      const text = readFileSync(join(root, path), 'utf8');
+      if (text.includes('\0')) continue; // binary: git's diff does not show its content either
+      text.split('\n').forEach((line, index) => {
+        linesRead += 1;
+        if (isSecretLine(line, path)) hits.push(`${path}:${index + 1}`);
+      });
+    }
+
+    // A scan that read nothing finds nothing: a mistyped revision did exactly that once.
+    expect(paths).toContain('scripts/check-secrets.mjs');
+    expect(paths.length).toBeGreaterThan(200);
+    expect(linesRead).toBeGreaterThan(20_000);
+    expect(hits).toEqual([]);
   });
 });

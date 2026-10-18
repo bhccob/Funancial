@@ -75,8 +75,8 @@ describe('vercel.json', () => {
     },
   );
 
-  it.each(['/reset', '/reset/'])(
-    'serves the reset page %s fresh, as its link carries a token for one use, and lets it compile WebAssembly',
+  it.each(['/reset', '/reset/(.*)'])(
+    'serves the reset page under %s fresh, as its link carries a token for one use, and lets it compile WebAssembly',
     (source) => {
       const entries = config.headers.filter((h) => h.source === source);
       expect(entries).toHaveLength(1);
@@ -86,8 +86,25 @@ describe('vercel.json', () => {
         'Cache-Control': 'no-cache',
         'Content-Security-Policy': RESET_CSP,
       });
-      expect(sentFor(source)['content-security-policy']).toBe(RESET_CSP);
-      expect(sentFor(source)['x-frame-options']).toBe('DENY');
+    },
+  );
+
+  // The page is the same file at all three, and Vercel serves it at each.
+  it.each(['/reset', '/reset/', '/reset/index.html'])(
+    'gives %s the wasm CSP, no-cache and the other security headers',
+    (path) => {
+      const sent = sentFor(path);
+      expect(sent['content-security-policy']).toBe(RESET_CSP);
+      expect(sent['cache-control']).toBe('no-cache');
+      expect(sent['x-frame-options']).toBe('DENY');
+      expect(sent['x-content-type-options']).toBe('nosniff');
+    },
+  );
+
+  it.each(['/resetting', '/reset-old/index.html', '/get/reset', '/assets/reset-abc.js'])(
+    'keeps the wasm CSP off %s, which only looks like the reset page',
+    (path) => {
+      expect(sentFor(path)['content-security-policy']).toBe(CSP);
     },
   );
 

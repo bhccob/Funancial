@@ -1,10 +1,19 @@
 name: security
 
-# The check that cannot be skipped: the pre-commit hook (scripts/check-secrets.mjs) is for the
-# person committing, this runs on every push and pull request. Actions are pinned to full commit SHAs.
+# What each trigger scans for secrets (gitleaks-action, read at the pinned SHA):
+#   push                       the commits in the push, up to the 20 GitHub lists in its payload
+#   pull_request               the commits of the pull request
+#   workflow_dispatch, weekly  the whole fetched history
+# So the push and pull-request runs catch what is new, and only the last two look at old commits.
+# The pre-commit hook (scripts/check-secrets.mjs) is the one on the committer's machine; this is the one
+# that is not. Actions are pinned to full commit SHAs.
 on:
   push:
   pull_request:
+  workflow_dispatch:
+  schedule:
+    # Mondays at 04:00 UTC. Scheduled runs use the default branch's copy of this file.
+    - cron: '0 4 * * 1'
 
 permissions:
   contents: read
@@ -12,15 +21,22 @@ permissions:
 jobs:
   gitleaks:
     runs-on: ubuntu-latest
+    # The pull-request scan lists the PR's commits through the API, which a private repository needs
+    # pull-requests: read for. Read only: the action's comments are switched off below.
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          # The whole history, so a secret that was committed and later deleted is still found.
+          # Every commit on hand, for the manual and weekly runs, which scan all of it. A push or a
+          # pull request only needs the commits it brings.
           fetch-depth: 0
       - uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Read-only token above: the action's PR comments would be refused, its failed job is the signal.
+          # No write permission above, so the action's pull-request comments would be refused. A failed
+          # job is the signal.
           GITLEAKS_ENABLE_COMMENTS: 'false'
           # Only an organization's repository needs a license: GITLEAKS_LICENSE as a repository secret.
 
