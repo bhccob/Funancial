@@ -352,7 +352,40 @@ function DeleteCopyDialog({ open, onClose }: { open: boolean; onClose(): void })
   );
 }
 
-type Opened = 'create' | 'login' | 'forgot' | 'password' | 'delete' | null;
+function LogOutDialog({ open, onClose }: { open: boolean; onClose(): void }) {
+  const { unlink } = useAccountActions();
+  const run = useAction();
+  const { busy, guard } = useBusy();
+
+  return (
+    <Dialog
+      open={open}
+      title="Log out on this phone?"
+      description="Your data stays on this phone, and your account and its copy stay on Funcial's service. This phone stops saving to your account until you log in again."
+      onClose={onClose}
+      actions={
+        <>
+          <Button variant="secondary" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            disabled={busy}
+            onClick={() =>
+              void guard(async () => {
+                await run(unlink, { success: 'Logged out. Your data is still on this phone.' });
+                onClose();
+              })
+            }
+          >
+            Log out
+          </Button>
+        </>
+      }
+    />
+  );
+}
+
+type Opened = 'create' | 'login' | 'forgot' | 'password' | 'logout' | 'delete' | null;
 
 function Loaded() {
   const { status, username, email, savedAt, tooBig, offline } = useAccount();
@@ -401,6 +434,9 @@ function Loaded() {
             <Button variant="secondary" onClick={() => setOpened('password')}>
               Change password
             </Button>
+            <Button variant="secondary" onClick={() => setOpened('logout')}>
+              Log out
+            </Button>
             <Button variant="danger-ghost" onClick={() => setOpened('delete')}>
               Turn off and delete my copy
             </Button>
@@ -431,13 +467,14 @@ function Loaded() {
       />
       <ForgotDialog open={opened === 'forgot'} onClose={close} />
       <ChangePasswordDialog open={opened === 'password'} onClose={close} />
+      <LogOutDialog open={opened === 'logout'} onClose={close} />
       <DeleteCopyDialog open={opened === 'delete'} onClose={close} />
     </div>
   );
 }
 
 /**
- * Settings → Account: make an account or log in, then see it and change its password or turn it off;
+ * Settings → Account: make an account or log in, then see it and change its password, log out or turn it off;
  * or, after another phone logged in, choose between logging in again and carrying on without one.
  * Nothing shows until the account has been read for the open data, and the demo has none.
  */

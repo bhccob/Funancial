@@ -1060,6 +1060,105 @@ describe('turning the account off', () => {
   });
 });
 
+describe('logging out of the account on this phone', () => {
+  const creds = { username: 'Robin', password: ME.password };
+  type Phone = Awaited<ReturnType<typeof linkedWithCopy>>;
+
+  /** Logged in to an account whose copy holds `theirs`, then `mine` added on this phone, unsaved. */
+  async function linkedWithCopy() {
+    const t = await setup();
+    await t.server.seed({
+      username: 'robin',
+      password: ME.password,
+      snapshot: snapshotWith('theirs'),
+    });
+    await t.actions.logIn(creds, { replace: false });
+    clock();
+    await t.store.getState().put('expense', lunch('mine'));
+    return t;
+  }
+  const ids = (t: Phone) =>
+    t.store
+      .getState()
+      .data.tables.expense.map((e) => e.id)
+      .sort();
+
+  it('forgets the link, keeps the data, and leaves the account and its copy at the service', async () => {
+    const t = await linkedWithCopy();
+    const copy = { ...t.server.accounts.get('robin')!.copy! };
+    const calls = t.server.calls.length;
+
+    await t.actions.unlink();
+    expect(linkedState(t.actions)).toBeNull();
+    expect(ids(t)).toEqual(['mine', 'theirs']);
+    expect(t.server.calls).toHaveLength(calls);
+    expect(t.server.accounts.get('robin')!.copy).toEqual(copy);
+
+    // Nothing saves any more, not even what was unsaved or changes made later.
+    await t.store.getState().put('expense', lunch('later'));
+    pause();
+    goOnline();
+    await elapse(10 * 60_000);
+    await t.actions.saveNow();
+    expect(t.server.calls).toHaveLength(calls);
+
+    // It stays out after a restart.
+    const again = createAppStore(t.deps);
+    await again.getState().boot();
+    const next = await follow(again, t.server);
+    expect(linkedState(next.actions)).toBeNull();
+  });
+
+  // Logging in again is the one path whether the account moved or this phone logged out.
+  it.each([
+    [
+      'logged out',
+      async (t: Phone) => {
+        await t.actions.unlink();
+        return null;
+      },
+    ],
+    [
+      'moved',
+      async (t: Phone) => {
+        await t.server.api.logIn({
+          username: 'robin',
+          authKey: t.server.accounts.get('robin')!.authKey,
+        });
+        await elapse(30_000);
+        await vi.waitFor(() => expect(linkedState(t.actions)!.status).toBe('moved'));
+        return 'moved';
+      },
+    ],
+  ])(
+    'logging in again after being %s asks before replacing, then takes the copy',
+    async (_name, leave) => {
+      const t = await linkedWithCopy();
+      await leave(t);
+      const calls = t.server.calls.length;
+      const token = t.server.accounts.get('robin')!.token;
+
+      await expect(t.actions.logIn(creds, { replace: false })).resolves.toBe('needs-confirm');
+      expect(t.server.calls).toHaveLength(calls);
+      expect(t.server.accounts.get('robin')!.token).toBe(token);
+      expect(ids(t)).toEqual(['mine', 'theirs']);
+
+      const puts = t.server.sent('putCopy').length;
+      await expect(t.actions.logIn(creds, { replace: true })).resolves.toBe('done');
+      expect(ids(t)).toEqual(['theirs']);
+      expect(linkedState(t.actions)).toMatchObject({
+        username: 'robin',
+        status: 'linked',
+        version: 1,
+        dirty: false,
+        deviceToken: t.server.accounts.get('robin')!.token,
+      });
+      expect(t.server.accounts.get('robin')!.token).not.toBe(token);
+      expect(t.server.sent('putCopy')).toHaveLength(puts);
+    },
+  );
+});
+
 /** A phone that is linked, with the clock in the test's hands. */
 async function linkedPhone({ pin = false } = {}) {
   const t = await setup();
