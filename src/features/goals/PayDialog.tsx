@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/Button';
 import { Dialog } from '@/components/ui/Dialog';
 import { MoneyField } from '@/components/ui/MoneyField';
 import { RadioGroup } from '@/components/ui/RadioGroup';
+import { cardPayment } from '@/domain/budget';
 import type { Debt, Goal } from '@/domain/entities';
 import { useAction } from '@/lib/useAction';
 import { useCurrency, useFinanceActions, useMoney, useToday } from '@/store/useFinance';
@@ -67,9 +68,11 @@ function DebtForm({ debt, balance, onDone }: { debt: Debt; balance: number; onDo
   const today = useToday();
   const run = useAction();
   const suggested =
-    debt.kind === 'loan' && debt.minimumPayment > 0
-      ? Math.min(debt.minimumPayment, balance)
-      : balance;
+    debt.kind === 'loan'
+      ? debt.minimumPayment > 0
+        ? Math.min(debt.minimumPayment, balance)
+        : balance
+      : cardPayment(debt, balance).amount;
   const [amount, setAmount] = useState<number | null>(suggested > 0 ? suggested : null);
   const [from, setFrom] = useState<'cash' | 'savings'>('cash');
   const [error, setError] = useState<string>();

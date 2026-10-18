@@ -204,6 +204,24 @@ describe('Debts', () => {
     expect(actions.payDebt).toHaveBeenCalledWith('card-1', 230_00, 'cash', TODAY);
   });
 
+  it('suggests the minimum for a card that is not paid in full, as its sheet says', async () => {
+    const data = filledData();
+    Object.assign(data.tables.debt[0]!, { payInFull: false, minimumPayment: 25_00 });
+    renderDebts(data);
+    await userEvent.click(row('Visa').getByRole('button', { name: 'Pay card' }));
+    const dialog = screen.getByRole('dialog', { name: 'Pay Visa' });
+    expect(within(dialog).getByLabelText('Amount')).toHaveValue('25.00');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Pay' }));
+    expect(actions.payDebt).toHaveBeenCalledWith('card-1', 25_00, 'cash', TODAY);
+  });
+
+  it('suggests a loan its minimum, as it always has', async () => {
+    renderDebts();
+    await userEvent.click(row('Car loan').getByRole('button', { name: 'Make a payment' }));
+    const dialog = screen.getByRole('dialog', { name: 'Pay Car loan' });
+    expect(within(dialog).getByLabelText('Amount')).toHaveValue('250.00');
+  });
+
   it('explains when a card with history cannot be deleted', async () => {
     actions.deleteDebt.mockRejectedValueOnce(new Error(HISTORY));
     renderDebts();
