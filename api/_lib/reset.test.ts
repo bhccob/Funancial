@@ -689,6 +689,21 @@ describe('reset', () => {
     expect((await logIn(accounts, first.authKey)).status).toBe(200);
   });
 
+  it("clears the name's log-in wait, so the new password works at once", async () => {
+    const { accounts, mail } = setup();
+    await join(accounts);
+    for (let i = 0; i < 5; i++) expect((await logIn(accounts, b64(32))).status).toBe(401);
+    expect((await logIn(accounts, b64(32))).status).toBe(429);
+    const token = await linkFor(accounts, mail);
+    const fresh = resetKeys();
+
+    expect(await accounts.reset({ token, newAuthKey: fresh.authKey, kek: fresh.kek }, IP)).toEqual({
+      status: 204,
+    });
+
+    expect((await logIn(accounts, fresh.authKey)).status).toBe(200);
+  });
+
   it('lets only one of two simultaneous uses win', async () => {
     const { accounts, mail } = setup(lagged);
     await join(accounts);

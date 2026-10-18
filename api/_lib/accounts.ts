@@ -723,6 +723,10 @@ export function createAccounts({ store, masterKey, now, mailer, waitUntil }: Acc
       }
       // The claim already makes the link one-use; this tidies it away.
       await store.del(K.reset(live.hash)).catch(() => {});
+      // The old password's failures are no reason to turn the new one away (a log-in clears them too).
+      await store
+        .del(loginTries(live.account.username), loginWaitKey(live.account.username))
+        .catch(() => {});
       return { status: 204 };
     },
 
