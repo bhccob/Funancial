@@ -130,7 +130,7 @@ Before you went to sleep you asked for seven more things. Each was built and rev
 
 - **Login speed.** Argon2id runs on the main thread, about 0.5–1.5 s on a phone, with the busy label shown first. It still needs measuring on the emulator.
 - **Screen readers.** They read `••••` as "bullet bullet bullet bullet".
-- **Rounding.** Income's year shares can add up to 99% or 101%.
-- **Reminders.** A reminder for next month, planned right after a part payment, can repeat this month's remaining amount.
-- **Gitleaks.** It hasn't been run locally yet. Run it once before pushing.
+- **Rounding.** Fixed 2026-10-18: Income's year shares always add up to 100%.
+- **Reminders.** Fixed 2026-10-18: later months remind of the whole minimum, even after this month's minimum is paid.
+- **Gitleaks.** Run locally on 2026-10-18 (8.28.0, every branch): only the four allowlisted test files, which 8.28 does not apply the allowlist to. CI runs 8.30.1.
 - **Smaller items.** The full list, with each review, is in the night's review files.
