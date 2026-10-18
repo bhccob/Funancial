@@ -5,6 +5,6 @@ import { CrashScreen } from '@/components/ui/ErrorBoundary';
 /** A screen that throws gets the app's own crash screen, not the router's default error page. */
 export function RouteError() {
   const error = useRouteError();
-  useEffect(() => console.error('Funancial screen crashed', error), [error]);
+  useEffect(() => console.error('Funcial screen crashed', error), [error]);
   return <CrashScreen />;
 }

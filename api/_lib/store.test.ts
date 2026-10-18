@@ -54,6 +54,22 @@ describe('memoryKvStore', () => {
     expect(await store.incr('n')).toBe(1);
   });
 
+  it('counts with a lifetime that starts again at each count, given in the same step', async () => {
+    let now = T0;
+    const store = memoryKvStore(() => now);
+    expect(await store.incr('n', 60)).toBe(1);
+    expect(await store.ttl('n')).toBe(60);
+    now += 50_000;
+    expect(await store.incr('n', 60)).toBe(2);
+    expect(await store.ttl('n')).toBe(60);
+    now += 50_000;
+    // Without one, a count keeps the lifetime it has.
+    expect(await store.incr('n')).toBe(3);
+    expect(await store.ttl('n')).toBe(10);
+    now += 10_000;
+    expect(await store.incr('n', 60)).toBe(1);
+  });
+
   it('keeps sets of strings, and an emptied set is gone', async () => {
     const store = memoryKvStore();
     await store.sadd('s', 'a');
@@ -141,6 +157,11 @@ describe('upstashKvStore', () => {
       },
       eval: async (script: string, keys: string[], args: string[]) => {
         calls.push(['eval', script, keys, args]);
+        if (script.includes('INCR')) {
+          const n = Number(data.get(keys[0] ?? '') ?? 0) + 1;
+          data.set(keys[0] ?? '', String(n));
+          return n;
+        }
         // What the script does: SET only if GET still gives the first argument.
         if (data.get(keys[0] ?? '') !== args[0]) return 0;
         data.set(keys[0] ?? '', args[1] ?? '');
@@ -196,6 +217,18 @@ describe('upstashKvStore', () => {
       ['expire', 'rl:x', 900, 'NX'],
       ['ttl', 'rl:x'],
     ]);
+  });
+
+  it('counts with a lifetime in one EVAL, INCR then EXPIRE, so no count is left without one', async () => {
+    const { calls, store } = fake();
+    expect(await store.incr('rl:x', 900)).toBe(1);
+    expect(await store.incr('rl:x', 900)).toBe(2);
+    expect(calls).toHaveLength(2);
+    const [name, script, keys, args] = calls[0] as [string, string, string[], string[]];
+    expect([name, keys, args]).toEqual(['eval', ['rl:x'], ['900']]);
+    expect(script).toBe(
+      "local n = redis.call('INCR', KEYS[1]) redis.call('EXPIRE', KEYS[1], ARGV[1]) return n",
+    );
   });
 
   it('runs compareAndSet as one EVAL of GET-compare-SET over the JSON text', async () => {

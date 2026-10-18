@@ -5,7 +5,7 @@ export const isReleaseBuild = (): boolean => import.meta.env.VITE_RELEASE === '1
 
 /** Where this build looks: the download page, or the test channel's page when the release script says so. */
 export const updateUrl = (): string =>
-  import.meta.env.VITE_UPDATE_URL || 'https://funancial.vercel.app/get/latest.json';
+  import.meta.env.VITE_UPDATE_URL || 'https://funcial.vercel.app/get/latest.json';
 
 const TIMEOUT_MS = 5_000;
 

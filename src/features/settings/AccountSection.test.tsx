@@ -43,6 +43,7 @@ describe('Settings → Account without an account', () => {
     expect(screen.getByRole('heading', { name: 'Account' })).toBeInTheDocument();
     expect(button('Create account')).toBeInTheDocument();
     expect(button('Log in')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Log out' })).not.toBeInTheDocument();
     expect(
       screen.getByText(
         'A locked copy of your data is kept so you can move to a new phone. The app\'s owner runs the service and could unlock it, which is how "forgot password" brings your data back.',
@@ -155,6 +156,11 @@ describe('Settings → Account without an account', () => {
     expect(
       within(dialog).getByText("Replace this phone's data with your account's copy?"),
     ).toBeInTheDocument();
+    // Plainly what happens, and no advice to make a backup: there are none to make.
+    expect(
+      within(dialog).getByText("What is on this phone now is replaced by your account's copy."),
+    ).toBeInTheDocument();
+    expect(dialog).not.toHaveTextContent(/backup/i);
     expect(actions.logIn).toHaveBeenCalledTimes(1);
 
     await userEvent.click(within(dialog).getByRole('button', { name: 'Replace' }));
@@ -292,6 +298,85 @@ describe('Settings → Account with an account', () => {
     expect(
       screen.getByText("Your copy is too big to save. Ask the app's owner for help."),
     ).toBeInTheDocument();
+  });
+
+  it('offers Log out between Change password and turning the copy off', () => {
+    show(fakeAccount(linkedAccount()));
+    const asked = ['Change password', 'Log out', 'Turn off and delete my copy'];
+    const shown = screen
+      .getAllByRole('button')
+      .map((b) => b.textContent ?? '')
+      .filter((name) => asked.includes(name));
+    expect(shown).toEqual(asked);
+  });
+
+  it('leaves everything as it was when Log out is cancelled', async () => {
+    const actions = show(fakeAccount(linkedAccount()));
+    await userEvent.click(button('Log out'));
+    const dialog = screen.getByRole('dialog', { name: 'Log out on this phone?' });
+    expect(
+      within(dialog).getByText(
+        "Your data stays on this phone, and your account and its copy stay on Funcial's service. This phone stops saving to your account until you log in again. If you log in again later, your account's copy replaces what is on this phone.",
+      ),
+    ).toBeInTheDocument();
+    expect(actions.unlink).not.toHaveBeenCalled();
+
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('dialog', { name: 'Log out on this phone?' })).toBeNull();
+    expect(actions.unlink).not.toHaveBeenCalled();
+    expect(toastStore.getState().toasts).toEqual([]);
+    expect(screen.getByText('robin')).toBeInTheDocument();
+  });
+
+  it('logs out once confirmed, says the data is still here, and asks the service for nothing', async () => {
+    const actions = fakeAccount(linkedAccount());
+    actions.unlink.mockImplementation(async () => actions.view.setState({ state: null }));
+    show(actions);
+    await userEvent.click(button('Log out'));
+    const dialog = screen.getByRole('dialog', { name: 'Log out on this phone?' });
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Log out' }));
+
+    expect(actions.unlink).toHaveBeenCalledTimes(1);
+    expect(actions.deleteAccount).not.toHaveBeenCalled();
+    expect(actions.logIn).not.toHaveBeenCalled();
+    expect(toastStore.getState().toasts).toEqual([
+      expect.objectContaining({
+        tone: 'success',
+        message: 'Logged out. Your data is still on this phone.',
+      }),
+    ]);
+    expect(screen.queryByRole('dialog', { name: 'Log out on this phone?' })).toBeNull();
+  });
+
+  it('sends one log-out for two taps in the same instant', async () => {
+    const actions = fakeAccount(linkedAccount());
+    actions.unlink.mockReturnValue(new Promise(() => {}));
+    show(actions);
+    await userEvent.click(button('Log out'));
+    const dialog = screen.getByRole('dialog', { name: 'Log out on this phone?' });
+    const confirm = within(dialog).getByRole('button', { name: 'Log out' });
+    act(() => {
+      fireEvent.click(confirm);
+      fireEvent.click(confirm);
+    });
+    expect(actions.unlink).toHaveBeenCalledTimes(1);
+  });
+
+  it('then offers Create account and Log in, as a phone without an account does', async () => {
+    const actions = fakeAccount(linkedAccount());
+    actions.unlink.mockImplementation(async () => actions.view.setState({ state: null }));
+    show(actions);
+    await userEvent.click(button('Log out'));
+    await userEvent.click(
+      within(screen.getByRole('dialog', { name: 'Log out on this phone?' })).getByRole('button', {
+        name: 'Log out',
+      }),
+    );
+    expect(screen.queryByRole('button', { name: 'Change password' })).toBeNull();
+    expect(button('Create account')).toBeInTheDocument();
+
+    await userEvent.click(button('Log in'));
+    expect(screen.getByRole('dialog', { name: 'Log in' })).toBeInTheDocument();
   });
 
   it('confirms before turning off and deleting the copy', async () => {
@@ -442,6 +527,7 @@ describe('Settings → Account after another phone logged in', () => {
     expect(button('Log in again')).toBeInTheDocument();
     expect(button('Keep using without an account')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Change password' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Log out' })).not.toBeInTheDocument();
     expect(screen.queryByText(/Last copy saved/)).not.toBeInTheDocument();
   });
 

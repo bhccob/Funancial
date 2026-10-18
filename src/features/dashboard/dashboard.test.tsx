@@ -1,7 +1,7 @@
 import { act, cleanup, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ReminderSettings } from '@/domain/entities';
 import { EXAMPLES } from '@/domain/examples';
 import { computeGameView } from '@/domain/game/engine';
@@ -10,6 +10,7 @@ import { formatMoney } from '@/domain/money';
 import { emptySnapshot, type DataSnapshot } from '@/domain/snapshot';
 import { applyRecords, dueGenerated } from '@/domain/sync';
 import { formatDay, formatMonth, formatMonthShort, formatWeekday } from '@/lib/format';
+import { useAmountsHidden } from '@/store/useAmountsHidden';
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
 import { fakeAccount, withAccount } from '@/test/fakeAccount';
 import { expectHelpTip } from '@/test/helpTip';
@@ -70,6 +71,9 @@ const october = formatMonth('2026-10');
 /** The text of a line whose bold parts split it: matched on all of it. */
 const line = (text: string) => (_content: string, el: Element | null) =>
   el?.tagName === 'P' && el.textContent === text;
+
+/** The month line's parts are named "Part: amount", which the amount's own button is not. */
+const SEGMENT = /^(Spent so far|Bills still to come|Left in your monthly limit): /;
 
 /** A Wednesday: with weeks starting Monday the week runs 10-12 to 10-18. */
 const TODAY = '2026-10-14';
@@ -306,15 +310,15 @@ describe('DashboardScreen hero', () => {
     expect(within(hero).getByText(usdWhole(284_99))).toBeInTheDocument();
     expect(within(hero).getByText('bills to come')).toBeInTheDocument();
     expect(within(hero).queryByText('left in limit')).not.toBeInTheDocument();
-    // The segments only: the "?" beside the title is a button too.
-    expect(within(hero).getAllByRole('button', { name: /: / })).toHaveLength(2);
+    // The segments only: the "?" beside the title and the amount are buttons too.
+    expect(within(hero).getAllByRole('button', { name: SEGMENT })).toHaveLength(2);
   });
 
   it('draws only the track when nothing is spent or due', () => {
     renderDashboard(emptySnapshot(), TODAY);
     const hero = region('Available to spend');
-    // No segments; only the "?" beside the title is a button.
-    expect(within(hero).queryAllByRole('button', { name: /: / })).toHaveLength(0);
+    // No segments; the "?", the eye and the amount are the buttons.
+    expect(within(hero).queryAllByRole('button', { name: SEGMENT })).toHaveLength(0);
     expect(within(hero).getByText(`spent in ${october}`)).toBeInTheDocument();
     expect(within(hero).getByText('bills to come')).toBeInTheDocument();
     expect(within(hero).getAllByText(usdWhole(0))).toHaveLength(2);
@@ -577,16 +581,76 @@ describe('DashboardScreen coming up', () => {
     renderDashboard(monthData(), TODAY);
     const bills = region('Coming up');
     // 15.99 + 230 + 39
-    expect(within(bills).getByRole('link', { name: usd(284_99) })).toHaveAttribute(
-      'href',
-      '/subscriptions',
-    );
+    expect(
+      within(bills).getByRole('link', { name: `${usd(284_99)} this month, Bills & cards` }),
+    ).toHaveAttribute('href', '/subscriptions');
     const rows = within(bills).getAllByRole('listitem');
     expect(rows.map((r) => r.textContent)).toEqual([
       `${formatMonthShort('2026-10-20')}20StreamflixSubscription · in 6 days${usd(15_99)}`,
-      `${formatMonthShort('2026-10-21')}21VisaCard · in 7 days${usd(230_00)}`,
+      // A card's block reads DUE, the day, then the month.
+      `DUE21${formatMonthShort('2026-10-21')}Visa card paymentPay the full balance · in 7 days${usd(230_00)}`,
       `${formatMonthShort('2026-10-28')}28FitHub GymSubscription · in 14 days${usd(39_00)}`,
     ]);
+  });
+
+  it('names where its header link goes after the total, which stays the visible text', async () => {
+    renderDashboard(monthData(), TODAY);
+    const link = within(region('Coming up')).getByRole('link', { name: /Bills & cards$/ });
+    // A hidden suffix, not an aria-label: the visible words are the start of the name.
+    expect(link).not.toHaveAttribute('aria-label');
+    expect(link.firstChild).toHaveTextContent(`${usd(284_99)} this month`);
+    expect(link.querySelector('.sr-only')).toHaveTextContent(', Bills & cards');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Hide amounts' }));
+    expect(
+      within(region('Coming up')).getByRole('link', { name: '•••• this month, Bills & cards' }),
+    ).toBeInTheDocument();
+    useAmountsHidden.setState({ hidden: false });
+  });
+
+  it('makes every row a button with a chevron', () => {
+    renderDashboard(monthData(), TODAY);
+    const rows = within(region('Coming up')).getAllByRole('listitem');
+    expect(rows).toHaveLength(3);
+    for (const r of rows) {
+      expect(within(r).getByRole('button')).toHaveClass('min-h-11');
+      expect(r.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
+    }
+  });
+
+  it('says "Minimum payment" for a card that is not paid in full', () => {
+    const data = monthData();
+    data.tables.debt = [
+      makeDebt({
+        id: 'visa',
+        name: 'Visa',
+        openingBalance: 230_00,
+        openingDate: '2026-09-01',
+        dueDay: 21,
+        payInFull: false,
+        minimumPayment: 25_00,
+      }),
+    ];
+    renderDashboard(data, TODAY);
+    const row = within(region('Coming up')).getByRole('button', { name: /Visa card payment/ });
+    expect(row).toHaveTextContent(`Minimum payment · in 7 days${usd(25_00)}`);
+  });
+
+  it('opens the card sheet from the card row, and the editor from a subscription row', async () => {
+    renderDashboard(monthData(), TODAY);
+    await userEvent.click(
+      within(region('Coming up')).getByRole('button', { name: /Visa card payment/ }),
+    );
+    const sheet = screen.getByRole('dialog', { name: 'Visa credit card' });
+    expect(within(sheet).getByText('Credit card')).toBeInTheDocument();
+    expect(within(sheet).getByRole('button', { name: 'Pay card' })).toBeEnabled();
+    expect(within(sheet).getByRole('button', { name: 'Edit card' })).toBeEnabled();
+    await userEvent.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog', { name: 'Visa credit card' })).not.toBeInTheDocument();
+
+    await userEvent.click(within(region('Coming up')).getByRole('button', { name: /Streamflix/ }));
+    const edit = screen.getByRole('dialog', { name: 'Edit subscription' });
+    expect(within(edit).getByLabelText('Name')).toHaveValue('Streamflix');
   });
 
   it('shows no more than four bills', () => {
@@ -635,6 +699,17 @@ describe('DashboardScreen net worth', () => {
   it('says there is no change when net worth has not moved this month', () => {
     renderDashboard(emptySnapshot(), TODAY);
     expect(screen.getByText('No change this month')).toHaveClass('text-muted');
+  });
+
+  it('links to the Income page from the Net worth section, beside the number and not inside it', () => {
+    renderDashboard(monthData(), TODAY);
+    const worth = region('Net worth');
+    const link = within(worth).getByRole('link', { name: 'Income stats' });
+    expect(link).toHaveAttribute('href', '/income');
+    const number = within(worth).getByRole('button', { name: /Net worth: see and correct$/ });
+    expect(number).not.toContainElement(link);
+    expect(link.closest('button')).toBeNull();
+    expect(link.parentElement).toBe(number.parentElement);
   });
 
   it('adds Investments to the legend, in the second chart colour, once they are worth something', () => {
@@ -792,7 +867,7 @@ describe('DashboardScreen salary and freeze', () => {
 describe('DashboardScreen reminders invitation', () => {
   const INVITE = 'Get reminders for bills, renewals and a daily nudge to log spending.';
   const BLOCKED =
-    'Notifications are blocked for Funancial. Turn them on in Android Settings → Apps → Funancial → Notifications.';
+    'Notifications are blocked for Funcial. Turn them on in Android Settings → Apps → Funcial → Notifications.';
   /** Nobody has been asked yet: off, and not prompted. */
   const fresh = makeSettings().reminders;
 
@@ -890,15 +965,23 @@ describe('DashboardScreen reminders invitation', () => {
 
 describe('DashboardScreen quests', () => {
   it('shows up to three quests on Home, with a link to all of them', () => {
-    renderDashboard(emptySnapshot(), '2026-10-14');
+    const data = emptySnapshot();
+    data.tables.profile = [makeProfile()];
+    data.tables.budgetLimit = [makeLimit()];
+    renderDashboard(data, '2026-10-14');
 
+    // Four quests apply (daily, two weekly and the salary one); Home shows the first three.
     const quests = region('Quests');
     expect(within(quests).getByRole('link', { name: 'All' })).toHaveAttribute('href', '/quests');
     expect(
       within(quests)
         .getAllByRole('listitem')
         .map((li) => li.querySelector('p')?.textContent),
-    ).toEqual(["Log today's spending", 'Do your weekly check-in', 'Back up your data']);
+    ).toEqual([
+      "Log today's spending",
+      'Stay within your limits this week',
+      'Do your weekly check-in',
+    ]);
   });
 
   it('puts the quests still to do first, daily before weekly before monthly', () => {
@@ -908,7 +991,7 @@ describe('DashboardScreen quests', () => {
     data.tables.checkIn = [makeCheckIn({ kind: 'no-spend', date: '2026-10-14' })];
     renderDashboard(data, '2026-10-14');
 
-    // Five quests apply and today's is done: it drops out of the three shown.
+    // Four quests apply and today's is done: it drops out, leaving three.
     const rows = within(region('Quests')).getAllByRole('listitem');
     expect(rows.map((li) => li.querySelector('p')?.textContent)).toEqual([
       'Stay within your limits this week',
@@ -999,5 +1082,145 @@ describe('DashboardScreen account reminder', () => {
   it('never asks in the demo', () => {
     renderWithAccount('demo');
     expect(screen.queryByText(ASK)).not.toBeInTheDocument();
+  });
+});
+
+describe('DashboardScreen with amounts hidden', () => {
+  afterEach(() => {
+    localStorage.clear();
+    useAmountsHidden.setState({ hidden: false });
+  });
+
+  const RUN = /\d[\d.,]*\d|\d/g;
+  /**
+   * Every run of digits that is read on the page, in its text and in the names it gives to
+   * assistive tech (the month line's parts are named with their amounts): "1,320.00", "21", "88".
+   * Each text node on its own, as neighbours ("3" beside "40") would run together into one.
+   */
+  const digitRuns = () => {
+    const read: string[] = [];
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      read.push(node.nodeValue ?? '');
+    }
+    for (const el of document.body.querySelectorAll('[aria-label],[aria-valuetext]')) {
+      read.push(el.getAttribute('aria-label') ?? '', el.getAttribute('aria-valuetext') ?? '');
+    }
+    return read.flatMap((text) => text.match(RUN) ?? []);
+  };
+  /** The digits an amount is written with, whole and exact: ["1,320", "1,320.00"]. */
+  const writtenAs = (minor: number) =>
+    [usd(minor), usdWhole(minor)].flatMap((text) => text.match(RUN) ?? []);
+
+  it('has the eye on the Available to spend row, and leaves the top line as it was', () => {
+    renderDashboard(monthData(), TODAY);
+    const eye = screen.getByRole('button', { name: 'Hide amounts' });
+    const row = screen.getByRole('heading', { name: 'Available to spend' }).parentElement;
+    expect(row).toContainElement(eye);
+    const quests = screen.getByRole('link', { name: /Open quests$/ });
+    expect(quests.parentElement).not.toContainElement(eye);
+  });
+
+  it('shows no amount and four bullets in their place after the eye is pressed', async () => {
+    renderDashboard(monthData(), TODAY);
+    // Available, spent so far, bills to come, what is left, the Visa, a subscription, net worth, goals.
+    const known = [
+      6_395_01, 1_320_00, 284_99, 180_00, 230_00, 15_99, 39_00, 6_450_00, 3_000_00, 10_000_00,
+    ];
+    expect(digitRuns()).toEqual(
+      expect.arrayContaining(['6,395.01', '1,320', '284.99', '6,450.00']),
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: 'Hide amounts' }));
+
+    const runs = digitRuns();
+    for (const minor of known) {
+      for (const written of writtenAs(minor)) expect(runs, written).not.toContain(written);
+    }
+    expect(screen.getAllByText('••••').length).toBeGreaterThan(4);
+    // Names, dates and counts stay.
+    expect(screen.getByText('Streamflix')).toBeInTheDocument();
+    expect(screen.getByText('Emergency fund')).toBeInTheDocument();
+    expect(screen.getByText(`spent in ${october}`)).toBeInTheDocument();
+    expect(screen.getByText('Hi, Test Player')).toBeInTheDocument();
+  });
+
+  it('shows the amounts again when the eye is pressed again', async () => {
+    renderDashboard(monthData(), TODAY);
+    const eye = screen.getByRole('button', { name: 'Hide amounts' });
+    await userEvent.click(eye);
+    expect(eye).toHaveAttribute('aria-pressed', 'true');
+    await userEvent.click(eye);
+    expect(eye).toHaveAttribute('aria-pressed', 'false');
+    expect(digitRuns()).toContain('1,320');
+    expect(screen.queryByText('••••')).not.toBeInTheDocument();
+  });
+
+  it("keeps the direction of net worth's move beside the bullets, and says no change only when there is none", async () => {
+    const { unmount } = renderDashboard(monthData(), TODAY);
+    await userEvent.click(screen.getByRole('button', { name: 'Hide amounts' }));
+    expect(screen.getByText('▼ •••• this month')).toHaveClass('text-danger');
+    expect(screen.queryByText('No change this month')).not.toBeInTheDocument();
+    unmount();
+
+    // The same Home with 2,000 of income: net worth went up.
+    const rise = renderDashboard(monthData({ income: 2_000_00 }), TODAY);
+    expect(screen.getByText('▲ •••• this month')).toHaveClass('text-accent-text');
+    rise.unmount();
+
+    renderDashboard(emptySnapshot(), TODAY);
+    expect(screen.getByText('No change this month')).toBeInTheDocument();
+  });
+
+  it('calls a move under the smallest whole unit no change, hidden or shown', async () => {
+    const withIncome = (cents: number) => {
+      const data = emptySnapshot();
+      data.tables.profile = [makeProfile({ openingDate: '2026-09-01' })];
+      data.tables.income = [makeIncome({ amount: cents, date: '2026-10-02', bucket: 'cash' })];
+      return data;
+    };
+    // 49 cents rounds to $0 and 50 to $1, as the whole-dollar text would have said.
+    const small = renderDashboard(withIncome(49), TODAY);
+    expect(screen.getByText('No change this month')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Hide amounts' }));
+    expect(screen.getByText('No change this month')).toBeInTheDocument();
+    small.unmount();
+
+    useAmountsHidden.setState({ hidden: false });
+    renderDashboard(withIncome(50), TODAY);
+    expect(screen.getByText(`▲ ${usdWhole(50)} this month`)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Hide amounts' }));
+    expect(screen.getByText('▲ •••• this month')).toBeInTheDocument();
+  });
+
+  it('turns the month line into one plain grey line, as its lengths would give the amounts away', async () => {
+    renderDashboard(monthData(), TODAY);
+    const hero = region('Available to spend');
+    expect(within(hero).getAllByRole('button', { name: SEGMENT })).toHaveLength(3);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Hide amounts' }));
+    expect(within(hero).queryAllByRole('button', { name: SEGMENT })).toHaveLength(0);
+    expect(hero.querySelector('.bg-track')).toBeInTheDocument();
+    expect(within(hero).getAllByText('••••')).toHaveLength(3);
+  });
+
+  it('does not keep naming a month-line part that was tapped before the amounts were hidden', async () => {
+    renderDashboard(monthData(), TODAY);
+    const hero = region('Available to spend');
+    await userEvent.click(
+      within(hero).getByRole('button', { name: `Bills still to come: ${usdWhole(284_99)}` }),
+    );
+    const eye = screen.getByRole('button', { name: 'Hide amounts' });
+    await userEvent.click(eye);
+    expect(within(hero).queryByText('Bills still to come')).not.toBeInTheDocument();
+    expect(within(hero).getByText(`spent in ${october}`)).toBeInTheDocument();
+
+    // Shown again, nothing is selected: the part tapped before has not come back.
+    await userEvent.click(eye);
+    expect(within(hero).queryByText('Bills still to come')).not.toBeInTheDocument();
+    expect(within(hero).getByText(`spent in ${october}`)).toBeInTheDocument();
+    for (const part of within(hero).getAllByRole('button', { name: SEGMENT })) {
+      expect(part).toHaveAttribute('aria-pressed', 'false');
+    }
   });
 });

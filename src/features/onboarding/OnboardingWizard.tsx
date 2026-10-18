@@ -8,6 +8,7 @@ import { Select } from '@/components/ui/Select';
 import { StepMotion, type StepDirection } from '@/components/ui/StepMotion';
 import { Switch } from '@/components/ui/Switch';
 import { TextField } from '@/components/ui/TextField';
+import { KeyDerivationError } from '@/data/accountCrypto';
 import { validateSecret, type SecretKind } from '@/data/keys';
 import { formatMoney, minorDigits } from '@/domain/money';
 import { ForgotScreen } from '@/features/account/ForgotScreen';
@@ -27,6 +28,7 @@ import {
 } from '@/store/accountActions';
 import type { CardInput } from '@/store/financeActions';
 import { useAccount, useAccountActions } from '@/store/useAccount';
+import { HIDDEN_AMOUNT, useAmountsHidden } from '@/store/useAmountsHidden';
 import { useFinanceActions } from '@/store/useFinance';
 
 const STEPS = 6;
@@ -131,6 +133,8 @@ export function OnboardingWizard({ onFinishing }: { onFinishing?(finishing: bool
   const enableBiometric = useApp((s) => s.enableBiometric);
   const deleteAllData = useApp((s) => s.deleteAllData);
   const emptyData = useApp((s) => !hasData(s.data));
+  // The person's choice from Home's eye, which a card's balance below follows (no profile yet).
+  const amountsHidden = useAmountsHidden((s) => s.hidden);
   const { signUp } = useAccountActions();
   const account = useAccount();
   const run = useAction();
@@ -152,8 +156,8 @@ export function OnboardingWizard({ onFinishing }: { onFinishing?(finishing: bool
     other?: string;
   }>({});
   // The last try failed for a reason that isn't what was typed: nothing came back (as good as
-  // offline), or the service failed. Either way a down service must not block setup.
-  const [failure, setFailure] = useState<'offline' | 'service' | null>(null);
+  // offline), the service failed, or this phone couldn't make the keys. None of them may block setup.
+  const [failure, setFailure] = useState<'offline' | 'service' | 'keys' | null>(null);
   const { busy: signingUp, guard } = useBusy();
 
   // A guess from where the phone is; the Select still offers every currency.
@@ -233,7 +237,9 @@ export function OnboardingWizard({ onFinishing }: { onFinishing?(finishing: bool
         } else {
           // Say so once, in the one line that comes with the way on.
           setAccountErrors({});
-          setFailure(code === 'offline' ? 'offline' : 'service');
+          setFailure(
+            code === 'offline' ? 'offline' : err instanceof KeyDerivationError ? 'keys' : 'service',
+          );
         }
       }
     });
@@ -379,12 +385,14 @@ export function OnboardingWizard({ onFinishing }: { onFinishing?(finishing: bool
             >
               I already have an account
             </button>
-            {(offline || failure === 'service') && (
+            {(offline || failure !== null) && (
               <div className="flex flex-col items-start gap-3">
                 <p className="text-muted text-sm">
                   {offline
                     ? "You're offline. Create your account later in Settings."
-                    : "Funancial's service isn't answering right now. You can make an account later in Settings."}
+                    : failure === 'keys'
+                      ? "This phone couldn't make your keys. Close other apps and try again, or make an account later in Settings."
+                      : "Funcial's service isn't answering right now. You can make an account later in Settings."}
                 </p>
                 <Button
                   variant="secondary"
@@ -456,7 +464,7 @@ export function OnboardingWizard({ onFinishing }: { onFinishing?(finishing: bool
             <ScreenHeader
               eyebrow="Your income"
               title="Your salary"
-              lead="So Funancial knows when money comes in."
+              lead="So Funcial knows when money comes in."
             />
             <Switch
               label="I don't have a regular salary"
@@ -500,7 +508,8 @@ export function OnboardingWizard({ onFinishing }: { onFinishing?(finishing: bool
                     <div className="min-w-0">
                       <p className="truncate font-bold">{c.name}</p>
                       <p className="text-muted text-sm tabular-nums">
-                        {formatMoney(c.balance, currency)} owed · due day {c.dueDay}
+                        {amountsHidden ? HIDDEN_AMOUNT : formatMoney(c.balance, currency)} owed ·
+                        due day {c.dueDay}
                         {c.payInFull ? ' · paid in full' : ''}
                       </p>
                     </div>
@@ -541,8 +550,8 @@ export function OnboardingWizard({ onFinishing }: { onFinishing?(finishing: bool
           <>
             <ScreenHeader
               eyebrow="Keep it private"
-              title="Lock Funancial?"
-              lead="Without a lock, anyone using this device can open Funancial. You can change this later in Settings."
+              title="Lock Funcial?"
+              lead="Without a lock, anyone using this device can open Funcial. You can change this later in Settings."
             />
             <RadioGroup<LockChoice>
               variant="underline"
@@ -601,7 +610,7 @@ export function OnboardingWizard({ onFinishing }: { onFinishing?(finishing: bool
   const progress = done ? 100 : Math.round(((step - 1) / STEPS) * 1000) / 10;
   const working = busy || signingUp;
   let label = 'Next';
-  if (done) label = 'Open Funancial';
+  if (done) label = 'Open Funcial';
   else if (step === 1 && signingUp) label = 'Creating…';
   else if (step === STEPS) label = busy ? 'Setting up…' : 'Start my adventure';
 

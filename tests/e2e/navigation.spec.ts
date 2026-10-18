@@ -177,3 +177,75 @@ test('mobile: a new screen opens at its top, and Back returns to where the last 
   await expect(index).toBeVisible();
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(left);
 });
+
+test('mobile: the Menu opens Goals and Debts as two pages', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'mobile-chromium', 'mobile layout only');
+  await startFresh(page);
+  const menuButton = page
+    .getByRole('navigation', { name: 'Primary' })
+    .getByRole('button', { name: 'Menu' });
+  const menu = page.getByRole('dialog', { name: 'Menu' });
+
+  await menuButton.click();
+  await menu.getByRole('link', { name: /^Goals/ }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Goals' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Add goal' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Add card' })).toHaveCount(0);
+
+  await menuButton.click();
+  await menu.getByRole('link', { name: /^Debts/ }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Debts' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Add card' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Add loan' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Add goal' })).toHaveCount(0);
+});
+
+test('mobile: the Menu opens Income, and an income added there shows in its bars', async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== 'mobile-chromium', 'mobile layout only');
+  await startFresh(page);
+  const menu = page.getByRole('dialog', { name: 'Menu' });
+  await page
+    .getByRole('navigation', { name: 'Primary' })
+    .getByRole('button', { name: 'Menu' })
+    .click();
+  const row = menu.getByRole('link', { name: /^Income/ });
+  await expect(row).toContainText('$0.00 this month');
+  await row.click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Income' })).toBeVisible();
+  await expect(page.getByText('No income yet')).toBeVisible();
+
+  // The empty page offers to add some, and Save brings the person back to it.
+  await page.getByRole('link', { name: 'Add income' }).click();
+  await expect(page.getByRole('radio', { name: 'Income' })).toBeChecked();
+  await page.getByLabel('Amount').fill('1250');
+  await page.getByRole('button', { name: 'Save' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Income' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'This month' })).toContainText('$1,250.00');
+
+  const chart = page.getByRole('region', { name: 'Last 12 months' });
+  const bars = chart.getByRole('group', { name: 'Income per month' }).getByRole('button');
+  await expect(bars).toHaveCount(12);
+  await bars.last().click();
+  await expect(chart.getByRole('status')).toContainText(
+    'Salary $1,250.00 · Extra $0.00 · Dividends $0.00',
+  );
+  // Twelve bars and their captions fit a 375px phone without a sideways scroll.
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(375);
+});
+
+test('desktop: Home links to Income stats, and the sidebar marks Income as current', async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop-chromium', 'desktop layout only');
+  await startFresh(page);
+  await page
+    .getByRole('region', { name: 'Net worth' })
+    .getByRole('link', { name: 'Income stats' })
+    .click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Income' })).toBeVisible();
+  await expect(
+    page.getByRole('navigation', { name: 'All sections' }).getByRole('link', { name: /^Income/ }),
+  ).toHaveAttribute('aria-current', 'page');
+});

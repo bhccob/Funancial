@@ -7,12 +7,12 @@ import type { Platform } from '@/platform/types';
 import { fakeAppLifecycle } from '@/test/fakeAppLifecycle';
 import { UpdateBanner } from './UpdateBanner';
 
-const PAGE = 'https://funancial.vercel.app/get/latest.json';
+const PAGE = 'https://funcial.vercel.app/get/latest.json';
 const latest = (versionCode: number): Latest => ({
   versionCode,
   versionName: `0.${versionCode}`,
   notes: `What is new in ${versionCode}.`,
-  apkUrl: `https://funancial.vercel.app/get/funancial-0.${versionCode}.apk`,
+  apkUrl: `https://funcial.vercel.app/get/funcial-0.${versionCode}.apk`,
   sha256: 'a'.repeat(63) + '0',
   size: 12_345_678,
 });
@@ -102,7 +102,7 @@ describe('a release build', () => {
     expect(screen.getByText('What is new in 9.')).toHaveClass('line-clamp-3');
     expect(screen.getByRole('link', { name: 'Update' })).toHaveAttribute(
       'href',
-      'https://funancial.vercel.app/get/funancial-0.9.apk',
+      'https://funcial.vercel.app/get/funcial-0.9.apk',
     );
     expect(fetchMock).toHaveBeenCalledWith(PAGE, expect.anything());
     // The button's name starts with the words on it, for people who speak them to a switch or voice control.
@@ -216,9 +216,9 @@ describe('a release build', () => {
     ['an apkUrl on another origin', { ...latest(9), apkUrl: 'https://evil.example/a.apk' }],
     [
       'an apkUrl with a user name and password',
-      { ...latest(9), apkUrl: 'https://user:pw@funancial.vercel.app/get/a.apk' },
+      { ...latest(9), apkUrl: 'https://user:pw@funcial.vercel.app/get/a.apk' },
     ],
-    ['an http apkUrl', { ...latest(9), apkUrl: 'http://funancial.vercel.app/get/a.apk' }],
+    ['an http apkUrl', { ...latest(9), apkUrl: 'http://funcial.vercel.app/get/a.apk' }],
     ['a versionCode that is not a number', { ...latest(9), versionCode: '9' }],
     ['huge notes', { ...latest(9), notes: 'x'.repeat(100_000) }],
     ['a body that is not an object', 'newer'],

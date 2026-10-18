@@ -1,9 +1,12 @@
 # Setting up accounts (for the owner)
 
 Accounts let a friend move to a new phone and keep everything. Their data is kept as a locked copy
-on the Funancial service, which is the `funancial` project on your Vercel. For that to work the
-service needs three things from you: a database, a Gmail address that sends "forgot password" emails,
-and a master key. This page walks you through them, click by click.
+on the Funcial service, which is the `funancial` project on your Vercel (the project keeps its old
+name; only the name people see changed). For that to work the service needs three things from you: a
+database, a Gmail address that sends "forgot password" emails, and a master key. This page walks you
+through them, click by click.
+
+The locked copy is also the only backup the app has: there are no backup files or exports.
 
 You type every secret yourself, straight into Vercel. **Claude never needs to see any of them.**
 Don't paste one into the chat, into a file in this project, or into a commit.
@@ -19,12 +22,12 @@ Accepting Upstash's terms (step 1) and Google's (step 2) is your click. Claude c
 3. Click **Create Database** (or **Browse Marketplace**), choose **Upstash**, then **Upstash for
    Redis**, and click **Continue**.
 4. Pick the **Free** plan, choose the region closest to you, and give it any name (for example
-   `funancial-accounts`).
+   `funcial-accounts`).
 5. Read Upstash's terms and, if you agree, accept them and click **Create**.
 6. When it asks which project to connect to, pick **funancial** and keep **Production** ticked.
 
 That is all. Vercel adds the database's address and password to the project by itself (you will see
-`KV_REST_API_URL` and `KV_REST_API_TOKEN` appear under Settings → Environment Variables). **Don't add
+`KV_REST_API_URL` and `KV_REST_API_TOKEN` appear under Environment Variables, in the project's left sidebar). **Don't add
 anything by hand for the database.** Vercel's screens change now and then, so if a button is named a
 little differently, pick the closest one. If the variables Vercel added aren't named
 `KV_REST_API_URL` and `KV_REST_API_TOKEN` (for example, a prefix was added), tell Claude. Keep those
@@ -44,10 +47,10 @@ dedicate to this (a fresh one is ideal).
    Verification is on.)
 3. Open [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords). (Or search
    "App passwords" in the box at the top of your Google account page.)
-4. Type a name, for example `Funancial`, and click **Create**.
+4. Type a name, for example `Funcial`, and click **Create**.
 5. Google shows a password of 16 letters, in four groups. **It is shown once.** Copy it, and save it
    in your password manager right away.
-6. In Vercel, open the **funancial** project, then **Settings**, then **Environment Variables**.
+6. In Vercel, open the **funancial** project, then click **Environment Variables** in the left sidebar.
 7. Add two variables, one at a time. For each: type the **Key**, paste the **Value**, make sure
    **Production** is ticked, and click **Save**.
    - Key `GMAIL_USER`, value: the Gmail address, for example `someone@gmail.com`.
@@ -71,9 +74,9 @@ it on this computer. Nobody else ever sees it.
 
 3. It prints one line of 44 letters, numbers and symbols, ending in `=`. Select that line with the
    mouse and press Ctrl+C to copy it.
-4. **First**, save it in your password manager, named for example `Funancial SERVER_MASTER_KEY`. Do
+4. **First**, save it in your password manager, named for example `Funcial SERVER_MASTER_KEY`. Do
    this before anything else.
-5. In Vercel, open the **funancial** project, then **Settings**, then **Environment Variables**.
+5. In Vercel, open the **funancial** project, then click **Environment Variables** in the left sidebar.
 6. Click to add one. Key `SERVER_MASTER_KEY`, value: paste the line. Make sure **Production** is
    ticked. If you see a **Sensitive** switch, turn it on. Click **Save**.
 7. Close PowerShell. (If you ran the command again by mistake, use only the line you saved in step 4.)
@@ -97,15 +100,15 @@ away, and that the reset page shows its "expired" message for a made-up link.
 | `SERVER_MASTER_KEY` | The master key you made in step 3. | Lets the service unlock a copy for "forgot password". With it and a stolen database, someone could open every copy. | **Lost:** email resets can't restore old data. **Leaked:** tell Claude. Replacing it has a cost (see step 3), so don't do it on your own. |
 | `GMAIL_USER` | The Gmail address that sends the emails. | Not a secret by itself. It's the "from" address. | Nothing to protect. |
 | `GMAIL_APP_PASSWORD` | A Google app password for that address. | Lets the service send "forgot password" emails from your Gmail. | Someone could send email as that Gmail. Delete the app password in your Google account and make a new one. |
-| `FUNANCIAL_ACCESS_TOKEN`, `FUNANCIAL_APP_ORIGIN` | Already set from earlier. | They keep strangers' requests out. | **Leave them alone.** |
+| `FUNANCIAL_ACCESS_TOKEN` | Already set from earlier. | It keeps strangers' requests out. | **Leave it alone.** |
 
 Claude only ever checks that the names are listed (`npx vercel env ls` prints names, not values). It
 never pulls, prints or asks for the values.
 
 ## If a friend asks you to remove their copy
 
-Not part of setup: skip this until someone asks. Removing a copy is permanent, so be sure the
-request really comes from the friend.
+Not part of setup: skip this until someone asks. Removing a copy is permanent, and it is their
+only backup, so be sure the request really comes from the friend.
 
 **The easy way: they do it themselves.** On the phone, they open Settings, then Account, and tap
 **Turn off and delete my copy**. That removes their account and its locked copy from the service. If
@@ -153,7 +156,7 @@ This is what each leftover does:
 
 ## When you're done
 
-Before you tell Claude, check in Vercel → Settings → Environment Variables that you can see
+Before you tell Claude, check in Vercel → Environment Variables (left sidebar) that you can see
 `SERVER_MASTER_KEY`, `GMAIL_USER`, `GMAIL_APP_PASSWORD` and the two `KV_REST_API_` names, and that
 the master key is in your password manager.
 

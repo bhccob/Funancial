@@ -84,7 +84,7 @@ test('card spending becomes a bill until the card is paid', async ({ page }) => 
   await start(page);
   await expect(available(page)).toContainText('$6,000.00');
 
-  await page.goto('/goals');
+  await page.goto('/debts');
   await page.getByRole('button', { name: 'Add card' }).click();
   const add = page.getByRole('dialog', { name: 'Add a card' });
   await add.getByLabel('Name').fill('Visa');
@@ -96,7 +96,7 @@ test('card spending becomes a bill until the card is paid', async ({ page }) => 
   await addExpense(page, { amount: '50', category: 'Shopping', paidWith: 'Visa' });
   await expect(available(page)).toContainText('$5,950.00');
 
-  await page.goto('/goals');
+  await page.goto('/debts');
   const visa = page.getByRole('listitem').filter({ hasText: 'Visa' });
   await expect(visa).toContainText('$50.00');
   await visa.getByRole('button', { name: 'Pay card' }).click();
@@ -131,13 +131,39 @@ test('setting the actual cash balance records a correction', async ({ page }) =>
   await page.goto('/history');
   await page.getByRole('button', { name: 'Set actual balance' }).click();
   const dialog = page.getByRole('dialog', { name: 'Set actual balance' });
-  await expect(dialog.getByText('Funancial thinks: $1,000.00')).toBeVisible();
+  await expect(dialog.getByText('Funcial thinks: $1,000.00')).toBeVisible();
   await dialog.getByLabel('Actual balance').fill('900');
   await dialog.getByRole('button', { name: 'Save' }).click();
   await expect(page.getByText('Balance correction')).toBeVisible();
 
   await page.goto('/');
   await expect(page.getByRole('region', { name: 'Net worth' })).toContainText('Cash $900');
+});
+
+test("Home's Available to spend sheet corrects cash and keeps its place", async ({ page }) => {
+  await start(page);
+  const number = page.getByRole('button', { name: 'Available to spend: see and correct' });
+  // The name is the amount drawn, then what it does, so it holds the text on screen.
+  await expect(number).toHaveAccessibleName('$6,000.00 Available to spend: see and correct');
+  await number.click();
+  const sheet = page.getByRole('dialog', { name: 'Available to spend' });
+  const cash = sheet.getByRole('listitem').filter({ hasText: 'Cash' });
+  await expect(cash).toContainText('$1,000.00');
+  await cash.getByRole('button', { name: 'Correct Cash', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Set actual balance' });
+  await expect(dialog.getByRole('radio', { name: 'Cash' })).toBeChecked();
+  await dialog.getByLabel('Actual balance').fill('900');
+  await dialog.getByRole('button', { name: 'Save' }).click();
+
+  // The sheet is still open with the new cash, and focus is back on the button that asked.
+  await expect(cash).toContainText('$900.00');
+  await expect(sheet.getByText('= Available to spend').locator('..')).toContainText('$5,900.00');
+  await expect(cash.getByRole('button', { name: 'Correct Cash', exact: true })).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(available(page)).toContainText('$5,900.00');
+  await expect(
+    page.getByRole('button', { name: 'Available to spend: see and correct' }),
+  ).toBeFocused();
 });
 
 test('a monthly expense also becomes a subscription renewing next month', async ({ page }) => {

@@ -2,6 +2,8 @@ import {
   ChartPie,
   CircleQuestionMark,
   Clock,
+  CreditCard,
+  HandCoins,
   House,
   Inbox,
   Repeat,
@@ -45,8 +47,10 @@ export const MENU_GROUPS: MenuGroup[] = [
   {
     title: 'Your money',
     items: [
-      { path: '/subscriptions', label: 'Subscriptions', icon: Repeat, color: '#2a78d6' },
+      { path: '/subscriptions', label: 'Bills & cards', icon: Repeat, color: '#2a78d6' },
       { path: '/goals', label: 'Goals', icon: Target, color: '#128a60' },
+      { path: '/debts', label: 'Debts', icon: CreditCard, color: '#b3261e' },
+      { path: '/income', label: 'Income', icon: HandCoins, color: '#2e7d32' },
       { path: '/history', label: 'History', icon: Clock, color: '#d9541e' },
       { path: '/freeze', label: 'Salary freeze', icon: Snowflake, color: '#4458d6' },
       { path: '/buy', label: 'Buy it?', icon: ShoppingBag, color: '#c43b6a' },

@@ -20,8 +20,8 @@ export const FAQ: Array<{ q: string; a: string }> = [
     a: "The date is a guess. A date with no ~ comes from the price service's real ex-dates.",
   },
   {
-    q: 'Does Funancial need my bank login?',
-    a: 'No. You add what you spend and earn yourself, and Funancial never asks for a bank login.',
+    q: 'Does Funcial need my bank login?',
+    a: 'No. You add what you spend and earn yourself, and Funcial never asks for a bank login.',
   },
   {
     q: 'Is my data sent anywhere?',
@@ -33,14 +33,10 @@ export const FAQ: Array<{ q: string; a: string }> = [
   },
   {
     q: 'How do I move to a new phone?',
-    a: 'Install Funancial on the new phone, tap "I have an account" and log in. Your data comes back. Without an account, make a backup in Settings, move the file to the new phone, and restore it there with your passphrase.',
+    a: 'Install Funcial on the new phone, tap "I have an account" and log in. Your data comes back. This works only if you made an account on the old phone, so make one in Settings first.',
   },
   {
     q: 'I forgot my password',
-    a: 'On the log-in screen, tap "Forgot password?" and type your username or email. Funancial emails you a link to choose a new password, and your data is still there.',
-  },
-  {
-    q: 'What if I forget my backup passphrase?',
-    a: "A backup can't be opened without the passphrase it was made with, and nobody can open it for you. Keep the passphrase somewhere safe.",
+    a: 'On the log-in screen, tap "Forgot password?" and type your username or email. Funcial emails you a link to choose a new password, and your data is still there.',
   },
 ];

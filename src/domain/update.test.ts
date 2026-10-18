@@ -5,7 +5,7 @@ const latest: Latest = {
   versionCode: 9,
   versionName: '0.9',
   notes: 'A new look for the budget screen.',
-  apkUrl: 'https://funancial.vercel.app/get/funancial-0.9.apk',
+  apkUrl: 'https://funcial.vercel.app/get/funcial-0.9.apk',
   sha256: 'a'.repeat(63) + '0',
   size: 12_345_678,
 };
@@ -30,7 +30,7 @@ describe('updateOffer', () => {
 describe('LatestSchema', () => {
   it('accepts what the release script writes, for both channels', () => {
     expect(LatestSchema.parse(latest)).toEqual(latest);
-    const test = { ...latest, apkUrl: 'https://funancial.vercel.app/get/test/funancial-0.9.apk' };
+    const test = { ...latest, apkUrl: 'https://funcial.vercel.app/get/test/funcial-0.9.apk' };
     expect(LatestSchema.parse(test)).toEqual(test);
   });
 
@@ -70,16 +70,16 @@ describe('LatestSchema', () => {
     ['blank notes', { notes: '  \n ' }],
     ['notes over 500 characters', { notes: 'x'.repeat(501) }],
     ['notes that are not text', { notes: ['new'] }],
-    ['an apkUrl that is not a URL', { apkUrl: 'funancial-0.9.apk' }],
+    ['an apkUrl that is not a URL', { apkUrl: 'funcial-0.9.apk' }],
     ['a javascript: apkUrl', { apkUrl: 'javascript:alert(1)' }],
-    ['a file: apkUrl', { apkUrl: 'file:///sdcard/funancial.apk' }],
+    ['a file: apkUrl', { apkUrl: 'file:///sdcard/funcial.apk' }],
     ['a data: apkUrl', { apkUrl: 'data:application/vnd.android.package-archive;base64,AAAA' }],
     ['a protocol-relative apkUrl', { apkUrl: '//evil.example/a.apk' }],
     [
       'an apkUrl with a user name and password',
-      { apkUrl: 'https://user:pw@funancial.vercel.app/a.apk' },
+      { apkUrl: 'https://user:pw@funcial.vercel.app/a.apk' },
     ],
-    ['an apkUrl with only a user name', { apkUrl: 'https://user@funancial.vercel.app/a.apk' }],
+    ['an apkUrl with only a user name', { apkUrl: 'https://user@funcial.vercel.app/a.apk' }],
     ['a sha256 in capitals', { sha256: 'A'.repeat(64) }],
     ['a sha256 that is too short', { sha256: 'a'.repeat(63) }],
     ['a zero size', { size: 0 }],

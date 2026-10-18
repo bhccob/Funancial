@@ -3,7 +3,8 @@ import { createStore, type StoreApi } from 'zustand/vanilla';
 import {
   canonicalUsername,
   deriveAccountKeys,
-  KDF_ITERATIONS,
+  KDF_PARAMS,
+  type KdfParams,
   newDek,
   openCopy,
   sealCopy,
@@ -97,18 +98,17 @@ const MESSAGES: Record<AccountErrorCode, string> = {
   taken: 'That username is taken. Try another one.',
   wrong: "That username and password don't match.",
   limited: 'Too many tries. Try again in a little while.',
-  busy: 'Funancial is busy right now. Try again in a moment.',
-  unavailable: "Funancial's service isn't answering right now. Try again in a moment.",
+  busy: 'Funcial is busy right now. Try again in a moment.',
+  unavailable: "Funcial's service isn't answering right now. Try again in a moment.",
   invalid: 'Check what you typed and try again.',
-  'too-new':
-    "Your account's copy was saved by a newer Funancial. Update the app, then log in again.",
+  'too-new': "Your account's copy was saved by a newer Funcial. Update the app, then log in again.",
   damaged: "Your account's copy couldn't be opened. Try again later.",
   unsupported: "This phone's browser engine is too old to save or restore your copy.",
   unreadable:
     "Your account's copy couldn't be opened on this phone. Nothing was changed. Try again later, or update Android System WebView.",
   moved:
     "Your account moved to another phone, so this one can't change its password. Log in again first.",
-  locked: 'Unlock Funancial first.',
+  locked: 'Unlock Funcial first.',
   demo: "Demo money can't have an account.",
   linked: 'This phone already has an account.',
   unlinked: 'This phone has no account.',
@@ -211,7 +211,7 @@ export function createAccountActions(
   store: StoreApi<AppState>,
   api: AccountApi,
   platform: Pick<Platform, 'onPause'>,
-  { iterations = KDF_ITERATIONS }: { iterations?: number } = {},
+  { kdf = KDF_PARAMS }: { kdf?: KdfParams } = {},
 ) {
   const view = createStore<AccountView>()(() => ({ loaded: false, state: null }));
   const app = () => store.getState();
@@ -413,7 +413,7 @@ export function createAccountActions(
   /** One of these at a time: a second tap before the first answers must not start a second sign-up. */
   function exclusive<A extends unknown[], R>(job: (...args: A) => Promise<R>) {
     return async (...args: A): Promise<R> => {
-      if (working) throw new AccountError('busy', 'Funancial is still working on your last tap.');
+      if (working) throw new AccountError('busy', 'Funcial is still working on your last tap.');
       working = true;
       try {
         return await job(...args);
@@ -447,7 +447,7 @@ export function createAccountActions(
     const address = email.trim();
     const mine = session;
     // Slow on purpose: once per submit.
-    const { authKey, kek } = await deriveAccountKeys(name, password, iterations);
+    const { authKey, kek } = await deriveAccountKeys(name, password, kdf);
     const dek = await newDek();
     const body = {
       username: name,
@@ -523,7 +523,7 @@ export function createAccountActions(
     if (!fresh && !replace && hasData(app().data)) return 'needs-confirm';
 
     const mine = session;
-    const { authKey, kek } = await deriveAccountKeys(name, password, iterations);
+    const { authKey, kek } = await deriveAccountKeys(name, password, kdf);
     const reply = await reach(() => api.logIn({ username: name, authKey }));
     if (reply.status !== 200) throw failed(reply, MESSAGES.wrong);
     const parsed = LoggedIn.safeParse(reply.body);
@@ -584,8 +584,8 @@ export function createAccountActions(
     const problem = passwordProblem(newPassword);
     if (problem) throw new AccountError('invalid', problem);
 
-    const old = await deriveAccountKeys(state.username, oldPassword, iterations);
-    const next = await deriveAccountKeys(state.username, newPassword, iterations);
+    const old = await deriveAccountKeys(state.username, oldPassword, kdf);
+    const next = await deriveAccountKeys(state.username, newPassword, kdf);
     const newWrappedPw = await wrapDek(state.dek, next.kek);
     const reply = await reach(() =>
       api.changePassword(state.deviceToken, {

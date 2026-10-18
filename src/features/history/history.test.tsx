@@ -259,10 +259,18 @@ describe('HistoryScreen', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Set actual balance' }));
     const dialog = screen.getByRole('dialog', { name: 'Set actual balance' });
     // 1,000 + 3,000 − 120 − 500 − 30 − 20
-    expect(within(dialog).getByText(`Funancial thinks: ${usd(3_330_00)}`)).toBeInTheDocument();
+    expect(within(dialog).getByText(`Funcial thinks: ${usd(3_330_00)}`)).toBeInTheDocument();
     await userEvent.type(within(dialog).getByLabelText('Actual balance'), '3,342.34');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
     expect(actions.setActualBalance).toHaveBeenCalledWith('cash', 3_342_34, '2026-10-10');
+  });
+
+  it('starts on Cash when opened from History', async () => {
+    renderHistory();
+    await userEvent.click(screen.getByRole('button', { name: 'Set actual balance' }));
+    const dialog = screen.getByRole('dialog', { name: 'Set actual balance' });
+    expect(within(dialog).getByRole('radio', { name: 'Cash' })).toBeChecked();
+    expect(within(dialog).getByRole('radio', { name: 'Savings' })).not.toBeChecked();
   });
 
   it('says when the balance already matches', async () => {

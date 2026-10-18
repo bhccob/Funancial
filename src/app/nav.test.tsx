@@ -9,9 +9,18 @@ import { formatMoney } from '@/domain/money';
 import { emptySnapshot, type DataSnapshot } from '@/domain/snapshot';
 import { topDialog } from '@/lib/dialogStack';
 import { formatDay } from '@/lib/format';
+import { useAmountsHidden } from '@/store/useAmountsHidden';
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
 import { INBOX_NOW, inboxData } from '@/test/inboxData';
-import { makeGoal, makeLedgerEntry, makeProfile, makeSubscription } from '@/test/fixtures';
+import {
+  makeDebt,
+  makeDividend,
+  makeGoal,
+  makeIncome,
+  makeLedgerEntry,
+  makeProfile,
+  makeSubscription,
+} from '@/test/fixtures';
 import { MENU_GROUPS } from './menu';
 import { appRouteObjects } from './router';
 
@@ -151,7 +160,7 @@ describe('Menu sheet', () => {
         .map((a) => a.getAttribute('href')),
     ).toEqual(MENU_GROUPS.flatMap((g) => g.items.map((i) => i.path)));
 
-    expect(row(sheet, 'Subscriptions')).toHaveTextContent(`2 active · ${usd(25_99)}/mo`);
+    expect(row(sheet, 'Bills & cards')).toHaveTextContent(`2 active · ${usd(25_99)}/mo`);
     expect(row(sheet, 'Goals')).toHaveTextContent('2 goals · 33% saved');
     expect(row(sheet, 'History')).toHaveTextContent('Every entry, searchable');
     expect(row(sheet, 'Salary freeze')).toHaveTextContent(
@@ -163,7 +172,7 @@ describe('Menu sheet', () => {
     expect(row(sheet, 'Shop')).toHaveTextContent('130 coins to spend');
     expect(row(sheet, 'Inbox')).toHaveTextContent(/^Inbox$/);
     expect(row(sheet, 'Help')).toHaveTextContent('How everything works');
-    expect(row(sheet, 'Settings')).toHaveTextContent('Lock, backups, reminders');
+    expect(row(sheet, 'Settings')).toHaveTextContent('Lock, account, reminders');
   });
 
   it('moves the Invest, Dividends and News rows out of the Menu', async () => {
@@ -172,6 +181,113 @@ describe('Menu sheet', () => {
     for (const label of ['Invest', 'Dividends', 'News']) {
       expect(within(sheet).queryByRole('link', { name: new RegExp(`^${label}`) })).toBeNull();
     }
+  });
+
+  it('adds the number of credit cards to the Bills & cards row, when there are any', async () => {
+    const data = liveData();
+    data.tables.debt.push(
+      makeDebt({ kind: 'credit_card' }),
+      makeDebt({ kind: 'credit_card' }),
+      makeDebt({ kind: 'loan' }),
+    );
+    renderAt('/', data);
+    expect(row(await openMenu(), 'Bills & cards')).toHaveTextContent(
+      `2 active · ${usd(25_99)}/mo · 2 cards`,
+    );
+    cleanup();
+
+    const oneCard = emptySnapshot();
+    oneCard.tables.debt.push(makeDebt({ kind: 'credit_card' }));
+    renderAt('/', oneCard);
+    expect(row(await openMenu(), 'Bills & cards')).toHaveTextContent(/^Bills & cards1 card$/);
+  });
+
+  describe('Debts row', () => {
+    afterEach(() => useAmountsHidden.setState({ hidden: false }));
+
+    const owing = () => {
+      const data = emptySnapshot();
+      data.tables.profile.push(makeProfile({ currency: 'USD' }));
+      data.tables.debt.push(
+        makeDebt({ kind: 'credit_card', openingBalance: 230_00 }),
+        makeDebt({ kind: 'loan', openingBalance: 1_000_00 }),
+      );
+      return data;
+    };
+
+    it('says how many cards and loans there are, and what they come to', async () => {
+      renderAt('/', owing());
+      const sheet = await openMenu();
+      expect(row(sheet, 'Debts')).toHaveTextContent(`2 cards and loans · ${usd(1_230_00)}`);
+      expect(row(sheet, 'Debts')).toHaveAttribute('href', '/debts');
+    });
+
+    it('names the one card or loan there is', async () => {
+      const card = emptySnapshot();
+      card.tables.debt.push(makeDebt({ kind: 'credit_card', openingBalance: 230_00 }));
+      renderAt('/', card);
+      expect(row(await openMenu(), 'Debts')).toHaveTextContent(`1 card · ${usd(230_00)}`);
+      cleanup();
+
+      const loan = emptySnapshot();
+      loan.tables.debt.push(makeDebt({ kind: 'loan', openingBalance: 1_000_00 }));
+      renderAt('/', loan);
+      expect(row(await openMenu(), 'Debts')).toHaveTextContent(`1 loan · ${usd(1_000_00)}`);
+    });
+
+    it('hides the total with the eye', async () => {
+      useAmountsHidden.setState({ hidden: true });
+      renderAt('/', owing());
+      expect(row(await openMenu(), 'Debts')).toHaveTextContent('2 cards and loans · ••••');
+    });
+  });
+
+  describe('Income row', () => {
+    afterEach(() => useAmountsHidden.setState({ hidden: false }));
+
+    const earning = () => {
+      const data = emptySnapshot();
+      data.tables.profile.push(makeProfile({ currency: 'USD' }));
+      data.tables.income.push(
+        makeIncome({ date: '2026-10-05', amount: 4_000_00 }),
+        makeIncome({ date: '2026-09-25', amount: 9_000_00 }),
+        // Not arrived: not income.
+        makeIncome({ date: '2026-10-25', amount: 5_000_00, status: 'expected' }),
+      );
+      data.tables.dividend.push(
+        makeDividend({ paidOn: '2026-10-03', expectedPayDate: '2026-10-03', amount: 13_00 }),
+      );
+      return data;
+    };
+
+    it('sits before History and says what came in this month', async () => {
+      renderAt('/', earning());
+      const sheet = await openMenu();
+      expect(row(sheet, 'Income')).toHaveTextContent(`${usd(4_013_00)} this month`);
+      expect(row(sheet, 'Income')).toHaveAttribute('href', '/income');
+      const hrefs = within(sheet)
+        .getAllByRole('link')
+        .map((a) => a.getAttribute('href'));
+      expect(hrefs.indexOf('/income')).toBe(hrefs.indexOf('/history') - 1);
+    });
+
+    it('says $0 this month when nothing has come in', async () => {
+      renderAt('/');
+      expect(row(await openMenu(), 'Income')).toHaveTextContent(`${usd(0)} this month`);
+    });
+
+    it('hides the amount with the eye', async () => {
+      useAmountsHidden.setState({ hidden: true });
+      renderAt('/', earning());
+      expect(row(await openMenu(), 'Income')).toHaveTextContent('•••• this month');
+    });
+
+    it('opens the Income page and closes the sheet', async () => {
+      renderAt('/', earning());
+      await userEvent.click(row(await openMenu(), 'Income'));
+      expect(screen.getByRole('heading', { level: 1, name: 'Income' })).toBeInTheDocument();
+      expect(screen.queryByRole('dialog', { name: 'Menu' })).not.toBeInTheDocument();
+    });
   });
 
   it('shows the level the player has reached on the Quests row', async () => {
@@ -185,8 +301,9 @@ describe('Menu sheet', () => {
   it('says so when there is nothing yet', async () => {
     renderAt('/');
     const sheet = await openMenu();
-    expect(row(sheet, 'Subscriptions')).toHaveTextContent('None yet');
+    expect(row(sheet, 'Bills & cards')).toHaveTextContent('None yet');
     expect(row(sheet, 'Goals')).toHaveTextContent('None yet');
+    expect(row(sheet, 'Debts')).toHaveTextContent('None yet');
     expect(row(sheet, 'Salary freeze')).toHaveTextContent('None right now');
     expect(row(sheet, 'Shop')).toHaveTextContent('0 coins to spend');
   });
@@ -251,7 +368,7 @@ describe('Menu sheet', () => {
     expect(row(sheet, 'Inbox')).not.toHaveTextContent('Soon');
     expect(row(sheet, 'Help')).not.toHaveTextContent('Soon');
     expect(row(sheet, 'Quests')).not.toHaveTextContent('Soon');
-    expect(row(sheet, 'Subscriptions')).not.toHaveTextContent('Soon');
+    expect(row(sheet, 'Bills & cards')).not.toHaveTextContent('Soon');
     expect(row(sheet, 'Settings')).not.toHaveTextContent('Soon');
     expect(within(sheet).queryAllByText('Soon')).toHaveLength(
       MENU_GROUPS.flatMap((g) => g.items).filter((i) => i.soon).length,
@@ -290,7 +407,7 @@ describe('Menu sheet', () => {
       within(money)
         .getAllByRole('link')
         .map((a) => a.getAttribute('href')),
-    ).toEqual(['/subscriptions', '/goals', '/history', '/freeze', '/buy']);
+    ).toEqual(['/subscriptions', '/goals', '/debts', '/income', '/history', '/freeze', '/buy']);
 
     await userEvent.click(row(sheet, 'Buy it\\?'));
     expect(screen.getByRole('heading', { level: 1, name: 'Should I buy it?' })).toBeInTheDocument();
@@ -383,20 +500,21 @@ describe('sidebar', () => {
     );
   });
 
-  it('marks the current screen', () => {
-    renderAt('/goals');
+  it.each([
+    ['/goals', 'Goals'],
+    ['/debts', 'Debts'],
+    ['/income', 'Income'],
+  ])('marks %s as the current screen', (path, name) => {
+    renderAt(path);
     const sidebar = screen.getByRole('navigation', { name: 'All sections' });
-    expect(within(sidebar).getByRole('link', { name: 'Goals' })).toHaveAttribute(
-      'aria-current',
-      'page',
-    );
+    expect(within(sidebar).getByRole('link', { name })).toHaveAttribute('aria-current', 'page');
   });
 });
 
 describe('menu items', () => {
   it('has the two groups in order, with a fixed chip colour that holds 3:1 against a white icon', () => {
     expect(MENU_GROUPS.map((g) => [g.title, g.items.length])).toEqual([
-      ['Your money', 5],
+      ['Your money', 7],
       ['You', 6],
     ]);
     const luminance = (hex: string) => {

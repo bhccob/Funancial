@@ -10,6 +10,7 @@ import { createStubStore } from '@/test/appStoreStub';
 import { fakeAppLifecycle } from '@/test/fakeAppLifecycle';
 import { makeHolding, makeProfile, makeSettings } from '@/test/fixtures';
 import { AppStoreProvider } from './AppStoreProvider';
+import { useAmountsHidden } from './useAmountsHidden';
 import {
   useInvestActions,
   useInvestMoney,
@@ -70,6 +71,7 @@ afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllEnvs();
   vi.useRealTimers();
+  useAmountsHidden.setState({ hidden: false });
 });
 
 describe('usePortfolio', () => {
@@ -167,6 +169,18 @@ describe('useInvestMoney', () => {
     expect(plain.result.current.convert(-2.5)).toBe(Math.round(-2.5));
     expect(plain.result.current.convert(2.5)).toBe(Math.round(2.5));
     expect(plain.result.current.format(-2.5)).toBe(formatMoney(-2, 'EUR'));
+  });
+
+  it('writes every amount as four bullets while amounts are hidden, converted or not', () => {
+    const { result } = render({ investCurrency: 'USD', investFx: dollars });
+    act(() => useAmountsHidden.setState({ hidden: true }));
+    expect(result.current.format(100_00)).toBe('••••');
+    expect(result.current.format(100_00, { whole: true })).toBe('••••');
+    expect(result.current.formatConverted(110_00)).toBe('••••');
+    // Converting is arithmetic, not display: the sums it feeds are unchanged.
+    expect(result.current.convert(100_00)).toBe(110_00);
+    act(() => useAmountsHidden.setState({ hidden: false }));
+    expect(result.current.format(100_00)).toBe(formatMoney(110_00, 'USD'));
   });
 
   it('keeps its value until what it depends on changes', () => {

@@ -37,6 +37,17 @@ test('the first expense pays XP, completes the daily quest and earns a badge', a
   ).toContainText(/Earned /);
 });
 
+test('the monthly backup quest is not offered, on Home or in How to earn', async ({ page }) => {
+  await startFresh(page);
+  await expect(logQuest(page)).toBeVisible();
+  await expect(page.getByText('Back up your data')).toHaveCount(0);
+
+  await page.goto('/quests');
+  const howTo = page.getByRole('region', { name: 'How to earn' });
+  await expect(howTo.getByText(/^Audit your subscriptions/)).toBeVisible();
+  await expect(page.getByText('Back up your data')).toHaveCount(0);
+});
+
 test('Nothing spent keeps the day', async ({ page }) => {
   await startFresh(page);
   await expect(hud(page)).toHaveAttribute('aria-label', /0-day streak/);

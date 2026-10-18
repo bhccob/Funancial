@@ -26,7 +26,6 @@ const ctxOn = (today: string): GameContext => ({
   today,
   now: localIso(today, 9),
   weekStartsOn: 1,
-  canBackUp: true,
 });
 const ctx = ctxOn('2026-10-15');
 

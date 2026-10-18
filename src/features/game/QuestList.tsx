@@ -2,7 +2,6 @@ import {
   CalendarCheck,
   Check,
   Coins,
-  HardDriveDownload,
   ListChecks,
   Receipt,
   Target,
@@ -24,7 +23,6 @@ const ICONS: Record<QuestId, LucideIcon> = {
   'month-salary': Wallet,
   'month-audit': ListChecks,
   'month-dividends': Coins,
-  'month-backup': HardDriveDownload,
 };
 
 const CADENCE_ORDER: Record<QuestView['cadence'], number> = { daily: 0, weekly: 1, monthly: 2 };

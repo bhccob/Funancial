@@ -6,12 +6,14 @@ import { AnswerScreen } from '@/features/buy/AnswerScreen';
 import { BuyScreen } from '@/features/buy/BuyScreen';
 import { DashboardScreen } from '@/features/dashboard/DashboardScreen';
 import { FreezeScreen } from '@/features/freeze/FreezeScreen';
+import { DebtsScreen } from '@/features/goals/DebtsScreen';
 import { GoalsScreen } from '@/features/goals/GoalsScreen';
 import { HelpPage } from '@/features/help/HelpPage';
 import { HelpScreen } from '@/features/help/HelpScreen';
 import { HistoryScreen } from '@/features/history/HistoryScreen';
 import { InboxScreen } from '@/features/inbox/InboxScreen';
 import { HoldingPage } from '@/features/invest/HoldingPage';
+import { IncomeScreen } from '@/features/income/IncomeScreen';
 import { InvestScreen } from '@/features/invest/InvestScreen';
 import { QuestsScreen } from '@/features/quests/QuestsScreen';
 import { ShopScreen } from '@/features/shop/ShopScreen';
@@ -39,6 +41,8 @@ export const APP_ROUTES: AppRoute[] = [
   { path: '/subscriptions', element: <SubscriptionsScreen /> },
   { path: '/freeze', element: <FreezeScreen /> },
   { path: '/goals', element: <GoalsScreen /> },
+  { path: '/debts', element: <DebtsScreen /> },
+  { path: '/income', element: <IncomeScreen /> },
   { path: '/history', element: <HistoryScreen /> },
   { path: '/shop', element: <ShopScreen /> },
   { path: '/inbox', element: <InboxScreen /> },

@@ -1,10 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { POST as loginPOST, OPTIONS as loginOPTIONS } from '../login.js';
-import { DELETE as copyDELETE, OPTIONS as copyOPTIONS, PUT as copyPUT } from '../copy.js';
-import { OPTIONS as forgotOPTIONS, POST as forgotPOST } from '../forgot.js';
-import { POST as passwordPOST, OPTIONS as passwordOPTIONS } from '../password.js';
-import { POST as signupPOST, OPTIONS as signupOPTIONS } from '../signup.js';
+import { DELETE, OPTIONS, POST, PUT } from '../[op].js';
 import { accountRoute } from './accountRoute.js';
 import { unwrapServer, type Account } from './accounts.js';
 import { clientIp } from './http.js';
@@ -20,18 +16,14 @@ const TOKEN = 'test-token';
 const ORIGIN = 'http://localhost:5173';
 const b64 = (bytes: number) => randomBytes(bytes).toString('base64');
 
-type Handler = (req: Request) => Promise<Response>;
+// Every call goes through the one function Vercel runs, by the real URL.
+const handlers = { POST, PUT, DELETE };
+type Method = keyof typeof handlers;
 
-function call(
-  handler: Handler,
-  method: string,
-  path: string,
-  body?: unknown,
-  headers: Record<string, string> = {},
-) {
+function call(method: Method, path: string, body?: unknown, headers: Record<string, string> = {}) {
   const init: RequestInit = { method, headers: { 'X-Funancial-Token': TOKEN, ...headers } };
   if (body !== undefined) init.body = typeof body === 'string' ? body : JSON.stringify(body);
-  return handler(new Request(`http://localhost${path}`, init));
+  return handlers[method](new Request(`http://localhost${path}`, init));
 }
 
 const bearer = (token: string) => ({ Authorization: `Bearer ${token}` });
@@ -54,20 +46,20 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-const routes: Array<[string, Handler, string, string]> = [
-  ['signup', signupPOST, 'POST', '/api/signup'],
-  ['login', loginPOST, 'POST', '/api/login'],
-  ['put copy', copyPUT, 'PUT', '/api/copy'],
-  ['delete copy', copyDELETE, 'DELETE', '/api/copy'],
-  ['password', passwordPOST, 'POST', '/api/password'],
-  ['forgot', forgotPOST, 'POST', '/api/forgot'],
+const routes: Array<[string, Method, string]> = [
+  ['signup', 'POST', '/api/signup'],
+  ['login', 'POST', '/api/login'],
+  ['put copy', 'PUT', '/api/copy'],
+  ['delete copy', 'DELETE', '/api/copy'],
+  ['password', 'POST', '/api/password'],
+  ['forgot', 'POST', '/api/forgot'],
 ];
 
 describe('account routes', () => {
   it('want the shared token, before they look at anything else', async () => {
-    for (const [name, handler, method, path] of routes) {
+    for (const [name, method, path] of routes) {
       for (const headers of [{}, { 'X-Funancial-Token': 'nope' }, { 'X-Funancial-Token': '' }]) {
-        const res = await call(handler, method, path, account(), {
+        const res = await call(method, path, account(), {
           'X-Funancial-Token': '',
           ...headers,
         });
@@ -79,16 +71,10 @@ describe('account routes', () => {
     expect(kvStoreFromEnv).not.toHaveBeenCalled();
   });
 
-  it('answer the preflight with every method and header the phone uses', () => {
-    for (const options of [
-      signupOPTIONS,
-      loginOPTIONS,
-      copyOPTIONS,
-      passwordOPTIONS,
-      forgotOPTIONS,
-    ]) {
-      const res = options(
-        new Request('http://localhost/api/copy', {
+  it('answer the preflight with every method and header the phone uses', async () => {
+    for (const name of ['signup', 'login', 'copy', 'password', 'forgot']) {
+      const res = await OPTIONS(
+        new Request(`http://localhost/api/${name}`, {
           method: 'OPTIONS',
           headers: { Origin: ORIGIN },
         }),
@@ -106,14 +92,8 @@ describe('account routes', () => {
 
   it('say not configured, with 503 and nothing else, when the store or master key is missing', async () => {
     const unconfigured = async () => {
-      for (const [name, handler, method, path] of routes) {
-        const res = await call(
-          handler,
-          method,
-          path,
-          account(),
-          bearer(b64(32).replace(/\W/g, '_')),
-        );
+      for (const [name, method, path] of routes) {
+        const res = await call(method, path, account(), bearer(b64(32).replace(/\W/g, '_')));
         expect(res.status, name).toBe(503);
         expect(res.headers.get('Cache-Control')).toBe('no-store');
         expect(await res.text()).toBe('{"error":"not configured"}');
@@ -132,11 +112,11 @@ describe('account routes', () => {
 
   it('refuse a body that is not JSON with 400, and one over 1.5 MB with 413', async () => {
     for (const body of ['not json', '', '{"half":']) {
-      const res = await call(signupPOST, 'POST', '/api/signup', body);
+      const res = await call('POST', '/api/signup', body);
       expect(res.status, body).toBe(400);
       expect(await res.json()).toEqual({ error: 'bad request' });
     }
-    const noBody = await signupPOST(
+    const noBody = await POST(
       new Request('http://localhost/api/signup', {
         method: 'POST',
         headers: { 'X-Funancial-Token': TOKEN },
@@ -147,13 +127,13 @@ describe('account routes', () => {
     // Exactly the cap is read (and then refused as not an account); one byte more never is.
     const pad = (bytes: number) => JSON.stringify({ pad: 'x'.repeat(bytes - 10) });
     expect(pad(1_500_000)).toHaveLength(1_500_000);
-    expect((await call(signupPOST, 'POST', '/api/signup', pad(1_500_000))).status).toBe(400);
-    const big = await call(signupPOST, 'POST', '/api/signup', pad(1_500_001));
+    expect((await call('POST', '/api/signup', pad(1_500_000))).status).toBe(400);
+    const big = await call('POST', '/api/signup', pad(1_500_001));
     expect(big.status).toBe(413);
     expect(await big.json()).toEqual({ error: 'too large' });
 
     // A declared length over the cap is refused without reading the body.
-    const declared = await call(signupPOST, 'POST', '/api/signup', '{}', {
+    const declared = await call('POST', '/api/signup', '{}', {
       'Content-Length': '1500001',
     });
     expect(declared.status).toBe(413);
@@ -161,29 +141,23 @@ describe('account routes', () => {
 
   it('carry an account from sign-up to deletion', async () => {
     const a = account();
-    const signup = await call(signupPOST, 'POST', '/api/signup', a, { Origin: ORIGIN });
+    const signup = await call('POST', '/api/signup', a, { Origin: ORIGIN });
     expect(signup.status).toBe(200);
     expect(signup.headers.get('Cache-Control')).toBe('no-store');
     expect(signup.headers.get('Access-Control-Allow-Origin')).toBe(ORIGIN);
     const { deviceToken } = (await signup.json()) as { deviceToken: string };
     expect(deviceToken).toMatch(/^[A-Za-z0-9_-]{43}$/);
 
-    const taken = await call(signupPOST, 'POST', '/api/signup', a);
+    const taken = await call('POST', '/api/signup', a);
     expect(taken.status).toBe(409);
     expect(await taken.json()).toEqual({ error: 'taken' });
 
     const copy = { iv: b64(12), ciphertext: b64(300) };
-    const put = await call(
-      copyPUT,
-      'PUT',
-      '/api/copy',
-      { baseVersion: 0, ...copy },
-      bearer(deviceToken),
-    );
+    const put = await call('PUT', '/api/copy', { baseVersion: 0, ...copy }, bearer(deviceToken));
     expect(put.status).toBe(200);
     expect(await put.json()).toMatchObject({ version: 1 });
 
-    const login = await call(loginPOST, 'POST', '/api/login', {
+    const login = await call('POST', '/api/login', {
       username: 'Ada',
       authKey: a.authKey,
     });
@@ -196,17 +170,10 @@ describe('account routes', () => {
     expect(next.wrappedPw).toEqual(a.wrappedPw);
     expect(next.copy).toEqual({ ...copy, version: 1, savedAt: expect.any(String) });
 
-    const stale = await call(
-      copyPUT,
-      'PUT',
-      '/api/copy',
-      { baseVersion: 1, ...copy },
-      bearer(deviceToken),
-    );
+    const stale = await call('PUT', '/api/copy', { baseVersion: 1, ...copy }, bearer(deviceToken));
     expect(stale.status).toBe(401);
 
     const changed = await call(
-      passwordPOST,
       'POST',
       '/api/password',
       {
@@ -219,22 +186,16 @@ describe('account routes', () => {
     expect(changed.status).toBe(204);
     expect(await changed.text()).toBe('');
 
-    const gone = await call(copyDELETE, 'DELETE', '/api/copy', undefined, bearer(next.deviceToken));
+    const gone = await call('DELETE', '/api/copy', undefined, bearer(next.deviceToken));
     expect(gone.status).toBe(204);
     expect(await gone.text()).toBe('');
-    const after = await call(
-      copyDELETE,
-      'DELETE',
-      '/api/copy',
-      undefined,
-      bearer(next.deviceToken),
-    );
+    const after = await call('DELETE', '/api/copy', undefined, bearer(next.deviceToken));
     expect(after.status).toBe(401);
   });
 
   it('read the Bearer token strictly, and its scheme in any case', async () => {
     const a = account();
-    const { deviceToken } = (await (await call(signupPOST, 'POST', '/api/signup', a)).json()) as {
+    const { deviceToken } = (await (await call('POST', '/api/signup', a)).json()) as {
       deviceToken: string;
     };
     const body = { baseVersion: 0, iv: b64(12), ciphertext: b64(100) };
@@ -246,11 +207,9 @@ describe('account routes', () => {
       `Bearer  ${deviceToken}`,
     ]) {
       const headers: Record<string, string> = Authorization ? { Authorization } : {};
-      expect((await call(copyPUT, 'PUT', '/api/copy', body, headers)).status, Authorization).toBe(
-        401,
-      );
+      expect((await call('PUT', '/api/copy', body, headers)).status, Authorization).toBe(401);
     }
-    const lower = await call(copyPUT, 'PUT', '/api/copy', body, {
+    const lower = await call('PUT', '/api/copy', body, {
       Authorization: `bearer ${deviceToken}`,
     });
     expect(lower.status).toBe(200);
@@ -259,7 +218,6 @@ describe('account routes', () => {
   it('send Retry-After with a 429, and count each address by the first X-Forwarded-For entry', async () => {
     const send = (ip: string, username: string) =>
       call(
-        signupPOST,
         'POST',
         '/api/signup',
         { ...account(), username },
@@ -303,13 +261,7 @@ describe('account routes', () => {
 
     // End to end: five sign-ups from one /64 use up its hour, whichever host bits they come from.
     const send = (ip: string, username: string) =>
-      call(
-        signupPOST,
-        'POST',
-        '/api/signup',
-        { ...account(), username },
-        { 'X-Forwarded-For': ip },
-      );
+      call('POST', '/api/signup', { ...account(), username }, { 'X-Forwarded-For': ip });
     for (let i = 0; i < 5; i++) {
       expect((await send(`2001:db8:1:2:${i}::${i}`, `user${i}`)).status).toBe(200);
     }
@@ -320,7 +272,7 @@ describe('account routes', () => {
   it('answer 503 not configured when the master key is not the one that wrapped the account', async () => {
     const store = memoryKvStore();
     vi.mocked(kvStoreFromEnv).mockReturnValue(store);
-    expect((await call(signupPOST, 'POST', '/api/signup', account())).status).toBe(200);
+    expect((await call('POST', '/api/signup', account())).status).toBe(200);
 
     // A route that opens the stored data key, as the email reset will, under a changed key.
     vi.stubEnv('SERVER_MASTER_KEY', b64(32));
@@ -374,20 +326,19 @@ describe('account routes', () => {
 
     const a = account();
     const auth = bearer(randomBytes(32).toString('base64url'));
-    const bodies: Array<[Handler, string, string, unknown]> = [
-      [signupPOST, 'POST', '/api/signup', a],
-      [loginPOST, 'POST', '/api/login', { username: 'ada', authKey: a.authKey }],
-      [copyPUT, 'PUT', '/api/copy', { baseVersion: 0, iv: b64(12), ciphertext: b64(100) }],
-      [copyDELETE, 'DELETE', '/api/copy', undefined],
+    const bodies: Array<[Method, string, unknown]> = [
+      ['POST', '/api/signup', a],
+      ['POST', '/api/login', { username: 'ada', authKey: a.authKey }],
+      ['PUT', '/api/copy', { baseVersion: 0, iv: b64(12), ciphertext: b64(100) }],
+      ['DELETE', '/api/copy', undefined],
       [
-        passwordPOST,
         'POST',
         '/api/password',
         { oldAuthKey: a.authKey, newAuthKey: b64(32), newWrappedPw: a.wrappedPw },
       ],
     ];
-    for (const [handler, method, path, body] of bodies) {
-      const res = await call(handler, method, path, body, auth);
+    for (const [method, path, body] of bodies) {
+      const res = await call(method, path, body, auth);
       expect(res.status, path).toBe(503);
       expect(res.headers.get('Cache-Control')).toBe('no-store');
       expect(await res.text()).toBe('{"error":"unavailable"}');
@@ -404,7 +355,7 @@ describe('account routes', () => {
   it('log nothing, and return no secret, on any failure path of any route', async () => {
     const spies = spiedConsole();
     const a = account();
-    const signup = await call(signupPOST, 'POST', '/api/signup', a);
+    const signup = await call('POST', '/api/signup', a);
     const { deviceToken } = (await signup.json()) as { deviceToken: string };
     const guess = b64(32);
     const guessToken = randomBytes(32).toString('base64url');
@@ -414,35 +365,27 @@ describe('account routes', () => {
 
     const failures: Response[] = [];
     // No shared token, on every route, with real secrets in the body.
-    for (const [, handler, method, path] of routes) {
-      failures.push(await call(handler, method, path, a, noToken));
+    for (const [, method, path] of routes) {
+      failures.push(await call(method, path, a, noToken));
     }
     failures.push(
-      await call(signupPOST, 'POST', '/api/signup', a), // taken
-      await call(signupPOST, 'POST', '/api/signup', { ...a, username: 'grace', dek: guess }),
-      await call(signupPOST, 'POST', '/api/signup', '{"authKey":'), // not JSON
-      await call(loginPOST, 'POST', '/api/login', { username: 'ada', authKey: guess }),
-      await call(loginPOST, 'POST', '/api/login', { username: 'nobody', authKey: a.authKey }),
-      await call(copyPUT, 'PUT', '/api/copy', copy, bearer(guessToken)),
-      await call(copyPUT, 'PUT', '/api/copy', { ...copy, baseVersion: 7 }, bearer(deviceToken)),
+      await call('POST', '/api/signup', a), // taken
+      await call('POST', '/api/signup', { ...a, username: 'grace', dek: guess }),
+      await call('POST', '/api/signup', '{"authKey":'), // not JSON
+      await call('POST', '/api/login', { username: 'ada', authKey: guess }),
+      await call('POST', '/api/login', { username: 'nobody', authKey: a.authKey }),
+      await call('PUT', '/api/copy', copy, bearer(guessToken)),
+      await call('PUT', '/api/copy', { ...copy, baseVersion: 7 }, bearer(deviceToken)),
+      await call('PUT', '/api/copy', { ...copy, ciphertext: b64(1_000_001) }, bearer(deviceToken)),
+      await call('PUT', '/api/copy', 'x'.repeat(1_500_001), bearer(deviceToken)),
+      await call('DELETE', '/api/copy', undefined, bearer(guessToken)),
       await call(
-        copyPUT,
-        'PUT',
-        '/api/copy',
-        { ...copy, ciphertext: b64(1_000_001) },
-        bearer(deviceToken),
-      ),
-      await call(copyPUT, 'PUT', '/api/copy', 'x'.repeat(1_500_001), bearer(deviceToken)),
-      await call(copyDELETE, 'DELETE', '/api/copy', undefined, bearer(guessToken)),
-      await call(
-        passwordPOST,
         'POST',
         '/api/password',
         { oldAuthKey: guess, newAuthKey: b64(32), newWrappedPw: a.wrappedPw },
         bearer(deviceToken),
       ),
       await call(
-        passwordPOST,
         'POST',
         '/api/password',
         { oldAuthKey: a.authKey, newAuthKey: b64(32), newWrappedPw: a.wrappedPw },
@@ -451,14 +394,12 @@ describe('account routes', () => {
     );
     // Until the log-in limit answers.
     for (let i = 0; i < 11; i++) {
-      failures.push(
-        await call(loginPOST, 'POST', '/api/login', { username: 'ada', authKey: guess }),
-      );
+      failures.push(await call('POST', '/api/login', { username: 'ada', authKey: guess }));
     }
     // And with the service not set up.
     vi.mocked(kvStoreFromEnv).mockReturnValue(null);
-    for (const [, handler, method, path] of routes) {
-      failures.push(await call(handler, method, path, a, bearer(deviceToken)));
+    for (const [, method, path] of routes) {
+      failures.push(await call(method, path, a, bearer(deviceToken)));
     }
 
     expect(failures.some((res) => res.status === 429)).toBe(true);

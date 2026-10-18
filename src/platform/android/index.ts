@@ -2,7 +2,6 @@ import { storedKeyring } from '@/data/keyring';
 import { sqliteStorage } from '@/data/sqliteStorage';
 import type { Platform } from '../types';
 import { androidBiometric } from './biometric';
-import { androidFiles } from './files';
 import { listen } from './listen';
 import { createAndroidNotifier } from './notifier';
 import { installShell } from './shell';
@@ -21,7 +20,6 @@ export async function createAndroidPlatform(): Promise<Platform> {
     keyring: storedKeyring,
     storageStatus: async () => true,
     requestPersistence: async () => true,
-    files: androidFiles,
     onPause: (cb) =>
       listen((run) => App.addListener('pause', run), cb, 'the app going to the background'),
     onResume: (cb) => listen((run) => App.addListener('resume', run), cb, 'the app coming back'),

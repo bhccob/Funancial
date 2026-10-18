@@ -29,7 +29,6 @@ export const QUEST_TITLES: Record<QuestId, string> = {
   'month-salary': "Reconcile this month's salary",
   'month-audit': 'Audit your subscriptions',
   'month-dividends': "Confirm this month's dividends",
-  'month-backup': 'Back up your data',
 };
 
 type Progress = Pick<QuestView, 'detail' | 'current' | 'target' | 'done'> &
@@ -145,17 +144,6 @@ function monthDividends(data: DataSnapshot, ctx: GameContext, month: string): Qu
   });
 }
 
-function monthBackup(data: DataSnapshot, month: string): QuestView {
-  const lastBackupAt = data.tables.settings[0]?.lastBackupAt ?? null;
-  const done = lastBackupAt !== null && monthKey(localDay(lastBackupAt)) === month;
-  return view(
-    'month-backup',
-    'monthly',
-    month,
-    oneStep(done, done ? 'Backed up' : 'Save an encrypted copy'),
-  );
-}
-
 /** The quests for today, this week and this month that apply to the person: daily, weekly, monthly. */
 export function currentQuests(data: DataSnapshot, ctx: GameContext): QuestView[] {
   const weekStart = weekRange(ctx.today, ctx.weekStartsOn).start;
@@ -170,7 +158,6 @@ export function currentQuests(data: DataSnapshot, ctx: GameContext): QuestView[]
   }
   const dividends = monthDividends(data, ctx, month);
   if (dividends) quests.push(dividends);
-  if (ctx.canBackUp) quests.push(monthBackup(data, month));
   return quests;
 }
 

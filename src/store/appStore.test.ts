@@ -1,13 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
-import { InvalidBackupError } from '@/data/backup';
 import { dexieStorage } from '@/data/db';
 import { browserKeyring } from '@/data/keyring';
-import { WrongSecretError } from '@/data/keys';
 import type { SyncMessage } from '@/lib/broadcast';
 import type { SafeStorage } from '@/lib/safeStorage';
 import { buildDemoSnapshot } from '@/data/demoSeed';
 import { CURRENT_SCHEMA_VERSION } from '@/domain/snapshot';
-import { makeExpense, makeSubscription } from '@/test/fixtures';
+import { makeExpense, makeLedgerEntry, makeSubscription } from '@/test/fixtures';
 import { memoryStorage } from '@/test/memoryStorage';
 import { createAppStore, type AppDeps } from './appStore';
 
@@ -235,67 +233,50 @@ describe('demo mode', () => {
   });
 });
 
-describe('backup and restore', () => {
-  it('creates a dated backup without yet recording it, since nothing is saved', async () => {
-    const { store } = await freshStore();
-    const { fileName, text } = await store.getState().createBackup('correct horse');
-    expect(fileName).toMatch(/^funancial-backup-\d{4}-\d{2}-\d{2}\.funbak$/);
-    expect(JSON.parse(text).format).toBe('funancial-backup');
-    expect(store.getState().data.tables.settings[0]?.lastBackupAt).toBeNull();
-  });
-
-  it('records when the backup was saved, at that moment, and keeps it', async () => {
-    const { deps, store, advance } = await freshStore();
-    await store.getState().createBackup('correct horse');
-    advance(90_000);
-
-    await store.getState().markBackedUp();
-
-    const settings = store.getState().data.tables.settings[0];
-    expect(settings?.lastBackupAt).toBe('2026-10-14T10:01:30.000Z');
-    expect(settings?.updatedAt).toBe('2026-10-14T10:01:30.000Z');
-    expect((await reboot(deps)).getState().data.tables.settings[0]?.lastBackupAt).toBe(
-      '2026-10-14T10:01:30.000Z',
-    );
-  });
-
-  it('restores a backup, replacing data, and tells other tabs', async () => {
+describe('restoring a snapshot', () => {
+  // What an account's copy restores through. There are no backup files any more.
+  it('replaces the data, and tells other tabs', async () => {
     const { deps, store, posts } = await freshStore();
     await store.getState().put('expense', makeExpense({ id: 'e1' }));
-    const { text } = await store.getState().createBackup('correct horse');
+    const copy = structuredClone(store.getState().data);
     await store.getState().remove('expense', 'e1');
     await store.getState().put('expense', makeExpense({ id: 'e2' }));
 
-    await store.getState().restoreBackup(text, 'correct horse');
+    await store.getState().restoreSnapshot(copy);
     expect(store.getState().data.tables.expense.map((e) => e.id)).toEqual(['e1']);
     expect(posts).toContainEqual({ type: 'reload', reason: 'restore' });
     expect((await reboot(deps)).getState().data.tables.expense.map((e) => e.id)).toEqual(['e1']);
   });
 
-  it('leaves data untouched when a restore fails', async () => {
-    const { deps, store, posts } = await freshStore();
-    await store.getState().put('expense', makeExpense({ id: 'keep' }));
-    const { text } = await store.getState().createBackup('correct horse');
-    const before = store.getState().data;
+  it('keeps what backups left in saved data: their fields and the XP their quest paid', async () => {
+    const { deps, store } = await freshStore();
+    const settings = store.getState().data.tables.settings[0]!;
+    await store.getState().put('settings', {
+      ...settings,
+      lastBackupAt: '2026-10-07T12:00:00.000Z',
+      reminders: { ...settings.reminders, backup: true },
+    });
+    const paid = makeLedgerEntry({
+      id: 'quest:month-backup:2026-09#0',
+      key: 'quest:month-backup:2026-09',
+      xp: 80,
+      coins: 20,
+      label: 'Quest: Back up your data',
+    });
+    await store.getState().put('ledger', paid);
+    const copy = structuredClone(store.getState().data);
+    await store.getState().put('settings', { ...settings, lastBackupAt: null });
+    await store.getState().remove('ledger', paid.id);
 
-    await expect(store.getState().restoreBackup('garbage', 'correct horse')).rejects.toBeInstanceOf(
-      InvalidBackupError,
-    );
-    await expect(store.getState().restoreBackup(text, 'wrong horse')).rejects.toBeInstanceOf(
-      WrongSecretError,
-    );
-    expect(store.getState().data).toBe(before);
-    expect(store.getState().phase).toBe('unlocked');
-    expect(posts.some((m) => m.reason === 'restore')).toBe(false);
-    expect((await reboot(deps)).getState().data.tables.expense.map((e) => e.id)).toEqual(['keep']);
-  });
+    await store.getState().restoreSnapshot(copy);
 
-  it('exports a readable copy', async () => {
-    const { store } = await freshStore();
-    await store.getState().put('expense', makeExpense({ id: 'e1', note: 'coffee' }));
-    const { fileName, text } = store.getState().exportPlain();
-    expect(fileName).toMatch(/^funancial-export-\d{4}-\d{2}-\d{2}\.json$/);
-    expect(JSON.parse(text).data.tables.expense[0].note).toBe('coffee');
+    for (const data of [store.getState().data, (await reboot(deps)).getState().data]) {
+      expect(data.tables.settings[0]).toMatchObject({
+        lastBackupAt: '2026-10-07T12:00:00.000Z',
+        reminders: { backup: true },
+      });
+      expect(data.tables.ledger).toEqual([paid]);
+    }
   });
 });
 
@@ -486,18 +467,6 @@ describe('data changes across tabs', () => {
   });
 });
 
-describe('backup when storage is full', () => {
-  it('does not fail a saved backup because its date could not be recorded', async () => {
-    const { store } = await freshStore();
-    const { fileName, text } = await store.getState().createBackup('correct horse');
-    expect(fileName).toMatch(/^funancial-backup-\d{4}-\d{2}-\d{2}\.funbak$/);
-    expect(JSON.parse(text).format).toBe('funancial-backup');
-
-    store.setState({ put: vi.fn().mockRejectedValue(new Error('quota')) });
-    await expect(store.getState().markBackedUp()).resolves.toBeUndefined();
-  });
-});
-
 describe('sync', () => {
   it('materializes due subscription charges when the app opens', async () => {
     const { deps, store } = await freshStore();
@@ -650,8 +619,7 @@ describe('the data-change signal', () => {
     expect(heard).toHaveBeenCalledTimes(2);
     await store.getState().remove('expense', 'e1');
     expect(heard).toHaveBeenCalledTimes(3);
-    const { text } = await store.getState().createBackup('correct horse');
-    await store.getState().restoreBackup(text, 'correct horse');
+    await store.getState().restoreSnapshot(structuredClone(store.getState().data));
     expect(heard).toHaveBeenCalledTimes(4);
     await store.getState().putMany([]);
     expect(heard).toHaveBeenCalledTimes(4);
@@ -711,19 +679,13 @@ describe('private values', () => {
     expect(await (await reboot(deps)).getState().getPrivate('funancial.account')).toEqual(secret);
   });
 
-  it('are in no snapshot, backup or export', async () => {
+  it('are in no snapshot', async () => {
     const { store } = await freshStore();
     await store.getState().putPrivate('funancial.account', secret);
     await store.getState().put('expense', makeExpense({ id: 'e1' }));
-    const { text } = await store.getState().createBackup('correct horse');
-    for (const out of [
-      JSON.stringify(store.getState().data),
-      text,
-      store.getState().exportPlain().text,
-    ]) {
-      expect(out).not.toContain('tok-1234567890');
-      expect(out).not.toContain('funancial.account');
-    }
+    const out = JSON.stringify(store.getState().data);
+    expect(out).not.toContain('tok-1234567890');
+    expect(out).not.toContain('funancial.account');
   });
 
   it('are bound to their name: moved under another, they do not open', async () => {
@@ -748,7 +710,7 @@ describe('private values', () => {
     await store.getState().setSecret('2468', 'pin');
     store.getState().lock();
     await expect(store.getState().getPrivate('funancial.account')).rejects.toThrow(
-      'Funancial is locked',
+      'Funcial is locked',
     );
     await store.getState().unlock('2468');
     await store.getState().startDemo();

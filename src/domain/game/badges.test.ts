@@ -21,7 +21,6 @@ const ctx: GameContext = {
   today: '2026-10-15',
   now: localIso('2026-10-15', 8),
   weekStartsOn: 1,
-  canBackUp: true,
 };
 
 function snap(tables: Partial<DataSnapshot['tables']>): DataSnapshot {

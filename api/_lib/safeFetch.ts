@@ -127,7 +127,7 @@ function send(url: URL, signal: AbortSignal, accept: string): Promise<IncomingMe
           Accept: accept,
           // Left out, a server may choose any encoding, and the body is read as it comes.
           'Accept-Encoding': 'identity',
-          'User-Agent': 'Mozilla/5.0 (compatible; Funancial/1.0)',
+          'User-Agent': 'Mozilla/5.0 (compatible; Funcial/1.0)',
         },
       },
       resolve,

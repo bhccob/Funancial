@@ -1,4 +1,4 @@
-# Releasing Funancial to friends
+# Releasing Funcial to friends
 
 A release is a signed Android APK plus a small `latest.json` that tells installed apps a newer
 version exists. `npm run release:android` builds both on this computer. Nothing goes online until
@@ -48,9 +48,9 @@ keep the password in your password manager.
 
 **Why:** Android installs an update over an app only when it is signed with the same key as the
 installed one. If the key file or its password is lost, there is no way to sign an update that
-installs over the old app. Friends would have to uninstall Funancial and install the new one, which
-wipes their data (a Funancial backup file restores it). Nobody, including Claude, can recover a lost
-key.
+installs over the old app. Friends would have to uninstall Funcial and install the new one, which
+wipes their data (logging in to their Funcial account brings it back, if they made one). Nobody,
+including Claude, can recover a lost key.
 
 ## 3. Raise the version
 
@@ -75,7 +75,7 @@ the test channel), not the live site:
 
   ```powershell
   New-Item -ItemType Directory -Force site\public\get
-  curl.exe --fail -o site\public\get\latest.json https://funancial.vercel.app/get/latest.json
+  curl.exe --fail -o site\public\get\latest.json https://funcial.vercel.app/get/latest.json
   ```
 
   (There is nothing to fetch before the first release.)
@@ -99,18 +99,25 @@ The notes are shown to friends in the update banner (1 to 500 characters). The s
 4. runs `npm run build` as a release build (it still reads `.env.local`, so the app has its price
    service key), then `npx cap sync android`, then Gradle `assembleRelease` (after deleting the last
    `app-release.apk`, so an old one can never be mistaken for the new one);
-5. copies the APK to `site/public/get/funancial-<versionName>.apk`;
+5. copies the APK to `site/public/get/funcial-<versionName>.apk`;
 6. writes `site/public/get/latest.json` with the APK's address, SHA-256 and size;
 7. runs a plain `npm run build` and `npx cap sync android` again, without the release settings (see
    "Your own phone").
 
 `--channel test` does the same into `site/public/get/test/` and bakes the test address
-(`https://funancial.vercel.app/get/test/latest.json`) into the app. It is for trying an update on an
+(`https://funcial.vercel.app/get/test/latest.json`) into the app. It is for trying an update on an
 emulator before the real release. When the test is over, delete the `site/public/get/test/` folder,
 so it does not ship with the live deploys.
 
 The update address is permanent: every release app checks
-`https://funancial.vercel.app/get/latest.json`, so never rename or delete the Vercel project.
+`https://funcial.vercel.app/get/latest.json`, so never remove that address from the Vercel project.
+The Vercel project is still called `funancial`, and so is its own address,
+`https://funancial.vercel.app`; `funcial.vercel.app` is a second domain on the same project (add it
+under the project's Settings, Domains). Never rename or delete the project: both addresses live on
+it. The release key's file name and alias (`funancial-release.jks`, `funancial`) are internal labels
+and keep their names too.
+
+The QR code on the download page (`site/get/qr.svg`) is an image of `https://funcial.vercel.app/get`, so if the address changes it must be regenerated (`npx qrcode@1.5.4 -t svg -e M -q 2 -d "#0d0d0f" -l "#ffffff" -o site/get/qr.svg "<address>/get"`); `tests/unit/qrCode.test.ts` reads the address back out of the file and fails when it is stale.
 
 ## 5. Deploy (only after the owner's OK)
 
@@ -120,8 +127,9 @@ npx vercel deploy --prebuilt --prod
 ```
 
 The APK and `latest.json` are git-ignored local files that a build on Vercel would not see, so the
-site is built here and uploaded as it is. Older `funancial-*.apk` files stay in `site/public/get` and
-are uploaded again each time; delete the ones nobody needs before you build.
+site is built here and uploaded as it is. Older `funcial-*.apk` files (and any `funancial-*.apk`
+from before the rename) stay in `site/public/get` and are uploaded again each time; delete the ones
+nobody needs before you build.
 
 > **Keep the Vercel project unconnected from GitHub.** The APK and `latest.json` are git-ignored, so a
 > build that Git triggers on Vercel would not have them, and the live download page would lose its

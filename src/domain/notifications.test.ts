@@ -10,6 +10,7 @@ import {
   makeProfile,
   makeSettings,
   makeSubscription,
+  makeTransaction,
 } from '@/test/fixtures';
 import { localDateTime } from './dates';
 import type {
@@ -319,9 +320,29 @@ describe('upcomingReminders', () => {
         at: '2026-10-19T09:00',
         title: 'Visa payment due in 2 days',
         body: `${money(230_00)} to pay.`,
-        route: '/goals',
+        route: '/debts',
       },
     ]);
+  });
+
+  it('reminds of what is left of a minimum, and not at all once it is paid', () => {
+    const minimum = visa({ payInFull: false, minimumPayment: 25_00 });
+    const after = (amount: number) => {
+      const data = build({ reminders: { bills: true }, ...minimum });
+      data.tables.transaction = [
+        makeTransaction({
+          type: 'card_payment',
+          amount,
+          date: '2026-10-14',
+          from: 'cash',
+          to: null,
+          debtId: 'card-visa',
+        }),
+      ];
+      return upcomingReminders(data, NOW).map((r) => r.body);
+    };
+    expect(after(10_00)).toEqual([`${money(15_00)} to pay.`]);
+    expect(after(25_00)).toEqual([]);
   });
 
   it('repeats a card reminder each month, and skips cards with nothing to pay', () => {
@@ -425,61 +446,24 @@ describe('upcomingReminders', () => {
     expect(both.map((r) => r.kind)).toEqual(['monthly-review']);
   });
 
-  it('reminds to back up a week after the last backup', () => {
-    const data = build({
-      reminders: { backup: true },
-      lastBackupAt: noon('2026-10-07'),
-    });
-    const all = upcomingReminders(data, NOW);
-    expect(all[0]).toEqual({
-      key: 'backup:2026-10-14',
-      kind: 'backup',
-      at: '2026-10-14T19:00',
-      title: 'Back up your data',
-      body: 'Save an encrypted copy to Drive or Files. It takes a minute.',
-      route: '/settings',
-    });
-    expect(all.map((r) => r.at)).toEqual([
-      '2026-10-14T19:00',
-      '2026-10-21T19:00',
-      '2026-10-28T19:00',
-      '2026-11-04T19:00',
-      '2026-11-11T19:00',
-    ]);
-  });
+  it('plans no backup reminder, whatever the old backup switch and date say', () => {
+    // Backups are gone; the switch and `lastBackupAt` stay in saved data so older data still loads.
+    const old = [
+      { reminders: { backup: true }, lastBackupAt: noon('2026-10-07') },
+      { reminders: { backup: true }, lastBackupAt: noon('2026-09-01') },
+      { reminders: { backup: true }, onboardedAt: noon('2026-10-10') },
+      { reminders: { backup: true } },
+    ];
+    for (const setup of old) expect(upcomingReminders(build(setup), NOW)).toEqual([]);
 
-  it('moves an overdue backup reminder to the next 19:00, then repeats weekly', () => {
-    const overdue = build({
-      reminders: { backup: true },
-      lastBackupAt: noon('2026-09-01'),
-    });
-    expect(upcomingReminders(overdue, NOW).map((r) => r.at)).toEqual([
-      '2026-10-14T19:00',
-      '2026-10-21T19:00',
-      '2026-10-28T19:00',
-      '2026-11-04T19:00',
-      '2026-11-11T19:00',
-    ]);
-    // Past 19:00 already, so it waits for tomorrow evening.
-    expect(upcomingReminders(overdue, '2026-10-14T19:00')[0]?.at).toBe('2026-10-15T19:00');
-  });
-
-  it('counts from onboarding until a first backup is made, and waits for neither', () => {
-    const onboarded = build({
-      reminders: { backup: true },
-      onboardedAt: noon('2026-10-10'),
-    });
-    expect(upcomingReminders(onboarded, NOW)[0]?.at).toBe('2026-10-17T19:00');
-
-    // A backup wins over the onboarding date.
-    const backedUp = build({
-      reminders: { backup: true },
-      onboardedAt: noon('2026-10-10'),
-      lastBackupAt: noon('2026-10-12'),
-    });
-    expect(upcomingReminders(backedUp, NOW)[0]?.at).toBe('2026-10-19T19:00');
-
-    expect(upcomingReminders(build({ reminders: { backup: true } }), NOW)).toEqual([]);
+    const everyRule = upcomingReminders(
+      build({ all: true, lastBackupAt: noon('2026-10-07') }),
+      NOW,
+    );
+    expect(everyRule.length).toBeGreaterThan(0);
+    expect(
+      everyRule.filter((r) => r.key.startsWith('backup:') || /back up/i.test(r.title)),
+    ).toEqual([]);
   });
 
   it('reminds the day before an ex-date and on the pay date', () => {
@@ -654,7 +638,6 @@ describe('upcomingReminders', () => {
     };
     const everything = upcomingReminders(build(setup), NOW);
     expect(kinds(everything)).toEqual([
-      'backup',
       'buy-usage',
       'buy-wait',
       'card-due',
@@ -677,7 +660,8 @@ describe('upcomingReminders', () => {
     expect(dropped({ bills: false })).toEqual(['card-due', 'renewal']);
     expect(dropped({ freeze: false })).toEqual(['freeze-end', 'freeze-start']);
     expect(dropped({ reviews: false })).toEqual(['monthly-review', 'weekly-review']);
-    expect(dropped({ backup: false })).toEqual(['backup']);
+    // The old backup switch is still in the data, and drops nothing.
+    expect(dropped({ backup: false })).toEqual([]);
     expect(dropped({ dividends: false })).toEqual(['dividend-ex', 'dividend-pay']);
     expect(dropped({ buyIt: false })).toEqual(['buy-usage', 'buy-wait']);
   });
@@ -822,7 +806,7 @@ describe('pastReminders', () => {
     expect(pastReminders(noProfile, NOW)).toEqual([]);
   });
 
-  it('keeps every kind the inbox shows, and never the daily nudge or the backup', () => {
+  it('keeps every kind the inbox shows, and never the daily nudge', () => {
     const everything = past(lately);
     expect(kinds(everything)).toEqual([
       'buy-usage',
@@ -976,6 +960,15 @@ describe('inboxItems', () => {
     ]);
   });
 
+  it('still holds the keys of backup reminders that were read, and lists nothing for them', () => {
+    // Saved before backups went: those keys stay in the list, which the store trims by itself.
+    const data = build({ ...reviews, inbox: { readBefore: null, read: ['backup:2026-10-07'] } });
+    expect(inboxItems(data, NOW).map((i) => i.key)).toEqual(
+      pastReminders(data, NOW).map((r) => r.key),
+    );
+    expect(inboxItems(data, NOW).some((i) => i.key.startsWith('backup:'))).toBe(false);
+  });
+
   it('is empty before there is a profile and settings', () => {
     expect(inboxItems(emptySnapshot(), NOW)).toEqual([]);
   });
@@ -995,7 +988,6 @@ describe('REMINDER_AREA', () => {
       'buy-wait': 'Buy it?',
       'buy-usage': 'Buy it?',
       'daily-log': 'Today',
-      backup: 'Backup',
     };
     expect(REMINDER_AREA).toEqual(area);
   });

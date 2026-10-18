@@ -25,10 +25,10 @@ function show(store = createStubStore({ phase: 'welcome' }), onHold = vi.fn()) {
 
 it('introduces the app and its promise, in the words the owner chose', () => {
   show();
-  expect(screen.getByRole('heading', { level: 1, name: 'Funancial' })).toBeInTheDocument();
+  expect(screen.getByRole('heading', { level: 1, name: 'Funcial' })).toBeInTheDocument();
   expect(screen.getByText('Level up your real financial life.')).toBeInTheDocument();
   expect(
-    screen.getByText("Funancial helps you track and plan your money. It isn't financial advice."),
+    screen.getByText("Funcial helps you track and plan your money. It isn't financial advice."),
   ).toBeInTheDocument();
 });
 
@@ -60,7 +60,7 @@ it('has colour shapes behind it, which are decoration', () => {
 
 it('brings the choices in with the same rise as setup', () => {
   show();
-  const layer = screen.getByRole('heading', { name: 'Funancial' }).closest('[data-motion]');
+  const layer = screen.getByRole('heading', { name: 'Funcial' }).closest('[data-motion]');
   expect(layer).toHaveClass('motion-safe:animate-step-in-up', 'motion-reduce:animate-fade-in');
 });
 
@@ -90,10 +90,10 @@ it('opens Log in with I have an account, without making anything on the phone', 
 
   // The arrow returns to the three choices, the step coming down from above.
   await userEvent.click(screen.getByRole('button', { name: 'Back' }));
-  expect(screen.getByRole('heading', { level: 1, name: 'Funancial' })).toBeInTheDocument();
+  expect(screen.getByRole('heading', { level: 1, name: 'Funcial' })).toBeInTheDocument();
   expect(choice('Create an account')).toBeInTheDocument();
-  expect(screen.getByRole('heading', { level: 1, name: 'Funancial' })).toHaveFocus();
-  expect(screen.getByRole('heading', { name: 'Funancial' }).closest('[data-motion]')).toHaveClass(
+  expect(screen.getByRole('heading', { level: 1, name: 'Funcial' })).toHaveFocus();
+  expect(screen.getByRole('heading', { name: 'Funcial' }).closest('[data-motion]')).toHaveClass(
     'motion-safe:animate-step-in-down',
   );
 });

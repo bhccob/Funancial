@@ -29,7 +29,7 @@ describe('startApp', () => {
 
     expect(screen.getByRole('heading', { name: 'Something went wrong' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Reload' })).toBeInTheDocument();
-    expect(logged).toHaveBeenCalledWith('Starting Funancial failed', expect.any(Error));
+    expect(logged).toHaveBeenCalledWith('Starting Funcial failed', expect.any(Error));
     logged.mockRestore();
   });
 

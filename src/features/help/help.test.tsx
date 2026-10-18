@@ -6,6 +6,7 @@ import { FAQ, GLOSSARY, HELP_PAGES, LEGAL, RESULT_ROWS } from '@/content/help';
 import { BUY_FROM, GUARD_CAP, WAIT_FROM } from '@/domain/advisor';
 import { EXAMPLES, ex, type WorkedExample } from '@/domain/examples';
 import { formatMoney } from '@/domain/money';
+import { useAmountsHidden } from '@/store/useAmountsHidden';
 import { ExampleTable } from './ExampleTable';
 import { HelpPage } from './HelpPage';
 import { HelpScreen } from './HelpScreen';
@@ -240,6 +241,19 @@ describe('ExampleTable', () => {
     const result = screen.getByRole('group', { name: 'Result' });
     expect(result).toHaveTextContent(formatMoney(2_654_01, 'EUR'));
     expect(result).not.toHaveTextContent('$');
+  });
+
+  it("keeps its numbers while amounts are hidden: they are an illustration, not the person's money", () => {
+    useAmountsHidden.setState({ hidden: true });
+    try {
+      const avl = EXAMPLES.find((e) => e.id === 'AVL-1')!;
+      render(<ExampleTable example={avl} />);
+      const row = (label: string) => screen.getByText(label).parentElement!;
+      expect(row(RESULT_ROWS.available!.label)).toHaveTextContent('$2,654.01');
+      expect(screen.queryByText('••••')).not.toBeInTheDocument();
+    } finally {
+      useAmountsHidden.setState({ hidden: false });
+    }
   });
 
   it('puts the limit levels in words', () => {

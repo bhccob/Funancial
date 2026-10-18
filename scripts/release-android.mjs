@@ -10,7 +10,7 @@ import { parseArgs } from 'node:util';
 import { fail, gradleCommand, requireJava } from './android.mjs';
 
 /** The permanent address the page and every release APK's update check live at. */
-const ORIGIN = 'https://funancial.vercel.app';
+const ORIGIN = 'https://funcial.vercel.app';
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const ANDROID_DIR = join(ROOT, 'android');
 
@@ -201,7 +201,7 @@ function release() {
   requireJava();
 
   const updateUrl = `${ORIGIN}/${channel === 'test' ? 'get/test' : 'get'}/latest.json`;
-  const apkFile = `funancial-${name}.apk`;
+  const apkFile = `funcial-${name}.apk`;
   const done = `Built ${apkFile} (versionCode ${code}) for the ${channel} channel in ${releaseDir(channel)}.`;
   let sha256 = '';
   // From the first release-flagged build on, dist/ and the Android assets carry the release flags.

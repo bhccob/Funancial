@@ -68,7 +68,6 @@ const ctxOf = (store: StoreApi<AppState>): GameContext => ({
   today: store.getState().today,
   now: new Date().toISOString(),
   weekStartsOn: store.getState().data.tables.settings[0]?.weekStartsOn ?? 1,
-  canBackUp: true,
 });
 
 describe('settling after a write', () => {
@@ -272,16 +271,16 @@ describe('overlapping settles', () => {
   });
 });
 
-describe('restoring a backup', () => {
+describe('restoring a snapshot', () => {
   it('keeps a restored ledger without paying twice', async () => {
     const { store, finance } = await setup();
     await finance.addExpense(lunch);
-    const { text } = await store.getState().createBackup('correct horse');
+    const copy = structuredClone(store.getState().data);
     const backedUp = ledgerOf(store);
 
     await store.getState().deleteAllData();
     await store.getState().startFresh();
-    await store.getState().restoreBackup(text, 'correct horse');
+    await store.getState().restoreSnapshot(copy);
 
     const byId = <T extends { id: string }>(rows: T[]) =>
       [...rows].sort((x, y) => x.id.localeCompare(y.id));
@@ -290,15 +289,15 @@ describe('restoring a backup', () => {
     expect(byId(ledgerOf(store))).toEqual(byId(backedUp));
   });
 
-  it('starts the game from the history of a backup that has no ledger', async () => {
+  it('starts the game from the history of a snapshot that has no ledger', async () => {
     const { store, finance } = await setup();
     await finance.addExpense(lunch);
     const { data } = store.getState();
     store.setState({ data: { ...data, tables: { ...data.tables, ledger: [] } } });
-    const { text } = await store.getState().createBackup('correct horse');
+    const copy = structuredClone(store.getState().data);
 
     const other = await setup();
-    await other.store.getState().restoreBackup(text, 'correct horse');
+    await other.store.getState().restoreSnapshot(copy);
 
     expect(ledgerTotals(ledgerOf(other.store)).xp).toBe(80);
     expect(other.store.getState().gameGain).toMatchObject({ gain: { xp: 80 } });

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Slice } from '@/domain/charts';
@@ -9,6 +9,7 @@ import { MonthLine } from './MonthLine';
 import { PriceLine } from './PriceLine';
 import { Ring } from './Ring';
 import { Sparkline } from './Sparkline';
+import { StackedBars } from './StackedBars';
 
 const formatAmount = (minor: number) =>
   `$${(minor / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -680,5 +681,141 @@ describe('PriceLine', () => {
       expect(slider).toHaveAttribute('aria-valuetext', 'on 2025-03-10: $200.00');
       expect(screen.getByText('on 2025-03-10 · $200.00')).toBeInTheDocument();
     });
+  });
+});
+
+describe('StackedBars', () => {
+  const bars = [
+    {
+      label: 'SEP',
+      name: 'September 2026',
+      current: false,
+      parts: [
+        { key: 'salary', amount: 300, color: 'blue' },
+        { key: 'extra', amount: 100, color: 'orange' },
+        { key: 'dividends', amount: 0, color: 'green' },
+      ],
+    },
+    {
+      label: 'OCT',
+      name: 'October 2026',
+      current: true,
+      parts: [
+        { key: 'salary', amount: 200, color: 'blue' },
+        { key: 'extra', amount: 0, color: 'orange' },
+        { key: 'dividends', amount: 0, color: 'green' },
+      ],
+    },
+    {
+      label: 'NOV',
+      name: 'November 2026',
+      current: false,
+      parts: [
+        { key: 'salary', amount: 0, color: 'blue' },
+        { key: 'extra', amount: 0, color: 'orange' },
+        { key: 'dividends', amount: 0, color: 'green' },
+      ],
+    },
+  ];
+
+  function stacked(props: Partial<React.ComponentProps<typeof StackedBars>> = {}) {
+    const onSelect = vi.fn();
+    render(
+      <StackedBars
+        label="Income per month"
+        bars={bars}
+        selected={null}
+        onSelect={onSelect}
+        formatAmount={(minor) => formatAmount(minor)}
+        {...props}
+      />,
+    );
+    return { onSelect };
+  }
+  const barOf = (name: string) => screen.getByRole('button', { name });
+  const parts = (name: string) => [...(barOf(name).firstElementChild as HTMLElement).children];
+
+  it('names the bars as a group, each reading its month and total', () => {
+    stacked();
+    const group = screen.getByRole('group', { name: 'Income per month' });
+    expect(within(group).getAllByRole('button')).toHaveLength(3);
+    expect(within(group).getByRole('button', { name: 'September 2026: $4.00' })).toBeVisible();
+    expect(within(group).getByRole('button', { name: 'November 2026: $0.00' })).toBeVisible();
+  });
+
+  it('stacks the parts in the order given from the bottom up, one colour each, skipping a part of nothing', () => {
+    stacked();
+    const sep = parts('September 2026: $4.00') as HTMLElement[];
+    expect(sep.map((p) => p.style.backgroundColor)).toEqual(['blue', 'orange']);
+    const stack = barOf('September 2026: $4.00').firstElementChild as HTMLElement;
+    expect(stack).toHaveClass('flex-col-reverse', 'gap-0.5'); // a 2px gap between the parts
+    expect(parts('October 2026: $2.00')).toHaveLength(1);
+  });
+
+  it('scales the bars to the biggest month, keeping each part in proportion', () => {
+    stacked();
+    const heights = (name: string) => (parts(name) as HTMLElement[]).map((p) => p.style.height);
+    // 100px for the biggest bar, less the 2px between its two parts: 98 shared 3 to 1.
+    expect(heights('September 2026: $4.00')).toEqual(['73.5px', '24.5px']);
+    expect(heights('October 2026: $2.00')).toEqual(['50px']);
+  });
+
+  it('keeps a part too small to see at 4px', () => {
+    stacked({
+      bars: [
+        {
+          label: 'OCT',
+          name: 'October 2026',
+          current: true,
+          parts: [
+            { key: 'salary', amount: 420_000, color: 'blue' },
+            { key: 'dividends', amount: 13, color: 'green' },
+          ],
+        },
+      ],
+    });
+    const [, dividends] = parts('October 2026: $4,200.13') as HTMLElement[];
+    expect(dividends!.style.height).toBe('4px');
+  });
+
+  it('shows a month with nothing as a 6px track, and every month so in a quiet year, without NaN', () => {
+    stacked();
+    const nov = barOf('November 2026: $0.00').firstElementChild as HTMLElement;
+    expect(nov.className).toContain('bg-track');
+    expect(nov.style.height).toBe('6px');
+
+    cleanup();
+    stacked({
+      bars: bars.map((b) => ({ ...b, parts: b.parts.map((p) => ({ ...p, amount: 0 })) })),
+    });
+    const heights = screen
+      .getAllByRole('button')
+      .map((b) => (b.firstElementChild as HTMLElement).style.height);
+    expect(heights).toEqual(['6px', '6px', '6px']);
+  });
+
+  it('selects a bar by its name, and clears the selection when the selected bar is tapped again', async () => {
+    const { onSelect } = stacked();
+    await userEvent.click(barOf('October 2026: $2.00'));
+    expect(onSelect).toHaveBeenLastCalledWith(1);
+    cleanup();
+
+    const again = stacked({ selected: 1 });
+    expect(barOf('October 2026: $2.00')).toHaveAttribute('aria-pressed', 'true');
+    expect(barOf('September 2026: $4.00')).toHaveAttribute('aria-pressed', 'false');
+    await userEvent.click(barOf('October 2026: $2.00'));
+    expect(again.onSelect).toHaveBeenLastCalledWith(null);
+  });
+
+  it('fades the other bars while one is selected, and keeps the labels in text colours', () => {
+    stacked({ selected: 0 });
+    expect(barOf('September 2026: $4.00').firstElementChild).not.toHaveClass('opacity-40');
+    expect(barOf('October 2026: $2.00').firstElementChild).toHaveClass('opacity-40');
+    for (const button of screen.getAllByRole('button')) {
+      expect(button.lastElementChild!.className).toMatch(/\btext-(text|muted)\b/);
+      expect((button.lastElementChild as HTMLElement).style.color).toBe('');
+    }
+    expect(screen.getByText('OCT')).toHaveClass('text-text'); // the current month
+    expect(screen.getByText('SEP')).toHaveClass('text-muted');
   });
 });

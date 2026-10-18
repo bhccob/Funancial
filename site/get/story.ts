@@ -83,7 +83,7 @@ function backTexture() {
   g.fillStyle = TOKENS['--color-bg'];
   g.font = `800 64px ${getComputedStyle(document.body).fontFamily}`;
   g.textAlign = 'center';
-  g.fillText('Funancial', 256, 560);
+  g.fillText('Funcial', 256, 560);
   return textureOf(canvas);
 }
 

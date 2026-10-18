@@ -1,4 +1,4 @@
-# Funancial
+# Funcial
 
 A gamified personal finance tracker: expenses, salary (with freezes), subscriptions, limits, goals,
 a stock/ETF portfolio with dividends and news, and a "Should I Buy It?" assistant — wrapped in XP,

@@ -1,7 +1,14 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { isIPv6 } from 'node:net';
 
-const ORIGINS = ['http://localhost:5173', 'capacitor://localhost', 'https://localhost'];
+// The site's old address stays: it is the Vercel project's own, and the new one is an alias of it.
+const ORIGINS = [
+  'http://localhost:5173',
+  'capacitor://localhost',
+  'https://localhost',
+  'https://funancial.vercel.app',
+  'https://funcial.vercel.app',
+];
 const SYMBOL = /^[A-Za-z0-9.^=-]{1,15}$/;
 const MAX_SYMBOLS = 25;
 /** The largest JSON body an account route reads: a 1,000,000-byte copy plus its envelope. */

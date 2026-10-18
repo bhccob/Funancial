@@ -110,7 +110,13 @@ describe('price service', () => {
     // Browsers cap it, but without it every request from the phone pays a preflight first.
     expect(ok.headers.get('Access-Control-Max-Age')).toBe('86400');
 
-    for (const origin of ['capacitor://localhost', 'https://localhost']) {
+    // Both site addresses: the Vercel project keeps its old one, and the new one is an alias of it.
+    for (const origin of [
+      'capacitor://localhost',
+      'https://localhost',
+      'https://funancial.vercel.app',
+      'https://funcial.vercel.app',
+    ]) {
       expect(preflight(origin).headers.get('Access-Control-Allow-Origin')).toBe(origin);
     }
 

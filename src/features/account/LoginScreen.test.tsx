@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Toaster } from '@/components/ui/Toaster';
 import { toastStore } from '@/lib/toast';
+import { KeyDerivationError } from '@/data/accountCrypto';
 import { AccountError } from '@/store/accountActions';
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
 import { fakeAccount, withAccount } from '@/test/fakeAccount';
@@ -97,8 +98,8 @@ describe('LoginScreen', () => {
       'unreadable',
       "Your account's copy couldn't be opened on this phone. Nothing was changed. Try again later, or update Android System WebView.",
     ],
-    ['unavailable', "Funancial's service isn't answering right now. Try again in a moment."],
-    ['busy', 'Funancial is busy right now. Try again in a moment.'],
+    ['unavailable', "Funcial's service isn't answering right now. Try again in a moment."],
+    ['busy', 'Funcial is busy right now. Try again in a moment.'],
     ['offline', "You're offline. Try again when you're connected."],
   ] as const)('shows what the account layer says for %s', async (code, message) => {
     const actions = fakeAccount();
@@ -175,7 +176,7 @@ describe('LoginScreen', () => {
       const { store, onHold } = await loggedIn();
       expect(screen.queryByLabelText('Password')).not.toBeInTheDocument();
       expect(screen.getByRole('heading', { level: 1, name: 'Lock this phone' })).toHaveFocus();
-      expect(screen.getByText('Choose a PIN to open Funancial on this phone.')).toBeInTheDocument();
+      expect(screen.getByText('Choose a PIN to open Funcial on this phone.')).toBeInTheDocument();
       expect(screen.queryByText(/Your data is here/)).not.toBeInTheDocument();
       await userEvent.type(screen.getByLabelText('Choose a PIN'), '2468');
       await userEvent.type(screen.getByLabelText('Confirm PIN'), '2468');
@@ -259,6 +260,11 @@ describe('LoginScreen', () => {
       await logIn();
       expect(await screen.findByRole('heading', { level: 1, name: REPLACE })).toBeInTheDocument();
       expect(screen.getByText('Before you log in')).toBeInTheDocument();
+      // Plainly what happens, and no advice to make a backup: there are none to make.
+      expect(
+        screen.getByText("What is on this phone now is replaced by your account's copy."),
+      ).toBeInTheDocument();
+      expect(document.body).not.toHaveTextContent(/backup/i);
       // A screen reader is told about the new screen.
       expect(screen.getByRole('heading', { level: 1, name: REPLACE })).toHaveFocus();
       expect(actions.logIn).toHaveBeenCalledTimes(1);
@@ -303,6 +309,20 @@ describe('LoginScreen', () => {
       );
       expect(screen.getByLabelText('Username')).toBeInTheDocument();
     });
+  });
+
+  it("says in plain words when this phone couldn't make the keys, not the engine's message", async () => {
+    const actions = fakeAccount();
+    actions.logIn.mockRejectedValue(
+      new KeyDerivationError(new RangeError('WebAssembly.instantiate(): Out of memory')),
+    );
+    show(actions);
+    await logIn();
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(
+      "This phone couldn't make your keys. Close other apps and try again.",
+    );
+    expect(alert).not.toHaveTextContent(/WebAssembly|memory/);
   });
 
   it('keeps a failure on the screen even after the new vault was made: the app holds this screen for a retry', async () => {

@@ -4,7 +4,7 @@ const devUrl = process.env.FUNANCIAL_DEV_URL;
 
 export default {
   appId: 'io.github.bhccob.funancial',
-  appName: 'Funancial',
+  appName: 'Funcial',
   webDir: 'dist',
   // Logging on (the default in a debug build) writes every plugin call and result to the WebView
   // console and logcat, and those carry key material: the biometric copy of the data key, the

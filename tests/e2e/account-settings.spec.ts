@@ -79,6 +79,9 @@ test('the Home reminder leads to Settings, where an account is made and then tur
     ['authKey', 'dek', 'email', 'username', 'wrappedPw'].sort(),
   );
   expect(JSON.stringify(signup!.body)).not.toContain(PASSWORD);
+  // Argon2id (64 MiB, 3 passes) from the built app's own WASM gives what Node's Argon2id and HKDF
+  // give for robin and PASSWORD (`independently` in api/_lib/accounts.test.ts), as the reset page does.
+  expect(signup!.body!.authKey).toBe('Vj0qBrtPRpdyMcSA5NoTGNqLuly/M1fklymvThxkE/s=');
   const [upload] = service.seen.filter((s) => s.route === 'copy' && s.method === 'PUT');
   expect(upload!.auth).toBe('Bearer device-token-1');
   expect(upload!.body).toMatchObject({ baseVersion: 0 });
@@ -101,6 +104,43 @@ test('the Home reminder leads to Settings, where an account is made and then tur
   expect(
     service.seen.some((s) => s.method === 'DELETE' && s.auth === 'Bearer device-token-1'),
   ).toBe(true);
+});
+
+test('logging out keeps the data, stops saving and leaves the service alone', async ({ page }) => {
+  const service = await mockAccountService(page);
+  await startFresh(page, '/settings');
+  await createAccount(page);
+  await expect(page.getByText(/Last copy saved/)).toBeVisible();
+  await page.getByLabel('Name').fill('Robin Kept');
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.getByText('Profile saved.')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Log out' }).click();
+  const confirm = page.getByRole('dialog', { name: 'Log out on this phone?' });
+  await expect(confirm).toContainText(
+    "If you log in again later, your account's copy replaces what is on this phone.",
+  );
+  await confirm.getByRole('button', { name: 'Cancel' }).click();
+  await expect(page.getByText('robin', { exact: true })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Log out' }).click();
+  await confirm.getByRole('button', { name: 'Log out' }).click();
+  await expect(page.getByText('Logged out. Your data is still on this phone.')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Create account' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Log in' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Log out' })).toBeHidden();
+
+  // Still logged out after a reload, with the data in place, and nothing more goes up.
+  const calls = service.seen.length;
+  await page.reload();
+  await expect(page.getByRole('button', { name: 'Create account' })).toBeVisible();
+  await expect(page.getByLabel('Name')).toHaveValue('Robin Kept');
+  await sendToBackground(page);
+  expect(service.seen).toHaveLength(calls);
+  expect(service.seen.some((s) => s.method === 'DELETE')).toBe(false);
+
+  await page.getByRole('button', { name: 'Log in' }).click();
+  await expect(page.getByRole('dialog', { name: 'Log in' })).toBeVisible();
 });
 
 test('a phone whose account moved says so and keeps working', async ({ page }) => {

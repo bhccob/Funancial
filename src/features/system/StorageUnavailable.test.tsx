@@ -24,11 +24,11 @@ describe('StorageUnavailable', () => {
     const { reload } = renderOn('web');
 
     expect(
-      screen.getByRole('heading', { level: 1, name: "Funancial can't save data here" }),
+      screen.getByRole('heading', { level: 1, name: "Funcial can't save data here" }),
     ).toBeInTheDocument();
     expect(
       screen.getByText(
-        'Your browser is blocking storage (this can happen in private windows). Open Funancial in a normal window to continue.',
+        'Your browser is blocking storage (this can happen in private windows). Open Funcial in a normal window to continue.',
       ),
     ).toBeInTheDocument();
 
@@ -40,11 +40,11 @@ describe('StorageUnavailable', () => {
     const { reload } = renderOn('android');
 
     expect(
-      screen.getByRole('heading', { level: 1, name: "Funancial can't open its storage" }),
+      screen.getByRole('heading', { level: 1, name: "Funcial can't open its storage" }),
     ).toBeInTheDocument();
     expect(
       screen.getByText(
-        "Something went wrong opening Funancial's encrypted storage on this phone. Close Funancial completely and open it again. Your data stays on this phone.",
+        "Something went wrong opening Funcial's encrypted storage on this phone. Close Funcial completely and open it again. Your data stays on this phone.",
       ),
     ).toBeInTheDocument();
     expect(screen.queryByText(/browser/i)).not.toBeInTheDocument();

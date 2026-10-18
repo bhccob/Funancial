@@ -6,7 +6,7 @@ import { useFinanceActions } from '@/store/useFinance';
 
 /** What to tell a person whose phone refused notifications: only Android's own settings can undo it. */
 export const REMINDERS_BLOCKED =
-  'Notifications are blocked for Funancial. Turn them on in Android Settings → Apps → Funancial → Notifications.';
+  'Notifications are blocked for Funcial. Turn them on in Android Settings → Apps → Funcial → Notifications.';
 
 /** The settings before any were saved: reminders off, nobody asked. */
 const NONE_SAVED = defaultSettings('').reminders;

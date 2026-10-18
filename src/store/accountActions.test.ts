@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { deriveAccountKeys, openCopy, UnsupportedError, unwrapDek } from '@/data/accountCrypto';
-import { readBackup } from '@/data/backup';
 import { base64ToBytes } from '@/data/crypto';
 import { emptySnapshot, type DataSnapshot } from '@/domain/snapshot';
 import { toastStore } from '@/lib/toast';
@@ -20,7 +19,8 @@ import {
 import { createAppStore } from './appStore';
 
 const ME = { username: 'Robin', email: 'robin@example.com', password: 'a long enough password' };
-const ITERATIONS = 1_000;
+/** Argon2id at its smallest: 8 KiB, one pass. */
+const FAST = { memorySize: 8, iterations: 1, parallelism: 1 };
 
 /** The browser's `online` event, and the app going to the background, which node has neither of. */
 let network = new EventTarget();
@@ -93,7 +93,7 @@ async function follow(
   store: Awaited<ReturnType<typeof freshRealStore>>['store'],
   server = fakeAccountApi(),
 ) {
-  const actions = createAccountActions(store, server.api, platform, { iterations: ITERATIONS });
+  const actions = createAccountActions(store, server.api, platform, { kdf: FAST });
   const stop = actions.start();
   await loaded(actions);
   return { actions, server, stop };
@@ -165,7 +165,7 @@ describe('sign-up', () => {
     );
     expect(JSON.stringify(body)).not.toContain(ME.password);
     // wrappedPw opens with the password's key, to the dek that was sent.
-    const { kek } = await deriveAccountKeys('robin', ME.password, ITERATIONS);
+    const { kek } = await deriveAccountKeys('robin', ME.password, FAST);
     const wrapped = await unwrapDek(body!.wrappedPw as { iv: string; ciphertext: string }, kek);
     expect(wrapped.raw).toBe(body!.dek);
     expect(linkedState(actions)).toMatchObject({ username: 'robin', dek: body!.dek });
@@ -546,7 +546,7 @@ describe('log-in', () => {
     });
   });
 
-  it('a copy from a newer Funancial links nothing and changes nothing', async () => {
+  it('a copy from a newer Funcial links nothing and changes nothing', async () => {
     const { actions, server, store } = await setup();
     const newer = { ...snapshotWith('x'), schemaVersion: 999 };
     await server.seed({ username: 'robin', password: ME.password, snapshot: newer });
@@ -595,7 +595,7 @@ describe('log-in', () => {
     await store.getState().boot();
     expect(store.getState().phase).toBe('welcome');
     const server = fakeAccountApi();
-    const actions = createAccountActions(store, server.api, platform, { iterations: ITERATIONS });
+    const actions = createAccountActions(store, server.api, platform, { kdf: FAST });
     actions.start();
     await server.seed({ username: 'robin', password: ME.password, snapshot: snapshotWith('a') });
 
@@ -858,7 +858,7 @@ describe('retries', () => {
 });
 
 describe('a copy stays clean', () => {
-  it('holds the data and nothing about the account, in an upload or a backup', async () => {
+  it('holds the data and nothing about the account, in an upload', async () => {
     const { actions, server, store } = await setup();
     await store.getState().put('profile', makeProfile({ name: 'Robin' }));
     await store.getState().put('expense', lunch('e1'));
@@ -880,23 +880,16 @@ describe('a copy stays clean', () => {
     const copy = await opened(body, state.dek);
     expect(copy).toEqual(store.getState().data);
     expect(JSON.stringify(copy)).not.toMatch(/funancial\.account|deviceToken/);
-
-    const { text: backup } = await store.getState().createBackup('backup passphrase');
-    for (const secret of [state.dek, state.deviceToken, 'funancial.account']) {
-      expect(backup).not.toContain(secret);
-    }
-    const restored = await readBackup(backup, 'backup passphrase');
-    expect(JSON.stringify(restored)).not.toContain(state.dek);
-    expect(store.getState().exportPlain().text).not.toContain(state.dek);
+    expect(JSON.stringify(store.getState().data)).not.toContain(state.dek);
   });
 
-  it('keeps a .funbak restore working, and uploads what it restored', async () => {
+  it('uploads what a restore of a snapshot put back', async () => {
     const { actions, server, store } = await setup();
     await actions.signUp(ME);
-    const { text } = await store.getState().createBackup('backup passphrase');
+    const before = structuredClone(store.getState().data);
     clock();
     await store.getState().put('expense', lunch('later'));
-    await store.getState().restoreBackup(text, 'backup passphrase');
+    await store.getState().restoreSnapshot(before);
     expect(store.getState().data.tables.expense).toEqual([]);
     pause();
     await waitForPuts(server, 2);
@@ -915,7 +908,7 @@ describe('a restart or a lock', () => {
 
     const again = createAppStore(deps);
     await again.getState().boot();
-    const next = createAccountActions(again, server.api, platform, { iterations: ITERATIONS });
+    const next = createAccountActions(again, server.api, platform, { kdf: FAST });
     next.start();
     await waitForPuts(server, 2);
     expect(linkedState(next)!.dirty).toBe(false);
@@ -958,7 +951,7 @@ describe('changing the password', () => {
       newAuthKey: string;
       newWrappedPw: { iv: string; ciphertext: string };
     }>;
-    const { kek, authKey } = await deriveAccountKeys('robin', next, ITERATIONS);
+    const { kek, authKey } = await deriveAccountKeys('robin', next, FAST);
     expect(body!.newAuthKey).toBe(authKey);
     expect((await unwrapDek(body!.newWrappedPw, kek)).raw).toBe(linkedState(actions)!.dek);
     expect(JSON.stringify(body)).not.toContain(next);
@@ -1057,6 +1050,105 @@ describe('turning the account off', () => {
     expect(linkedState(actions)).toBeNull();
     expect(server.calls).toHaveLength(calls);
   });
+});
+
+describe('logging out of the account on this phone', () => {
+  const creds = { username: 'Robin', password: ME.password };
+  type Phone = Awaited<ReturnType<typeof linkedWithCopy>>;
+
+  /** Logged in to an account whose copy holds `theirs`, then `mine` added on this phone, unsaved. */
+  async function linkedWithCopy() {
+    const t = await setup();
+    await t.server.seed({
+      username: 'robin',
+      password: ME.password,
+      snapshot: snapshotWith('theirs'),
+    });
+    await t.actions.logIn(creds, { replace: false });
+    clock();
+    await t.store.getState().put('expense', lunch('mine'));
+    return t;
+  }
+  const ids = (t: Phone) =>
+    t.store
+      .getState()
+      .data.tables.expense.map((e) => e.id)
+      .sort();
+
+  it('forgets the link, keeps the data, and leaves the account and its copy at the service', async () => {
+    const t = await linkedWithCopy();
+    const copy = { ...t.server.accounts.get('robin')!.copy! };
+    const calls = t.server.calls.length;
+
+    await t.actions.unlink();
+    expect(linkedState(t.actions)).toBeNull();
+    expect(ids(t)).toEqual(['mine', 'theirs']);
+    expect(t.server.calls).toHaveLength(calls);
+    expect(t.server.accounts.get('robin')!.copy).toEqual(copy);
+
+    // Nothing saves any more, not even what was unsaved or changes made later.
+    await t.store.getState().put('expense', lunch('later'));
+    pause();
+    goOnline();
+    await elapse(10 * 60_000);
+    await t.actions.saveNow();
+    expect(t.server.calls).toHaveLength(calls);
+
+    // It stays out after a restart.
+    const again = createAppStore(t.deps);
+    await again.getState().boot();
+    const next = await follow(again, t.server);
+    expect(linkedState(next.actions)).toBeNull();
+  });
+
+  // Logging in again is the one path whether the account moved or this phone logged out.
+  it.each([
+    [
+      'logged out',
+      async (t: Phone) => {
+        await t.actions.unlink();
+        return null;
+      },
+    ],
+    [
+      'moved',
+      async (t: Phone) => {
+        await t.server.api.logIn({
+          username: 'robin',
+          authKey: t.server.accounts.get('robin')!.authKey,
+        });
+        await elapse(30_000);
+        await vi.waitFor(() => expect(linkedState(t.actions)!.status).toBe('moved'));
+        return 'moved';
+      },
+    ],
+  ])(
+    'logging in again after being %s asks before replacing, then takes the copy',
+    async (_name, leave) => {
+      const t = await linkedWithCopy();
+      await leave(t);
+      const calls = t.server.calls.length;
+      const token = t.server.accounts.get('robin')!.token;
+
+      await expect(t.actions.logIn(creds, { replace: false })).resolves.toBe('needs-confirm');
+      expect(t.server.calls).toHaveLength(calls);
+      expect(t.server.accounts.get('robin')!.token).toBe(token);
+      expect(ids(t)).toEqual(['mine', 'theirs']);
+
+      const puts = t.server.sent('putCopy').length;
+      await expect(t.actions.logIn(creds, { replace: true })).resolves.toBe('done');
+      expect(ids(t)).toEqual(['theirs']);
+      expect(linkedState(t.actions)).toMatchObject({
+        username: 'robin',
+        status: 'linked',
+        version: 1,
+        dirty: false,
+        deviceToken: t.server.accounts.get('robin')!.token,
+      });
+      expect(t.server.accounts.get('robin')!.token).not.toBe(token);
+      expect(t.server.sent('putCopy')).toHaveLength(puts);
+    },
+  );
 });
 
 /** A phone that is linked, with the clock in the test's hands. */
@@ -1320,7 +1412,7 @@ describe('forgot password', () => {
     await store.getState().boot();
     expect(store.getState().phase).toBe('welcome');
     const server = fakeAccountApi();
-    const actions = createAccountActions(store, server.api, platform, { iterations: ITERATIONS });
+    const actions = createAccountActions(store, server.api, platform, { kdf: FAST });
     await expect(actions.forgot('robin')).resolves.toBeUndefined();
     expect(server.sent('forgot')).toEqual([{ who: 'robin' }]);
   });

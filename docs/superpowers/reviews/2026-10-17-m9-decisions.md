@@ -88,3 +88,49 @@ These are words I wrote that speak for you. Change any of them.
   - The manual copy-removal search can also show an email entry.
 - **Multi-tab use of the web app.**
 - **Large files.** `accounts.ts` and `accountActions.ts` are large files that weren't split.
+
+## The night of 2026-10-17: what you asked for before sleeping
+
+Before you went to sleep you asked for seven more things. Each was built and reviewed one at a time, then the whole night's work had one final review on the most careful model. It runs from 09d04c0 to fe4840c. Except for the "hide numbers" and card screens, which you approved as wireframes, there was no fresh wireframe: everything uses styles you had already approved. Phone-size screenshots of each are in `.superpowers/overnight/screens/`.
+
+1. **Hide amounts.** An eye button on the "Available to spend" row turns every amount in the app into `••••`, as you chose (dots, not blur). The month bar goes grey. Your choice is remembered on that phone and is not part of your data or copy.
+2. **The card.**
+   - In "Coming up" the card row reads "<card> card payment" with a DUE date, and you can tap it. It opens a panel with what you owe, the due date, what you pay, how much of the limit is used, **Pay card** and **Edit card**.
+   - The bills page is now "Bills & cards".
+   - **Pay card** suggests the minimum for a card you don't pay in full.
+   - Once you've paid the minimum, the card no longer shows as due, so Available to spend doesn't count it twice.
+3. **Tap Home's numbers.** Tapping **Available to spend** or **Net worth** shows what the number is made of. Each balance has **Correct** (type what your bank shows) and each debt has **Edit**.
+4. **Goals and Debts** are two pages, each in the Menu.
+5. **Income.** A new page with this month against your average, the last 12 months stacked by salary, extra and dividends, this year's split, and the biggest sources. It's in the Menu, with a link from Home.
+6. **Security, against your SECURITY.md.** No secret was ever committed. The fixes:
+   - **Passwords.** Keys now come from Argon2id at 64 MiB with 3 passes, the bar your rules set.
+   - **Log-in limits.** At most 10 a minute per address. A name waits after 5 failures, up to 10 minutes, even under a burst of tries sent at once.
+   - **Requests.** The service refuses fields it doesn't expect.
+   - **The reset link.** Its code sits in the part of the address (`#…`) that never reaches a server.
+   - **Libraries.** nodemailer is updated, and `npm audit` reports no high-severity problem.
+   - **Browser rules.** Security headers and a content policy are now set for the site.
+   - **`.gitignore`.** It now covers every kind of secret file.
+   - **Secret checks.** A check now runs before every commit, and a GitHub workflow scans for secrets and vulnerable libraries.
+7. **The name is Funcial.** Everything a person sees is renamed, at the new address `https://funcial.vercel.app`, and the QR code was regenerated. The hidden internal names (the app ID, storage names and the words used to make keys) are unchanged, so your data, account and backups keep working.
+
+### The calls I made overnight
+
+- **Where the eye sits.** It is on the "Available to spend" row, as in the wireframe, not in the top line, where it cut the date into "Oc…" on 412px phones.
+- **The average on Income.** It starts from your first month with income, not a flat 12 months, so a new user's average isn't far below a normal month.
+- **Bar targets on Income.** Twelve bars at phone width are 28px wide each, taller than they are wide. That is under the app's usual 44px, but above the accessibility minimum.
+- **The key change for your test account.** No friend has an account yet, so the key change needed no migration. Your test account's old password stops working on the new build. Use "Forgot password?" once, which keeps the data, or delete it and make it again.
+- **What I left for you.**
+  - Making the GitHub repo private.
+  - Vercel's firewall: deny or rate-limit, not "challenge", on `/api/*`. A phone can't pass a challenge.
+  - A narrower Upstash token.
+  - A separate shared key for dev builds.
+- **Not fixed yet.** A mistyped email at sign-up can still receive that account's reset link. Confirming the email is its own feature for later.
+
+### Deferred from the night (none loses data)
+
+- **Login speed.** Argon2id runs on the main thread, about 0.5–1.5 s on a phone, with the busy label shown first. It still needs measuring on the emulator.
+- **Screen readers.** They read `••••` as "bullet bullet bullet bullet".
+- **Rounding.** Income's year shares can add up to 99% or 101%.
+- **Reminders.** A reminder for next month, planned right after a part payment, can repeat this month's remaining amount.
+- **Gitleaks.** It hasn't been run locally yet. Run it once before pushing.
+- **Smaller items.** The full list, with each review, is in the night's review files.

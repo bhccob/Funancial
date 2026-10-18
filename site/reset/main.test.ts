@@ -12,6 +12,11 @@ const NO_TOKEN = 'Open the link in your email again to choose a new password.';
 const DONE = 'Your password is changed. Log in on your phone with the new one.';
 const LATER = 'Something went wrong. Try again in a moment.';
 const PASSWORD = 'a brand new password';
+/** What 'ada' and PASSWORD derive, as `independently` in api/_lib/accounts.test.ts computes it. */
+const ADA_KEYS = {
+  newAuthKey: 'lZxv41bid5O0MjkLF1yeGhyvPux4SnnbRdw+3PaAiq4=',
+  kek: 'rVlb6vjMQaTT2CAzWvIHDx4oZlpcOTTaQSp1gApAqCs=',
+};
 
 // The page's own markup, which main.ts finds its parts in.
 const markup = new DOMParser().parseFromString(page, 'text/html').body.innerHTML;
@@ -24,24 +29,31 @@ let info: Answer | Error;
 let change: Answer | Error;
 const fetchMock = vi.fn<typeof fetch>();
 
-/** Opens the page as the emailed link would, with the service answering `info` and then `change`. */
-async function open(search = `?token=${TOKEN}`) {
+/**
+ * Opens the page as the emailed link would, the token in its fragment (links sent before that have it
+ * in the query), with the service answering `info` and then `change`.
+ */
+async function open(after = `#token=${TOKEN}`) {
   vi.resetModules();
   document.body.innerHTML = markup;
-  history.replaceState(null, '', `/reset${search}`);
+  history.replaceState(null, '', `/reset${after}`);
   await import('./main');
 }
 
 const field = (label: string) => screen.getByLabelText(label);
 const submit = () => screen.getByRole('button', { name: /password/i });
-const posts = () => fetchMock.mock.calls.filter(([, init]) => init?.method === 'POST');
+/** A request's JSON body; `{}` for one with none. */
+const bodyOf = (init?: RequestInit) =>
+  JSON.parse(String(init?.body ?? '{}')) as Record<string, string>;
+/** The calls that sent new keys; asking whose link it is sends the token alone. */
+const changes = () => fetchMock.mock.calls.filter(([, init]) => 'newAuthKey' in bodyOf(init));
 
 function fill(first: string, second = first) {
   fireEvent.input(field('New password'), { target: { value: first } });
   fireEvent.input(field('Type it again'), { target: { value: second } });
 }
 
-// Choosing a password stretches the key 600,000 times, which a loaded machine can take a while over.
+// Choosing a password runs Argon2id at 64 MiB, which a loaded machine can take a while over.
 configure({ asyncUtilTimeout: 10_000 });
 vi.setConfig({ testTimeout: 20_000 });
 
@@ -49,7 +61,7 @@ beforeEach(() => {
   info = { status: 200, body: { username: 'ada' } };
   change = { status: 204 };
   fetchMock.mockReset().mockImplementation(async (_url, init) => {
-    const answer = init?.method === 'POST' ? change : info;
+    const answer = 'newAuthKey' in bodyOf(init) ? change : info;
     if (answer instanceof Error) throw answer;
     return reply(answer);
   });
@@ -68,30 +80,41 @@ describe('the reset page', () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [url, init] = fetchMock.mock.calls[0] ?? [];
-    expect(url).toBe(`/api/reset?token=${TOKEN}`);
-    expect(init?.headers).toBeUndefined();
+    // The token goes in a POST body, never in a URL a request log could keep.
+    expect(url).toBe('/api/reset');
+    expect(init?.method).toBe('POST');
+    expect(init?.headers).toEqual({ 'Content-Type': 'application/json' });
+    expect(bodyOf(init)).toEqual({ token: TOKEN });
     expect(field('New password')).toHaveAttribute('type', 'password');
     expect(field('Type it again')).toHaveAttribute('type', 'password');
     expect(field('New password')).toHaveFocus();
     expect(submit()).toBeEnabled();
   });
 
-  it('takes the token out of the address bar once it has read it, before asking about it', async () => {
-    let seen = '';
-    fetchMock.mockImplementation(async (url) => {
-      seen = location.search;
-      return reply(String(url).includes(TOKEN) ? (info as Answer) : { status: 410 });
-    });
-    await open();
-    await screen.findByText('Choose a new password for ada');
+  it.each([
+    ['its fragment', `#token=${TOKEN}`],
+    ['the query, as links already sent have it', `?token=${TOKEN}`],
+  ])(
+    'reads the token from %s, and takes it out of the address bar before asking about it',
+    async (_, after) => {
+      let seen = '';
+      fetchMock.mockImplementation(async (_url, init) => {
+        seen = location.href;
+        return reply(bodyOf(init).token === TOKEN ? (info as Answer) : { status: 410 });
+      });
+      await open(after);
+      await screen.findByText('Choose a new password for ada');
 
-    // The request carried it; the address bar no longer does (nor does history).
-    expect(fetchMock.mock.calls[0]?.[0]).toBe(`/api/reset?token=${TOKEN}`);
-    expect(seen).toBe('');
-    expect(location.pathname).toBe('/reset');
-    expect(location.search).toBe('');
-    expect(location.href).not.toContain(TOKEN);
-  });
+      // The request's body carried it; the address bar no longer does (nor does history), nor any URL.
+      expect(bodyOf(fetchMock.mock.calls[0]?.[1])).toEqual({ token: TOKEN });
+      expect(fetchMock.mock.calls.map(([url]) => String(url)).join()).not.toContain(TOKEN);
+      expect(seen).not.toContain(TOKEN);
+      expect(location.pathname).toBe('/reset');
+      expect(location.search).toBe('');
+      expect(location.hash).toBe('');
+      expect(location.href).not.toContain(TOKEN);
+    },
+  );
 
   it('shows the name as the service spells it, in the form the keys are derived from', async () => {
     info = { status: 200, body: { username: 'ＡＤＡ' } };
@@ -108,7 +131,7 @@ describe('the reset page', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('Use at least 10 characters.');
     expect(field('New password')).toHaveAttribute('aria-invalid', 'true');
     expect(field('New password')).toHaveFocus();
-    expect(posts()).toHaveLength(0);
+    expect(changes()).toHaveLength(0);
   });
 
   it('takes a password of exactly 10 characters', async () => {
@@ -127,7 +150,7 @@ describe('the reset page', () => {
 
     expect(screen.getByRole('alert')).toHaveTextContent("The two passwords don't match.");
     expect(field('Type it again')).toHaveAttribute('aria-invalid', 'true');
-    expect(posts()).toHaveLength(0);
+    expect(changes()).toHaveLength(0);
 
     fireEvent.input(field('Type it again'), { target: { value: PASSWORD } });
     expect(screen.getByRole('alert', { hidden: true })).not.toBeVisible();
@@ -144,8 +167,8 @@ describe('the reset page', () => {
     expect(await screen.findByText(DONE)).toBeVisible();
     expect(screen.queryByLabelText('New password')).not.toBeVisible();
 
-    expect(posts()).toHaveLength(1);
-    const [url, init] = posts()[0] ?? [];
+    expect(changes()).toHaveLength(1);
+    const [url, init] = changes()[0] ?? [];
     expect(url).toBe('/api/reset');
     // Only what the service needs: no shared token.
     expect(init?.headers).toEqual({ 'Content-Type': 'application/json' });
@@ -158,6 +181,8 @@ describe('the reset page', () => {
     expect(sent.newAuthKey).toBe(keys.authKey);
     expect(sent.kek).toBe(await exportKek(keys.kek));
     expect(atob(sent.kek ?? '')).toHaveLength(32);
+    // And the known answer, from Node's own Argon2id (64 MiB, 3 passes) and HKDF, apart from both.
+    expect(sent).toMatchObject(ADA_KEYS);
     expect(String(init?.body)).not.toContain(PASSWORD);
     expect(String(init?.body)).not.toContain(encodeURIComponent(PASSWORD));
     // And the fields are emptied.
@@ -176,7 +201,7 @@ describe('the reset page', () => {
     fireEvent.submit(submit().closest('form')!);
 
     expect(await screen.findByText(DONE)).toBeVisible();
-    expect(posts()).toHaveLength(1);
+    expect(changes()).toHaveLength(1);
   });
 
   it('says the link has expired when the service says 410', async () => {
@@ -213,6 +238,27 @@ describe('the reset page', () => {
     expect(await screen.findByText(LATER)).toBeVisible();
   });
 
+  it("says plainly when this browser couldn't make the keys, sends nothing, and lets it try again", async () => {
+    await open();
+    await screen.findByText('Choose a new password for ada');
+    fill(PASSWORD);
+    const instantiate = vi
+      .spyOn(WebAssembly, 'instantiate')
+      .mockRejectedValueOnce(new RangeError('WebAssembly.instantiate(): Out of memory'));
+    fireEvent.click(submit());
+    await waitFor(() =>
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        "This browser couldn't make your new keys. Close other tabs and apps, then try again.",
+      ),
+    );
+    instantiate.mockRestore();
+    expect(changes()).toHaveLength(0);
+    expect(submit()).toBeEnabled();
+
+    fireEvent.click(submit());
+    expect(await screen.findByText(DONE)).toBeVisible();
+  });
+
   it('keeps the form after a failed change, so it can be tried again', async () => {
     change = { status: 503, body: { error: 'unavailable' } };
     await open();
@@ -234,7 +280,7 @@ describe('the reset page', () => {
     change = { status: 204 };
     fireEvent.click(submit());
     expect(await screen.findByText(DONE)).toBeVisible();
-    expect(posts()).toHaveLength(3);
+    expect(changes()).toHaveLength(3);
   });
 });
 

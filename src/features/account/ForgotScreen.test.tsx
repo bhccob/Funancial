@@ -61,7 +61,7 @@ describe('ForgotScreen', () => {
     show(actions);
     await ask('robin');
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      "Funancial's service isn't answering right now. Try again in a moment.",
+      "Funcial's service isn't answering right now. Try again in a moment.",
     );
     expect(screen.getByRole('status')).toBeEmptyDOMElement();
     expect(screen.getByLabelText('Username or email')).toHaveValue('robin');

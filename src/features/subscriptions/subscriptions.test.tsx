@@ -5,7 +5,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Subscription } from '@/domain/entities';
 import { formatMoney } from '@/domain/money';
 import { emptySnapshot } from '@/domain/snapshot';
-import { formatDay } from '@/lib/format';
+import { DashboardScreen } from '@/features/dashboard/DashboardScreen';
+import { formatDay, formatMonthShort } from '@/lib/format';
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
 import { localIso, makeDebt, makeSubscription } from '@/test/fixtures';
 import { SubscriptionsScreen } from './SubscriptionsScreen';
@@ -26,9 +27,20 @@ const usd = (minor: number) => formatMoney(minor, 'USD');
 
 beforeEach(() => Object.values(actions).forEach((a) => a.mockClear()));
 
-function renderSubs() {
+/** The Visa owes 230.00, due on the 21st; the month's other bill is Streamflix (15.99, 10-17). */
+function monthData() {
   const data = emptySnapshot();
-  data.tables.debt.push(makeDebt({ id: 'card-1', name: 'Visa', kind: 'credit_card' }));
+  data.tables.debt.push(
+    makeDebt({
+      id: 'card-1',
+      name: 'Visa',
+      kind: 'credit_card',
+      openingBalance: 230_00,
+      openingDate: '2026-09-01',
+      dueDay: 21,
+      payInFull: true,
+    }),
+  );
   data.tables.subscription.push(
     makeSubscription({
       id: 'sub-tv',
@@ -47,11 +59,15 @@ function renderSubs() {
     }),
     makeSubscription({ id: 'sub-mag', name: 'Old Magazine', status: 'cancelled' }),
   );
+  return data;
+}
+
+function renderSubs() {
   renderWithStore(
     <MemoryRouter>
       <SubscriptionsScreen />
     </MemoryRouter>,
-    createStubStore({ data, today: TODAY }),
+    createStubStore({ data: monthData(), today: TODAY }),
   );
 }
 
@@ -62,13 +78,97 @@ const row = (name: string) => {
 };
 
 describe('SubscriptionsScreen', () => {
-  it('sums the active subscriptions per month', () => {
+  it('is Bills & cards, with what is due this month and what the subscriptions cost', () => {
     renderSubs();
-    expect(
-      screen.getByRole('heading', { level: 1, name: 'Subscriptions & bills' }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: 'Bills & cards' })).toBeInTheDocument();
+    // Streamflix 15.99 and the Visa 230.00.
+    expect(screen.getByText(`${usd(245_99)} due this month`)).toBeInTheDocument();
     // 15.99 monthly + 120.00 yearly (10.00 a month)
-    expect(screen.getByText(`${usd(25_99)} a month · 2 active`)).toBeInTheDocument();
+    expect(
+      within(screen.getByRole('region', { name: 'Active' })).getByText(`${usd(25_99)} a month`),
+    ).toBeInTheDocument();
+  });
+
+  it('shows the same month total as Home, as both come from the same bills', () => {
+    const store = createStubStore({ data: monthData(), today: TODAY });
+    const home = renderWithStore(
+      <MemoryRouter>
+        <DashboardScreen />
+      </MemoryRouter>,
+      store,
+    );
+    const comingUp = within(screen.getByRole('region', { name: 'Coming up' }));
+    expect(
+      comingUp.getByRole('link', { name: `${usd(245_99)} this month, Bills & cards` }),
+    ).toBeInTheDocument();
+    home.unmount();
+
+    renderWithStore(
+      <MemoryRouter>
+        <SubscriptionsScreen />
+      </MemoryRouter>,
+      store,
+    );
+    expect(screen.getByText(`${usd(245_99)} due this month`)).toBeInTheDocument();
+  });
+
+  it('lists each card payment above the subscriptions, like Home does', () => {
+    renderSubs();
+    expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual([
+      'Card payments',
+      'Active',
+      'Cancelled',
+    ]);
+    const visa = within(screen.getByRole('region', { name: 'Card payments' })).getByRole('button', {
+      name: /Visa/,
+    });
+    expect(visa).toHaveTextContent(
+      `DUE21${formatMonthShort('2026-10-21')}VisaFull balance · in 7 days${usd(230_00)}`,
+    );
+  });
+
+  it('says "Minimum payment" for a card paid by its minimum', () => {
+    const data = monthData();
+    data.tables.debt = [
+      makeDebt({
+        id: 'card-1',
+        name: 'Visa',
+        openingBalance: 230_00,
+        openingDate: '2026-09-01',
+        dueDay: 21,
+        payInFull: false,
+        minimumPayment: 25_00,
+      }),
+    ];
+    renderWithStore(
+      <MemoryRouter>
+        <SubscriptionsScreen />
+      </MemoryRouter>,
+      createStubStore({ data, today: TODAY }),
+    );
+    expect(screen.getByRole('button', { name: /Visa/ })).toHaveTextContent(
+      `VisaMinimum payment · in 7 days${usd(25_00)}`,
+    );
+  });
+
+  it('has no Card payments section when no card has a payment coming', () => {
+    const data = monthData();
+    data.tables.debt = [];
+    renderWithStore(
+      <MemoryRouter>
+        <SubscriptionsScreen />
+      </MemoryRouter>,
+      createStubStore({ data, today: TODAY }),
+    );
+    expect(screen.queryByRole('region', { name: 'Card payments' })).not.toBeInTheDocument();
+  });
+
+  it('opens the card sheet from a card payment', async () => {
+    renderSubs();
+    await userEvent.click(screen.getByRole('button', { name: /Visa/ }));
+    const sheet = screen.getByRole('dialog', { name: 'Visa credit card' });
+    expect(within(sheet).getByRole('button', { name: 'Pay card' })).toBeEnabled();
+    expect(within(sheet).getByRole('button', { name: 'Edit card' })).toBeEnabled();
   });
 
   it('says when a renewal is close and how each is paid', () => {

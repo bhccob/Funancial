@@ -2,9 +2,12 @@ import { act, fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Toaster } from '@/components/ui/Toaster';
+import { formatMoney } from '@/domain/money';
 import { emptySnapshot, type DataSnapshot } from '@/domain/snapshot';
 import { toastStore } from '@/lib/toast';
+import { KeyDerivationError } from '@/data/accountCrypto';
 import { AccountError } from '@/store/accountActions';
+import { useAmountsHidden } from '@/store/useAmountsHidden';
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
 import { fakeAccount, linkedAccount, withAccount } from '@/test/fakeAccount';
 import { OnboardingWizard } from './OnboardingWizard';
@@ -30,7 +33,10 @@ beforeEach(() => {
   // Setup starts on the phone's currency, so the machine running the tests must not decide it.
   phoneIn('America/New_York');
 });
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  useAmountsHidden.setState({ hidden: false });
+});
 
 const PASSWORD = 'a long enough password';
 /** The step showing now: the one that is leaving stays a moment, with fields of its own. */
@@ -214,7 +220,7 @@ describe('the account step', () => {
       await next();
       expect(
         await screen.findByText(
-          "Funancial's service isn't answering right now. You can make an account later in Settings.",
+          "Funcial's service isn't answering right now. You can make an account later in Settings.",
         ),
       ).toBeInTheDocument();
       expect(screen.queryByRole('alert')).not.toBeInTheDocument();
@@ -227,6 +233,27 @@ describe('the account step', () => {
       expect(await screen.findByText('Step 2 of 6')).toBeInTheDocument();
     },
   );
+
+  it("says plainly when this phone couldn't make the keys, and still offers the skip", async () => {
+    const account = fakeAccount();
+    account.signUp.mockRejectedValueOnce(
+      new KeyDerivationError(new RangeError('WebAssembly.instantiate(): Out of memory')),
+    );
+    renderWizard({ account });
+    await fillAccount();
+    await next();
+    expect(
+      await screen.findByText(
+        "This phone couldn't make your keys. Close other apps and try again, or make an account later in Settings.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/WebAssembly|service isn't answering/)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Skip for now' })).toBeEnabled();
+
+    // Or the next try makes the account.
+    await next();
+    expect(await screen.findByText('Step 2 of 6')).toBeInTheDocument();
+  });
 
   it('skips to the next step from a failed service, without asking it again', async () => {
     const account = fakeAccount();
@@ -506,11 +533,32 @@ describe('OnboardingWizard', () => {
     expect(lockedAt).toBeLessThan(onboardedAt ?? 0);
     expect(store.getState().enableBiometric).not.toHaveBeenCalled();
 
-    // The app is held on this screen while it shows the last step, and let go by Open Funancial.
+    // The app is held on this screen while it shows the last step, and let go by Open Funcial.
     expect(onFinishing).toHaveBeenLastCalledWith(true);
     expect(onFinishing).not.toHaveBeenCalledWith(false);
-    await userEvent.click(screen.getByRole('button', { name: 'Open Funancial' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Open Funcial' }));
     expect(onFinishing).toHaveBeenLastCalledWith(false);
+  });
+
+  it('lists an added card with its balance as bullets while amounts are hidden', async () => {
+    renderWizard();
+    await skipAccount();
+    await next();
+    await fillBalances('0', '0');
+    await userEvent.click(screen.getByRole('switch', { name: "I don't have a regular salary" }));
+    await next();
+    await userEvent.click(screen.getByRole('button', { name: 'Add a card' }));
+    await userEvent.type(screen.getByLabelText('Card name'), 'Visa');
+    await userEvent.type(screen.getByLabelText('Current balance'), '230');
+    await userEvent.selectOptions(screen.getByLabelText('Due day'), '21');
+    await userEvent.click(screen.getByRole('button', { name: 'Save card' }));
+    const owed = (amount: string) => `${amount} owed · due day 21 · paid in full`;
+    expect(screen.getByText(owed(formatMoney(23000, 'USD')))).toBeInTheDocument();
+
+    // The choice is device-wide, so one made earlier (in the demo) holds in setup too.
+    act(() => useAmountsHidden.setState({ hidden: true }));
+    expect(screen.getByText(owed('••••'))).toBeInTheDocument();
+    expect(screen.getByText('Visa')).toBeInTheDocument();
   });
 
   it('says only that the person is all set when they gave no name', async () => {

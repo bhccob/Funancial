@@ -1,9 +1,14 @@
+import { useState } from 'react';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Section, SectionLink } from '@/components/ui/Section';
 import type { Bill } from '@/domain/budget';
+import type { Subscription } from '@/domain/entities';
 import type { LocalDate } from '@/domain/dates';
-import { dayOfMonth } from '@/domain/periods';
-import { formatMonthShort, relativeDays } from '@/lib/format';
+import { CardSheet } from '@/features/goals/CardSheet';
+import { BillRow } from '@/features/shared/BillRow';
+import { SubscriptionDialog } from '@/features/subscriptions/SubscriptionDialog';
+import { relativeDays } from '@/lib/format';
+import { useApp } from '@/store/AppStoreProvider';
 import { useMoney } from '@/store/useFinance';
 
 export interface BillsSectionProps {
@@ -13,42 +18,59 @@ export interface BillsSectionProps {
   today: LocalDate;
 }
 
-/** The next four bills, each with a date block. The title's link shows the month's total. */
+/**
+ * The next four bills, each a button that opens what it shows: a subscription's edit dialog, or a
+ * card's sheet. The title's link shows the month's total and leads to the bills page.
+ */
 export function BillsSection({ bills, total, today }: BillsSectionProps) {
   const money = useMoney();
+  const subscriptions = useApp((s) => s.data.tables.subscription);
+  const [editing, setEditing] = useState<Subscription>();
+  const [cardId, setCardId] = useState<string | null>(null);
 
   return (
-    <Section
-      title="Coming up"
-      action={<SectionLink to="/subscriptions">{money(total)}</SectionLink>}
-    >
-      {bills.length > 0 ? (
-        <ul className="divide-border divide-y">
-          {bills.slice(0, 4).map((bill) => (
-            <li key={`${bill.refId}-${bill.date}`} className="flex items-center gap-3.5 py-[13px]">
-              <div className="w-10 flex-none text-center">
-                <span className="text-muted block text-[11px] font-extrabold tracking-[0.06em]">
-                  {formatMonthShort(bill.date)}
-                </span>
-                <b className="text-[22px] leading-tight font-extrabold tracking-[-0.02em]">
-                  {dayOfMonth(bill.date)}
-                </b>
-              </div>
-              <div className="min-w-0 flex-1">
-                <b className="block truncate text-[15px] font-extrabold">{bill.name}</b>
-                <span className="text-muted text-[13px] font-semibold">
-                  {`${bill.kind === 'card' ? 'Card' : 'Subscription'} · ${relativeDays(today, bill.date)}`}
-                </span>
-              </div>
-              <span className="flex-none text-[15px] font-extrabold tabular-nums">
-                {money(bill.amount)}
-              </span>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <EmptyState title="Nothing due this month" />
-      )}
-    </Section>
+    <>
+      <Section
+        title="Coming up"
+        action={
+          <SectionLink to="/subscriptions">
+            {`${money(total)} this month`}
+            <span className="sr-only">, Bills & cards</span>
+          </SectionLink>
+        }
+      >
+        {bills.length > 0 ? (
+          <ul className="divide-border divide-y">
+            {bills.slice(0, 4).map((bill) => {
+              const card = bill.kind === 'card';
+              const when = relativeDays(today, bill.date);
+              return (
+                <BillRow
+                  key={`${bill.refId}-${bill.date}`}
+                  date={bill.date}
+                  due={card}
+                  title={card ? `${bill.name} card payment` : bill.name}
+                  subline={
+                    card
+                      ? `${bill.inFull ? 'Pay the full balance' : 'Minimum payment'} · ${when}`
+                      : `Subscription · ${when}`
+                  }
+                  amount={money(bill.amount)}
+                  onOpen={() =>
+                    card
+                      ? setCardId(bill.refId)
+                      : setEditing(subscriptions.find((s) => s.id === bill.refId))
+                  }
+                />
+              );
+            })}
+          </ul>
+        ) : (
+          <EmptyState title="Nothing due this month" />
+        )}
+      </Section>
+      <CardSheet debtId={cardId} onClose={() => setCardId(null)} />
+      <SubscriptionDialog sub={editing} onClose={() => setEditing(undefined)} />
+    </>
   );
 }

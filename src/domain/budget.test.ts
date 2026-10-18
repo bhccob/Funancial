@@ -1,8 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { makeDebt, makeExpense, makeLimit, makeProfile, makeSubscription } from '@/test/fixtures';
+import {
+  makeDebt,
+  makeExpense,
+  makeLimit,
+  makeProfile,
+  makeSubscription,
+  makeTransaction,
+} from '@/test/fixtures';
 import { bucketBalances } from './balances';
+import { addDays } from './dates';
 import {
   availableBalance,
+  cardPayment,
   categoryBreakdown,
   limitLabel,
   limitStatus,
@@ -179,6 +188,30 @@ describe('upcomingBills for a card with no minimum set', () => {
   });
 });
 
+describe('cardPayment', () => {
+  const pays = (overrides: Parameters<typeof makeDebt>[0], balance: number) =>
+    cardPayment(emptySnapshot(), makeDebt(overrides), balance, TODAY);
+
+  it('is the whole balance for a card paid in full, or one with no minimum on file', () => {
+    expect(pays({ payInFull: true, minimumPayment: 25_00 }, 230_00)).toEqual({
+      inFull: true,
+      amount: 230_00,
+    });
+    expect(pays({ payInFull: false, minimumPayment: 0 }, 230_00)).toEqual({
+      inFull: true,
+      amount: 230_00,
+    });
+  });
+
+  it('is the minimum otherwise, but never more than is owed', () => {
+    expect(pays({ payInFull: false, minimumPayment: 25_00 }, 230_00)).toEqual({
+      inFull: false,
+      amount: 25_00,
+    });
+    expect(pays({ payInFull: false, minimumPayment: 25_00 }, 12_00).amount).toBe(12_00);
+  });
+});
+
 describe('reservedTotal', () => {
   it('holds back what is left of reserved limits, never less than zero', () => {
     const d = emptySnapshot();
@@ -219,5 +252,89 @@ describe('spending', () => {
       { category: 'shopping', amount: 40_00 },
       { category: 'transport', amount: 20_00 },
     ]);
+  });
+});
+
+describe('a card whose minimum is paid before its due date', () => {
+  // Owes 800.00 with a 25.00 minimum due on the 21st; the cycle began after the 21st of September.
+  const card = (over: Parameters<typeof makeDebt>[0] = {}) =>
+    makeDebt({
+      id: 'visa',
+      name: 'Visa',
+      openingDate: '2025-01-01',
+      openingBalance: 800_00,
+      payInFull: false,
+      minimumPayment: 25_00,
+      dueDay: 21,
+      ...over,
+    });
+  const paid = (amount: number, date: string, debtId = 'visa') =>
+    makeTransaction({ type: 'card_payment', amount, date, from: 'cash', to: null, debtId });
+  const due = (
+    today: string,
+    over: Parameters<typeof makeDebt>[0],
+    ...payments: ReturnType<typeof paid>[]
+  ) => {
+    const d = emptySnapshot();
+    d.tables.profile = [makeProfile({ openingDate: '2025-01-01' })];
+    d.tables.debt = [card(over)];
+    d.tables.transaction = payments;
+    return upcomingBills(d, today).map((b) => [b.date, b.amount]);
+  };
+
+  it('has no bill once the whole minimum is paid', () => {
+    expect(due(TODAY, {})).toEqual([['2026-10-21', 25_00]]);
+    expect(due(TODAY, {}, paid(25_00, TODAY))).toEqual([]);
+  });
+
+  it('asks what is left after a part payment, and adds up several', () => {
+    expect(due(TODAY, {}, paid(10_00, TODAY))).toEqual([['2026-10-21', 15_00]]);
+    expect(due(TODAY, {}, paid(10_00, '2026-10-02'), paid(15_00, '2026-10-10'))).toEqual([]);
+  });
+
+  it('counts only payments after the previous due date, up to today', () => {
+    // The 21st of September ended the last cycle, so a payment on it belongs to that one.
+    expect(due(TODAY, {}, paid(25_00, '2026-09-21'))).toEqual([['2026-10-21', 25_00]]);
+    expect(due(TODAY, {}, paid(25_00, '2026-09-22'))).toEqual([]);
+    expect(due(TODAY, {}, paid(25_00, '2026-10-20'))).toEqual([['2026-10-21', 25_00]]);
+    expect(due(TODAY, {}, paid(25_00, TODAY, 'another-card'))).toEqual([['2026-10-21', 25_00]]);
+    // A new cycle starts on the day after the due date: the October payment no longer counts.
+    expect(due('2026-10-22', {}, paid(25_00, TODAY))).toEqual([['2026-11-21', 25_00]]);
+  });
+
+  it('never asks more than is owed, nor loses what is still owed to a small balance', () => {
+    expect(due(TODAY, { openingBalance: 25_00 }, paid(20_00, TODAY))).toEqual([
+      ['2026-10-21', 5_00],
+    ]);
+    expect(due(TODAY, { openingBalance: 25_00 }, paid(5_00, TODAY))).toEqual([
+      ['2026-10-21', 20_00],
+    ]);
+  });
+
+  it('leaves a card paid in full to its balance, which already reflects payments', () => {
+    expect(due(TODAY, { payInFull: true }, paid(100_00, TODAY))).toEqual([['2026-10-21', 700_00]]);
+  });
+
+  it('counts a loan-style debt_payment as well', () => {
+    const d = emptySnapshot();
+    d.tables.debt = [card()];
+    d.tables.transaction = [{ ...paid(25_00, TODAY), type: 'debt_payment' }];
+    expect(upcomingBills(d, TODAY)).toEqual([]);
+  });
+
+  it('has no cycle to count payments in when there is no due day', () => {
+    expect(due(TODAY, { dueDay: null }, paid(25_00, TODAY))).toEqual([[TODAY, 25_00]]);
+  });
+
+  // The previous due date is the same day a month before, clamped like nextDueDate clamps.
+  it.each([
+    ['a short month', '2026-03-01', 31, '2026-03-31', '2026-02-28'],
+    ['a short month ahead', '2026-02-10', 31, '2026-02-28', '2026-01-31'],
+    ['a leap February', '2028-02-10', 30, '2028-02-29', '2028-01-30'],
+    ['the turn of the year', '2026-01-10', 15, '2026-01-15', '2025-12-15'],
+    ['a long month after a short one', '2026-05-01', 30, '2026-05-30', '2026-04-30'],
+  ])('uses the due date clamped in %s', (_name, today, dueDay, next, previous) => {
+    expect(due(today, { dueDay }, paid(25_00, previous))).toEqual([[next, 25_00]]);
+    expect(due(today, { dueDay }, paid(25_00, addDays(previous, 1)))).toEqual([]);
   });
 });

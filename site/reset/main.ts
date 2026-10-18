@@ -1,5 +1,10 @@
 import '../get/page.css';
-import { canonicalUsername, deriveAccountKeys, exportKek } from '@/data/accountCrypto';
+import {
+  canonicalUsername,
+  deriveAccountKeys,
+  exportKek,
+  KeyDerivationError,
+} from '@/data/accountCrypto';
 
 /*
  * The page an emailed reset link opens. The friend chooses a new password here; this derives the new
@@ -23,9 +28,15 @@ const EXPIRED = 'This link has expired. Ask for a new one in the app.';
 const NO_TOKEN = 'Open the link in your email again to choose a new password.';
 const DONE = 'Your password is changed. Log in on your phone with the new one.';
 const LATER = 'Something went wrong. Try again in a moment.';
+// Argon2id needs 64 MiB, and a page that forbids WebAssembly can't run it at all.
+const NO_KEYS =
+  "This browser couldn't make your new keys. Close other tabs and apps, then try again.";
 
-const token = new URLSearchParams(location.search).get('token');
-// Read, so no longer needed in the address bar: not in the history, a screenshot, or a copied link.
+// The link has it in its fragment, which never reaches a server; links sent before had it in the query.
+const token =
+  new URLSearchParams(location.hash.slice(1)).get('token') ??
+  new URLSearchParams(location.search).get('token');
+// Read, so no longer needed in the address bar (neither part): not in the history, a screenshot, or a copied link.
 history.replaceState(null, '', location.pathname);
 let username = '';
 let busy = false;
@@ -60,7 +71,12 @@ function clearComplaint() {
 async function open() {
   if (!token) return say(NO_TOKEN);
   try {
-    const res = await fetch(`/api/reset?token=${encodeURIComponent(token)}`);
+    // In the body, never the URL: a request log keeps URLs.
+    const res = await fetch('/api/reset', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token }),
+    });
     if (res.status === 410) return say(EXPIRED);
     const body = (await res.json()) as { username?: unknown };
     if (!res.ok || typeof body.username !== 'string') return say(LATER);
@@ -103,8 +119,8 @@ async function change(event: SubmitEvent) {
     }
     if (res.status === 410) return say(EXPIRED);
     complain(res.status === 429 ? 'Too many tries. Wait a while, then try again.' : LATER);
-  } catch {
-    complain(LATER);
+  } catch (e) {
+    complain(e instanceof KeyDerivationError ? NO_KEYS : LATER);
   } finally {
     busy = false;
     submit.disabled = false;

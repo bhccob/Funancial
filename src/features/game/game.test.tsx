@@ -176,7 +176,6 @@ describe('QuestList', () => {
       'month-salary': 'wallet',
       'month-audit': 'list-checks',
       'month-dividends': 'coins',
-      'month-backup': 'hard-drive-download',
     };
     const quests = (Object.keys(icons) as QuestId[]).map((id) =>
       quest(id, { current: 1, target: 4, reward: { xp: 40, coins: 10 } }),
@@ -184,7 +183,7 @@ describe('QuestList', () => {
     renderIn(<QuestList quests={quests} />);
 
     const rows = screen.getAllByRole('listitem');
-    expect(rows).toHaveLength(7);
+    expect(rows).toHaveLength(6);
     for (const [id, icon] of Object.entries(icons)) {
       const row = screen.getByText(`Title of ${id}`).closest('li')!;
       expect(row.querySelector(`svg.lucide-${icon}`)).toBeInTheDocument();
@@ -218,7 +217,7 @@ describe('QuestList', () => {
       quest('week-checkin', { cadence: 'weekly', done: true }),
       quest('week-limits', { cadence: 'weekly' }),
       quest('log-today', { cadence: 'daily', done: true }),
-      quest('month-backup', { cadence: 'monthly', done: true }),
+      quest('month-dividends', { cadence: 'monthly', done: true }),
       quest('month-audit', { cadence: 'monthly' }),
     ];
     renderIn(<QuestList quests={quests} />);
@@ -229,7 +228,7 @@ describe('QuestList', () => {
         'Title of month-audit',
         'Title of log-today',
         'Title of week-checkin',
-        'Title of month-backup',
+        'Title of month-dividends',
       ],
     );
   });

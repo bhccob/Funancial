@@ -3,6 +3,7 @@ import { formatMoney, type MoneyFormatOptions } from '@/domain/money';
 import { computeFinanceView, type FinanceView } from '@/domain/view';
 import { useApp, useAppStore } from './AppStoreProvider';
 import { createFinanceActions, type FinanceActions } from './financeActions';
+import { HIDDEN_AMOUNT, useAmountsHidden } from './useAmountsHidden';
 
 export function useToday(): string {
   return useApp((s) => s.today);
@@ -12,10 +13,14 @@ export function useCurrency(): string {
   return useApp((s) => s.data.tables.profile[0]?.currency ?? 'USD');
 }
 
-/** Formatter for the profile currency in the reader's locale. */
+/** Formatter for the profile currency in the reader's locale. While amounts are hidden, `••••`. */
 export function useMoney(): (minor: number, opts?: MoneyFormatOptions) => string {
   const currency = useCurrency();
-  return useCallback((minor, opts) => formatMoney(minor, currency, undefined, opts), [currency]);
+  const hidden = useAmountsHidden((s) => s.hidden);
+  return useCallback(
+    (minor, opts) => (hidden ? HIDDEN_AMOUNT : formatMoney(minor, currency, undefined, opts)),
+    [currency, hidden],
+  );
 }
 
 export function useFinanceView(): FinanceView {

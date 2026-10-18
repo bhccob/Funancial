@@ -1,13 +1,16 @@
-import { createHash, createHmac, randomBytes } from 'node:crypto';
+import * as nodeCrypto from 'node:crypto';
+import { createHash, createHmac, hkdfSync, randomBytes, scrypt } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 // The phone's own module, by relative path: the cross tests below hold the server to its formats.
 import {
   canonicalUsername as phoneCanonical,
   deriveAccountKeys,
   exportKek,
+  KDF_PARAMS,
   newDek,
   unwrapDek,
   wrapDek,
+  type KdfParams,
 } from '../../src/data/accountCrypto';
 import {
   canonicalUsername,
@@ -24,11 +27,20 @@ import {
 import { rateLimit } from './rateLimit.js';
 import { memoryKvStore, type KvStore } from './store.js';
 
+// The real scrypt, watched: a log-in that must wait is answered before any of its work.
+vi.mock('node:crypto', async (real) => {
+  const crypto = await real<typeof import('node:crypto')>();
+  return { ...crypto, scrypt: vi.fn(crypto.scrypt) };
+});
+
 const T0 = Date.parse('2026-10-17T12:00:00.000Z');
 const MASTER = randomBytes(32);
 const IP = '203.0.113.7';
 const PASSWORD = 'correct horse battery';
-const FAST = 1_000;
+/** Argon2id at its smallest: 8 KiB, one pass. */
+const FAST = { memorySize: 8, iterations: 1, parallelism: 1 };
+// Node's own Argon2id, from Node 24.7 (the engines field allows 22.12, where these checks skip).
+const { argon2Sync } = nodeCrypto as Partial<typeof nodeCrypto>;
 
 let clock = T0;
 const advance = (seconds: number) => {
@@ -841,40 +853,177 @@ describe('deleteAccount', () => {
 });
 
 describe('rate limits', () => {
-  it('turns away the 11th log-in for a username within 15 minutes, saying nothing of the account', async () => {
-    const { accounts } = setup();
-    const { authKey } = await join(accounts);
-    for (let i = 0; i < 10; i++) expect((await logIn(accounts, b64(32))).status).toBe(401);
-
-    const known = await logIn(accounts, authKey);
-    expect(known).toEqual({ status: 429, body: { error: 'too many attempts' }, retryAfter: 900 });
-    // A name that was never registered is turned away just the same.
-    for (let i = 0; i < 10; i++) await logIn(accounts, b64(32), 'nobody');
-    expect(await logIn(accounts, b64(32), 'nobody')).toEqual(known);
-
-    advance(300);
-    expect(await logIn(accounts, authKey)).toMatchObject({ status: 429, retryAfter: 600 });
+  const DENIED = { status: 401, body: { error: 'denied' } };
+  const WAIT = (retryAfter: number) => ({
+    status: 429,
+    body: { error: 'too many attempts' },
+    retryAfter,
   });
-
-  it('opens the window again once it has ended', async () => {
-    const { accounts } = setup();
-    const { authKey } = await join(accounts);
-    for (let i = 0; i < 11; i++) await logIn(accounts, b64(32));
-    advance(899);
-    expect((await logIn(accounts, authKey)).status).toBe(429);
-    advance(2);
-    expect((await logIn(accounts, authKey)).status).toBe(200);
-  });
-
-  it('limits log-ins per address too: the 31st in 15 minutes is 429, another address is fine', async () => {
-    const { accounts } = setup();
-    const { authKey } = await join(accounts);
-    for (let i = 0; i < 30; i++) {
-      expect((await logIn(accounts, b64(32), `user${i}`, '198.51.100.1')).status).toBe(401);
+  // A new address for each try, as an attacker with many has: only the name's count applies.
+  let address = 0;
+  const tryKey = (accounts: Accounts, authKey: string, username = 'ada') =>
+    logIn(accounts, authKey, username, `10.0.${Math.floor(address / 250)}.${address++ % 250}`);
+  const fail = async (accounts: Accounts, times: number, username = 'ada') => {
+    for (let i = 0; i < times; i++) {
+      expect(await tryKey(accounts, b64(32), username)).toEqual(DENIED);
     }
-    const res = await logIn(accounts, b64(32), 'user31', '198.51.100.1');
-    expect(res).toMatchObject({ status: 429, retryAfter: 900 });
+  };
+
+  it('makes a name wait 15 s from its 5th failed log-in, even with the right key', async () => {
+    const { accounts } = setup();
+    const { authKey } = await join(accounts);
+    await fail(accounts, 4);
+    expect((await tryKey(accounts, authKey)).status).toBe(200);
+    await fail(accounts, 5);
+
+    expect(await tryKey(accounts, authKey)).toEqual(WAIT(15));
+    advance(14);
+    expect(await tryKey(accounts, authKey)).toEqual(WAIT(1));
+    advance(1);
+    expect((await tryKey(accounts, authKey)).status).toBe(200);
+  });
+
+  it('answers the wait before it reads the account or runs scrypt', async () => {
+    const reads: unknown[] = [];
+    const { accounts } = setup((store) =>
+      around(store, 'get', (args, run) => (reads.push(args[0]), run())),
+    );
+    const { authKey } = await join(accounts);
+    await fail(accounts, 5);
+    reads.length = 0;
+    vi.mocked(scrypt).mockClear();
+
+    expect(await tryKey(accounts, authKey)).toEqual(WAIT(15));
+    expect(reads).not.toContain('acct:u:ada');
+    expect(scrypt).not.toHaveBeenCalled();
+  });
+
+  it('doubles the wait with each failure after the 5th, up to 10 minutes', async () => {
+    const { accounts } = setup();
+    await join(accounts);
+    await fail(accounts, 5);
+    const waits: number[] = [];
+    for (let i = 0; i < 8; i++) {
+      const { status, retryAfter = 0 } = await tryKey(accounts, b64(32));
+      expect(status).toBe(429);
+      waits.push(retryAfter);
+      advance(retryAfter);
+      // Counted only now the wait is over: tries during it are turned away uncounted.
+      await fail(accounts, 1);
+    }
+    expect(waits).toEqual([15, 30, 60, 120, 240, 480, 600, 600]);
+  });
+
+  it('forgets the failures 15 minutes after the last one, not the first', async () => {
+    const { accounts } = setup();
+    const { authKey } = await join(accounts);
+    await fail(accounts, 1);
+    advance(600);
+    await fail(accounts, 3);
+    // 20 minutes after the first failure, 10 after the last: the 5th still counts.
+    advance(600);
+    await fail(accounts, 1);
+    expect(await tryKey(accounts, authKey)).toEqual(WAIT(15));
+
+    advance(900);
+    await fail(accounts, 4);
+    expect((await tryKey(accounts, authKey)).status).toBe(200);
+  });
+
+  it('gives the count its lifetime in the step that counts, so a function cut off there leaves none for ever', async () => {
+    let cut = false;
+    // The function dies straight after the count: every store call after it fails.
+    const { store, accounts } = setup(
+      (real) =>
+        new Proxy(real, {
+          get(target, name, receiver) {
+            const member: unknown = Reflect.get(target, name, receiver);
+            if (typeof member !== 'function') return member;
+            return async (...args: unknown[]) => {
+              if (cut) throw new Error('cut off');
+              const out: unknown = await member.apply(target, args);
+              if (name === 'incr' && String(args[0]).startsWith('rl:login:fail:')) cut = true;
+              return out;
+            };
+          },
+        }),
+    );
+    await join(accounts);
+    await tryKey(accounts, b64(32)).catch(() => {});
+    expect(cut).toBe(true);
+    expect(await store.ttl('rl:login:fail:ada')).toBe(900);
+  });
+
+  it('clears the count and the wait when a log-in succeeds', async () => {
+    const { store, accounts } = setup();
+    const { authKey } = await join(accounts);
+    const left = () => Object.keys(store.dump()).filter((k) => /^rl:login:(fail|wait):/.test(k));
+    await fail(accounts, 4);
+    expect((await tryKey(accounts, authKey)).status).toBe(200);
+    expect(left()).toEqual([]);
+
+    // Past the 5th, a try sets the next wait before its check: a success takes that away too.
+    await fail(accounts, 5);
+    advance(15);
+    expect((await tryKey(accounts, authKey)).status).toBe(200);
+    expect(left()).toEqual([]);
+    expect((await tryKey(accounts, authKey)).status).toBe(200);
+
+    await fail(accounts, 4);
+    expect((await tryKey(accounts, authKey)).status).toBe(200);
+  });
+
+  it('runs at most 6 password checks for a burst of tries at one name from as many addresses', async () => {
+    for (const username of ['ada', 'nobody']) {
+      const { accounts } = setup(lagged);
+      await join(accounts);
+      const burst = async () => {
+        vi.mocked(scrypt).mockClear();
+        const answers = await Promise.all(
+          Array.from({ length: 40 }, () => tryKey(accounts, b64(32), username)),
+        );
+        const checks = vi.mocked(scrypt).mock.calls.length;
+        // Each check is a wrong password; every other try was told how long to wait.
+        expect(answers.filter((r) => r.status === 401)).toHaveLength(checks);
+        for (const r of answers.filter((r) => r.status !== 401)) {
+          expect(r.status).toBe(429);
+          expect(r.retryAfter).toBeGreaterThan(0);
+        }
+        return checks;
+      };
+      expect(await burst(), username).toBeLessThanOrEqual(6);
+      // Once its waits are over, the name is past its 5 free tries: one check for the next burst.
+      advance(600);
+      expect(await burst(), username).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it('counts a name with no account exactly as a wrong password, so neither says which it is', async () => {
+    const { accounts } = setup();
+    await join(accounts);
+    const answers = async (username: string) => {
+      const seen: Result[] = [];
+      for (let i = 0; i < 7; i++) {
+        seen.push(await tryKey(accounts, b64(32), username));
+        if (i === 5) advance(15);
+      }
+      return seen;
+    };
+    const known = await answers('ada');
+    expect(known.map((r) => r.status)).toEqual([401, 401, 401, 401, 401, 429, 401]);
+    expect(await answers('nobody')).toEqual(known);
+  });
+
+  it('limits log-ins per address: the 11th in a minute is 429, another address is fine', async () => {
+    const { accounts } = setup();
+    const { authKey } = await join(accounts);
+    for (let i = 0; i < 10; i++) {
+      expect(await logIn(accounts, b64(32), `user${i}`, '198.51.100.1')).toEqual(DENIED);
+    }
+    expect(await logIn(accounts, authKey, 'ada', '198.51.100.1')).toEqual(WAIT(60));
     expect((await logIn(accounts, authKey, 'ada', '198.51.100.2')).status).toBe(200);
+    advance(60);
+    expect((await logIn(accounts, authKey, 'ada', '198.51.100.1')).status).toBe(200);
   });
 
   it('limits sign-ups per address: the 6th in an hour is 429, and the hour resets it', async () => {
@@ -916,6 +1065,37 @@ describe('rate limits', () => {
     advance(30);
     expect(await rateLimit(store, 'test', 'who', 2, 60)).toEqual({ ok: true });
     expect(await rateLimit(store, 'test', 'who', 2, 60)).toEqual({ ok: false, retryAfter: 30 });
+  });
+});
+
+describe('request bodies', () => {
+  it('are refused with 400 for a field the service does not know, at any depth, and change nothing', async () => {
+    const { store, accounts } = setup();
+    const a = await join(accounts);
+    const before = JSON.stringify(store.dump());
+    const extra = { isAdmin: true };
+    const BAD = { status: 400, body: { error: 'bad request' } };
+
+    expect((await join(accounts, { username: 'grace', ...extra })).res).toEqual(BAD);
+    expect(
+      (await join(accounts, { username: 'grace', wrappedPw: { ...wrapped(), ...extra } })).res,
+    ).toEqual(BAD);
+    expect(await accounts.login({ username: 'ada', authKey: a.authKey, ...extra }, IP)).toEqual(
+      BAD,
+    );
+    expect(await accounts.putCopy(a.token, { baseVersion: 0, ...copyOf(), ...extra })).toEqual(BAD);
+    const change = { oldAuthKey: a.authKey, newAuthKey: b64(32), newWrappedPw: wrapped() };
+    expect(await accounts.changePassword(a.token, { ...change, ...extra })).toEqual(BAD);
+    expect(
+      await accounts.changePassword(a.token, {
+        ...change,
+        newWrappedPw: { ...wrapped(), ...extra },
+      }),
+    ).toEqual(BAD);
+    expect(JSON.stringify(store.dump())).toBe(before);
+
+    // The same bodies without it go through.
+    expect((await accounts.login({ username: 'ada', authKey: a.authKey }, IP)).status).toBe(200);
   });
 });
 
@@ -977,6 +1157,87 @@ describe('secrets', () => {
     expect(failures.filter((r) => r.status === 429).length).toBeGreaterThan(0);
     for (const spy of spies) expect(spy).not.toHaveBeenCalled();
   });
+});
+
+describe('the phone derivation, against an Argon2id apart from its own', () => {
+  /** What accountCrypto.ts describes, with Node's Argon2id (OpenSSL) and HKDF: no hash-wasm, no WebCrypto. */
+  function independently(username: string, password: string, kdf: KdfParams) {
+    const master = argon2Sync!('argon2id', {
+      message: Buffer.from(password.normalize('NFKC')),
+      nonce: createHash('sha256')
+        .update(`funancial-account:${canonicalUsername(username)}`)
+        .digest(),
+      memory: kdf.memorySize,
+      passes: kdf.iterations,
+      parallelism: kdf.parallelism,
+      tagLength: 32,
+    });
+    const split = (info: string) =>
+      Buffer.from(hkdfSync('sha256', master, new Uint8Array(0), info, 32)).toString('base64');
+    return { authKey: split('funancial auth'), kek: split('funancial enc') };
+  }
+  const phone = async (username: string, password: string, kdf?: KdfParams) => {
+    const { authKey, kek } = await deriveAccountKeys(username, password, kdf);
+    return { authKey, kek: await exportKek(kek) };
+  };
+
+  it.runIf(Boolean(argon2Sync))('checks the oracle against RFC 9106 §5.3 first', () => {
+    const tag = argon2Sync!('argon2id', {
+      message: Buffer.alloc(32, 1),
+      nonce: Buffer.alloc(16, 2),
+      secret: Buffer.alloc(8, 3),
+      associatedData: Buffer.alloc(12, 4),
+      memory: 32,
+      passes: 3,
+      parallelism: 4,
+      tagLength: 32,
+    });
+    expect(tag.toString('hex')).toBe(
+      '0d640df58d78766c08c037a34a8b53c9d01ef0452d75b65eb52520e96b01e659',
+    );
+  });
+
+  it.runIf(Boolean(argon2Sync))(
+    "gives the keys Node's Argon2id and HKDF give, with the app's parameters and others",
+    async () => {
+      expect(await phone('Ada.Lovelace', PASSWORD)).toEqual(
+        independently('Ada.Lovelace', PASSWORD, KDF_PARAMS),
+      );
+      const cases: Array<[string, string, KdfParams]> = [
+        ['Ada.Lovelace', PASSWORD, FAST],
+        // An accented name and a ligature in the password (NFKC), and two passes over two lanes.
+        ['JOSE\u0301', '\ufb01 and more words', FAST],
+        ['ada', PASSWORD, { memorySize: 64, iterations: 2, parallelism: 2 }],
+      ];
+      for (const [name, password, kdf] of cases) {
+        expect(await phone(name, password, kdf)).toEqual(independently(name, password, kdf));
+      }
+    },
+  );
+
+  it.runIf(Boolean(argon2Sync))(
+    'gives the known answers the phone, the reset page and the e2e specs are held to',
+    () => {
+      // src/data/accountCrypto.test.ts
+      expect(independently('Ada.Lovelace', PASSWORD, FAST)).toEqual({
+        authKey: 'aarEa9zitUo8HYw0C8xWPUuydJoK5gq1r9gp1dBI5q8=',
+        kek: '3j06rpX21YS4WjUn4IqoOi97HHbSjgyj9f81c0pv41E=',
+      });
+      expect(independently('Ada.Lovelace', PASSWORD, KDF_PARAMS)).toEqual({
+        authKey: 'tvQBDpfBPb0en/81A5fMWJsQQ1eRXW7Wo4jUypYII5s=',
+        kek: 'MlWLwDDry6A3PnLTZHweNzsfv2kdJC8ceUimErkaXiM=',
+      });
+      // site/reset/main.test.ts and tests/e2e/site/reset.spec.ts
+      expect(independently('ada', 'a brand new password', KDF_PARAMS)).toEqual({
+        authKey: 'lZxv41bid5O0MjkLF1yeGhyvPux4SnnbRdw+3PaAiq4=',
+        kek: 'rVlb6vjMQaTT2CAzWvIHDx4oZlpcOTTaQSp1gApAqCs=',
+      });
+      // tests/e2e/account-settings.spec.ts
+      expect(independently('Robin', 'a long enough password', KDF_PARAMS).authKey).toBe(
+        'Vj0qBrtPRpdyMcSA5NoTGNqLuly/M1fklymvThxkE/s=',
+      );
+    },
+  );
 });
 
 describe('with the phone module', () => {

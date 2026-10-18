@@ -73,6 +73,7 @@ export const ReminderSettingsSchema = z.object({
   bills: z.boolean(),
   freeze: z.boolean(),
   reviews: z.boolean(),
+  /** Kept so older data still loads. */
   backup: z.boolean(),
   dividends: z.boolean(),
   buyIt: z.boolean(),
@@ -111,6 +112,7 @@ export const SettingsSchema = z.object({
     z.literal(15),
     z.literal(30),
   ]),
+  /** Kept so older data still loads. */
   lastBackupAt: IsoTimestampSchema.nullable(),
   reminders: ReminderSettingsSchema,
   cosmetics: CosmeticsSchema,

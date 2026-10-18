@@ -298,9 +298,9 @@ const LIM_1: WorkedExample = {
   }),
   steps: [
     'Your Food limit is $100.00 for October.',
-    'You have spent $85.00, which is 85%: past the 80% warning, so Funancial gives you a heads-up.',
+    'You have spent $85.00, which is 85%: past the 80% warning, so Funcial gives you a heads-up.',
     'A $20.00 lunch would take you to $105.00, which is 105%: over the limit.',
-    'Past 120% Funancial tells you the limit is well exceeded. Subscriptions and card purchases count too.',
+    'Past 120% Funcial tells you the limit is well exceeded. Subscriptions and card purchases count too.',
   ],
   result: { spent: 85_00, pct: 85, levelRank: 1, pctAfterLunch: 105, levelRankAfterLunch: 2 },
 };
@@ -351,7 +351,7 @@ const SUB_1: WorkedExample = {
   steps: [
     'Streamflix costs $15.99 and renews on the 20th.',
     'On Oct 19 it is an upcoming bill: cash is still $1,000.00 but only $984.01 is available to spend.',
-    'On Oct 20 Funancial records the $15.99 charge as an expense, so cash drops to $984.01.',
+    'On Oct 20 Funcial records the $15.99 charge as an expense, so cash drops to $984.01.',
     'The next renewal moves to Nov 20, so nothing more is due this month.',
   ],
   result: {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { makeHolding, makeProfile } from '@/test/fixtures';
+import { makeDebt, makeHolding, makeProfile, makeTransaction } from '@/test/fixtures';
 import { EXAMPLES } from './examples';
 import { emptySnapshot } from './snapshot';
 import { computeFinanceView } from './view';
@@ -28,6 +28,42 @@ describe('computeFinanceView', () => {
       ['rent', 0],
     ]);
     expect(v.debts.map((d) => [d.debt.id, d.balance])).toEqual([['card-1', 230_00]]);
+  });
+
+  it('does not take a card minimum off Available to spend twice once it is paid', () => {
+    const data = emptySnapshot();
+    data.tables.profile = [
+      makeProfile({ openingDate: '2026-10-01', openingCash: 1_000_00, openingSavings: 0 }),
+    ];
+    // Owes 800.00, a 25.00 minimum due on the 21st.
+    data.tables.debt = [
+      makeDebt({
+        id: 'visa',
+        openingDate: '2026-10-01',
+        openingBalance: 800_00,
+        payInFull: false,
+        minimumPayment: 25_00,
+        dueDay: 21,
+      }),
+    ];
+    const before = computeFinanceView(data, '2026-10-14', 1);
+    expect([before.buckets.cash, before.billsTotal, before.available]).toEqual([
+      1_000_00, 25_00, 975_00,
+    ]);
+
+    data.tables.transaction = [
+      makeTransaction({
+        type: 'card_payment',
+        amount: 25_00,
+        date: '2026-10-14',
+        from: 'cash',
+        to: null,
+        debtId: 'visa',
+      }),
+    ];
+    const after = computeFinanceView(data, '2026-10-14', 1);
+    expect([after.buckets.cash, after.bills, after.available]).toEqual([975_00, [], 975_00]);
+    expect(after.debts.map((d) => d.balance)).toEqual([775_00]);
   });
 
   it('counts the priced portfolio as investments in net worth', () => {

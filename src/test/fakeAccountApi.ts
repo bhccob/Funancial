@@ -1,4 +1,11 @@
-import { deriveAccountKeys, newDek, sealCopy, wrapDek, type Sealed } from '@/data/accountCrypto';
+import {
+  deriveAccountKeys,
+  newDek,
+  sealCopy,
+  wrapDek,
+  type KdfParams,
+  type Sealed,
+} from '@/data/accountCrypto';
 import type { DataSnapshot } from '@/domain/snapshot';
 import { NetworkError, type AccountApi, type Reply } from '@/services/account';
 
@@ -117,12 +124,13 @@ export function fakeAccountApi() {
       version?: number;
       savedAt?: string;
       email?: string;
-      iterations?: number;
+      kdf?: KdfParams;
     }) {
       const { authKey, kek } = await deriveAccountKeys(
         options.username,
         options.password,
-        options.iterations ?? 1_000,
+        // Argon2id at its smallest: 8 KiB, one pass.
+        options.kdf ?? { memorySize: 8, iterations: 1, parallelism: 1 },
       );
       const dek = await newDek();
       const copy =

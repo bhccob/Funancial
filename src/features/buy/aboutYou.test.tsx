@@ -55,6 +55,14 @@ function spyOnWrites(store: Store, ms = 0) {
 /** Resolves once every About-you save already started has finished (it makes one write of its own). */
 const settled = (store: Store) => createBuyActions(store, market).saveAbout({});
 
+/**
+ * Waits for the status line to say Saved. The record is in the store a little before that (the save
+ * still has to settle and the screen to render), so a test that read the line the moment it saw the
+ * record found it empty whenever the machine was busy.
+ */
+const saidSaved = () =>
+  waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Saved'));
+
 /** Every write to the store fails. */
 const failingWrites = (store: Store) =>
   store.setState({ put: vi.fn().mockRejectedValue(new Error('Disk is full')) });
@@ -104,7 +112,23 @@ describe('About you', () => {
     expect(saved()).toBeUndefined(); // not on every key
     await userEvent.tab();
     await waitFor(() => expect(saved()?.matters).toBe('A house deposit by 2028'));
-    expect(screen.getByRole('status')).toHaveTextContent('Saved');
+    await saidSaved();
+  });
+
+  it('says Saved when the save has finished, not when the record reaches the store', async () => {
+    const { store, saved } = await renderAbout();
+    const { put } = store.getState();
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    // The write lands, and the save stays open until the test lets it finish.
+    store.setState({ put: (async (...args) => (await put(...args), await held)) as typeof put });
+    await pasteInto(MATTERS, 'A house deposit');
+    await userEvent.tab();
+    await waitFor(() => expect(saved()?.matters).toBe('A house deposit'));
+    expect(screen.getByRole('status')).toBeEmptyDOMElement();
+
+    release();
+    await saidSaved();
   });
 
   it('saves the situation when the field is left, and clearing it saves too', async () => {
@@ -145,7 +169,7 @@ describe('About you', () => {
       await userEvent.click(chip('Fun'));
       expect(chip('Fun')).toHaveAttribute('aria-pressed', 'true');
       await waitFor(() => expect(saved()?.overspend).toEqual(['entertainment']));
-      expect(screen.getByRole('status')).toHaveTextContent('Saved');
+      await saidSaved();
 
       await userEvent.click(chip('Fun'));
       expect(chip('Fun')).toHaveAttribute('aria-pressed', 'false');
@@ -191,7 +215,7 @@ describe('About you', () => {
       await userEvent.selectOptions(screen.getByLabelText(GOAL), 'bike');
       await waitFor(() => expect(saved()?.protectGoalId).toBe('bike'));
       expect(screen.getByLabelText(GOAL)).toHaveValue('bike');
-      expect(screen.getByRole('status')).toHaveTextContent('Saved');
+      await saidSaved();
 
       await userEvent.selectOptions(screen.getByLabelText(GOAL), 'None');
       await waitFor(() => expect(saved()?.protectGoalId).toBeNull());
@@ -264,7 +288,7 @@ describe('About you', () => {
       expect(screen.queryByText(TOO_LONG)).not.toBeInTheDocument();
       await userEvent.tab();
       await waitFor(() => expect(saved()?.matters).toHaveLength(500));
-      expect(screen.getByRole('status')).toHaveTextContent('Saved');
+      await saidSaved();
     });
 
     it('do not hold back a chip or a goal', async () => {

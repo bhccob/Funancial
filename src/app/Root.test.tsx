@@ -27,11 +27,11 @@ describe('Root', () => {
   it('explains when storage is unavailable', () => {
     renderWithStore(<Root />, createStubStore({ phase: 'unavailable' }));
     expect(
-      screen.getByRole('heading', { level: 1, name: "Funancial can't save data here" }),
+      screen.getByRole('heading', { level: 1, name: "Funcial can't save data here" }),
     ).toBeInTheDocument();
     expect(
       screen.getByText(
-        'Your browser is blocking storage (this can happen in private windows). Open Funancial in a normal window to continue.',
+        'Your browser is blocking storage (this can happen in private windows). Open Funcial in a normal window to continue.',
       ),
     ).toBeInTheDocument();
   });
@@ -39,11 +39,11 @@ describe('Root', () => {
   it('asks for the latest version when the data was saved by a newer one', () => {
     renderWithStore(<Root />, createStubStore({ phase: 'updateNeeded' }));
     expect(
-      screen.getByRole('heading', { level: 1, name: 'Funancial needs an update' }),
+      screen.getByRole('heading', { level: 1, name: 'Funcial needs an update' }),
     ).toBeInTheDocument();
     expect(
       screen.getByText(
-        'This data was saved by a newer version of Funancial. Install the latest version to open it.',
+        'This data was saved by a newer version of Funcial. Install the latest version to open it.',
       ),
     ).toBeInTheDocument();
   });

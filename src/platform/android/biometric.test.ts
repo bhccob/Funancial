@@ -35,7 +35,7 @@ describe('androidBiometric', () => {
     await expect(androidBiometric.read(SLOT)).resolves.toEqual({ status: 'ok', secret: 'S2V5' });
     expect(native.getSecureData).toHaveBeenCalledExactlyOnceWith({
       key: SLOT,
-      title: 'Unlock Funancial',
+      title: 'Unlock Funcial',
       negativeButtonText: 'Use PIN',
     });
 

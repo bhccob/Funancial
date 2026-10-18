@@ -1,0 +1,21 @@
+# The gitleaks job (.github/workflows/security.yml) scans with gitleaks' default rules plus this file.
+# It lets through only the files known to trip the one broad rule, `generic-api-key` (a key-like
+# name, then a high-entropy literal), on a stand-in value. A single file is named, never a folder:
+# `src/` or `api/` would hide a real leak too (tests/unit/gitleaks.test.ts holds that). `[[allowlists]]`
+# with `targetRules` is read from gitleaks 8.25; the workflow pins a version that does.
+title = "Funcial"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Stand-in values in unit tests: public test vectors and a fake secret"
+targetRules = ["generic-api-key"]
+paths = [
+  # The Argon2id known answers: public vectors, derived from a made-up name and password.
+  '''^src/data/accountCrypto\.test\.ts$''',
+  '''^api/_lib/accounts\.test\.ts$''',
+  '''^site/reset/main\.test\.ts$''',
+  # A fake token and key the test stores, to check that they are kept encrypted.
+  '''^src/store/appStore\.test\.ts$''',
+]

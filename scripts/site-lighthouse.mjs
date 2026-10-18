@@ -40,7 +40,7 @@ try {
       versionCode: 1,
       versionName: '0.1',
       notes: 'A made-up release for the Lighthouse run.',
-      apkUrl: 'https://funancial.vercel.app/get/funancial-0.1.apk',
+      apkUrl: 'https://funcial.vercel.app/get/funcial-0.1.apk',
       sha256: '0'.repeat(64),
       size: 9_437_184,
     }),

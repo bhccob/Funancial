@@ -1,8 +1,8 @@
 import type { TableName } from './snapshot';
 
 /**
- * Per-record upgrades, keyed by the schema version they produce. Stored rows and backups are
- * migrated record by record on read, so a change to one entity never hides old data.
+ * Per-record upgrades, keyed by the schema version they produce. Stored rows and an account's copy
+ * are migrated record by record on read, so a change to one entity never hides old data.
  */
 type Step = Partial<
   Record<TableName, (record: Record<string, unknown>) => Record<string, unknown>>

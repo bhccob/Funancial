@@ -4,7 +4,7 @@ const LATEST = {
   versionCode: 8,
   versionName: '0.8',
   notes: 'First release for friends.',
-  apkUrl: 'https://funancial.vercel.app/get/funancial-0.8.apk',
+  apkUrl: 'https://funcial.vercel.app/get/funcial-0.8.apk',
   sha256: 'a'.repeat(63) + '0',
   size: 9_437_184,
 };
@@ -114,14 +114,14 @@ function lowestContrast(page: Page, png: Buffer, color: string) {
 test('keeps itself out of search engines', async ({ page }) => {
   await serveLatest(page);
   await page.goto('/get');
-  await expect(page).toHaveTitle('Funancial');
+  await expect(page).toHaveTitle('Funcial');
   await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', /noindex/);
 });
 
 test('tells the story in plain sections, and what the app asks for', async ({ page }) => {
   await serveLatest(page);
   await page.goto('/get');
-  await expect(page.getByRole('heading', { level: 1, name: 'Funancial' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'Funcial' })).toBeVisible();
   await expect(page.getByText('A budget app that lives on your phone.')).toBeVisible();
   for (const caption of [
     'See what you can still spend.',
@@ -156,7 +156,7 @@ test('shows the install steps', async ({ page }) => {
   await expect(steps).toHaveText([
     'Tap Download, then open the file.',
     'If Android asks, allow your browser to install apps.',
-    'Tap Install, open Funancial, and try demo money first.',
+    'Tap Install, open Funcial, and try demo money first.',
   ]);
   await expect(steps.first()).toBeVisible();
 });
@@ -338,7 +338,7 @@ test.describe('on an iPhone', () => {
   test('says it is Android-only, and offers no download', async ({ page }) => {
     await serveLatest(page);
     await page.goto('/get');
-    const notes = page.getByText('Funancial is Android-only for now.');
+    const notes = page.getByText('Funcial is Android-only for now.');
     // Once at the top and once in the download block.
     await expect(notes).toHaveCount(2);
     for (const note of await notes.all()) await expect(note).toBeVisible();
@@ -362,7 +362,7 @@ test.describe('without JavaScript', () => {
       await expect(note).toBeVisible();
     }
     await expect(comingSoon(page)).toHaveCount(0);
-    await expect(page.getByRole('heading', { level: 1, name: 'Funancial' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: 'Funcial' })).toBeVisible();
     await expect(page.getByText('Tap Download, then open the file.')).toBeVisible();
   });
 });
@@ -375,10 +375,10 @@ test.describe('with reduced motion', () => {
   }) => {
     await serveLatest(page);
     await page.goto('/get');
-    const phones = page.getByRole('img', { name: /^Funancial .* screen$/ });
+    const phones = page.getByRole('img', { name: /^Funcial .* screen$/ });
     await expect(phones).toHaveCount(4);
     for (const phone of await phones.all()) await expect(phone).toBeVisible();
-    await expect(page.getByRole('heading', { level: 1, name: 'Funancial' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: 'Funcial' })).toBeVisible();
     await expect(downloadLink(page)).toBeVisible();
     await expect(page.getByText('Tap Download, then open the file.')).toBeVisible();
 
@@ -394,7 +394,7 @@ test.describe('with reduced motion', () => {
     const urls = watchRequests(page);
     await serveLatest(page);
     await page.goto('/get');
-    await expect(page.getByRole('img', { name: 'Funancial Home screen' })).toBeVisible();
+    await expect(page.getByRole('img', { name: 'Funcial Home screen' })).toBeVisible();
     // Give a late start every chance: after load, and a couple of frames after that.
     await page.waitForLoadState('load');
     await page.evaluate(
@@ -407,7 +407,7 @@ test.describe('with reduced motion', () => {
   test('draws the Home screen once the font is in', async ({ page }) => {
     await serveLatest(page);
     await page.goto('/get');
-    const home = page.getByRole('img', { name: 'Funancial Home screen' });
+    const home = page.getByRole('img', { name: 'Funcial Home screen' });
     // The heading "Home" and the figure are dark ink on a white screen: some pixel is nearly black.
     await expect
       .poll(() =>
@@ -463,7 +463,7 @@ test.describe('the 3D story, when motion is allowed', () => {
     await serveLatest(page);
     await page.goto('/get');
     await expect.poll(() => hasWebglCanvas(page), GLIDE).toBe(true);
-    await expect(page.getByRole('heading', { level: 1, name: 'Funancial' })).toBeInViewport();
+    await expect(page.getByRole('heading', { level: 1, name: 'Funcial' })).toBeInViewport();
     // "Trial": every check a click makes, including that nothing sits on top of the button.
     await heroLink(page).click({ trial: true });
     // The title scrolls away with the page; the button goes with it, not before.
@@ -551,7 +551,7 @@ test.describe('the 3D story, when motion is allowed', () => {
     );
     await expect(page.locator('html')).not.toHaveClass(/story-on/);
     await expect(page.locator('.story-canvas')).toHaveCount(0);
-    const phones = page.getByRole('img', { name: /^Funancial .* screen$/ });
+    const phones = page.getByRole('img', { name: /^Funcial .* screen$/ });
     await expect(phones).toHaveCount(4);
     for (const phone of await phones.all()) await expect(phone).toBeVisible();
     await expect(heroLink(page)).toBeVisible();
@@ -588,7 +588,7 @@ test.describe('in a narrow computer window', () => {
     await page.goto('/get');
     await expect(page.getByRole('img', { name: 'QR code for this page' })).toBeVisible();
     await expect(page.getByText('Scan with your Android phone')).toBeVisible();
-    const phones = page.getByRole('img', { name: /^Funancial .* screen$/ });
+    const phones = page.getByRole('img', { name: /^Funcial .* screen$/ });
     await expect(phones).toHaveCount(4);
     for (const phone of await phones.all()) await expect(phone).toBeVisible();
     await page.waitForLoadState('load');
@@ -635,7 +635,7 @@ test.describe('without WebGL', () => {
     const urls = watchRequests(page);
     await serveLatest(page);
     await page.goto('/get');
-    const phones = page.getByRole('img', { name: /^Funancial .* screen$/ });
+    const phones = page.getByRole('img', { name: /^Funcial .* screen$/ });
     await expect(phones).toHaveCount(4);
     for (const phone of await phones.all()) await expect(phone).toBeVisible();
     await expect(heroLink(page)).toHaveAttribute('href', '#download');
@@ -664,11 +664,11 @@ test.describe('before Three.js has loaded', () => {
     await page.goto('/get');
     await requested;
 
-    await expect(page.getByRole('heading', { level: 1, name: 'Funancial' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: 'Funcial' })).toBeVisible();
     await expect(heroLink(page)).toBeVisible();
     await expect(downloadLink(page)).toBeVisible();
     await expect(page.getByText('Tap Download, then open the file.')).toBeVisible();
-    const phones = page.getByRole('img', { name: /^Funancial .* screen$/ });
+    const phones = page.getByRole('img', { name: /^Funcial .* screen$/ });
     await expect(phones).toHaveCount(4);
     for (const phone of await phones.all()) await expect(phone).toBeVisible();
     await expect(page.locator('html')).not.toHaveClass(/story-on/);

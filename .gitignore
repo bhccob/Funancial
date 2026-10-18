@@ -8,11 +8,19 @@ blob-report/
 *.funbak
 *.tsbuildinfo
 .DS_Store
-.env.local
 .vercel
+# Secrets: never committed. .env.example is the one tracked template.
+.env
+.env.*
+!.env.example
+*.pem
+*.p12
 *.jks
 *.keystore
-android/keystore.properties
+google-services.json
+keystore.properties
+android/.idea/
+.superpowers/
 site-dist/
 site/public/get/*.apk
 site/public/get/**/*.apk

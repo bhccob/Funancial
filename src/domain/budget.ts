@@ -1,6 +1,6 @@
 import { debtBalance, type Buckets } from './balances';
 import type { LocalDate } from './dates';
-import type { BudgetLimit, Category, Expense } from './entities';
+import type { BudgetLimit, Category, Debt, Expense } from './entities';
 import {
   dayOfMonth,
   dayRange,
@@ -85,7 +85,11 @@ export type Bill = {
   amount: number;
   kind: 'subscription' | 'card';
   refId: string;
+  /** Cards only: the payment is the whole balance, not the minimum. */
+  inFull?: boolean;
 };
+
+const pad = (n: number) => String(n).padStart(2, '0');
 
 /**
  * The first date on or after `today` that falls on `dueDay` (clamped to short months), or `today`
@@ -95,12 +99,51 @@ export function nextDueDate(today: LocalDate, dueDay: number | null): LocalDate 
   if (dueDay === null) return today;
   const y = Number(today.slice(0, 4));
   const m = Number(today.slice(5, 7));
-  const pad = (n: number) => String(n).padStart(2, '0');
   if (dueDay >= dayOfMonth(today)) {
     return `${y}-${pad(m)}-${pad(Math.min(dueDay, daysInMonth(y, m)))}`;
   }
   const [ny, nm] = m === 12 ? [y + 1, 1] : [y, m + 1];
   return `${ny}-${pad(nm)}-${pad(Math.min(dueDay, daysInMonth(ny, nm)))}`;
+}
+
+/**
+ * What has been paid toward a card since its previous due date, up to today: the payments that
+ * count toward the due date `nextDueDate` gives. A card with no due day has no cycle to count in.
+ */
+function paidThisCycle(data: DataSnapshot, debt: Debt, today: LocalDate): number {
+  if (debt.dueDay === null) return 0; // shortcut: no cycle without a due day, unless one is asked for
+  const next = nextDueDate(today, debt.dueDay);
+  const [y, m] = [Number(next.slice(0, 4)), Number(next.slice(5, 7))];
+  const [py, pm] = m === 1 ? [y - 1, 12] : [y, m - 1];
+  // The same day a month earlier, clamped to a short month the way `nextDueDate` clamps.
+  const since = `${py}-${pad(pm)}-${pad(Math.min(debt.dueDay, daysInMonth(py, pm)))}`;
+  return data.tables.transaction
+    .filter(
+      (t) =>
+        (t.type === 'card_payment' || t.type === 'debt_payment') &&
+        t.debtId === debt.id &&
+        t.date > since &&
+        t.date <= today,
+    )
+    .reduce((sum, t) => sum + t.amount, 0);
+}
+
+/**
+ * What a card's next payment is: the whole balance when it is paid in full or has no minimum on
+ * file, else what is left of its minimum after the payments made since the previous due date
+ * (never more than is owed, and 0 once the minimum is paid). A balance already reflects payments,
+ * so a card paid in full needs no such step.
+ */
+export function cardPayment(
+  data: DataSnapshot,
+  debt: Debt,
+  balance: number,
+  today: LocalDate,
+): { amount: number; inFull: boolean } {
+  const inFull = debt.payInFull || debt.minimumPayment <= 0;
+  if (inFull) return { inFull, amount: balance };
+  const left = debt.minimumPayment - paidThisCycle(data, debt, today);
+  return { inFull, amount: Math.max(0, Math.min(balance, left)) };
 }
 
 /**
@@ -124,16 +167,16 @@ export function upcomingBills(
     if (debt.kind !== 'credit_card') continue;
     const balance = debtBalance(debt, data, today);
     if (balance <= 0) continue;
+    const { amount, inFull } = cardPayment(data, debt, balance, today);
+    // The minimum is paid for this due date: nothing is due.
+    if (amount === 0) continue;
     bills.push({
       date: nextDueDate(today, debt.dueDay),
       name: debt.name,
-      // Without a minimum on file, the whole balance is what's due.
-      amount:
-        debt.payInFull || debt.minimumPayment <= 0
-          ? balance
-          : Math.min(debt.minimumPayment, balance),
+      amount,
       kind: 'card',
       refId: debt.id,
+      inFull,
     });
   }
   return bills.sort((a, b) => a.date.localeCompare(b.date) || a.name.localeCompare(b.name));

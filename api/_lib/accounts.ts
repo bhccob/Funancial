@@ -60,6 +60,13 @@ export type Accounts = ReturnType<typeof createAccounts>;
 const MAX_COPY_BYTES = 1_000_000;
 const TAG_BYTES = 16;
 const LOGIN_WINDOW = 15 * 60;
+/** How long a name's log-in tries are remembered after the last one: longer than the longest wait. */
+const LOGIN_TRIES_SECONDS = 15 * 60;
+/** The try from which a failure makes the name wait: 15 s, doubling with each one after, at most 10 min. */
+const LOGIN_WAIT_FROM = 5;
+const loginWait = (tries: number) => Math.min(600, 15 * 2 ** (tries - LOGIN_WAIT_FROM));
+const loginTries = (name: string) => `rl:login:fail:${name}`;
+const loginWaitKey = (name: string) => `rl:login:wait:${name}`;
 const HOUR = 60 * 60;
 const DAY = 24 * HOUR;
 /** Reset emails the owner's Gmail sends a day, for everyone: it is not for anyone to use as a relay. */
@@ -77,7 +84,7 @@ const CLAIM_SECONDS = 60;
 /** How long an emailed reset link works. */
 const RESET_SECONDS = 30 * 60;
 /** Where the link in a reset email points (the page is site/reset). */
-const SITE = 'https://funancial.vercel.app';
+const SITE = 'https://funcial.vercel.app';
 
 const USERNAME = /^[a-z0-9._-]{3,30}$/;
 const TOKEN = /^[A-Za-z0-9_-]{43}$/;
@@ -91,10 +98,10 @@ export function canonicalUsername(name: string): string {
 }
 
 // Exact shapes, so what is stored is what the phone's crypto produced: a 32-byte key, a 12-byte IV, a
-// data key wrapped (32 bytes plus the tag).
+// data key wrapped (32 bytes plus the tag). Strict: a field nobody sends is refused, not dropped.
 const key32 = z.string().regex(/^[A-Za-z0-9+/]{43}=$/);
 const iv = z.string().regex(/^[A-Za-z0-9+/]{16}$/);
-const wrappedKey = z.object({ iv, ciphertext: z.string().regex(/^[A-Za-z0-9+/]{64}$/) });
+const wrappedKey = z.strictObject({ iv, ciphertext: z.string().regex(/^[A-Za-z0-9+/]{64}$/) });
 const username = z.string().max(100).transform(canonicalUsername).pipe(z.string().regex(USERNAME));
 const email = z
   .string()
@@ -102,9 +109,15 @@ const email = z
   .pipe(z.email())
   .transform((e) => e.toLowerCase());
 
-const signupBody = z.object({ username, email, authKey: key32, dek: key32, wrappedPw: wrappedKey });
-const loginBody = z.object({ username, authKey: key32 });
-const copyBody = z.object({
+const signupBody = z.strictObject({
+  username,
+  email,
+  authKey: key32,
+  dek: key32,
+  wrappedPw: wrappedKey,
+});
+const loginBody = z.strictObject({ username, authKey: key32 });
+const copyBody = z.strictObject({
   baseVersion: z.int().min(0),
   iv,
   ciphertext: z
@@ -113,9 +126,11 @@ const copyBody = z.object({
     .refine((s) => s.length % 4 === 0),
 });
 // A username or an email address; only an address has an "@".
-const forgotBody = z.union([email, username]);
-const resetKeys = z.object({ newAuthKey: key32, kek: key32 });
-const passwordBody = z.object({
+const forgotBody = z.strictObject({ who: z.union([email, username]) });
+// The token is checked apart: any that is not a live link's is answered as an expired one (410).
+const resetInfoBody = z.strictObject({ token: z.unknown() });
+const resetBody = z.strictObject({ token: z.unknown(), newAuthKey: key32, kek: key32 });
+const passwordBody = z.strictObject({
   oldAuthKey: key32,
   newAuthKey: key32,
   newWrappedPw: wrappedKey,
@@ -128,6 +143,8 @@ function sameText(a: string, b: string) {
   return x.length === y.length && timingSafeEqual(x, y);
 }
 
+// Defence in depth only: `authKey` is already 256 bits out of the phone's Argon2id (64 MiB, 3 passes),
+// which is the memory-hard step and what a guess at the password costs.
 const hashAuth = (authKey: string, salt: Uint8Array) =>
   new Promise<Buffer>((resolve, reject) =>
     scrypt(authKey, salt, 32, { N: 16384, r: 8, p: 1 }, (err, hash) =>
@@ -258,6 +275,31 @@ export function createAccounts({ store, masterKey, now, mailer, waitUntil }: Acc
     return r.ok ? null : { ...fail(429, 'too many attempts'), retryAfter: r.retryAfter };
   }
 
+  const tooSoon = (retryAfter: number): Result => ({
+    ...fail(429, 'too many attempts'),
+    retryAfter,
+  });
+
+  /** The 429 for a name still waiting after failed log-ins, else null. Counts nothing. */
+  async function loginWaiting(name: string): Promise<Result | null> {
+    const left = await store.ttl(loginWaitKey(name));
+    return left > 0 ? tooSoon(left) : null;
+  }
+
+  /**
+   * Counts this try against the name before any scrypt, so tries sent at once are counted too: null
+   * lets it check the password, else the 429 to send. From the 5th try, only the try that sets the
+   * next wait goes on (the wait stays if it fails); the others wait. A success clears both, so in
+   * effect failures are what count. A name with no account goes the same way, so nothing tells them apart.
+   */
+  async function loginTry(name: string): Promise<Result | null> {
+    // The count and its lifetime in one step: a function cut off between two would leave one for ever.
+    const tries = await store.incr(loginTries(name), LOGIN_TRIES_SECONDS);
+    if (tries < LOGIN_WAIT_FROM) return null;
+    if (await store.setNx(loginWaitKey(name), tries, loginWait(tries))) return null;
+    return tooSoon(Math.max(1, await store.ttl(loginWaitKey(name))));
+  }
+
   /** Whether `authKey` is the account's; an absent account costs the same work and never matches. */
   async function matches(account: Account | null, authKey: string) {
     const given = await hashAuth(
@@ -386,9 +428,10 @@ export function createAccounts({ store, masterKey, now, mailer, waitUntil }: Acc
       await store.set(K.reset(hash), link, RESET_SECONDS);
       await mailer?.send(
         account.email,
-        'Choose a new Funancial password',
-        'Hi,\n\ntap the link to choose a new Funancial password. It works for 30 minutes.\n\n' +
-          `${SITE}/reset?token=${token}\n\n` +
+        'Choose a new Funcial password',
+        'Hi,\n\ntap the link to choose a new Funcial password. It works for 30 minutes.\n\n' +
+          // In the fragment, which a browser never sends: it is in no request log, the page's own included.
+          `${SITE}/reset#token=${token}\n\n` +
           "If you didn't ask for this, ignore this email.",
       );
     } catch (err) {
@@ -469,9 +512,11 @@ export function createAccounts({ store, masterKey, now, mailer, waitUntil }: Acc
       const parsed = loginBody.safeParse(body);
       if (!parsed.success) return badRequest();
       const { username: name, authKey } = parsed.data;
+      // All before the account is read or any scrypt runs.
       const over =
-        (await throttle('login:ip', ip, 30, LOGIN_WINDOW)) ??
-        (await throttle('login:user', name, 10, LOGIN_WINDOW));
+        (await throttle('login:ip', ip, 10, 60)) ??
+        (await loginWaiting(name)) ??
+        (await loginTry(name));
       if (over) return over;
 
       const account = await store.get<Account>(K.user(name));
@@ -492,6 +537,8 @@ export function createAccounts({ store, masterKey, now, mailer, waitUntil }: Acc
         return before === BUSY ? busy() : denied();
       }
       await store.del(K.token(before.deviceTokenHash));
+      // The log-in has happened: a count or wait left behind only makes the next wait come sooner.
+      await store.del(loginTries(name), loginWaitKey(name)).catch(() => {});
 
       // Read again: the old phone may have been acknowledged an upload since the first read, and the
       // new phone must start from it. If this read fails, the first one stands.
@@ -596,11 +643,11 @@ export function createAccounts({ store, masterKey, now, mailer, waitUntil }: Acc
      * asked about, not the account, so a 429 says nothing either. It answers before it has looked
      * for the account, so neither the answer nor its timing says whether there is one.
      */
-    async forgot(who: unknown, ip: string): Promise<Result> {
+    async forgot(body: unknown, ip: string): Promise<Result> {
       if (!mailer) return fail(503, 'not configured');
-      const parsed = forgotBody.safeParse(who);
+      const parsed = forgotBody.safeParse(body);
       if (!parsed.success) return badRequest();
-      const subject = parsed.data;
+      const subject = parsed.data.who;
       const over =
         (await throttle('forgot:ip', ip, 10, HOUR)) ??
         (await throttle('forgot:subject', subject, 3, HOUR));
@@ -614,8 +661,11 @@ export function createAccounts({ store, masterKey, now, mailer, waitUntil }: Acc
       return { status: 200, body: { ok: true } };
     },
 
-    /** Whose account a link is for, so the reset page can derive the right keys; 410 for any link that isn't live. */
-    async resetInfo(token: unknown, ip: string): Promise<Result> {
+    /** Whose account a link (`{ token }`) is for, so the reset page can derive the right keys; 410 for any link that isn't live. */
+    async resetInfo(body: unknown, ip: string): Promise<Result> {
+      const parsed = resetInfoBody.safeParse(body);
+      if (!parsed.success) return badRequest();
+      const { token } = parsed.data;
       if (typeof token !== 'string' || !TOKEN.test(token)) return gone();
       const over = await throttle('reset:ip', ip, 20, HOUR);
       if (over) return over;
@@ -628,10 +678,11 @@ export function createAccounts({ store, masterKey, now, mailer, waitUntil }: Acc
      * key and locked again with the page's `kek`. The device token and the copy are not touched, so the
      * phone in use goes on uploading. The link works once.
      */
-    async reset(token: unknown, newAuthKey: unknown, kek: unknown, ip: string): Promise<Result> {
-      if (typeof token !== 'string' || !TOKEN.test(token)) return gone();
-      const parsed = resetKeys.safeParse({ newAuthKey, kek });
+    async reset(body: unknown, ip: string): Promise<Result> {
+      const parsed = resetBody.safeParse(body);
       if (!parsed.success) return badRequest();
+      const { token } = parsed.data;
+      if (typeof token !== 'string' || !TOKEN.test(token)) return gone();
       const over = await throttle('reset:ip', ip, 20, HOUR);
       if (over) return over;
       const live = await liveReset(token);
@@ -672,6 +723,10 @@ export function createAccounts({ store, masterKey, now, mailer, waitUntil }: Acc
       }
       // The claim already makes the link one-use; this tidies it away.
       await store.del(K.reset(live.hash)).catch(() => {});
+      // The old password's failures are no reason to turn the new one away (a log-in clears them too).
+      await store
+        .del(loginTries(live.account.username), loginWaitKey(live.account.username))
+        .catch(() => {});
       return { status: 204 };
     },
 
