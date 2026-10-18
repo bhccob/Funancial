@@ -228,6 +228,27 @@ describe('the reset page', () => {
     expect(await screen.findByText(LATER)).toBeVisible();
   });
 
+  it("says plainly when this browser couldn't make the keys, sends nothing, and lets it try again", async () => {
+    await open();
+    await screen.findByText('Choose a new password for ada');
+    fill(PASSWORD);
+    const instantiate = vi
+      .spyOn(WebAssembly, 'instantiate')
+      .mockRejectedValueOnce(new RangeError('WebAssembly.instantiate(): Out of memory'));
+    fireEvent.click(submit());
+    await waitFor(() =>
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        "This browser couldn't make your new keys. Close other tabs and apps, then try again.",
+      ),
+    );
+    instantiate.mockRestore();
+    expect(changes()).toHaveLength(0);
+    expect(submit()).toBeEnabled();
+
+    fireEvent.click(submit());
+    expect(await screen.findByText(DONE)).toBeVisible();
+  });
+
   it('keeps the form after a failed change, so it can be tried again', async () => {
     change = { status: 503, body: { error: 'unavailable' } };
     await open();

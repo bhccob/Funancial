@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Toaster } from '@/components/ui/Toaster';
 import { toastStore } from '@/lib/toast';
+import { KeyDerivationError } from '@/data/accountCrypto';
 import { AccountError } from '@/store/accountActions';
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
 import { fakeAccount, withAccount } from '@/test/fakeAccount';
@@ -303,6 +304,20 @@ describe('LoginScreen', () => {
       );
       expect(screen.getByLabelText('Username')).toBeInTheDocument();
     });
+  });
+
+  it("says in plain words when this phone couldn't make the keys, not the engine's message", async () => {
+    const actions = fakeAccount();
+    actions.logIn.mockRejectedValue(
+      new KeyDerivationError(new RangeError('WebAssembly.instantiate(): Out of memory')),
+    );
+    show(actions);
+    await logIn();
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(
+      "This phone couldn't make your keys. Close other apps and try again.",
+    );
+    expect(alert).not.toHaveTextContent(/WebAssembly|memory/);
   });
 
   it('keeps a failure on the screen even after the new vault was made: the app holds this screen for a retry', async () => {

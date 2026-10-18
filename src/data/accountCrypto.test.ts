@@ -6,6 +6,7 @@ import {
   deriveAccountKeys,
   exportKek,
   KDF_PARAMS,
+  KeyDerivationError,
   newDek,
   openCopy,
   sealCopy,
@@ -106,6 +107,25 @@ describe('deriveAccountKeys', () => {
   it('uses Argon2id at 64 MiB, 3 passes and one lane unless told otherwise (SECURITY.md §4)', () => {
     expect(KDF_PARAMS).toEqual({ memorySize: 65_536, iterations: 3, parallelism: 1 });
     expect(Object.isFrozen(KDF_PARAMS)).toBe(true);
+  });
+
+  it("says plainly when Argon2id can't run here, keeping the engine's own error as the cause", async () => {
+    // As a WebView out of memory, or one whose page forbids compiling WebAssembly, fails.
+    const engine = new RangeError(
+      'WebAssembly.instantiate(): Out of memory: Cannot allocate Wasm memory',
+    );
+    const instantiate = vi.spyOn(WebAssembly, 'instantiate').mockRejectedValueOnce(engine);
+    const error = await deriveAccountKeys('ada', PASSWORD, FAST).catch((e: unknown) => e);
+    instantiate.mockRestore();
+    expect(error).toBeInstanceOf(KeyDerivationError);
+    expect((error as Error).message).toBe(
+      "This phone couldn't make your keys. Close other apps and try again.",
+    );
+    expect((error as Error).cause).toBe(engine);
+    // And the next try, with memory again, works.
+    expect(await keysOf(await deriveAccountKeys('Ada.Lovelace', PASSWORD, FAST))).toEqual(
+      KNOWN.fast,
+    );
   });
 
   it('keeps authKey and kek apart', async () => {

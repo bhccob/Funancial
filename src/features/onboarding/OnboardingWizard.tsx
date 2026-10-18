@@ -8,6 +8,7 @@ import { Select } from '@/components/ui/Select';
 import { StepMotion, type StepDirection } from '@/components/ui/StepMotion';
 import { Switch } from '@/components/ui/Switch';
 import { TextField } from '@/components/ui/TextField';
+import { KeyDerivationError } from '@/data/accountCrypto';
 import { validateSecret, type SecretKind } from '@/data/keys';
 import { formatMoney, minorDigits } from '@/domain/money';
 import { ForgotScreen } from '@/features/account/ForgotScreen';
@@ -155,8 +156,8 @@ export function OnboardingWizard({ onFinishing }: { onFinishing?(finishing: bool
     other?: string;
   }>({});
   // The last try failed for a reason that isn't what was typed: nothing came back (as good as
-  // offline), or the service failed. Either way a down service must not block setup.
-  const [failure, setFailure] = useState<'offline' | 'service' | null>(null);
+  // offline), the service failed, or this phone couldn't make the keys. None of them may block setup.
+  const [failure, setFailure] = useState<'offline' | 'service' | 'keys' | null>(null);
   const { busy: signingUp, guard } = useBusy();
 
   // A guess from where the phone is; the Select still offers every currency.
@@ -236,7 +237,9 @@ export function OnboardingWizard({ onFinishing }: { onFinishing?(finishing: bool
         } else {
           // Say so once, in the one line that comes with the way on.
           setAccountErrors({});
-          setFailure(code === 'offline' ? 'offline' : 'service');
+          setFailure(
+            code === 'offline' ? 'offline' : err instanceof KeyDerivationError ? 'keys' : 'service',
+          );
         }
       }
     });
@@ -382,12 +385,14 @@ export function OnboardingWizard({ onFinishing }: { onFinishing?(finishing: bool
             >
               I already have an account
             </button>
-            {(offline || failure === 'service') && (
+            {(offline || failure !== null) && (
               <div className="flex flex-col items-start gap-3">
                 <p className="text-muted text-sm">
                   {offline
                     ? "You're offline. Create your account later in Settings."
-                    : "Funancial's service isn't answering right now. You can make an account later in Settings."}
+                    : failure === 'keys'
+                      ? "This phone couldn't make your keys. Close other apps and try again, or make an account later in Settings."
+                      : "Funancial's service isn't answering right now. You can make an account later in Settings."}
                 </p>
                 <Button
                   variant="secondary"

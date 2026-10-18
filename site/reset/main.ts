@@ -1,5 +1,10 @@
 import '../get/page.css';
-import { canonicalUsername, deriveAccountKeys, exportKek } from '@/data/accountCrypto';
+import {
+  canonicalUsername,
+  deriveAccountKeys,
+  exportKek,
+  KeyDerivationError,
+} from '@/data/accountCrypto';
 
 /*
  * The page an emailed reset link opens. The friend chooses a new password here; this derives the new
@@ -23,6 +28,9 @@ const EXPIRED = 'This link has expired. Ask for a new one in the app.';
 const NO_TOKEN = 'Open the link in your email again to choose a new password.';
 const DONE = 'Your password is changed. Log in on your phone with the new one.';
 const LATER = 'Something went wrong. Try again in a moment.';
+// Argon2id needs 64 MiB, and a page that forbids WebAssembly can't run it at all.
+const NO_KEYS =
+  "This browser couldn't make your new keys. Close other tabs and apps, then try again.";
 
 const token = new URLSearchParams(location.search).get('token');
 // Read, so no longer needed in the address bar: not in the history, a screenshot, or a copied link.
@@ -108,8 +116,8 @@ async function change(event: SubmitEvent) {
     }
     if (res.status === 410) return say(EXPIRED);
     complain(res.status === 429 ? 'Too many tries. Wait a while, then try again.' : LATER);
-  } catch {
-    complain(LATER);
+  } catch (e) {
+    complain(e instanceof KeyDerivationError ? NO_KEYS : LATER);
   } finally {
     busy = false;
     submit.disabled = false;

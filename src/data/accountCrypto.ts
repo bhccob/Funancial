@@ -45,6 +45,17 @@ export class UnsupportedError extends Error {
   }
 }
 
+/**
+ * Argon2id couldn't run here: too little memory for its 64 MiB, or a page that forbids compiling
+ * WebAssembly. Says so in plain words; the engine's own error is the `cause`.
+ */
+export class KeyDerivationError extends Error {
+  constructor(cause: unknown) {
+    super("This phone couldn't make your keys. Close other apps and try again.", { cause });
+    this.name = 'KeyDerivationError';
+  }
+}
+
 const aesGcm = (iv: string) => ({ name: 'AES-GCM', iv: base64ToBytes(iv) });
 
 /**
@@ -97,6 +108,8 @@ export async function deriveAccountKeys(
     parallelism: kdf.parallelism,
     hashLength: 32,
     outputType: 'binary',
+  }).catch((e: unknown) => {
+    throw new KeyDerivationError(e);
   });
   // A copy, typed as WebCrypto takes it (hash-wasm's type allows a shared buffer).
   const hkdfKey = await crypto.subtle.importKey('raw', new Uint8Array(master), 'HKDF', false, [

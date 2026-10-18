@@ -5,6 +5,7 @@ import { Toaster } from '@/components/ui/Toaster';
 import { formatMoney } from '@/domain/money';
 import { emptySnapshot, type DataSnapshot } from '@/domain/snapshot';
 import { toastStore } from '@/lib/toast';
+import { KeyDerivationError } from '@/data/accountCrypto';
 import { AccountError } from '@/store/accountActions';
 import { useAmountsHidden } from '@/store/useAmountsHidden';
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
@@ -232,6 +233,27 @@ describe('the account step', () => {
       expect(await screen.findByText('Step 2 of 6')).toBeInTheDocument();
     },
   );
+
+  it("says plainly when this phone couldn't make the keys, and still offers the skip", async () => {
+    const account = fakeAccount();
+    account.signUp.mockRejectedValueOnce(
+      new KeyDerivationError(new RangeError('WebAssembly.instantiate(): Out of memory')),
+    );
+    renderWizard({ account });
+    await fillAccount();
+    await next();
+    expect(
+      await screen.findByText(
+        "This phone couldn't make your keys. Close other apps and try again, or make an account later in Settings.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/WebAssembly|service isn't answering/)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Skip for now' })).toBeEnabled();
+
+    // Or the next try makes the account.
+    await next();
+    expect(await screen.findByText('Step 2 of 6')).toBeInTheDocument();
+  });
 
   it('skips to the next step from a failed service, without asking it again', async () => {
     const account = fakeAccount();
