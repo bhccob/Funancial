@@ -656,7 +656,9 @@ describe('the data-change signal', () => {
 });
 
 describe('private values', () => {
-  const secret = { token: 'tok-1234567890', dek: 'AbCdEf+/123=' };
+  // Short and plain, so a secret scanner does not take them for real; base64 never has a '-', so
+  // neither can turn up in a ciphertext by chance.
+  const secret = { token: 'tok-plain', dek: 'dek-plain' };
 
   async function metaOf(deps: AppDeps) {
     const backend = await deps.storage.open('real');
@@ -675,7 +677,7 @@ describe('private values', () => {
 
     const stored = await metaOf(deps);
     expect(stored).toEqual({ iv: expect.any(String), data: expect.any(String) });
-    expect(JSON.stringify(stored)).not.toContain('tok-1234567890');
+    expect(JSON.stringify(stored)).not.toContain('tok-plain');
     expect(await (await reboot(deps)).getState().getPrivate('funancial.account')).toEqual(secret);
   });
 
@@ -684,7 +686,7 @@ describe('private values', () => {
     await store.getState().putPrivate('funancial.account', secret);
     await store.getState().put('expense', makeExpense({ id: 'e1' }));
     const out = JSON.stringify(store.getState().data);
-    expect(out).not.toContain('tok-1234567890');
+    expect(out).not.toContain('tok-plain');
     expect(out).not.toContain('funancial.account');
   });
 

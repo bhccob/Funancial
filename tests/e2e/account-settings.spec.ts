@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { sha256 } from 'hash-wasm';
 import { startDemo, startFresh } from './helpers';
 
 // The build gets this token from playwright.config.ts.
@@ -80,8 +81,11 @@ test('the Home reminder leads to Settings, where an account is made and then tur
   );
   expect(JSON.stringify(signup!.body)).not.toContain(PASSWORD);
   // Argon2id (64 MiB, 3 passes) from the built app's own WASM gives what Node's Argon2id and HKDF
-  // give for robin and PASSWORD (`independently` in api/_lib/accounts.test.ts), as the reset page does.
-  expect(signup!.body!.authKey).toBe('Vj0qBrtPRpdyMcSA5NoTGNqLuly/M1fklymvThxkE/s=');
+  // give for robin and PASSWORD (`independently` in api/_lib/accounts.test.ts), as the reset page does,
+  // checked by its SHA-256 so the key, which looks like a real secret, is not in the repo.
+  expect(await sha256(String(signup!.body!.authKey))).toBe(
+    'cbac384a9a92fb4820f05b88b977ef5005c6ec975a37a89f0cb29a81fa9f7146',
+  );
   const [upload] = service.seen.filter((s) => s.route === 'copy' && s.method === 'PUT');
   expect(upload!.auth).toBe('Bearer device-token-1');
   expect(upload!.body).toMatchObject({ baseVersion: 0 });

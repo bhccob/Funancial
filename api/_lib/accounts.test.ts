@@ -1218,23 +1218,24 @@ describe('the phone derivation, against an Argon2id apart from its own', () => {
   it.runIf(Boolean(argon2Sync))(
     'gives the known answers the phone, the reset page and the e2e specs are held to',
     () => {
+      // Each answer is the SHA-256 of `${authKey} ${kek}` (Robin's of authKey alone), as those files
+      // hold it: the keys themselves look like real secrets to a scanner.
+      const sha = (text: string) => createHash('sha256').update(text).digest('hex');
+      const both = ({ authKey, kek }: { authKey: string; kek: string }) => sha(`${authKey} ${kek}`);
       // src/data/accountCrypto.test.ts
-      expect(independently('Ada.Lovelace', PASSWORD, FAST)).toEqual({
-        authKey: 'aarEa9zitUo8HYw0C8xWPUuydJoK5gq1r9gp1dBI5q8=',
-        kek: '3j06rpX21YS4WjUn4IqoOi97HHbSjgyj9f81c0pv41E=',
-      });
-      expect(independently('Ada.Lovelace', PASSWORD, KDF_PARAMS)).toEqual({
-        authKey: 'tvQBDpfBPb0en/81A5fMWJsQQ1eRXW7Wo4jUypYII5s=',
-        kek: 'MlWLwDDry6A3PnLTZHweNzsfv2kdJC8ceUimErkaXiM=',
-      });
+      expect(both(independently('Ada.Lovelace', PASSWORD, FAST))).toBe(
+        '9120294c0a61d99843980c24376440ade236da9eccfdb68707596fb95e2e1e8a',
+      );
+      expect(both(independently('Ada.Lovelace', PASSWORD, KDF_PARAMS))).toBe(
+        'c5465b5b3a09cebe47d78a873c19682a4948664537f520d11db7a9bd4b043b74',
+      );
       // site/reset/main.test.ts and tests/e2e/site/reset.spec.ts
-      expect(independently('ada', 'a brand new password', KDF_PARAMS)).toEqual({
-        authKey: 'lZxv41bid5O0MjkLF1yeGhyvPux4SnnbRdw+3PaAiq4=',
-        kek: 'rVlb6vjMQaTT2CAzWvIHDx4oZlpcOTTaQSp1gApAqCs=',
-      });
+      expect(both(independently('ada', 'a brand new password', KDF_PARAMS))).toBe(
+        '69f1094909f5a745ce82f5ea776857362a933fe598357171df5c24836722b7b4',
+      );
       // tests/e2e/account-settings.spec.ts
-      expect(independently('Robin', 'a long enough password', KDF_PARAMS).authKey).toBe(
-        'Vj0qBrtPRpdyMcSA5NoTGNqLuly/M1fklymvThxkE/s=',
+      expect(sha(independently('Robin', 'a long enough password', KDF_PARAMS).authKey)).toBe(
+        'cbac384a9a92fb4820f05b88b977ef5005c6ec975a37a89f0cb29a81fa9f7146',
       );
     },
   );

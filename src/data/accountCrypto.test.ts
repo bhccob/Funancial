@@ -1,3 +1,4 @@
+import { sha256 } from 'hash-wasm';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { emptySnapshot, migrateSnapshot, type DataSnapshot } from '@/domain/snapshot';
 import { makeExpense, makeGoal } from '@/test/fixtures';
@@ -78,28 +79,21 @@ describe('deriveAccountKeys', () => {
   // Computed with Node's own Argon2id (OpenSSL's, not hash-wasm's) and node:crypto's HKDF, as
   // `independently` in api/_lib/accounts.test.ts does again on every run: salt =
   // SHA-256("funancial-account:ada.lovelace"), HKDF-SHA256 with an empty salt and the info strings
-  // "funancial auth" / "funancial enc".
+  // "funancial auth" / "funancial enc". Each answer is the SHA-256 of `${authKey} ${kek}`, so the
+  // keys themselves, which a secret scanner takes for real ones, are not in the repository.
   const KNOWN = {
-    fast: {
-      authKey: 'aarEa9zitUo8HYw0C8xWPUuydJoK5gq1r9gp1dBI5q8=',
-      kek: '3j06rpX21YS4WjUn4IqoOi97HHbSjgyj9f81c0pv41E=',
-    },
-    production: {
-      authKey: 'tvQBDpfBPb0en/81A5fMWJsQQ1eRXW7Wo4jUypYII5s=',
-      kek: 'MlWLwDDry6A3PnLTZHweNzsfv2kdJC8ceUimErkaXiM=',
-    },
+    fast: '9120294c0a61d99843980c24376440ade236da9eccfdb68707596fb95e2e1e8a',
+    production: 'c5465b5b3a09cebe47d78a873c19682a4948664537f520d11db7a9bd4b043b74',
   };
-  const keysOf = async ({ authKey, kek }: { authKey: string; kek: CryptoKey }) => ({
-    authKey,
-    kek: await exportKek(kek),
-  });
+  const fingerprint = async ({ authKey, kek }: { authKey: string; kek: CryptoKey }) =>
+    sha256(`${authKey} ${await exportKek(kek)}`);
 
   it('matches the known answers for Argon2id then HKDF (the server and the reset page rely on them)', async () => {
-    expect(await keysOf(await deriveAccountKeys('Ada.Lovelace', PASSWORD, FAST))).toEqual(
+    expect(await fingerprint(await deriveAccountKeys('Ada.Lovelace', PASSWORD, FAST))).toBe(
       KNOWN.fast,
     );
     // With no parameters: the ones the app and the reset page use.
-    expect(await keysOf(await deriveAccountKeys('Ada.Lovelace', PASSWORD))).toEqual(
+    expect(await fingerprint(await deriveAccountKeys('Ada.Lovelace', PASSWORD))).toBe(
       KNOWN.production,
     );
   });
@@ -123,7 +117,7 @@ describe('deriveAccountKeys', () => {
     );
     expect((error as Error).cause).toBe(engine);
     // And the next try, with memory again, works.
-    expect(await keysOf(await deriveAccountKeys('Ada.Lovelace', PASSWORD, FAST))).toEqual(
+    expect(await fingerprint(await deriveAccountKeys('Ada.Lovelace', PASSWORD, FAST))).toBe(
       KNOWN.fast,
     );
   });
@@ -149,7 +143,7 @@ describe('deriveAccountKeys', () => {
 
     it('goes on without one on a hidden page, where no frame comes', async () => {
       vi.stubGlobal('requestAnimationFrame', () => 0);
-      expect(await keysOf(await deriveAccountKeys('Ada.Lovelace', PASSWORD, FAST))).toEqual(
+      expect(await fingerprint(await deriveAccountKeys('Ada.Lovelace', PASSWORD, FAST))).toBe(
         KNOWN.fast,
       );
     });

@@ -2,6 +2,7 @@
 // Types for the matchers; the test setup file loads them.
 import '@testing-library/jest-dom/vitest';
 import { configure, fireEvent, screen, waitFor } from '@testing-library/react';
+import { sha256 } from 'hash-wasm';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { deriveAccountKeys, exportKek } from '@/data/accountCrypto';
 import page from './index.html?raw';
@@ -12,11 +13,11 @@ const NO_TOKEN = 'Open the link in your email again to choose a new password.';
 const DONE = 'Your password is changed. Log in on your phone with the new one.';
 const LATER = 'Something went wrong. Try again in a moment.';
 const PASSWORD = 'a brand new password';
-/** What 'ada' and PASSWORD derive, as `independently` in api/_lib/accounts.test.ts computes it. */
-const ADA_KEYS = {
-  newAuthKey: 'lZxv41bid5O0MjkLF1yeGhyvPux4SnnbRdw+3PaAiq4=',
-  kek: 'rVlb6vjMQaTT2CAzWvIHDx4oZlpcOTTaQSp1gApAqCs=',
-};
+/**
+ * What 'ada' and PASSWORD derive, as `independently` in api/_lib/accounts.test.ts computes it: the
+ * SHA-256 of `${newAuthKey} ${kek}`, so the keys, which look like real secrets, are not in the repo.
+ */
+const ADA_ANSWER = '69f1094909f5a745ce82f5ea776857362a933fe598357171df5c24836722b7b4';
 
 // The page's own markup, which main.ts finds its parts in.
 const markup = new DOMParser().parseFromString(page, 'text/html').body.innerHTML;
@@ -182,7 +183,7 @@ describe('the reset page', () => {
     expect(sent.kek).toBe(await exportKek(keys.kek));
     expect(atob(sent.kek ?? '')).toHaveLength(32);
     // And the known answer, from Node's own Argon2id (64 MiB, 3 passes) and HKDF, apart from both.
-    expect(sent).toMatchObject(ADA_KEYS);
+    expect(await sha256(`${sent.newAuthKey} ${sent.kek}`)).toBe(ADA_ANSWER);
     expect(String(init?.body)).not.toContain(PASSWORD);
     expect(String(init?.body)).not.toContain(encodeURIComponent(PASSWORD));
     // And the fields are emptied.
