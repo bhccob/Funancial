@@ -38,6 +38,8 @@ jobs:
           # No write permission above, so the action's pull-request comments would be refused. A failed
           # job is the signal.
           GITLEAKS_ENABLE_COMMENTS: 'false'
+          # The repo's allowlist of known test values, on top of gitleaks' default rules.
+          GITLEAKS_CONFIG: ${{ github.workspace }}/.gitleaks.toml
           # Only an organization's repository needs a license: GITLEAKS_LICENSE as a repository secret.
 
   audit:
