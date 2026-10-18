@@ -10,6 +10,7 @@ import {
   makeProfile,
   makeSettings,
   makeSubscription,
+  makeTransaction,
 } from '@/test/fixtures';
 import { localDateTime } from './dates';
 import type {
@@ -322,6 +323,26 @@ describe('upcomingReminders', () => {
         route: '/debts',
       },
     ]);
+  });
+
+  it('reminds of what is left of a minimum, and not at all once it is paid', () => {
+    const minimum = visa({ payInFull: false, minimumPayment: 25_00 });
+    const after = (amount: number) => {
+      const data = build({ reminders: { bills: true }, ...minimum });
+      data.tables.transaction = [
+        makeTransaction({
+          type: 'card_payment',
+          amount,
+          date: '2026-10-14',
+          from: 'cash',
+          to: null,
+          debtId: 'card-visa',
+        }),
+      ];
+      return upcomingReminders(data, NOW).map((r) => r.body);
+    };
+    expect(after(10_00)).toEqual([`${money(15_00)} to pay.`]);
+    expect(after(25_00)).toEqual([]);
   });
 
   it('repeats a card reminder each month, and skips cards with nothing to pay', () => {

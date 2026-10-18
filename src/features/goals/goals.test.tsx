@@ -215,6 +215,31 @@ describe('Debts', () => {
     expect(actions.payDebt).toHaveBeenCalledWith('card-1', 25_00, 'cash', TODAY);
   });
 
+  it.each([
+    [10_00, '15.00'],
+    [25_00, ''],
+  ])(
+    'suggests what is left of the minimum after %d of it is paid: "%s"',
+    async (amount, suggested) => {
+      const data = filledData();
+      Object.assign(data.tables.debt[0]!, { payInFull: false, minimumPayment: 25_00 });
+      data.tables.transaction.push(
+        makeTransaction({
+          type: 'card_payment',
+          amount,
+          date: TODAY,
+          from: 'cash',
+          to: null,
+          debtId: 'card-1',
+        }),
+      );
+      renderDebts(data);
+      await userEvent.click(row('Visa').getByRole('button', { name: 'Pay card' }));
+      const dialog = screen.getByRole('dialog', { name: 'Pay Visa' });
+      expect(within(dialog).getByLabelText('Amount')).toHaveValue(suggested);
+    },
+  );
+
   it('suggests a loan its minimum, as it always has', async () => {
     renderDebts();
     await userEvent.click(row('Car loan').getByRole('button', { name: 'Make a payment' }));

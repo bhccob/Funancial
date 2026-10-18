@@ -86,7 +86,8 @@ export function CardSheet({ debtId, onClose }: { debtId: string | null; onClose(
 function CardFacts({ debt, balance }: { debt: Debt; balance: number }) {
   const money = useMoney();
   const today = useToday();
-  const { amount, inFull } = cardPayment(debt, balance);
+  const data = useApp((s) => s.data);
+  const { amount, inFull } = cardPayment(data, debt, balance, today);
   const due = formatDay(nextDueDate(today, debt.dueDay));
 
   return (
@@ -94,7 +95,12 @@ function CardFacts({ debt, balance }: { debt: Debt; balance: number }) {
       <dl className="my-4 grid grid-cols-2 gap-x-3 gap-y-3">
         <Fact label="You owe" value={money(balance)} />
         <Fact label="Payment due" value={due} />
-        <Fact label="You pay" value={inFull ? 'The full balance' : `${money(amount)} minimum`} />
+        <Fact
+          label="You pay"
+          value={
+            inFull ? 'The full balance' : amount === 0 ? 'Minimum paid' : `${money(amount)} minimum`
+          }
+        />
         {debt.creditLimit ? (
           <Fact
             label="Limit used"
@@ -104,7 +110,9 @@ function CardFacts({ debt, balance }: { debt: Debt; balance: number }) {
       </dl>
       {balance > 0 && (
         <p className="bg-surface-2 text-muted rounded-xl px-3.5 py-3 text-[13px] leading-snug font-semibold">
-          {`Buying with this card adds to what you owe. Your cash only drops when you pay the card, so Funcial keeps ${money(amount)} aside for ${due}.`}
+          {amount === 0
+            ? `Buying with this card adds to what you owe. Your cash only drops when you pay the card, and the minimum due ${due} is paid, so Funcial keeps nothing aside.`
+            : `Buying with this card adds to what you owe. Your cash only drops when you pay the card, so Funcial keeps ${money(amount)} aside for ${due}.`}
         </p>
       )}
     </>

@@ -6,6 +6,7 @@ import { RadioGroup } from '@/components/ui/RadioGroup';
 import { cardPayment } from '@/domain/budget';
 import type { Debt, Goal } from '@/domain/entities';
 import { useAction } from '@/lib/useAction';
+import { useApp } from '@/store/AppStoreProvider';
 import { useCurrency, useFinanceActions, useMoney, useToday } from '@/store/useFinance';
 
 /** Money moving toward something: a goal (from cash to savings) or a card or loan (paid off). */
@@ -66,13 +67,14 @@ function DebtForm({ debt, balance, onDone }: { debt: Debt; balance: number; onDo
   const currency = useCurrency();
   const money = useMoney();
   const today = useToday();
+  const data = useApp((s) => s.data);
   const run = useAction();
   const suggested =
     debt.kind === 'loan'
       ? debt.minimumPayment > 0
         ? Math.min(debt.minimumPayment, balance)
         : balance
-      : cardPayment(debt, balance).amount;
+      : cardPayment(data, debt, balance, today).amount;
   const [amount, setAmount] = useState<number | null>(suggested > 0 ? suggested : null);
   const [from, setFrom] = useState<'cash' | 'savings'>('cash');
   const [error, setError] = useState<string>();

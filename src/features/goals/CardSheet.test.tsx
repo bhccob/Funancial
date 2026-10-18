@@ -1,13 +1,13 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { Debt } from '@/domain/entities';
+import type { Debt, Transaction } from '@/domain/entities';
 import { formatMoney } from '@/domain/money';
 import { emptySnapshot } from '@/domain/snapshot';
 import { formatDay } from '@/lib/format';
 import { useAmountsHidden } from '@/store/useAmountsHidden';
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
-import { makeDebt, makeProfile } from '@/test/fixtures';
+import { makeDebt, makeProfile, makeTransaction } from '@/test/fixtures';
 import { freshRealStore } from '@/test/realStore';
 import { CardSheet } from './CardSheet';
 
@@ -16,7 +16,11 @@ const usd = (minor: number) => formatMoney(minor, 'USD');
 
 afterEach(() => useAmountsHidden.setState({ hidden: false }));
 
-function renderSheet(overrides: Partial<Debt> = {}, debtId: string | null = 'visa') {
+function renderSheet(
+  overrides: Partial<Debt> = {},
+  debtId: string | null = 'visa',
+  payments: Transaction[] = [],
+) {
   const onClose = vi.fn();
   const data = emptySnapshot();
   data.tables.profile.push(makeProfile({ openingDate: '2026-10-01' }));
@@ -32,6 +36,7 @@ function renderSheet(overrides: Partial<Debt> = {}, debtId: string | null = 'vis
       ...overrides,
     }),
   );
+  data.tables.transaction.push(...payments);
   renderWithStore(
     <CardSheet debtId={debtId} onClose={onClose} />,
     createStubStore({ data, today: TODAY }),
@@ -75,6 +80,37 @@ describe('CardSheet', () => {
     expect(within(sheet()).getByText(/Funcial keeps/)).toHaveTextContent(
       `keeps ${usd(25_00)} aside`,
     );
+  });
+
+  describe('when part of the minimum is already paid', () => {
+    const paid = (amount: number) =>
+      makeTransaction({
+        type: 'card_payment',
+        amount,
+        date: TODAY,
+        from: 'cash',
+        to: null,
+        debtId: 'visa',
+      });
+    const minimum = { payInFull: false, minimumPayment: 25_00 };
+
+    it('says what is left, and keeps only that aside', () => {
+      renderSheet(minimum, 'visa', [paid(10_00)]);
+      expect(fact('You pay')).toHaveTextContent(`You pay${usd(15_00)} minimum`);
+      expect(within(sheet()).getByText(/Funcial keeps/)).toHaveTextContent(
+        `keeps ${usd(15_00)} aside`,
+      );
+    });
+
+    it('says the minimum is paid, and keeps nothing aside, once all of it is', () => {
+      renderSheet(minimum, 'visa', [paid(25_00)]);
+      expect(fact('You pay')).toHaveTextContent('You payMinimum paid');
+      expect(within(sheet()).getByText(/Your cash only drops/)).toHaveTextContent(
+        `the minimum due ${formatDay('2026-10-21')} is paid, so Funcial keeps nothing aside.`,
+      );
+      // Paying more is still allowed.
+      expect(within(sheet()).getByRole('button', { name: 'Pay card' })).toBeEnabled();
+    });
   });
 
   it('drops "Limit used" when the card has no limit', () => {
