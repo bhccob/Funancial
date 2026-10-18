@@ -3,7 +3,7 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <!-- Backup is off: a restored database could not be decrypted on another phone. The
-         encrypted .funbak file is the way to move data. -->
+         account's locked copy is the way to move data. -->
     <application
         android:allowBackup="false"
         android:dataExtractionRules="@xml/data_extraction_rules"

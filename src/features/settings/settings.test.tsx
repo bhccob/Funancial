@@ -187,7 +187,7 @@ describe('Data', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Delete all data' }));
     const dialog = screen.getByRole('dialog', { name: 'Delete all data?' });
     expect(dialog).toHaveAccessibleDescription(
-      'This erases everything Funcial stores on this device. If you have an account, log in afterwards to get your data back.',
+      "This erases everything Funcial stores on this device, and it can't be undone. If you have an account, log in afterwards to get your data back.",
     );
   });
 

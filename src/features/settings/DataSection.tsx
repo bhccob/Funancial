@@ -37,7 +37,7 @@ function DeleteAllButton() {
       <EraseDialog
         open={open}
         title="Delete all data?"
-        description="This erases everything Funcial stores on this device. If you have an account, log in afterwards to get your data back."
+        description="This erases everything Funcial stores on this device, and it can't be undone. If you have an account, log in afterwards to get your data back."
         onClose={() => setOpen(false)}
       />
     </>
