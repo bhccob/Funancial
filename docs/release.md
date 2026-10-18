@@ -117,6 +117,8 @@ under the project's Settings, Domains). Never rename or delete the project: both
 it. The release key's file name and alias (`funancial-release.jks`, `funancial`) are internal labels
 and keep their names too.
 
+The QR code on the download page (`site/get/qr.svg`) is an image of `https://funcial.vercel.app/get`, so if the address changes it must be regenerated (`npx qrcode@1.5.4 -t svg -e M -q 2 -d "#0d0d0f" -l "#ffffff" -o site/get/qr.svg "<address>/get"`); `tests/unit/qrCode.test.ts` reads the address back out of the file and fails when it is stale.
+
 ## 5. Deploy (only after the owner's OK)
 
 ```powershell
