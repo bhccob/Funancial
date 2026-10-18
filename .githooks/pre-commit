@@ -1,0 +1,3 @@
+#!/bin/sh
+# Refuses a commit that stages a secret. Turn it on once per clone: npm run hooks:install
+exec node scripts/check-secrets.mjs --staged

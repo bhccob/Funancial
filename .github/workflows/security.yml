@@ -1,0 +1,36 @@
+name: security
+
+# The check that cannot be skipped: the pre-commit hook (scripts/check-secrets.mjs) is for the
+# person committing, this runs on every push and pull request. Actions are pinned to full commit SHAs.
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  gitleaks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The whole history, so a secret that was committed and later deleted is still found.
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Read-only token above: the action's PR comments would be refused, its failed job is the signal.
+          GITLEAKS_ENABLE_COMMENTS: 'false'
+          # Only an organization's repository needs a license: GITLEAKS_LICENSE as a repository secret.
+
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm audit --omit=dev --audit-level=high

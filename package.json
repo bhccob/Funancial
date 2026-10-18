@@ -20,6 +20,7 @@
     "site:build": "vite build --config site/vite.config.ts",
     "site:preview": "vite preview --config site/vite.config.ts --port 4174 --strictPort",
     "site:lighthouse": "node scripts/site-lighthouse.mjs",
+    "hooks:install": "git config core.hooksPath .githooks",
     "android:sync": "npm run build && cap sync android",
     "android:open": "cap open android",
     "android:run": "npm run android:sync && node scripts/android-run.mjs",
