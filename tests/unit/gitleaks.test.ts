@@ -29,4 +29,12 @@ describe('.gitleaks.toml', () => {
       'GITLEAKS_CONFIG: ${{ github.workspace }}/.gitleaks.toml',
     );
   });
+
+  // The pinned action runs 8.24.3 unless told otherwise, and that one ignores [[allowlists]].
+  it('runs a gitleaks that reads [[allowlists]] with targetRules, 8.25 or newer', () => {
+    const [, major, minor] = /GITLEAKS_VERSION: (\d+)\.(\d+)\.\d+\s/.exec(
+      read('.github/workflows/security.yml'),
+    ) ?? [undefined, '0', '0'];
+    expect(Number(major) * 1000 + Number(minor)).toBeGreaterThanOrEqual(8 * 1000 + 25);
+  });
 });

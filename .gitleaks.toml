@@ -1,29 +1,21 @@
 # The gitleaks job (.github/workflows/security.yml) scans with gitleaks' default rules plus this file.
-# It lets through only values known to be stand-ins, and only past the one broad rule they trip,
-# `generic-api-key` (a key-like name, then a high-entropy literal). A single file is named, never a
-# folder: `src/` or `api/` would hide a real leak too (tests/unit/gitleaks.test.ts holds that).
+# It lets through only the files known to trip the one broad rule, `generic-api-key` (a key-like
+# name, then a high-entropy literal), on a stand-in value. A single file is named, never a folder:
+# `src/` or `api/` would hide a real leak too (tests/unit/gitleaks.test.ts holds that). `[[allowlists]]`
+# with `targetRules` is read from gitleaks 8.25; the workflow pins a version that does.
 title = "Funcial"
 
 [extend]
 useDefault = true
 
 [[allowlists]]
-description = "Known stand-ins: test vectors and fake secrets in unit tests, and the names-only template"
+description = "Stand-in values in unit tests: public test vectors and a fake secret"
 targetRules = ["generic-api-key"]
 paths = [
   # The Argon2id known answers: public vectors, derived from a made-up name and password.
   '''^src/data/accountCrypto\.test\.ts$''',
   '''^api/_lib/accounts\.test\.ts$''',
   '''^site/reset/main\.test\.ts$''',
-  # Fake secrets the tests plant to check that none of them leaks into a log or a response.
+  # A fake token and key the test stores, to check that they are kept encrypted.
   '''^src/store/appStore\.test\.ts$''',
-  '''^src/store/useAccount\.test\.tsx$''',
-  # Literals shaped like secrets, to check the pre-commit hook (scripts/check-secrets.mjs) sees them.
-  '''^tests/unit/checkSecrets\.test\.ts$''',
-  # Variable names with empty values: a name followed by an empty value reads as "value = next name".
-  '''^\.env\.example$''',
-]
-regexes = [
-  # The keystore.properties template in the release notes: an alias, not a password.
-  '''^keyAlias=funancial$''',
 ]

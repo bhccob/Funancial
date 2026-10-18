@@ -40,6 +40,9 @@ jobs:
           GITLEAKS_ENABLE_COMMENTS: 'false'
           # The repo's allowlist of known test values, on top of gitleaks' default rules.
           GITLEAKS_CONFIG: ${{ github.workspace }}/.gitleaks.toml
+          # The action installs 8.24.3 unless told otherwise, and that version ignores the allowlist's
+          # `[[allowlists]]` block (read from 8.25). Raise it on purpose, not by leaving it unset.
+          GITLEAKS_VERSION: 8.30.1
           # Only an organization's repository needs a license: GITLEAKS_LICENSE as a repository secret.
 
   audit:
