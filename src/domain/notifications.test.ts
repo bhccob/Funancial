@@ -345,6 +345,29 @@ describe('upcomingReminders', () => {
     expect(after(25_00)).toEqual([]);
   });
 
+  it('reminds of the whole minimum in later months, after a part or full payment now', () => {
+    const minimum = visa({ payInFull: false, minimumPayment: 25_00 });
+    const after = (amount: number) => {
+      const data = build({ reminders: { bills: true }, ...minimum });
+      data.tables.transaction = [
+        makeTransaction({
+          type: 'card_payment',
+          amount,
+          date: '2026-10-14',
+          from: 'cash',
+          to: null,
+          debtId: 'card-visa',
+        }),
+      ];
+      return upcomingReminders(data, NOW, { horizonDays: 45 }).map((r) => [r.key, r.body]);
+    };
+    expect(after(10_00)).toEqual([
+      ['card:card-visa:2026-10-21', `${money(15_00)} to pay.`],
+      ['card:card-visa:2026-11-21', `${money(25_00)} to pay.`],
+    ]);
+    expect(after(25_00)).toEqual([['card:card-visa:2026-11-21', `${money(25_00)} to pay.`]]);
+  });
+
   it('repeats a card reminder each month, and skips cards with nothing to pay', () => {
     const owing = build({ reminders: { bills: true }, ...visa() });
     expect(

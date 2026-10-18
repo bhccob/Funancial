@@ -88,3 +88,21 @@ export function incomeThisYear(
     .slice(0, 5);
   return { salary, extra, dividends, total: salary + extra + dividends, top };
 }
+
+/**
+ * Whole percentages of `parts` that add up to exactly 100: each is rounded down, and the points
+ * still missing go to the biggest remainders (the bigger part first on a tie). All 0 with no total.
+ */
+export function wholePercents(parts: number[]): number[] {
+  const total = parts.reduce((sum, p) => sum + p, 0);
+  if (total <= 0) return parts.map(() => 0);
+  // Minor units are integers, so `% total` keeps the remainders exact.
+  const remainders = parts.map((p) => (p * 100) % total);
+  const out = parts.map((p, i) => (p * 100 - remainders[i]!) / total);
+  const missing = 100 - out.reduce((sum, p) => sum + p, 0);
+  const order = parts
+    .map((_, i) => i)
+    .sort((a, b) => remainders[b]! - remainders[a]! || parts[b]! - parts[a]!);
+  for (const i of order.slice(0, missing)) out[i]! += 1;
+  return out;
+}

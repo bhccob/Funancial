@@ -4,7 +4,7 @@ import { StackedBars } from '@/components/charts/StackedBars';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { EmptyLink, Section } from '@/components/ui/Section';
-import { averageIncome, incomeByMonth, incomeThisYear } from '@/domain/income';
+import { averageIncome, incomeByMonth, incomeThisYear, wholePercents } from '@/domain/income';
 import { minorDigits } from '@/domain/money';
 import { formatMonthShort, formatMonthYear } from '@/lib/format';
 import { useApp } from '@/store/AppStoreProvider';
@@ -73,7 +73,7 @@ export function IncomeScreen() {
   );
 
   const picked = selected === null ? undefined : rows[selected];
-  const share = (amount: number) => `${Math.round((amount * 100) / year.total)}%`;
+  const shares = wholePercents(SOURCES.map((s) => year[s.key]));
 
   return (
     <div>
@@ -143,7 +143,7 @@ export function IncomeScreen() {
                   <span className="flex items-baseline gap-2 tabular-nums">
                     <span className="font-extrabold">{money(year[s.key])}</span>
                     <span className="text-muted w-10 text-right text-sm font-bold">
-                      {share(year[s.key])}
+                      {`${shares[k]}%`}
                     </span>
                   </span>
                 </li>

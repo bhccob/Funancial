@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { makeDividend, makeIncome, makeProfile, makeTransaction } from '@/test/fixtures';
 import { dividendTotals } from './dividends';
-import { averageIncome, incomeByMonth, incomeThisYear } from './income';
+import { averageIncome, incomeByMonth, incomeThisYear, wholePercents } from './income';
 import { emptySnapshot, type DataSnapshot } from './snapshot';
 
 const TODAY = '2026-10-14';
@@ -256,5 +256,18 @@ describe('incomeThisYear', () => {
       { name: 'Gift', amount: 10_00 },
       { name: 'KO', amount: 10_00 },
     ]);
+  });
+});
+
+describe('wholePercents', () => {
+  it('adds up to 100 where plain rounding gives 99 or 101', () => {
+    // Plain rounding: 33 + 33 + 33 = 99, and 17 + 17 + 67 = 101.
+    expect(wholePercents([1, 1, 1])).toEqual([34, 33, 33]);
+    expect(wholePercents([1, 1, 4])).toEqual([17, 16, 67]);
+    expect(wholePercents([3, 0, 1])).toEqual([75, 0, 25]);
+  });
+
+  it('is all zeros with nothing to share', () => {
+    expect(wholePercents([0, 0, 0])).toEqual([0, 0, 0]);
   });
 });
