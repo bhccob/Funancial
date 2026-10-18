@@ -32,8 +32,11 @@ const LATER = 'Something went wrong. Try again in a moment.';
 const NO_KEYS =
   "This browser couldn't make your new keys. Close other tabs and apps, then try again.";
 
-const token = new URLSearchParams(location.search).get('token');
-// Read, so no longer needed in the address bar: not in the history, a screenshot, or a copied link.
+// The link has it in its fragment, which never reaches a server; links sent before had it in the query.
+const token =
+  new URLSearchParams(location.hash.slice(1)).get('token') ??
+  new URLSearchParams(location.search).get('token');
+// Read, so no longer needed in the address bar (neither part): not in the history, a screenshot, or a copied link.
 history.replaceState(null, '', location.pathname);
 let username = '';
 let busy = false;

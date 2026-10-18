@@ -430,7 +430,8 @@ export function createAccounts({ store, masterKey, now, mailer, waitUntil }: Acc
         account.email,
         'Choose a new Funancial password',
         'Hi,\n\ntap the link to choose a new Funancial password. It works for 30 minutes.\n\n' +
-          `${SITE}/reset?token=${token}\n\n` +
+          // In the fragment, which a browser never sends: it is in no request log, the page's own included.
+          `${SITE}/reset#token=${token}\n\n` +
           "If you didn't ask for this, ignore this email.",
       );
     } catch (err) {

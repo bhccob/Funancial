@@ -5,7 +5,7 @@ import { defineConfig, type Plugin, type PreviewServer, type ViteDevServer } fro
 const here = (path: string) => fileURLToPath(new URL(path, import.meta.url));
 
 // Vercel serves get/index.html at /get, and reset/index.html at /reset (the emailed link adds
-// ?token=), as well as with the slash. Vite's own servers only do the slash.
+// #token=, or ?token= in links sent before), as well as with the slash. Vite's own servers only do the slash.
 const PAGES = ['/get', '/reset'];
 const servePagesWithoutSlash = (server: ViteDevServer | PreviewServer) => {
   server.middlewares.use((req, _res, next) => {

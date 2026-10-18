@@ -29,11 +29,14 @@ let info: Answer | Error;
 let change: Answer | Error;
 const fetchMock = vi.fn<typeof fetch>();
 
-/** Opens the page as the emailed link would, with the service answering `info` and then `change`. */
-async function open(search = `?token=${TOKEN}`) {
+/**
+ * Opens the page as the emailed link would, the token in its fragment (links sent before that have it
+ * in the query), with the service answering `info` and then `change`.
+ */
+async function open(after = `#token=${TOKEN}`) {
   vi.resetModules();
   document.body.innerHTML = markup;
-  history.replaceState(null, '', `/reset${search}`);
+  history.replaceState(null, '', `/reset${after}`);
   await import('./main');
 }
 
@@ -88,23 +91,30 @@ describe('the reset page', () => {
     expect(submit()).toBeEnabled();
   });
 
-  it('takes the token out of the address bar once it has read it, before asking about it', async () => {
-    let seen = '';
-    fetchMock.mockImplementation(async (_url, init) => {
-      seen = location.search;
-      return reply(bodyOf(init).token === TOKEN ? (info as Answer) : { status: 410 });
-    });
-    await open();
-    await screen.findByText('Choose a new password for ada');
+  it.each([
+    ['its fragment', `#token=${TOKEN}`],
+    ['the query, as links already sent have it', `?token=${TOKEN}`],
+  ])(
+    'reads the token from %s, and takes it out of the address bar before asking about it',
+    async (_, after) => {
+      let seen = '';
+      fetchMock.mockImplementation(async (_url, init) => {
+        seen = location.href;
+        return reply(bodyOf(init).token === TOKEN ? (info as Answer) : { status: 410 });
+      });
+      await open(after);
+      await screen.findByText('Choose a new password for ada');
 
-    // The request's body carried it; the address bar no longer does (nor does history), nor any URL.
-    expect(bodyOf(fetchMock.mock.calls[0]?.[1])).toEqual({ token: TOKEN });
-    expect(fetchMock.mock.calls.map(([url]) => String(url)).join()).not.toContain(TOKEN);
-    expect(seen).toBe('');
-    expect(location.pathname).toBe('/reset');
-    expect(location.search).toBe('');
-    expect(location.href).not.toContain(TOKEN);
-  });
+      // The request's body carried it; the address bar no longer does (nor does history), nor any URL.
+      expect(bodyOf(fetchMock.mock.calls[0]?.[1])).toEqual({ token: TOKEN });
+      expect(fetchMock.mock.calls.map(([url]) => String(url)).join()).not.toContain(TOKEN);
+      expect(seen).not.toContain(TOKEN);
+      expect(location.pathname).toBe('/reset');
+      expect(location.search).toBe('');
+      expect(location.hash).toBe('');
+      expect(location.href).not.toContain(TOKEN);
+    },
+  );
 
   it('shows the name as the service spells it, in the form the keys are derived from', async () => {
     info = { status: 200, body: { username: 'ＡＤＡ' } };

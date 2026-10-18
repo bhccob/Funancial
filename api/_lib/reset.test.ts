@@ -181,7 +181,8 @@ describe('forgot', () => {
       // No name in it: the page says which account the link is for.
       text:
         'Hi,\n\ntap the link to choose a new Funancial password. It works for 30 minutes.\n\n' +
-        `https://funancial.vercel.app/reset?token=${token}\n\n` +
+        // In the fragment, which a browser never sends: no request log gets it.
+        `https://funancial.vercel.app/reset#token=${token}\n\n` +
         "If you didn't ask for this, ignore this email.",
     });
     expect(email?.text).not.toContain('ada');
