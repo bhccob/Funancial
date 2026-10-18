@@ -24,24 +24,36 @@ const headersOf = (source: string) =>
       .flatMap((h) => h.headers.map((x) => [x.key, x.value])),
   );
 
-// What Vercel sends for a path: every matching entry in file order, a later one replacing an earlier
-// one's header of the same name (each entry becomes a `continue` route in the built config.json).
-const sentFor = (path: string) => {
-  const sent = new Map<string, string>();
-  for (const { source, headers } of config.headers) {
-    // A `.` is literal in a source (`latest.json`), except as the `.` of `(.*)`.
-    if (!new RegExp(`^${source.replace(/\.(?!\*)/g, '\\.')}$`).test(path)) continue;
-    for (const { key, value } of headers) sent.set(key.toLowerCase(), value);
-  }
-  return Object.fromEntries(sent);
-};
+// The entries Vercel applies to a path, in file order (each becomes a `continue` route in the built
+// config.json). A `.` is literal in a source (`latest.json`), except as the `.` of `.*`.
+const entriesFor = (path: string) =>
+  config.headers.filter(({ source }) =>
+    new RegExp(`^${source.replace(/\.(?!\*)/g, '\\.')}$`).test(path),
+  );
+// What is sent for a path, were a later entry to replace an earlier one's header of the same name.
+const sentFor = (path: string) =>
+  Object.fromEntries(
+    entriesFor(path).flatMap(({ headers }) => headers.map((h) => [h.key.toLowerCase(), h.value])),
+  );
 const cspsIn = (headers: Header[]) =>
   headers.filter((h) => /^content-security-policy$/i.test(h.key));
+// The entries that set a CSP for a path: two would both bind the page, whatever Vercel does on a clash.
+const cspEntriesFor = (path: string) => entriesFor(path).filter((e) => cspsIn(e.headers).length);
 
 const CSP =
   "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'";
 // The reset page compiles Argon2id's WebAssembly from bytes, which that one keyword allows.
 const RESET_CSP = CSP.replace("script-src 'self'", "script-src 'self' 'wasm-unsafe-eval'");
+
+// Every page but the reset page: this source never matches /reset, /reset/ or anything below it.
+const GENERAL = '/((?!reset(?:/|$)).*)';
+const SECURITY = {
+  'X-Robots-Tag': 'noindex, nofollow',
+  'X-Content-Type-Options': 'nosniff',
+  'X-Frame-Options': 'DENY',
+  'Referrer-Policy': 'strict-origin-when-cross-origin',
+  'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), payment=(), usb=()',
+};
 
 describe('vercel.json', () => {
   it('deploys the download page, not the app', () => {
@@ -58,15 +70,17 @@ describe('vercel.json', () => {
   });
 
   it('sends the six security headers on every response, and asks search engines to stay away', () => {
-    expect(headersOf('/(.*)')).toEqual({
-      'X-Robots-Tag': 'noindex, nofollow',
-      'Content-Security-Policy': CSP,
-      'X-Content-Type-Options': 'nosniff',
-      'X-Frame-Options': 'DENY',
-      'Referrer-Policy': 'strict-origin-when-cross-origin',
-      'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), payment=(), usb=()',
-    });
+    expect(headersOf(GENERAL)).toEqual({ ...SECURITY, 'Content-Security-Policy': CSP });
   });
+
+  it.each(['/', '/get', '/get/', '/api/quote', '/reset', '/reset/', '/reset/index.html'])(
+    'sets exactly one Content-Security-Policy on %s, by which entries match and not by their order',
+    (path) => {
+      const entries = cspEntriesFor(path);
+      expect(entries).toHaveLength(1);
+      expect(cspsIn(entries[0]?.headers ?? [])).toHaveLength(1);
+    },
+  );
 
   it.each(['/get', '/get/', '/api/reset', '/assets/get-abc.js', '/get/latest.json'])(
     'lets %s run scripts from its own origin only',
@@ -76,13 +90,13 @@ describe('vercel.json', () => {
   );
 
   it.each(['/reset', '/reset/(.*)'])(
-    'serves the reset page under %s fresh, as its link carries a token for one use, and lets it compile WebAssembly',
+    'serves the reset page under %s fresh, as its link carries a token for one use, lets it compile WebAssembly, and repeats the other security headers',
     (source) => {
       const entries = config.headers.filter((h) => h.source === source);
       expect(entries).toHaveLength(1);
-      // One CSP in the entry, and so one in the response: two would both bind the page.
       expect(cspsIn(entries[0]?.headers ?? [])).toHaveLength(1);
       expect(headersOf(source)).toEqual({
+        ...SECURITY,
         'Cache-Control': 'no-cache',
         'Content-Security-Policy': RESET_CSP,
       });
@@ -105,6 +119,7 @@ describe('vercel.json', () => {
     'keeps the wasm CSP off %s, which only looks like the reset page',
     (path) => {
       expect(sentFor(path)['content-security-policy']).toBe(CSP);
+      expect(cspEntriesFor(path)).toHaveLength(1);
     },
   );
 
