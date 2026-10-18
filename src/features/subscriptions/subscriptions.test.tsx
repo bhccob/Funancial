@@ -98,7 +98,9 @@ describe('SubscriptionsScreen', () => {
       store,
     );
     const comingUp = within(screen.getByRole('region', { name: 'Coming up' }));
-    expect(comingUp.getByRole('link', { name: `${usd(245_99)} this month` })).toBeInTheDocument();
+    expect(
+      comingUp.getByRole('link', { name: `${usd(245_99)} this month, Bills & cards` }),
+    ).toBeInTheDocument();
     home.unmount();
 
     renderWithStore(

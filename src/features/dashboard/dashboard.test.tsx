@@ -581,10 +581,9 @@ describe('DashboardScreen coming up', () => {
     renderDashboard(monthData(), TODAY);
     const bills = region('Coming up');
     // 15.99 + 230 + 39
-    expect(within(bills).getByRole('link', { name: `${usd(284_99)} this month` })).toHaveAttribute(
-      'href',
-      '/subscriptions',
-    );
+    expect(
+      within(bills).getByRole('link', { name: `${usd(284_99)} this month, Bills & cards` }),
+    ).toHaveAttribute('href', '/subscriptions');
     const rows = within(bills).getAllByRole('listitem');
     expect(rows.map((r) => r.textContent)).toEqual([
       `${formatMonthShort('2026-10-20')}20StreamflixSubscription · in 6 days${usd(15_99)}`,
@@ -592,6 +591,21 @@ describe('DashboardScreen coming up', () => {
       `DUE21${formatMonthShort('2026-10-21')}Visa card paymentPay the full balance · in 7 days${usd(230_00)}`,
       `${formatMonthShort('2026-10-28')}28FitHub GymSubscription · in 14 days${usd(39_00)}`,
     ]);
+  });
+
+  it('names where its header link goes after the total, which stays the visible text', async () => {
+    renderDashboard(monthData(), TODAY);
+    const link = within(region('Coming up')).getByRole('link', { name: /Bills & cards$/ });
+    // A hidden suffix, not an aria-label: the visible words are the start of the name.
+    expect(link).not.toHaveAttribute('aria-label');
+    expect(link.firstChild).toHaveTextContent(`${usd(284_99)} this month`);
+    expect(link.querySelector('.sr-only')).toHaveTextContent(', Bills & cards');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Hide amounts' }));
+    expect(
+      within(region('Coming up')).getByRole('link', { name: '•••• this month, Bills & cards' }),
+    ).toBeInTheDocument();
+    useAmountsHidden.setState({ hidden: false });
   });
 
   it('makes every row a button with a chevron', () => {

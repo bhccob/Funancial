@@ -32,7 +32,12 @@ export function BillsSection({ bills, total, today }: BillsSectionProps) {
     <>
       <Section
         title="Coming up"
-        action={<SectionLink to="/subscriptions">{`${money(total)} this month`}</SectionLink>}
+        action={
+          <SectionLink to="/subscriptions">
+            {`${money(total)} this month`}
+            <span className="sr-only">, Bills & cards</span>
+          </SectionLink>
+        }
       >
         {bills.length > 0 ? (
           <ul className="divide-border divide-y">
