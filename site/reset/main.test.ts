@@ -12,7 +12,7 @@ const NO_TOKEN = 'Open the link in your email again to choose a new password.';
 const DONE = 'Your password is changed. Log in on your phone with the new one.';
 const LATER = 'Something went wrong. Try again in a moment.';
 const PASSWORD = 'a brand new password';
-/** What 'ada' and PASSWORD derive, as accountCrypto.test.ts's `independently` computes it. */
+/** What 'ada' and PASSWORD derive, as `independently` in api/_lib/accounts.test.ts computes it. */
 const ADA_KEYS = {
   newAuthKey: 'lZxv41bid5O0MjkLF1yeGhyvPux4SnnbRdw+3PaAiq4=',
   kek: 'rVlb6vjMQaTT2CAzWvIHDx4oZlpcOTTaQSp1gApAqCs=',
