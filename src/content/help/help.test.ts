@@ -114,7 +114,6 @@ describe('glossary, FAQ and legal text', () => {
     expect(privacy).toMatch(/no analytics/i);
     expect(privacy).toMatch(/doesn't track how you use it/i);
     expect(privacy).toMatch(/the app's own service/i);
-    expect(privacy).toMatch(/passphrase/i);
   });
 
   it('say what an account keeps, who can open it and what the email is for', () => {
@@ -156,11 +155,17 @@ describe('glossary, FAQ and legal text', () => {
     expect(line).toMatch(/ask the app's owner to remove it/);
   });
 
-  it('warns in the terms that an account copy is as is, so backups still matter', () => {
+  it('warns in the terms that an account copy is as is, with no promise it will always be there', () => {
     const line = LEGAL.terms.find((l) => /account/.test(l))!;
-    expect(line).toMatch(/locked copy is kept on a service one person runs/);
-    expect(line).toMatch(/as is, with no promise it will always be there/);
-    expect(line).toMatch(/keep making backups/);
+    expect(line).toBe(
+      'If you make an account, its locked copy is kept on a service one person runs, as is, with no promise it will always be there.',
+    );
+  });
+
+  it('has no help, FAQ, privacy or terms line about backups, files or exports', () => {
+    // The account's copy is the backup now; the app no longer makes or restores files.
+    expect(allProse().filter((line) => /backup|back up|funbak|export/i.test(line))).toEqual([]);
+    expect(FAQ.some((f) => /passphrase/i.test(f.q))).toBe(false);
   });
 
   it('names where your data lives as the summary of the Privacy page', () => {
@@ -170,7 +175,7 @@ describe('glossary, FAQ and legal text', () => {
   it('answers how to move phones with log in, and a forgotten password with the emailed link', () => {
     const move = FAQ.find((f) => f.q === 'How do I move to a new phone?')!.a;
     expect(move).toMatch(/log in/i);
-    expect(move).toContain('backup');
+    expect(move).toContain('made an account on the old phone');
     const forgot = FAQ.find((f) => f.q === 'I forgot my password')!.a;
     expect(forgot).toContain('Forgot password?');
     expect(forgot).toMatch(/emails? you a link/);
@@ -231,12 +236,6 @@ describe('help copy says what the code does', () => {
     expect(LEGAL.privacy).toContain(
       'An app installed from the download page also checks that page for a newer version. That check carries nothing about you.',
     );
-  });
-
-  it("says the app doesn't keep the passphrase, not that it keeps no copy of the backup", () => {
-    const privacy = LEGAL.privacy.join(' ');
-    expect(privacy).toContain("Funcial doesn't keep your passphrase");
-    expect(privacy).not.toMatch(/keeps no copy/);
   });
 
   it('counts streaks in days, weeks or months', () => {

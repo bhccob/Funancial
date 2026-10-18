@@ -228,16 +228,15 @@ describe('Quests screen: quests', () => {
     const month = within(group('This month'));
     expect(month.getByText("Reconcile this month's salary")).toBeInTheDocument();
     expect(month.getByText('Audit your subscriptions')).toBeInTheDocument();
-    expect(month.getByText('Back up your data')).toBeInTheDocument();
-    expect(month.getAllByRole('listitem')).toHaveLength(3);
+    expect(month.getAllByRole('listitem')).toHaveLength(2);
 
     // The groups are the Quests section's own.
     expect(within(region('Quests')).getAllByRole('group')).toHaveLength(3);
   });
 
   it('leaves out a group with nothing in it', () => {
-    // A demo can't back up, so with no salary or subscriptions nothing is left for the month.
-    renderQuests(() => {}, { namespace: 'demo' });
+    // With no salary, subscriptions or dividends nothing is left for the month.
+    renderQuests();
     expect(group('Today')).toBeInTheDocument();
     expect(group('This week')).toBeInTheDocument();
     expect(screen.queryByRole('group', { name: 'This month' })).not.toBeInTheDocument();
@@ -584,8 +583,7 @@ describe('Quests screen: how to earn', () => {
     expect(
       quests.getByText("Confirm this month's dividends — +80 XP, +20 coins"),
     ).toBeInTheDocument();
-    expect(quests.getByText('Back up your data — +80 XP, +20 coins')).toBeInTheDocument();
-    expect(quests.getAllByRole('listitem')).toHaveLength(7);
+    expect(quests.getAllByRole('listitem')).toHaveLength(6);
 
     const logging = list('Daily logging streak');
     expect(logging.getByText('7-day streak — +50 XP, +10 coins')).toBeInTheDocument();
@@ -632,9 +630,9 @@ describe('Quests screen: how to earn', () => {
 });
 
 describe('Quests screen: how to earn, with nothing set up', () => {
-  it('lists all seven quests with their rewards, whether or not they apply yet', () => {
-    // No limit, no salary, no subscription, no dividend and a demo that cannot back up: four quests do not apply.
-    renderQuests(() => {}, { namespace: 'demo' });
+  it('lists all six quests with their rewards, whether or not they apply yet', () => {
+    // No limit, no salary, no subscription and no dividend: four quests do not apply.
+    renderQuests();
     expect(screen.queryByRole('group', { name: 'This month' })).not.toBeInTheDocument();
 
     const quests = within(within(region('How to earn')).getByRole('group', { name: 'Quests' }));
@@ -645,8 +643,8 @@ describe('Quests screen: how to earn, with nothing set up', () => {
       "Reconcile this month's salary — +100 XP, +25 coins",
       'Audit your subscriptions — +100 XP, +25 coins',
       "Confirm this month's dividends — +80 XP, +20 coins",
-      'Back up your data — +80 XP, +20 coins',
     ]);
+    expect(within(region('How to earn')).queryByText(/Back up your data/)).not.toBeInTheDocument();
   });
 });
 

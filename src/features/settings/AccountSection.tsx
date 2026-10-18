@@ -172,8 +172,7 @@ function LogInDialog({
         <form className="flex flex-col gap-5" onSubmit={submit} noValidate>
           {confirming ? (
             <p className="text-muted text-sm">
-              What is on this phone now is replaced. Make an encrypted backup first if you might
-              want it back.
+              What is on this phone now is replaced by your account&apos;s copy.
             </p>
           ) : (
             <>
@@ -361,7 +360,7 @@ function LogOutDialog({ open, onClose }: { open: boolean; onClose(): void }) {
     <Dialog
       open={open}
       title="Log out on this phone?"
-      description="Your data stays on this phone, and your account and its copy stay on Funcial's service. This phone stops saving to your account until you log in again."
+      description="Your data stays on this phone, and your account and its copy stay on Funcial's service. This phone stops saving to your account until you log in again. If you log in again later, your account's copy replaces what is on this phone."
       onClose={onClose}
       actions={
         <>

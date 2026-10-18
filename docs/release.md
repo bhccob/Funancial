@@ -49,8 +49,8 @@ keep the password in your password manager.
 **Why:** Android installs an update over an app only when it is signed with the same key as the
 installed one. If the key file or its password is lost, there is no way to sign an update that
 installs over the old app. Friends would have to uninstall Funcial and install the new one, which
-wipes their data (a Funcial backup file restores it). Nobody, including Claude, can recover a lost
-key.
+wipes their data (logging in to their Funcial account brings it back, if they made one). Nobody,
+including Claude, can recover a lost key.
 
 ## 3. Raise the version
 

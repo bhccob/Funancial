@@ -21,7 +21,6 @@ const ctx: GameContext = {
   today: '2026-10-15',
   now: localIso('2026-10-15', 8),
   weekStartsOn: 1,
-  canBackUp: true,
 };
 
 function snap(tables: Partial<DataSnapshot['tables']>): DataSnapshot {
@@ -64,33 +63,33 @@ const recorded = (expectedPayDate: string, over: Partial<Dividend> = {}) =>
 
 describe('currentQuests', () => {
   it('shows each quest only when it applies', () => {
-    const quiet = { ...ctx, canBackUp: false };
-    expect(ids(snap({}), quiet)).toEqual(['log-today', 'week-checkin']);
-    expect(ids(snap({ budgetLimit: [limitSince('2026-10-01')] }), quiet)).toEqual([
+    expect(ids(snap({}), ctx)).toEqual(['log-today', 'week-checkin']);
+    expect(ids(snap({ budgetLimit: [limitSince('2026-10-01')] }), ctx)).toEqual([
       'log-today',
       'week-limits',
       'week-checkin',
     ]);
-    expect(ids(snap({ profile: [makeProfile()] }), quiet)).toEqual([
+    expect(ids(snap({ profile: [makeProfile()] }), ctx)).toEqual([
       'log-today',
       'week-checkin',
       'month-salary',
     ]);
-    expect(ids(snap({ profile: [makeProfile({ salary: null })] }), quiet)).toEqual([
+    expect(ids(snap({ profile: [makeProfile({ salary: null })] }), ctx)).toEqual([
       'log-today',
       'week-checkin',
     ]);
-    expect(ids(snap({ subscription: [makeSubscription()] }), quiet)).toEqual([
+    expect(ids(snap({ subscription: [makeSubscription()] }), ctx)).toEqual([
       'log-today',
       'week-checkin',
       'month-audit',
     ]);
-    expect(ids(snap({ subscription: [makeSubscription({ status: 'cancelled' })] }), quiet)).toEqual(
-      ['log-today', 'week-checkin'],
-    );
+    expect(ids(snap({ subscription: [makeSubscription({ status: 'cancelled' })] }), ctx)).toEqual([
+      'log-today',
+      'week-checkin',
+    ]);
   });
 
-  it('lists daily, then weekly, then monthly quests, with the backup quest when it can run', () => {
+  it('lists daily, then weekly, then monthly quests', () => {
     const data = snap({
       budgetLimit: [limitSince('2026-10-01')],
       profile: [makeProfile()],
@@ -102,9 +101,7 @@ describe('currentQuests', () => {
       ['week-checkin', 'weekly', '2026-10-12'],
       ['month-salary', 'monthly', '2026-10'],
       ['month-audit', 'monthly', '2026-10'],
-      ['month-backup', 'monthly', '2026-10'],
     ]);
-    expect(ids(data, { ...ctx, canBackUp: false })).not.toContain('month-backup');
   });
 
   it('pays each quest its reward and gives it its title', () => {
@@ -122,7 +119,7 @@ describe('currentQuests', () => {
       holding: [payer('2026-10-05', '2026-10-12')],
     });
     const views = currentQuests(data, ctx);
-    expect(views).toHaveLength(7);
+    expect(views).toHaveLength(6);
     for (const view of views) expect(view.title).toBe(QUEST_TITLES[view.id]);
     expect(Object.keys(QUEST_TITLES)).toEqual(views.map((q) => q.id));
   });
@@ -485,31 +482,21 @@ describe('currentQuests', () => {
     });
   });
 
-  describe('month-backup', () => {
-    it('completes with a backup this month', () => {
-      const backedUp = snap({ settings: [makeSettings({ lastBackupAt: localIso('2026-10-02') })] });
-      expect(quest(backedUp, 'month-backup')).toMatchObject({
-        done: true,
-        current: 1,
-        target: 1,
-        detail: 'Backed up',
-        action: null,
-      });
+  describe('the retired month-backup quest', () => {
+    // A backup this month used to complete it. Backups are gone: the account's copy is the backup.
+    const backedUpThisMonth = snap({
+      settings: [makeSettings({ lastBackupAt: localIso('2026-10-02') })],
     });
 
-    it('stays open without a backup this month', () => {
-      const lastMonth = snap({
-        settings: [makeSettings({ lastBackupAt: localIso('2026-09-30') })],
-      });
-      expect(quest(lastMonth, 'month-backup')).toMatchObject({
-        done: false,
-        current: 0,
-        detail: 'Save an encrypted copy',
-      });
+    it('is no longer offered, whether or not a backup was made this month', () => {
+      for (const data of [backedUpThisMonth, snap({})]) {
+        expect(ids(data, ctx)).not.toContain('month-backup');
+      }
+      expect(Object.keys(QUEST_TITLES)).not.toContain('month-backup');
+    });
 
-      const never = snap({ settings: [makeSettings({ lastBackupAt: null })] });
-      expect(quest(never, 'month-backup').done).toBe(false);
-      expect(quest(snap({}), 'month-backup').done).toBe(false);
+    it('pays nothing new, even for a backup made this month', () => {
+      expect(questAwards(backedUpThisMonth, ctx).map((a) => a.key)).toEqual([]);
     });
   });
 });
@@ -553,13 +540,11 @@ describe('questAwards', () => {
       subscription: [makeSubscription({ auditedAt: localIso('2026-10-03') })],
       holding: [payer('2026-10-05', '2026-10-12')],
       dividend: [recorded('2026-10-12')],
-      settings: [makeSettings({ lastBackupAt: localIso('2026-10-02') })],
     });
     expect(questAwards(data, ctx).map((a) => [a.key, a.xp, a.coins])).toEqual([
       ['quest:month-salary:2026-10', 100, 25],
       ['quest:month-audit:2026-10', 100, 25],
       ['quest:month-dividends:2026-10', 80, 20],
-      ['quest:month-backup:2026-10', 80, 20],
     ]);
     expect(questAwards(data, ctx).find((a) => a.key.includes('dividends'))).toMatchObject({
       kind: 'quest',

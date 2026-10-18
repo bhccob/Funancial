@@ -113,7 +113,7 @@ describe('LockScreen review fixes', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Forgot your PIN?' }));
     const dialog = screen.getByRole('dialog', { name: 'Erase this device and start over?' });
     expect(dialog).toHaveAccessibleDescription(
-      "Without your PIN, the data on this device can't be recovered. If you have a backup, you can restore it after starting over.",
+      "Without your PIN, the data on this device can't be recovered. If you have an account, log in after starting over to get your data back.",
     );
     const erase = within(dialog).getByRole('button', { name: 'Delete everything' });
     expect(erase).toBeDisabled();

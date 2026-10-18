@@ -101,21 +101,21 @@ using that port makes Vite pick a different one.
 
 ## 5. Move your data from the browser
 
-1. On the computer, in the browser version, open Settings and choose Create encrypted backup. Pick a
-   passphrase you will remember, and save the `.funbak` file.
-2. Send the file to the phone, for example through Google Drive or Files.
-3. If the app on the phone is new, open it, tap Start with my real data, and finish the setup.
-   Settings, where the restore is, only opens after that. The restore replaces your setup answers,
-   so quick ones will do. The lock you choose here is the one the phone keeps.
-4. On the phone, open More, then Settings. Under Restore from backup, tap Backup file and pick the
-   `.funbak` file (the phone lists every file, so pick the right one), then type its passphrase and
-   tap Restore. The app asks you to confirm, because this replaces all data on the phone. Tap
-   Restore again.
+The app has no backup files any more. An account's locked copy is how data moves, so make one first.
+
+1. On the computer, in the browser version, open Settings, then Account, and tap Create account.
+   Wait until Settings, Account shows "Last copy saved".
+2. On the phone, open the app. At the welcome screen tap I have an account, and log in. Your data
+   comes back.
+
+The account lives on one device at a time. Once you log in on the phone, the browser stops saving to
+it and says so; the data in the browser stays there.
 
 ## Good to know
 
 - **Backups.** Android's own cloud backup is turned off for the app on purpose: a restored database
-  could not be decrypted on another phone. The encrypted backup file is how you back up.
+  could not be decrypted on another phone. An account's locked copy is how you back up: make one in
+  Settings, Account.
 - **Seeing the app's console.** Capacitor's native logging is off, because it would log sensitive
   plugin results. To see the console, connect the phone, open `chrome://inspect` in Chrome on the
   computer, and choose Inspect under Funcial.

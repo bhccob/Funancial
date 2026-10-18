@@ -10,7 +10,7 @@ const SEEN_KEY = 'funancial.account.reminded';
 /**
  * The one-time nudge to make an account: for real data only (the demo has none), and only once the
  * account has been read and there is none, until the person has answered. "Not now" and "Set up"
- * both count; it is kept on this phone, not in the data, so a restored backup does not bring it back.
+ * both count; it is kept on this phone, not in the data, so a restored copy does not bring it back.
  * While the account is moved it says instead, every time, that this phone has stopped saving.
  */
 export function AccountReminder() {

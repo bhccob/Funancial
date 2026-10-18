@@ -1,10 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_DB_PREFIX, dbName } from '@/data/db';
-import { backupFileName, createBackup, exportFileName, exportPlainJson } from '@/data/backup';
-import { emptySnapshot } from '@/domain/snapshot';
 
-// The app is called Funcial, but these names are what stored data, accounts, backups, the service
+// The app is called Funcial, but these names are what stored data, accounts, the service
 // and installed updates are keyed on. Changing one strands them, so a rename that reaches one fails
 // here. (The known-answer tests in src/data/accountCrypto.test.ts and api/_lib/accounts.test.ts
 // pin what the crypto strings derive to; this pins the strings themselves, with a clear message.)
@@ -21,11 +19,6 @@ const PINNED: Array<[file: string, why: string, literals: string[]]> = [
     'api/_lib/accounts.ts',
     'the service: the key id and the reset tag HKDF infos',
     ["'funancial key id'", "'funancial reset tag'"],
-  ],
-  [
-    'src/data/backup.ts',
-    'the backup and export format markers (and, from the first, the AES-GCM additional data)',
-    ["const FORMAT = 'funancial-backup'", "format: 'funancial-export'", '`${FORMAT}:v${VERSION}`'],
   ],
   ['src/data/db.ts', 'the IndexedDB and SQLite names', ["DEFAULT_DB_PREFIX = 'funancial'"]],
   [
@@ -76,14 +69,5 @@ describe('internal names that must keep the old spelling', () => {
     expect(DEFAULT_DB_PREFIX).toBe('funancial');
     expect(dbName('real')).toBe('funancial-real');
     expect(dbName('demo')).toBe('funancial-demo');
-  });
-
-  it('keeps the format markers inside the files, and renames only the suggested file names', async () => {
-    const now = new Date(2026, 9, 14);
-    expect(JSON.parse(exportPlainJson(emptySnapshot(), now)).format).toBe('funancial-export');
-    const backup = await createBackup(emptySnapshot(), 'correct horse', { iterations: 1_000 });
-    expect(JSON.parse(backup).format).toBe('funancial-backup');
-    expect(backupFileName(now)).toBe('funcial-backup-2026-10-14.funbak');
-    expect(exportFileName(now)).toBe('funcial-export-2026-10-14.json');
   });
 });

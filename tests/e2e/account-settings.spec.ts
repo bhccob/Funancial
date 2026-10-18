@@ -117,6 +117,9 @@ test('logging out keeps the data, stops saving and leaves the service alone', as
 
   await page.getByRole('button', { name: 'Log out' }).click();
   const confirm = page.getByRole('dialog', { name: 'Log out on this phone?' });
+  await expect(confirm).toContainText(
+    "If you log in again later, your account's copy replaces what is on this phone.",
+  );
   await confirm.getByRole('button', { name: 'Cancel' }).click();
   await expect(page.getByText('robin', { exact: true })).toBeVisible();
 

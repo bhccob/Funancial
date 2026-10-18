@@ -13,14 +13,13 @@ export const LEGAL: {
     'Because "forgot password" brings your data back, the service can unlock the copy, so the app\'s owner, who runs it, and anyone who got into the owner\'s Vercel account could read it.',
     '"Delete all data" erases this phone only. An account\'s locked copy stays on the service until you delete it from the phone you use it on (Settings, Account, Turn off and delete my copy) or ask the app\'s owner to remove it.',
     'An app installed from the download page also checks that page for a newer version. That check carries nothing about you.',
-    "A backup is a file you choose where to save, encrypted with your passphrase. Funcial doesn't keep your passphrase, so if you lose it, nobody can open the backup.",
   ],
   terms: [
     'Funcial is a personal app, provided as is, with no warranty.',
     "It isn't financial advice. It shows your own numbers, and you decide.",
     'Prices, exchange rates, dividend dates and news come from outside sources and can be late or wrong. Check anything that matters before you act on it.',
-    'Your backups and your passphrase are yours to keep safe, because only you have them.',
-    'If you make an account, its locked copy is kept on a service one person runs, as is, with no promise it will always be there, so keep making backups.',
+    'If you set a PIN or passphrase, it is yours to keep safe, because only you have it.',
+    'If you make an account, its locked copy is kept on a service one person runs, as is, with no promise it will always be there.',
   ],
   disclaimers: [
     {

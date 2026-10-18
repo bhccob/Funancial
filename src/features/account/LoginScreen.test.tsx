@@ -260,6 +260,11 @@ describe('LoginScreen', () => {
       await logIn();
       expect(await screen.findByRole('heading', { level: 1, name: REPLACE })).toBeInTheDocument();
       expect(screen.getByText('Before you log in')).toBeInTheDocument();
+      // Plainly what happens, and no advice to make a backup: there are none to make.
+      expect(
+        screen.getByText("What is on this phone now is replaced by your account's copy."),
+      ).toBeInTheDocument();
+      expect(document.body).not.toHaveTextContent(/backup/i);
       // A screen reader is told about the new screen.
       expect(screen.getByRole('heading', { level: 1, name: REPLACE })).toHaveFocus();
       expect(actions.logIn).toHaveBeenCalledTimes(1);

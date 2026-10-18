@@ -15,20 +15,20 @@ function setup() {
   return { store, wrapper };
 }
 
-it('builds the context from the store: today, the week start and whether a backup is possible', () => {
+it('builds the context from the store: today and the week start', () => {
   const { store, wrapper } = setup();
   const { result } = renderHook(() => useGameContext(), { wrapper });
-  expect(result.current).toMatchObject({ today: '2026-10-14', weekStartsOn: 1, canBackUp: true });
+  expect(result.current).toMatchObject({ today: '2026-10-14', weekStartsOn: 1 });
 
   act(() => {
     const data = emptySnapshot();
     data.tables.settings = [makeSettings({ weekStartsOn: 0 })];
-    store.setState({ data, namespace: 'demo' });
+    store.setState({ data });
   });
-  expect(result.current).toMatchObject({ weekStartsOn: 0, canBackUp: false });
+  expect(result.current).toMatchObject({ weekStartsOn: 0 });
 });
 
-it('keeps the same view until the data, the day, the week start or the namespace changes', () => {
+it('keeps the same view until the data or the day changes, whatever the namespace', () => {
   const { store, wrapper } = setup();
   const { result } = renderHook(() => useGameView(), { wrapper });
   const first = result.current;
@@ -40,12 +40,11 @@ it('keeps the same view until the data, the day, the week start or the namespace
   expect(result.current).not.toBe(first);
   const second = result.current;
 
-  act(() => store.setState({ namespace: 'demo' }));
-  expect(result.current).not.toBe(second);
-  const third = result.current;
+  act(() => store.setState({ namespace: 'demo' })); // the game is the same in the demo
+  expect(result.current).toBe(second);
 
   act(() => store.setState({ data: emptySnapshot() }));
-  expect(result.current).not.toBe(third);
+  expect(result.current).not.toBe(second);
 });
 
 it('hands out the same actions for the same store', () => {

@@ -5,7 +5,6 @@ export type GameContext = {
   today: LocalDate;
   now: string;
   weekStartsOn: 0 | 1;
-  canBackUp: boolean;
 };
 
 export type Reward = { xp: number; coins: number };
@@ -24,13 +23,7 @@ export type Award = {
 export type StreakKind = 'logging' | 'no-overspend' | 'checkin' | 'dividend';
 
 export type QuestId =
-  | 'log-today'
-  | 'week-limits'
-  | 'week-checkin'
-  | 'month-salary'
-  | 'month-audit'
-  | 'month-dividends'
-  | 'month-backup';
+  'log-today' | 'week-limits' | 'week-checkin' | 'month-salary' | 'month-audit' | 'month-dividends';
 
 export type BadgeId =
   | 'first-expense'

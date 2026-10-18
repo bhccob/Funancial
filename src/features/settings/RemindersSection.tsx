@@ -18,13 +18,12 @@ const HOURS = Array.from({ length: 17 }, (_, i) => `${String(i + 7).padStart(2, 
 
 /** The rules after the daily nudge, which has its time beside it. */
 const RULES: Array<{
-  key: 'bills' | 'freeze' | 'reviews' | 'backup' | 'dividends' | 'buyIt';
+  key: 'bills' | 'freeze' | 'reviews' | 'dividends' | 'buyIt';
   label: string;
 }> = [
   { key: 'bills', label: 'Bills and renewals' },
   { key: 'freeze', label: 'Salary freeze start and end' },
   { key: 'reviews', label: 'Weekly and monthly reviews' },
-  { key: 'backup', label: 'Backup reminder' },
   { key: 'dividends', label: 'Dividends' },
   { key: 'buyIt', label: 'Buy it?' },
 ];
@@ -68,7 +67,7 @@ export function RemindersSection({ notifier }: { notifier: Notifier }) {
       }
     });
 
-  // A time saved some other way (a restored backup) still shows as it is.
+  // A time saved some other way (a restored copy) still shows as it is.
   const times = HOURS.includes(r.dailyTime) ? HOURS : [...HOURS, r.dailyTime].sort();
   const off = !r.enabled;
 

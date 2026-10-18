@@ -9,7 +9,7 @@ export const HIDDEN_AMOUNT = '••••';
 
 /**
  * The eye on Home. It lives beside the data, not in it: it is a choice about this screen, so it is
- * not part of a backup or the account's copy, and it is the same in demo mode. `useMoney` and
+ * not part of the account's copy, and it is the same in demo mode. `useMoney` and
  * `useInvestMoney` read it, so everything they write is hidden without its callers changing.
  */
 export const useAmountsHidden = create<{ hidden: boolean; toggle(): void }>()((set, get) => ({

@@ -965,15 +965,23 @@ describe('DashboardScreen reminders invitation', () => {
 
 describe('DashboardScreen quests', () => {
   it('shows up to three quests on Home, with a link to all of them', () => {
-    renderDashboard(emptySnapshot(), '2026-10-14');
+    const data = emptySnapshot();
+    data.tables.profile = [makeProfile()];
+    data.tables.budgetLimit = [makeLimit()];
+    renderDashboard(data, '2026-10-14');
 
+    // Four quests apply (daily, two weekly and the salary one); Home shows the first three.
     const quests = region('Quests');
     expect(within(quests).getByRole('link', { name: 'All' })).toHaveAttribute('href', '/quests');
     expect(
       within(quests)
         .getAllByRole('listitem')
         .map((li) => li.querySelector('p')?.textContent),
-    ).toEqual(["Log today's spending", 'Do your weekly check-in', 'Back up your data']);
+    ).toEqual([
+      "Log today's spending",
+      'Stay within your limits this week',
+      'Do your weekly check-in',
+    ]);
   });
 
   it('puts the quests still to do first, daily before weekly before monthly', () => {
@@ -983,7 +991,7 @@ describe('DashboardScreen quests', () => {
     data.tables.checkIn = [makeCheckIn({ kind: 'no-spend', date: '2026-10-14' })];
     renderDashboard(data, '2026-10-14');
 
-    // Five quests apply and today's is done: it drops out of the three shown.
+    // Four quests apply and today's is done: it drops out, leaving three.
     const rows = within(region('Quests')).getAllByRole('listitem');
     expect(rows.map((li) => li.querySelector('p')?.textContent)).toEqual([
       'Stay within your limits this week',

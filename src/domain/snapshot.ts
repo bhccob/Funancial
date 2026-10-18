@@ -99,7 +99,7 @@ export const SnapshotSchema = z.object({
     transaction: table('transaction', TransactionSchema),
     goal: table('goal', GoalSchema),
     debt: table('debt', DebtSchema),
-    // Added in v4: snapshots and backups from before it have none of these.
+    // Added in v4: snapshots from before it have none of these.
     ledger: table('ledger', LedgerEntrySchema).default([]),
     checkIn: table('checkIn', CheckInSchema).default([]),
     challenge: table('challenge', ChallengeSchema).default([]),

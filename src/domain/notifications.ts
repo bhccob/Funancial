@@ -1,5 +1,5 @@
 import { nextDueDate, upcomingBills } from './budget';
-import { addDays, formatLocalDateTime, localDateTime, toLocalDate, type LocalDate } from './dates';
+import { addDays, formatLocalDateTime, localDateTime, type LocalDate } from './dates';
 import { expectedPayouts } from './dividends';
 import type { Profile, ReminderSettings, Settings } from './entities';
 import { isLoggedExpense } from './game/activity';
@@ -16,7 +16,6 @@ export type ReminderKind =
   | 'freeze-end'
   | 'weekly-review'
   | 'monthly-review'
-  | 'backup'
   | 'dividend-ex'
   | 'dividend-pay'
   | 'buy-wait'
@@ -38,8 +37,6 @@ const DEFAULT_LIMIT = 60;
 
 const MORNING = '09:00';
 const EVENING = '18:00';
-const BACKUP_TIME = '19:00';
-const BACKUP_EVERY_DAYS = 7;
 /** An ex-date reminder comes before its payout pays, so payouts are looked for this far past the horizon. */
 const PAY_LAG_DAYS = 60;
 const USAGE_ASK_AFTER_DAYS = 14;
@@ -192,32 +189,6 @@ function reviews({ prefs, settings, firstDay, lastDay }: Context): Reminder[] {
   return out;
 }
 
-/**
- * A week after the last backup (or after onboarding, before a first one) at 19:00, then weekly.
- * A backup that is already due is reminded at the next 19:00 instead, and weekly from there.
- */
-function backups({ profile, settings, prefs, today, now, lastDay }: Context): Reminder[] {
-  if (!prefs.backup) return [];
-  const since = settings.lastBackupAt ?? profile.onboardedAt;
-  if (!since) return [];
-  const tonight = moment(today, BACKUP_TIME);
-  const nextEvening = now < tonight ? today : addDays(today, 1);
-  const due = addDays(toLocalDate(new Date(since)), BACKUP_EVERY_DAYS);
-  const first = moment(due, BACKUP_TIME) > now ? due : nextEvening;
-  const out: Reminder[] = [];
-  for (let d = first; d <= lastDay; d = addDays(d, BACKUP_EVERY_DAYS)) {
-    out.push({
-      key: `backup:${d}`,
-      kind: 'backup',
-      at: moment(d, BACKUP_TIME),
-      title: 'Back up your data',
-      body: 'Save an encrypted copy to Drive or Files. It takes a minute.',
-      route: '/settings',
-    });
-  }
-  return out;
-}
-
 /** The day before each known ex-date, and each known pay date, at 09:00. */
 function dividends({ data, profile, prefs, today, firstDay, lastDay, money }: Context): Reminder[] {
   if (!prefs.dividends) return [];
@@ -291,7 +262,7 @@ function buyIt({ data, prefs }: Context): Reminder[] {
   });
 }
 
-const RULES: Rule[] = [dailyLog, renewals, cardBills, freezes, reviews, backups, dividends, buyIt];
+const RULES: Rule[] = [dailyLog, renewals, cardBills, freezes, reviews, dividends, buyIt];
 
 /** What the rules plan for a context's days. Each caller keeps the moments that suit its window. */
 const plan = (ctx: Context): Reminder[] => RULES.flatMap((rule) => rule(ctx));
@@ -349,8 +320,8 @@ export function upcomingReminders(
     .slice(0, opts.limit ?? DEFAULT_LIMIT);
 }
 
-/** Kinds the inbox leaves out: a nightly nudge and a weekly one are noise to catch up on. */
-const NOT_IN_INBOX: ReadonlySet<ReminderKind> = new Set(['daily-log', 'backup']);
+/** Kinds the inbox leaves out: a nightly nudge is noise to catch up on. */
+const NOT_IN_INBOX: ReadonlySet<ReminderKind> = new Set(['daily-log']);
 
 /**
  * The reminders that came due in the `days` up to `now` (inclusive, so the complement of
@@ -398,7 +369,6 @@ export const REMINDER_AREA: Record<ReminderKind, string> = {
   'buy-wait': 'Buy it?',
   'buy-usage': 'Buy it?',
   'daily-log': 'Today',
-  backup: 'Backup',
 };
 
 export type InboxItem = Reminder & { read: boolean };

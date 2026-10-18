@@ -23,6 +23,35 @@ test('set PIN → reload → locked → wrong → right → unlocked', async ({ 
   await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible();
 });
 
+test('a forgotten PIN points to the account, not to a backup', async ({ page }) => {
+  await startFresh(page, '/settings');
+  await page.getByRole('radio', { name: 'PIN' }).click();
+  const set = page.getByRole('dialog', { name: 'Set a PIN' });
+  await set.getByLabel('New PIN').fill('2468');
+  await set.getByLabel('Confirm PIN').fill('2468');
+  await set.getByRole('button', { name: 'Save' }).click();
+  await expect(set).toBeHidden();
+
+  await page.reload();
+  await page.getByRole('button', { name: 'Forgot your PIN?' }).click();
+  const erase = page.getByRole('dialog', { name: 'Erase this device and start over?' });
+  await expect(erase).toContainText(
+    "Without your PIN, the data on this device can't be recovered. If you have an account, log in after starting over to get your data back.",
+  );
+  await expect(erase).not.toContainText(/backup/i);
+});
+
+test('Settings, Data offers Delete all data and nothing to back up, restore or export', async ({
+  page,
+}) => {
+  await startFresh(page, '/settings');
+  const data = page.getByRole('region', { name: 'Data' });
+  await expect(data.getByRole('button', { name: 'Delete all data' })).toBeVisible();
+  await expect(data.getByRole('button')).toHaveCount(1);
+  await expect(data.getByText(/backup|restore|export/i)).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /backup|export|restore/i })).toHaveCount(0);
+});
+
 test('a second tab reloads when data is deleted in the first', async ({ context }) => {
   const a = await context.newPage();
   await startFresh(a, '/settings');

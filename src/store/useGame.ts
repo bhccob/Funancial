@@ -10,27 +10,16 @@ import { useToday } from './useFinance';
 export function useGameContext(): GameContext {
   const today = useToday();
   const weekStartsOn = useApp((s) => s.data.tables.settings[0]?.weekStartsOn ?? 1);
-  const canBackUp = useApp((s) => s.namespace === 'real');
-  return useMemo(
-    () => ({ today, now: nowIso(), weekStartsOn, canBackUp }),
-    [today, weekStartsOn, canBackUp],
-  );
+  return useMemo(() => ({ today, now: nowIso(), weekStartsOn }), [today, weekStartsOn]);
 }
 
 export function useGameView(): GameView {
   const data = useApp((s) => s.data);
   const today = useToday();
   const weekStartsOn = useApp((s) => s.data.tables.settings[0]?.weekStartsOn ?? 1);
-  const namespace = useApp((s) => s.namespace);
   return useMemo(
-    () =>
-      computeGameView(data, {
-        today,
-        now: nowIso(),
-        weekStartsOn,
-        canBackUp: namespace === 'real',
-      }),
-    [data, today, weekStartsOn, namespace],
+    () => computeGameView(data, { today, now: nowIso(), weekStartsOn }),
+    [data, today, weekStartsOn],
   );
 }
 

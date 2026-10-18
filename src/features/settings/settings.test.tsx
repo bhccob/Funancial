@@ -1,27 +1,16 @@
 import { act, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import type { ReactElement } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Toaster } from '@/components/ui/Toaster';
-import { InvalidBackupError } from '@/data/backup';
 import type { ReminderSettings } from '@/domain/entities';
 import { currencyOptions } from '@/features/shared/currencies';
 import { emptySnapshot } from '@/domain/snapshot';
-import { downloadText } from '@/lib/download';
 import { toastStore } from '@/lib/toast';
-import { PlatformProvider } from '@/platform/PlatformProvider';
-import type { Platform } from '@/platform/types';
-import { createWebPlatform } from '@/platform/web';
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
 import { fakeAccount, withAccount } from '@/test/fakeAccount';
 import { fakeNotifier, onPhone, type FakeNotifier } from '@/test/fakeNotifier';
 import { makeExpense, makeGoal, makeProfile, makeSettings } from '@/test/fixtures';
 import { SettingsScreen } from './SettingsScreen';
-
-vi.mock('@/lib/download', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/lib/download')>()),
-  downloadText: vi.fn(),
-}));
 
 const finance = vi.hoisted(() => ({
   changeCurrency: vi.fn<(currency: string) => Promise<void>>(async () => {}),
@@ -41,7 +30,6 @@ vi.mock('@/store/useInvest', async (importOriginal) => ({
 
 beforeEach(() => {
   toastStore.setState({ toasts: [] });
-  vi.mocked(downloadText).mockClear();
   finance.changeCurrency.mockClear();
   invest.refreshMarket.mockClear();
   finance.updateProfile.mockClear();
@@ -52,29 +40,6 @@ function snapshotWith(settings = makeSettings()) {
   const data = emptySnapshot();
   data.tables.settings = [settings];
   return data;
-}
-
-type Save = Platform['files']['save'];
-
-/** A `files.save` that ends the way the person's choice in the share sheet did. */
-const savingTo = (outcome: Awaited<ReturnType<Save>>) => vi.fn<Save>(async () => outcome);
-
-/** `ui` on a web platform whose files go to `save`. */
-function onPlatform(save: Save, ui: ReactElement) {
-  return (
-    <PlatformProvider platform={{ ...createWebPlatform(), files: { save } }}>{ui}</PlatformProvider>
-  );
-}
-
-async function openBackupDialog() {
-  await userEvent.click(screen.getByRole('button', { name: 'Create encrypted backup' }));
-  return screen.getByRole('dialog', { name: 'Create encrypted backup' });
-}
-
-async function createBackupIn(dialog: HTMLElement) {
-  await userEvent.type(within(dialog).getByLabelText('Backup passphrase'), 'correct horse');
-  await userEvent.type(within(dialog).getByLabelText('Confirm passphrase'), 'correct horse');
-  await userEvent.click(within(dialog).getByRole('button', { name: 'Create backup' }));
 }
 
 describe('Security', () => {
@@ -196,218 +161,33 @@ describe('Data', () => {
     expect(screen.getByText('2 expenses · 1 goal')).toBeInTheDocument();
   });
 
-  it('creates a backup only with matching passphrases, then downloads it', async () => {
-    const { store } = renderWithStore(
-      <SettingsScreen />,
-      createStubStore({
-        data: snapshotWith(),
-        createBackup: vi.fn(async () => ({
-          fileName: 'funcial-backup-2026-10-14.funbak',
-          text: 'X',
-        })),
-      }),
-    );
-    await userEvent.click(screen.getByRole('button', { name: 'Create encrypted backup' }));
-    const dialog = screen.getByRole('dialog', { name: 'Create encrypted backup' });
-    expect(
-      within(dialog).getByText("If you forget this passphrase, the backup can't be opened."),
-    ).toBeInTheDocument();
-    await userEvent.type(within(dialog).getByLabelText('Backup passphrase'), 'correct horse');
-    await userEvent.type(within(dialog).getByLabelText('Confirm passphrase'), 'correct hors');
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Create backup' }));
-    expect(within(dialog).getByText("Those don't match.")).toBeInTheDocument();
-    expect(store.getState().markBackedUp).not.toHaveBeenCalled();
-
-    await userEvent.type(within(dialog).getByLabelText('Confirm passphrase'), 'e');
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Create backup' }));
-    expect(store.getState().createBackup).toHaveBeenCalledWith('correct horse');
-    expect(downloadText).toHaveBeenCalledWith(
-      'funcial-backup-2026-10-14.funbak',
-      'X',
-      'application/octet-stream',
-    );
-    await vi.waitFor(() => expect(store.getState().markBackedUp).toHaveBeenCalledTimes(1));
+  it('offers no backup, restore or export, with or without an old backup date', () => {
+    // The account's copy is the backup now. `lastBackupAt` stays in saved data, and shows nowhere.
+    const withOldBackup = snapshotWith(makeSettings({ lastBackupAt: '2026-10-07T12:00:00.000Z' }));
+    for (const data of [snapshotWith(), withOldBackup]) {
+      const view = renderWithStore(<SettingsScreen />, createStubStore({ data }));
+      const section = screen.getByRole('region', { name: 'Data' });
+      for (const name of [
+        'Create encrypted backup',
+        'Export unencrypted copy',
+        'Export expenses (CSV)',
+        'Restore',
+      ]) {
+        expect(within(section).queryByRole('button', { name })).not.toBeInTheDocument();
+      }
+      expect(within(section).queryByLabelText('Backup file')).not.toBeInTheDocument();
+      expect(within(section).queryByText(/backup/i)).not.toBeInTheDocument();
+      expect(within(section).getByRole('button', { name: 'Delete all data' })).toBeInTheDocument();
+      view.unmount();
+    }
   });
 
-  it('saves the backup through the platform, then records it and closes', async () => {
-    const save = savingTo('saved');
-    const store = createStubStore({
-      data: snapshotWith(),
-      createBackup: vi.fn(async () => ({
-        fileName: 'funcial-backup-2026-10-15.funbak',
-        text: 'ENCRYPTED',
-      })),
-    });
-    renderWithStore(onPlatform(save, <SettingsScreen />), store);
-    const dialog = await openBackupDialog();
-    await createBackupIn(dialog);
-
-    await vi.waitFor(() =>
-      expect(save).toHaveBeenCalledExactlyOnceWith(
-        'funcial-backup-2026-10-15.funbak',
-        'ENCRYPTED',
-        'application/octet-stream',
-      ),
-    );
-    await vi.waitFor(() => expect(store.getState().markBackedUp).toHaveBeenCalledTimes(1));
-    expect(
-      screen.queryByRole('dialog', { name: 'Create encrypted backup' }),
-    ).not.toBeInTheDocument();
-    expect(downloadText).not.toHaveBeenCalled();
-  });
-
-  it('keeps the backup dialog open, and unrecorded, when the share sheet was cancelled', async () => {
-    const save = savingTo('cancelled');
-    const { store } = renderWithStore(
-      onPlatform(save, <SettingsScreen />),
-      createStubStore({ data: snapshotWith() }),
-    );
-    const dialog = await openBackupDialog();
-    await createBackupIn(dialog);
-
-    expect(await within(dialog).findByRole('alert')).toHaveTextContent(
-      'Nothing was saved. Choose where to save your backup to finish.',
-    );
-    expect(save).toHaveBeenCalledTimes(1);
-    expect(store.getState().markBackedUp).not.toHaveBeenCalled();
-    expect(screen.getByRole('dialog', { name: 'Create encrypted backup' })).toBeInTheDocument();
-    expect(within(dialog).getByLabelText('Backup passphrase')).toHaveValue('correct horse');
-    expect(within(dialog).getByLabelText('Confirm passphrase')).toHaveValue('correct horse');
-  });
-
-  it('records the backup when a retry after a cancelled share is saved', async () => {
-    const save = vi.fn<Save>().mockResolvedValueOnce('cancelled').mockResolvedValueOnce('saved');
-    const { store } = renderWithStore(
-      onPlatform(save, <SettingsScreen />),
-      createStubStore({ data: snapshotWith() }),
-    );
-    const dialog = await openBackupDialog();
-    await createBackupIn(dialog);
-    expect(await within(dialog).findByRole('alert')).toBeInTheDocument();
-
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Create backup' }));
-
-    await vi.waitFor(() => expect(store.getState().markBackedUp).toHaveBeenCalledTimes(1));
-    expect(
-      screen.queryByRole('dialog', { name: 'Create encrypted backup' }),
-    ).not.toBeInTheDocument();
-    expect(save).toHaveBeenCalledTimes(2);
-  });
-
-  it('keeps the backup dialog open and says why when the file cannot be saved', async () => {
-    const save = vi.fn<Save>(async () => {
-      throw new Error('No space left on device');
-    });
-    const { store } = renderWithStore(
-      onPlatform(save, <SettingsScreen />),
-      createStubStore({ data: snapshotWith() }),
-    );
-    const dialog = await openBackupDialog();
-    await createBackupIn(dialog);
-
-    expect(await within(dialog).findByRole('alert')).toHaveTextContent('No space left on device');
-    expect(store.getState().markBackedUp).not.toHaveBeenCalled();
-  });
-
-  it.each([
-    ['Export unencrypted copy', 'export.json', '{}', 'application/json'],
-    [
-      'Export expenses (CSV)',
-      'funcial-expenses-2026-10-14.csv',
-      'date,amount,currency,category,payment_method,card,note,subscription\r\n',
-      'text/csv',
-    ],
-  ])('saves "%s" through the platform, shared or not', async (label, fileName, text, mime) => {
-    const save = savingTo('cancelled');
-    const { store } = renderWithStore(
-      onPlatform(save, <SettingsScreen />),
-      createStubStore({ data: snapshotWith(), today: '2026-10-14' }),
-    );
-    await userEvent.click(screen.getByRole('button', { name: label }));
-    const dialog = screen.getByRole('dialog', { name: 'Export an unprotected copy?' });
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Export' }));
-
-    await vi.waitFor(() => expect(save).toHaveBeenCalledExactlyOnceWith(fileName, text, mime));
-    expect(downloadText).not.toHaveBeenCalled();
-    expect(store.getState().markBackedUp).not.toHaveBeenCalled();
-  });
-
-  it('shows a message when an export cannot be saved', async () => {
-    const save = vi.fn<Save>(async () => {
-      throw new Error('No space left on device');
-    });
-    renderWithStore(
-      onPlatform(
-        save,
-        <>
-          <SettingsScreen />
-          <Toaster />
-        </>,
-      ),
-      createStubStore({ data: snapshotWith() }),
-    );
-    await userEvent.click(screen.getByRole('button', { name: 'Export unencrypted copy' }));
-    const dialog = screen.getByRole('dialog', { name: 'Export an unprotected copy?' });
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Export' }));
-
-    expect(await screen.findByRole('alert')).toHaveTextContent('No space left on device');
-  });
-
-  it('restore shows the error message from a bad file', async () => {
-    const restoreBackup = vi.fn(async () => {
-      throw new InvalidBackupError();
-    });
-    renderWithStore(<SettingsScreen />, createStubStore({ data: snapshotWith(), restoreBackup }));
-    const file = new File(['not a backup'], 'notes.funbak');
-    await userEvent.upload(screen.getByLabelText('Backup file'), file);
-    await userEvent.type(screen.getByLabelText('Passphrase for this backup'), 'correct horse');
-    await userEvent.click(screen.getByRole('button', { name: 'Restore' }));
-    const confirm = screen.getByRole('dialog', { name: 'Restore this backup?' });
-    expect(confirm).toHaveAccessibleDescription('It replaces all data on this device.');
-    await userEvent.click(within(confirm).getByRole('button', { name: 'Restore' }));
-
-    expect(restoreBackup).toHaveBeenCalledWith('not a backup', 'correct horse');
-    expect(await screen.findByRole('alert')).toHaveTextContent("This file isn't a Funcial backup.");
-  });
-
-  it('narrows the backup file picker to .funbak on the web only', () => {
-    // Android's file chooser crashes on an extension it has no MIME type for, and `.funbak` has
-    // none. On the phone the picker shows every file; the restore rejects anything else.
-    const web = renderWithStore(<SettingsScreen />, createStubStore({ data: snapshotWith() }));
-    expect(screen.getByLabelText('Backup file')).toHaveAttribute('accept', '.funbak');
-    web.unmount();
-
-    renderWithStore(onPhone(null, <SettingsScreen />), createStubStore({ data: snapshotWith() }));
-    expect(screen.getByLabelText('Backup file')).not.toHaveAttribute('accept');
-  });
-
-  it('warns before exporting an unprotected copy', async () => {
-    const { store } = renderWithStore(
-      <SettingsScreen />,
-      createStubStore({ data: snapshotWith() }),
-    );
-    await userEvent.click(screen.getByRole('button', { name: 'Export unencrypted copy' }));
-    const dialog = screen.getByRole('dialog', { name: 'Export an unprotected copy?' });
+  it('tells a person who deletes everything to log in to their account, not to make a backup', async () => {
+    renderWithStore(<SettingsScreen />, createStubStore({ data: snapshotWith() }));
+    await userEvent.click(screen.getByRole('button', { name: 'Delete all data' }));
+    const dialog = screen.getByRole('dialog', { name: 'Delete all data?' });
     expect(dialog).toHaveAccessibleDescription(
-      "This file isn't protected. Anyone who gets it can read your finances.",
-    );
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Export' }));
-    expect(store.getState().exportPlain).toHaveBeenCalledTimes(1);
-    expect(downloadText).toHaveBeenCalledWith('export.json', '{}', 'application/json');
-  });
-
-  it('exports expenses as CSV after the same warning', async () => {
-    const data = snapshotWith();
-    data.tables.expense.push(makeExpense({ id: 'e1', amount: 12_50, date: '2026-10-14' }));
-    renderWithStore(<SettingsScreen />, createStubStore({ data, today: '2026-10-14' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Export expenses (CSV)' }));
-    const dialog = screen.getByRole('dialog', { name: 'Export an unprotected copy?' });
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Export' }));
-    expect(downloadText).toHaveBeenCalledWith(
-      'funcial-expenses-2026-10-14.csv',
-      'date,amount,currency,category,payment_method,card,note,subscription\r\n' +
-        '2026-10-14,12.50,USD,food,cash,,,\r\n',
-      'text/csv',
+      'This erases everything Funcial stores on this device. If you have an account, log in afterwards to get your data back.',
     );
   });
 
@@ -429,18 +209,16 @@ describe('Data', () => {
     expect(store.getState().deleteAllData).toHaveBeenCalledTimes(1);
   });
 
-  it('in demo, offers backup and leaving demo but hides lock, restore, export and delete', () => {
+  it('in demo, offers leaving demo but hides lock and delete', () => {
     renderWithStore(
       <SettingsScreen />,
       createStubStore({ namespace: 'demo', data: snapshotWith() }),
     );
     expect(screen.getByText("Demo data isn't locked.")).toBeInTheDocument();
     expect(screen.queryByRole('radio', { name: 'PIN' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Create encrypted backup' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Start with my real data' })).toBeInTheDocument();
-    expect(screen.queryByLabelText('Backup file')).not.toBeInTheDocument();
     expect(
-      screen.queryByRole('button', { name: 'Export unencrypted copy' }),
+      screen.queryByRole('button', { name: 'Create encrypted backup' }),
     ).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Delete all data' })).not.toBeInTheDocument();
     expect(screen.queryByRole('region', { name: 'Profile & salary' })).not.toBeInTheDocument();
@@ -631,7 +409,6 @@ describe('Reminders', () => {
     ['Bills and renewals', 'bills'],
     ['Salary freeze start and end', 'freeze'],
     ['Weekly and monthly reviews', 'reviews'],
-    ['Backup reminder', 'backup'],
     ['Dividends', 'dividends'],
     ['Buy it?', 'buyIt'],
   ] as const;
@@ -767,6 +544,18 @@ describe('Reminders', () => {
     await userEvent.selectOptions(at, '23:00');
     expect(finance.updateSettings).toHaveBeenLastCalledWith({
       reminders: { ...on, dailyTime: '23:00' },
+    });
+  });
+
+  it('offers no backup reminder, and keeps the saved choice when another switch changes', async () => {
+    // Backups are gone. The old switch stays in the saved data so older data still loads.
+    renderReminders(fakeNotifier(), { ...on, backup: true });
+    expect(within(section()).queryByRole('switch', { name: /backup/i })).not.toBeInTheDocument();
+
+    await userEvent.click(switchNamed('Dividends'));
+
+    expect(finance.updateSettings).toHaveBeenCalledExactlyOnceWith({
+      reminders: { ...on, backup: true, dividends: false },
     });
   });
 
@@ -963,19 +752,11 @@ describe('Settings in the line style', () => {
     isLine(screen.getByLabelText('At'), 'At');
   });
 
-  it('has line fields in the currency, PIN, backup, restore and erase dialogs', async () => {
+  it('has line fields in the currency, PIN and erase dialogs', async () => {
     renderWithStore(<SettingsScreen />, createStubStore({ lockMode: 'pin', data: snapshotWith() }));
-    isLine(screen.getByLabelText('Passphrase for this backup'), 'Passphrase for this backup');
-
-    await userEvent.click(screen.getByRole('button', { name: 'Create encrypted backup' }));
-    let dialog = screen.getByRole('dialog', { name: 'Create encrypted backup' });
-    for (const label of ['Backup passphrase', 'Confirm passphrase']) {
-      isLine(within(dialog).getByLabelText(label), label);
-    }
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
 
     await userEvent.click(screen.getByRole('button', { name: 'Change PIN' }));
-    dialog = screen.getByRole('dialog', { name: 'Change PIN' });
+    let dialog = screen.getByRole('dialog', { name: 'Change PIN' });
     for (const label of ['Current PIN', 'New PIN', 'Confirm PIN']) {
       isLine(within(dialog).getByLabelText(label), label);
     }

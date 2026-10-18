@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { storedKeyring } from '@/data/keyring';
 import type { VaultRecord } from '@/data/keys';
 import { sqliteStorage } from '@/data/sqliteStorage';
+import { migrateSnapshot } from '@/domain/snapshot';
 import { makeExpense, makeIncome, makeSubscription } from '@/test/fixtures';
 import { freshRealStore } from '@/test/realStore';
 import { sqlJsDriver } from '@/test/sqlJsDriver';
@@ -79,8 +80,8 @@ describe('the app over the SQLite backend', () => {
     expect((await reboot(deps)).getState().phase).toBe('unlocked');
   });
 
-  it('restores a backup made in the browser', async () => {
-    // The browser: a Dexie-backed store, its data and a backup file of it.
+  it('restores a snapshot of the data made in the browser', async () => {
+    // The browser: a Dexie-backed store and its data, as an account's copy carries them.
     const browser = await freshRealStore();
     await browser.store.getState().put('expense', makeExpense({ id: 'e1', note: 'Café ☕' }));
     await browser.store.getState().put('expense', makeExpense({ id: 'e2', amount: 99_00 }));
@@ -89,12 +90,12 @@ describe('the app over the SQLite backend', () => {
       .getState()
       .put('subscription', makeSubscription({ id: 's1', nextRenewal: '2026-12-01' }));
     const browserData = (await reboot(browser.deps)).getState().data;
-    const { text } = await browser.store.getState().createBackup('correct horse');
+    const copy = migrateSnapshot(JSON.parse(JSON.stringify(browser.store.getState().data)));
 
     // The phone: a SQLite-backed store with data of its own, which the restore replaces.
     const phone = await freshRealStore(nativeOverrides());
     await phone.store.getState().put('expense', makeExpense({ id: 'only-on-phone' }));
-    await phone.store.getState().restoreBackup(text, 'correct horse');
+    await phone.store.getState().restoreSnapshot(copy);
 
     const restarted = await reboot(phone.deps);
     expect(restarted.getState().phase).toBe('unlocked');

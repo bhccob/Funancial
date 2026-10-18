@@ -172,7 +172,7 @@ describe('Menu sheet', () => {
     expect(row(sheet, 'Shop')).toHaveTextContent('130 coins to spend');
     expect(row(sheet, 'Inbox')).toHaveTextContent(/^Inbox$/);
     expect(row(sheet, 'Help')).toHaveTextContent('How everything works');
-    expect(row(sheet, 'Settings')).toHaveTextContent('Lock, backups, reminders');
+    expect(row(sheet, 'Settings')).toHaveTextContent('Lock, account, reminders');
   });
 
   it('moves the Invest, Dividends and News rows out of the Menu', async () => {

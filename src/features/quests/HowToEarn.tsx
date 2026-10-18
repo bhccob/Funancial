@@ -23,7 +23,6 @@ const QUEST_ORDER: readonly QuestId[] = [
   'month-salary',
   'month-audit',
   'month-dividends',
-  'month-backup',
 ];
 
 /** "Daily logging" becomes "Daily logging streak"; "Dividend streak" already says it. */

@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { deriveAccountKeys, openCopy, UnsupportedError, unwrapDek } from '@/data/accountCrypto';
-import { readBackup } from '@/data/backup';
 import { base64ToBytes } from '@/data/crypto';
 import { emptySnapshot, type DataSnapshot } from '@/domain/snapshot';
 import { toastStore } from '@/lib/toast';
@@ -859,7 +858,7 @@ describe('retries', () => {
 });
 
 describe('a copy stays clean', () => {
-  it('holds the data and nothing about the account, in an upload or a backup', async () => {
+  it('holds the data and nothing about the account, in an upload', async () => {
     const { actions, server, store } = await setup();
     await store.getState().put('profile', makeProfile({ name: 'Robin' }));
     await store.getState().put('expense', lunch('e1'));
@@ -881,23 +880,16 @@ describe('a copy stays clean', () => {
     const copy = await opened(body, state.dek);
     expect(copy).toEqual(store.getState().data);
     expect(JSON.stringify(copy)).not.toMatch(/funancial\.account|deviceToken/);
-
-    const { text: backup } = await store.getState().createBackup('backup passphrase');
-    for (const secret of [state.dek, state.deviceToken, 'funancial.account']) {
-      expect(backup).not.toContain(secret);
-    }
-    const restored = await readBackup(backup, 'backup passphrase');
-    expect(JSON.stringify(restored)).not.toContain(state.dek);
-    expect(store.getState().exportPlain().text).not.toContain(state.dek);
+    expect(JSON.stringify(store.getState().data)).not.toContain(state.dek);
   });
 
-  it('keeps a .funbak restore working, and uploads what it restored', async () => {
+  it('uploads what a restore of a snapshot put back', async () => {
     const { actions, server, store } = await setup();
     await actions.signUp(ME);
-    const { text } = await store.getState().createBackup('backup passphrase');
+    const before = structuredClone(store.getState().data);
     clock();
     await store.getState().put('expense', lunch('later'));
-    await store.getState().restoreBackup(text, 'backup passphrase');
+    await store.getState().restoreSnapshot(before);
     expect(store.getState().data.tables.expense).toEqual([]);
     pause();
     await waitForPuts(server, 2);

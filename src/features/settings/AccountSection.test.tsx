@@ -156,6 +156,11 @@ describe('Settings → Account without an account', () => {
     expect(
       within(dialog).getByText("Replace this phone's data with your account's copy?"),
     ).toBeInTheDocument();
+    // Plainly what happens, and no advice to make a backup: there are none to make.
+    expect(
+      within(dialog).getByText("What is on this phone now is replaced by your account's copy."),
+    ).toBeInTheDocument();
+    expect(dialog).not.toHaveTextContent(/backup/i);
     expect(actions.logIn).toHaveBeenCalledTimes(1);
 
     await userEvent.click(within(dialog).getByRole('button', { name: 'Replace' }));
@@ -311,7 +316,7 @@ describe('Settings → Account with an account', () => {
     const dialog = screen.getByRole('dialog', { name: 'Log out on this phone?' });
     expect(
       within(dialog).getByText(
-        "Your data stays on this phone, and your account and its copy stay on Funcial's service. This phone stops saving to your account until you log in again.",
+        "Your data stays on this phone, and your account and its copy stay on Funcial's service. This phone stops saving to your account until you log in again. If you log in again later, your account's copy replaces what is on this phone.",
       ),
     ).toBeInTheDocument();
     expect(actions.unlink).not.toHaveBeenCalled();

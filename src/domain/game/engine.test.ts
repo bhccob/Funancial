@@ -19,7 +19,7 @@ import type { GameContext } from './types';
 
 // 2026-10-15 is a Thursday, so with weeks starting Monday the current week starts 2026-10-12.
 const today = '2026-10-15';
-const ctx: GameContext = { today, now: localIso(today, 18), weekStartsOn: 1, canBackUp: false };
+const ctx: GameContext = { today, now: localIso(today, 18), weekStartsOn: 1 };
 
 function snap(tables: Partial<DataSnapshot['tables']>): DataSnapshot {
   const base = emptySnapshot();

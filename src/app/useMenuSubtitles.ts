@@ -58,6 +58,6 @@ export function useMenuSubtitles(): Record<string, string> {
     // Nothing under the name when there is nothing new.
     '/inbox': unread > 0 ? `${unread} new` : '',
     '/help': 'How everything works',
-    '/settings': 'Lock, backups, reminders',
+    '/settings': 'Lock, account, reminders',
   };
 }

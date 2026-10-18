@@ -6,6 +6,8 @@ name; only the name people see changed). For that to work the service needs thre
 database, a Gmail address that sends "forgot password" emails, and a master key. This page walks you
 through them, click by click.
 
+The locked copy is also the only backup the app has: there are no backup files or exports.
+
 You type every secret yourself, straight into Vercel. **Claude never needs to see any of them.**
 Don't paste one into the chat, into a file in this project, or into a commit.
 
@@ -105,8 +107,8 @@ never pulls, prints or asks for the values.
 
 ## If a friend asks you to remove their copy
 
-Not part of setup: skip this until someone asks. Removing a copy is permanent, so be sure the
-request really comes from the friend.
+Not part of setup: skip this until someone asks. Removing a copy is permanent, and it is their
+only backup, so be sure the request really comes from the friend.
 
 **The easy way: they do it themselves.** On the phone, they open Settings, then Account, and tap
 **Turn off and delete my copy**. That removes their account and its locked copy from the service. If

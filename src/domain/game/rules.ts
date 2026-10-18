@@ -11,7 +11,6 @@ export const QUEST_REWARDS: Record<QuestId, Reward> = {
   'month-salary': { xp: 100, coins: 25 },
   'month-audit': { xp: 100, coins: 25 },
   'month-dividends': { xp: 80, coins: 20 },
-  'month-backup': { xp: 80, coins: 20 },
 };
 
 /** Reached when a run gets to `at` days (weeks for check-ins, months for dividends). */

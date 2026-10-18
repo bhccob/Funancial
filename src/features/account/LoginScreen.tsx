@@ -160,7 +160,7 @@ export function LoginScreen({
           eyebrow="Before you log in"
           title={REPLACE}
           focus
-          lead="What is on this phone now is replaced. Make an encrypted backup first if you might want it back."
+          lead="What is on this phone now is replaced by your account's copy."
         />
         <div className="flex flex-col gap-3">
           <Button variant="danger" size="lg" disabled={busy} onClick={() => void attempt(true)}>

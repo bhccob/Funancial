@@ -182,7 +182,7 @@ export function LockScreen() {
         <EraseDialog
           open={forgotOpen}
           title="Erase this device and start over?"
-          description={`Without your ${secretName}, the data on this device can't be recovered. If you have a backup, you can restore it after starting over.`}
+          description={`Without your ${secretName}, the data on this device can't be recovered. If you have an account, log in after starting over to get your data back.`}
           onClose={() => setForgotOpen(false)}
         />
       </Card>

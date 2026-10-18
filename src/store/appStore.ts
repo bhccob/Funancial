@@ -1,12 +1,5 @@
 import { createStore, type StoreApi } from 'zustand/vanilla';
 import {
-  backupFileName,
-  createBackup as encryptBackup,
-  exportFileName,
-  exportPlainJson,
-  readBackup,
-} from '@/data/backup';
-import {
   base64ToBytes,
   bytesToBase64,
   decryptRecord,
@@ -122,23 +115,17 @@ export interface AppState {
   /** Refresh `today` and create what has come due (subscription charges, expected salary). */
   sync(): Promise<void>;
   remove(table: TableName, id: string): Promise<void>;
-  /** Encrypts the data into backup text. It is not a backup until saved: then call `markBackedUp`. */
-  createBackup(passphrase: string): Promise<{ fileName: string; text: string }>;
-  /** Records that a backup file was saved just now, which is what "Last backup" shows. */
-  markBackedUp(): Promise<void>;
-  restoreBackup(text: string, passphrase: string): Promise<void>;
-  /** Replaces all data with `snapshot`, already validated (`migrateSnapshot`): what a backup and an account's copy both restore through. */
+  /** Replaces all data with `snapshot`, already validated (`migrateSnapshot`): what an account's copy restores through. */
   restoreSnapshot(snapshot: DataSnapshot): Promise<void>;
   /** Runs `cb` after the app changed the data (a write, a removal, a restore). Returns an unsubscribe. */
   onDataChange(cb: () => void): () => void;
   /**
    * A value kept in this namespace's metadata, locked with the data key. It sits beside the data,
-   * never in it: no snapshot, backup or upload holds it. `null` when nothing is kept under `name`.
+   * never in it: no snapshot or upload holds it. `null` when nothing is kept under `name`.
    */
   getPrivate<T>(name: string): Promise<T | null>;
   putPrivate(name: string, value: unknown): Promise<void>;
   deletePrivate(name: string): Promise<void>;
-  exportPlain(): { fileName: string; text: string };
   deleteAllData(): Promise<void>;
 }
 
@@ -165,16 +152,12 @@ async function importDataKey(secret: string): Promise<CryptoKey | null> {
   }
 }
 
-/** The moment the game runs in: the store's day and namespace, and the settings' week start. */
-export function gameContext(
-  state: Pick<AppState, 'today' | 'namespace' | 'data'>,
-  now: string,
-): GameContext {
+/** The moment the game runs in: the store's day, and the settings' week start. */
+export function gameContext(state: Pick<AppState, 'today' | 'data'>, now: string): GameContext {
   return {
     today: state.today,
     now,
     weekStartsOn: state.data.tables.settings[0]?.weekStartsOn ?? 1,
-    canBackUp: state.namespace === 'real',
   };
 }
 
@@ -625,31 +608,6 @@ export function createAppStore(deps: AppDeps): StoreApi<AppState> {
         announceDataChange();
       },
 
-      async createBackup(passphrase) {
-        const now = new Date(deps.now());
-        const text = await encryptBackup(get().data, passphrase, {
-          iterations: deps.kdfIterations,
-          now,
-        });
-        return { fileName: backupFileName(now), text };
-      },
-
-      async markBackedUp() {
-        const at = nowIsoString();
-        const settings = get().data.tables.settings[0] ?? defaultSettings(at);
-        // Best effort: the file is already saved, and when storage is full that matters more than
-        // remembering its date.
-        await get()
-          .put('settings', { ...settings, lastBackupAt: at, updatedAt: at })
-          .catch(() => {});
-      },
-
-      async restoreBackup(text, passphrase) {
-        unlocked();
-        const snapshot = await readBackup(text, passphrase); // throws before anything changes
-        await get().restoreSnapshot(snapshot);
-      },
-
       async restoreSnapshot(snapshot) {
         const s = unlocked();
         await s.repo.replaceAll(snapshot);
@@ -686,11 +644,6 @@ export function createAppStore(deps: AppDeps): StoreApi<AppState> {
 
       async deletePrivate(name) {
         await unlocked().backend.meta.delete(name);
-      },
-
-      exportPlain() {
-        const now = new Date(deps.now());
-        return { fileName: exportFileName(now), text: exportPlainJson(get().data, now) };
       },
 
       async deleteAllData() {

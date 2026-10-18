@@ -1,23 +1,15 @@
 import { describe, expect, it, vi } from 'vitest';
 import { browserKeyring } from '@/data/keyring';
-import { downloadText } from '@/lib/download';
 import { createWebPlatform } from './web';
 
-vi.mock('@/lib/download', () => ({ downloadText: vi.fn() }));
-
 describe('createWebPlatform', () => {
-  it('the web platform keeps browser storage and downloads', async () => {
+  it('the web platform keeps browser storage and a device key', () => {
     const platform = createWebPlatform();
 
     expect(platform.kind).toBe('web');
     expect(platform.keyring).toBe(browserKeyring);
     expect(platform.biometric).toBeNull();
     expect(platform.notifier).toBeNull();
-
-    await expect(
-      platform.files.save('funcial-export.json', '{}', 'application/json'),
-    ).resolves.toBe('saved');
-    expect(downloadText).toHaveBeenCalledWith('funcial-export.json', '{}', 'application/json');
   });
 
   it('has no app version, since a web page is not an installed build', async () => {
