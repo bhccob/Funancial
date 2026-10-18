@@ -310,7 +310,7 @@ describe('.gitignore', () => {
   it.each([
     '*.jks',
     '*.keystore',
-    'android/keystore.properties',
+    'keystore.properties',
     'site-dist/',
     'site/public/get/*.apk',
     'site/public/get/**/latest.json',
