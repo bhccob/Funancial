@@ -1,3 +1,4 @@
+import './jitless';
 import { LatestSchema, type Latest } from '@/domain/update';
 
 // Absolute on purpose: at /get, without a trailing slash, './latest.json' would mean /latest.json.

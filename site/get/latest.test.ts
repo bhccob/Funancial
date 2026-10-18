@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { z } from 'zod';
 import { loadLatest, metaLine } from './latest';
 
 const LATEST = {
@@ -14,6 +15,12 @@ const answer = (body: string, status = 200) =>
   vi.fn<typeof fetch>(async () => new Response(body, { status }));
 
 afterEach(() => vi.useRealTimers());
+
+describe('the page under its CSP', () => {
+  it('has zod skip its eval probe, which a CSP without unsafe-eval reports as a violation', () => {
+    expect(z.config().jitless).toBe(true);
+  });
+});
 
 describe('loadLatest', () => {
   it('reads the absolute /get/latest.json, which a /get without a slash would not find relatively', async () => {
