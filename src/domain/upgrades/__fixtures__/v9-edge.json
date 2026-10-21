@@ -66,6 +66,48 @@
         "recurrence": null,
         "period": null,
         "note": ""
+      },
+      {
+        "id": "inc-cash-as-of",
+        "createdAt": "2026-01-01T12:00:00.000Z",
+        "updatedAt": "2026-01-01T12:00:00.000Z",
+        "amount": 6000,
+        "source": "extra",
+        "label": "Refund",
+        "date": "2026-10-20",
+        "status": "confirmed",
+        "bucket": "cash",
+        "recurrence": null,
+        "period": null,
+        "note": ""
+      },
+      {
+        "id": "inc-salary-confirmed",
+        "createdAt": "2026-01-01T12:00:00.000Z",
+        "updatedAt": "2026-01-01T12:00:00.000Z",
+        "amount": 420000,
+        "source": "salary",
+        "label": "Salary",
+        "date": "2026-09-25",
+        "status": "confirmed",
+        "bucket": "cash",
+        "recurrence": null,
+        "period": "2026-09",
+        "note": ""
+      },
+      {
+        "id": "inc-salary-expected",
+        "createdAt": "2026-01-01T12:00:00.000Z",
+        "updatedAt": "2026-01-01T12:00:00.000Z",
+        "amount": 420000,
+        "source": "salary",
+        "label": "Salary",
+        "date": "2026-10-25",
+        "status": "expected",
+        "bucket": "cash",
+        "recurrence": null,
+        "period": "2026-10",
+        "note": ""
       }
     ],
     "expense": [
@@ -92,6 +134,45 @@
         "note": "",
         "paymentMethod": "credit_card",
         "cardId": "card-a",
+        "recurrence": null,
+        "subscriptionId": null
+      },
+      {
+        "id": "exp-card-a-gap",
+        "createdAt": "2026-01-01T12:00:00.000Z",
+        "updatedAt": "2026-01-01T12:00:00.000Z",
+        "amount": 3333,
+        "category": "shopping",
+        "date": "2026-01-15",
+        "note": "",
+        "paymentMethod": "credit_card",
+        "cardId": "card-a",
+        "recurrence": null,
+        "subscriptionId": null
+      },
+      {
+        "id": "exp-opening-day",
+        "createdAt": "2026-01-01T12:00:00.000Z",
+        "updatedAt": "2026-01-01T12:00:00.000Z",
+        "amount": 333,
+        "category": "food",
+        "date": "2026-01-01",
+        "note": "",
+        "paymentMethod": "cash",
+        "cardId": null,
+        "recurrence": null,
+        "subscriptionId": null
+      },
+      {
+        "id": "exp-after-as-of",
+        "createdAt": "2026-01-01T12:00:00.000Z",
+        "updatedAt": "2026-01-01T12:00:00.000Z",
+        "amount": 444,
+        "category": "food",
+        "date": "2026-10-21",
+        "note": "",
+        "paymentMethod": "cash",
+        "cardId": null,
         "recurrence": null,
         "subscriptionId": null
       },
@@ -195,6 +276,30 @@
     ],
     "transaction": [
       {
+        "id": "tx-transfer-before-opening",
+        "createdAt": "2026-01-01T12:00:00.000Z",
+        "updatedAt": "2026-01-01T12:00:00.000Z",
+        "type": "transfer",
+        "amount": 12300,
+        "date": "2025-12-30",
+        "from": "savings",
+        "to": "passive",
+        "debtId": null,
+        "note": ""
+      },
+      {
+        "id": "tx-card-payment-gap",
+        "createdAt": "2026-01-01T12:00:00.000Z",
+        "updatedAt": "2026-01-01T12:00:00.000Z",
+        "type": "card_payment",
+        "amount": 4000,
+        "date": "2026-01-20",
+        "from": "savings",
+        "to": null,
+        "debtId": "card-a",
+        "note": ""
+      },
+      {
         "id": "tx-loan-payment",
         "createdAt": "2026-01-01T12:00:00.000Z",
         "updatedAt": "2026-01-01T12:00:00.000Z",
@@ -264,7 +369,7 @@
         "name": "Visa A",
         "kind": "credit_card",
         "openingBalance": 15000,
-        "openingDate": "2026-01-01",
+        "openingDate": "2026-02-01",
         "interestRate": 22.9,
         "minimumPayment": 2500,
         "creditLimit": 300000,
@@ -335,6 +440,19 @@
       }
     ],
     "dividend": [
+      {
+        "id": "div-before-opening",
+        "createdAt": "2026-01-01T12:00:00.000Z",
+        "updatedAt": "2026-01-01T12:00:00.000Z",
+        "holdingId": "holding-1",
+        "symbol": "KO",
+        "expectedPayDate": "2025-12-30",
+        "paidOn": "2025-12-30",
+        "status": "confirmed",
+        "amount": 555,
+        "bucket": "passive",
+        "sharesAdded": null
+      },
       {
         "id": "div-passive",
         "createdAt": "2026-01-01T12:00:00.000Z",

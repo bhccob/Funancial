@@ -12,8 +12,8 @@
   },
   "edge": {
     "asOf": "2026-10-20",
-    "cash": 80725,
-    "savings": 466000,
+    "cash": 506392,
+    "savings": 462000,
     "passive": 31120,
     "cards": {
       "card-a": 18000,
@@ -22,6 +22,6 @@
     "loans": {
       "loan-1": 110000
     },
-    "netWorth": 491911
+    "netWorth": 913578
   }
 }
