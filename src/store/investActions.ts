@@ -1,4 +1,5 @@
 import type { StoreApi } from 'zustand/vanilla';
+import { payingAccount } from '@/domain/accounts';
 import type { LocalDate } from '@/domain/dates';
 import type { ExpectedPayout } from '@/domain/dividends';
 import {
@@ -49,8 +50,11 @@ export interface HoldingInput {
   /** What the person paid in total, in the profile currency. */
   costBasis: number;
   purchaseDate: LocalDate;
-  /** `owned`: bought before using the app, so no money moves. */
-  paidFrom: 'owned' | 'cash' | 'savings';
+  /**
+   * `owned`: bought before using the app, so no money moves. Else the id of the account that paid:
+   * a bank account, cash or savings in use, never a credit card.
+   */
+  paidFrom: 'owned' | string;
   withholdingPct: number;
   /** Used when the price service gives no profile for the symbol. */
   name?: string;
@@ -74,7 +78,8 @@ export interface DividendInput {
   /** What arrived after tax, in minor units of the profile currency. */
   amount: number;
   paidOn: LocalDate;
-  bucket: NonNullable<Dividend['bucket']>;
+  /** `reinvest` buys more shares; else the account it was paid into (not a credit card). */
+  to: 'reinvest' | { accountId: string };
 }
 
 export interface SaleInput {
@@ -82,8 +87,8 @@ export interface SaleInput {
   /** What one share sold for, in minor units of the profile currency; the proceeds round it once. */
   pricePerShareMinor: number;
   soldOn: LocalDate;
-  /** Where the money goes. */
-  to: Sale['to'];
+  /** The account the money goes into: a bank account, cash or savings in use, never a credit card. */
+  toAccountId: string;
 }
 
 export type InvestActions = ReturnType<typeof createInvestActions>;
@@ -92,6 +97,8 @@ export type InvestActions = ReturnType<typeof createInvestActions>;
 export function createInvestActions(store: StoreApi<AppState>, market: Market) {
   const state = () => store.getState();
   const holdings = () => state().data.tables.holding;
+  /** An account money can be paid from or into: a bank account, cash or savings in use today. */
+  const moneyAccount = (id: string) => payingAccount(state().data, id, state().today);
   const profileCurrency = () => state().data.tables.profile[0]?.currency ?? 'USD';
   const stamp = () => {
     const t = nowIso();
@@ -114,7 +121,10 @@ export function createInvestActions(store: StoreApi<AppState>, market: Market) {
     );
   const payoutRecord = (
     p: ExpectedPayout,
-    outcome: Pick<Dividend, 'paidOn' | 'status' | 'amount' | 'bucket' | 'sharesAdded'>,
+    outcome: Pick<
+      Dividend,
+      'paidOn' | 'status' | 'amount' | 'accountId' | 'reinvested' | 'sharesAdded'
+    >,
   ): Dividend => ({
     id: payoutId(p),
     ...stamp(),
@@ -155,14 +165,16 @@ export function createInvestActions(store: StoreApi<AppState>, market: Market) {
       };
       const items: TableRecord[] = [{ table: 'holding', record: holding }];
       if (input.paidFrom !== 'owned') {
+        // After the lookup, so the account is checked as it stands when the purchase is written.
+        moneyAccount(input.paidFrom);
         const purchase: Transaction = {
           id: newId(),
           ...stamp(),
           type: 'investment',
           amount: input.costBasis,
           date: input.purchaseDate,
-          from: input.paidFrom,
-          to: null,
+          fromAccountId: input.paidFrom,
+          toAccountId: null,
           debtId: null,
           note: `Bought ${symbol}`,
         };
@@ -194,11 +206,12 @@ export function createInvestActions(store: StoreApi<AppState>, market: Market) {
     /**
      * Sells shares of a holding, in one write. A partial sale leaves the holding with the shares and
      * cost basis the sold ones did not carry. Selling every share removes the holding, and the sale
-     * keeps it as it was, so `undoSale` can bring it back. The proceeds count in the bucket they went
-     * to from the sale date (`bucketBalances`). Returns what the sale came to.
+     * keeps it as it was, so `undoSale` can bring it back. The proceeds count in the account they
+     * went to from the sale date (`accountBalance`). Returns what the sale came to.
      */
     async sellHolding(id: string, input: SaleInput): Promise<SalePlan> {
       notFuture(input.soldOn);
+      moneyAccount(input.toAccountId);
       const holding = find(id);
       if (input.soldOn < holding.purchaseDate)
         throw new Error(saleBeforePurchase(holding.purchaseDate));
@@ -214,7 +227,7 @@ export function createInvestActions(store: StoreApi<AppState>, market: Market) {
         proceeds: plan.proceeds,
         cost: plan.cost,
         soldOn: input.soldOn,
-        to: input.to,
+        toAccountId: input.toAccountId,
         restore: plan.all ? holding : null,
       };
       const items: TableRecord[] = [{ table: 'sale', record: sale }];
@@ -358,17 +371,20 @@ export function createInvestActions(store: StoreApi<AppState>, market: Market) {
     /**
      * Records a payout as received. A payout already confirmed or skipped is left as it is, so a
      * second tap cannot count it twice. Reinvesting buys shares at the holding's price instead of
-     * paying a bucket. A payout of a fully sold holding pays a bucket, and cannot be reinvested.
+     * paying an account. A payout of a fully sold holding pays an account, and cannot be reinvested.
      */
     async confirmDividend(p: ExpectedPayout, input: DividendInput) {
       notFuture(input.paidOn);
       if (settledBefore(p)) return;
+      const accountId = input.to === 'reinvest' ? null : input.to.accountId;
+      const reinvest = accountId === null;
+      if (accountId !== null) moneyAccount(accountId);
       const holding = holdings().find((h) => h.id === p.holding.id);
       const sold = state().data.tables.sale.some((s) => s.holdingId === p.holding.id && s.restore);
       if (!holding && !sold) throw new Error('That item no longer exists.');
       const items: TableRecord[] = [];
       let sharesAdded: number | null = null;
-      if (input.bucket === 'reinvest') {
+      if (reinvest) {
         if (!holding) throw new Error(SOLD_NO_REINVEST);
         const price = holdingPrice(holding) ?? 0;
         const rate = holdingRate(holding, profileCurrency());
@@ -389,7 +405,8 @@ export function createInvestActions(store: StoreApi<AppState>, market: Market) {
         paidOn: input.paidOn,
         status: 'confirmed',
         amount: input.amount,
-        bucket: input.bucket,
+        accountId,
+        reinvested: reinvest,
         sharesAdded,
       });
       await state().putMany([{ table: 'dividend', record: dividend }, ...items]);
@@ -404,7 +421,8 @@ export function createInvestActions(store: StoreApi<AppState>, market: Market) {
           paidOn: p.payDate,
           status: 'skipped',
           amount: 0,
-          bucket: null,
+          accountId: null,
+          reinvested: false,
           sharesAdded: null,
         }),
       );
@@ -419,7 +437,7 @@ export function createInvestActions(store: StoreApi<AppState>, market: Market) {
       if (!dividend) throw new Error('That item no longer exists.');
       const holding = holdings().find((h) => h.id === dividend.holdingId);
       const items: TableRecord[] = [];
-      if (dividend.bucket === 'reinvest' && holding) {
+      if (dividend.reinvested && holding) {
         const shares = holding.shares - (dividend.sharesAdded ?? 0);
         if (shares <= 0) throw new Error(SHARES_GONE);
         items.push({

@@ -10,11 +10,16 @@ import {
   makeTransaction,
 } from '@/test/fixtures';
 import {
+  ACCOUNT_ARCHIVED,
+  accountInUse,
   accountRemoval,
   activeAccounts,
   archivedBy,
+  CREDIT_CANT_PAY,
   defaultAccount,
   defaultsFor,
+  NO_ACCOUNT,
+  payingAccount,
 } from './accounts';
 import type { Account } from './entities';
 import { emptySnapshot, type DataSnapshot } from './snapshot';
@@ -161,5 +166,55 @@ describe('defaultAccount', () => {
     const s = data([savings, cash], null);
     s.tables.settings = [];
     expect(defaultAccount(s, DAY)?.id).toBe('acct-cash');
+  });
+});
+
+describe('accountInUse and payingAccount', () => {
+  const DAY = '2026-10-20';
+  const main = makeAccount({ id: 'acct-main' });
+  const savings = makeAccount({ id: 'acct-savings', kind: 'savings' });
+  const cash = makeAccount({ id: 'acct-cash', kind: 'cash' });
+  const card = makeAccount({ id: 'card-1', kind: 'credit' });
+  const old = makeAccount({ id: 'acct-old', archivedOn: '2026-10-01' });
+  const oldCard = makeAccount({ id: 'card-old', kind: 'credit', archivedOn: '2026-10-01' });
+  const later = makeAccount({ id: 'acct-later', archivedOn: '2026-10-21' });
+  const data = (): DataSnapshot => {
+    const s = emptySnapshot();
+    s.tables.account = [main, savings, cash, card, old, oldCard, later];
+    return s;
+  };
+
+  it('has the messages the actions say', () => {
+    expect(NO_ACCOUNT).toBe("That account doesn't exist.");
+    expect(ACCOUNT_ARCHIVED).toBe('That account is no longer in use.');
+    expect(CREDIT_CANT_PAY).toBe('Only a bank account, cash or savings can pay.');
+  });
+
+  it('accountInUse returns an account that exists and is not archived by the day', () => {
+    for (const a of [main, savings, cash, card, later]) {
+      expect(accountInUse(data(), a.id, DAY)).toBe(a);
+    }
+  });
+
+  it('accountInUse refuses one that is gone, or archived by the day, a card included', () => {
+    expect(() => accountInUse(data(), 'acct-gone', DAY)).toThrow(NO_ACCOUNT);
+    expect(() => accountInUse(data(), 'acct-old', DAY)).toThrow(ACCOUNT_ARCHIVED);
+    expect(() => accountInUse(data(), 'card-old', DAY)).toThrow(ACCOUNT_ARCHIVED);
+    // Archived on the day itself counts as archived.
+    expect(() => accountInUse(data(), 'acct-later', '2026-10-21')).toThrow(ACCOUNT_ARCHIVED);
+  });
+
+  it('payingAccount returns a bank account, cash or savings in use', () => {
+    for (const a of [main, savings, cash, later]) {
+      expect(payingAccount(data(), a.id, DAY)).toBe(a);
+    }
+  });
+
+  it('payingAccount refuses a credit card, then what accountInUse refuses', () => {
+    expect(() => payingAccount(data(), 'card-1', DAY)).toThrow(CREDIT_CANT_PAY);
+    expect(() => payingAccount(data(), 'acct-gone', DAY)).toThrow(NO_ACCOUNT);
+    expect(() => payingAccount(data(), 'acct-old', DAY)).toThrow(ACCOUNT_ARCHIVED);
+    // An archived card is told it is archived, as accountInUse says, before it is told it is a card.
+    expect(() => payingAccount(data(), 'card-old', DAY)).toThrow(ACCOUNT_ARCHIVED);
   });
 });

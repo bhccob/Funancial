@@ -1,15 +1,32 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { bucketBalances } from '@/domain/balances';
+import { ACCOUNT_ARCHIVED, CREDIT_CANT_PAY, NO_ACCOUNT } from '@/domain/accounts';
+import { accountBalance } from '@/domain/balances';
 import { duePayouts, type ExpectedPayout } from '@/domain/dividends';
-import type { Holding, Settings } from '@/domain/entities';
+import {
+  DividendSchema,
+  SaleSchema,
+  TransactionSchema,
+  type Holding,
+  type Settings,
+} from '@/domain/entities';
 import { MarketError, type Market } from '@/services/market';
-import { makeDividend, makeHolding, makeProfile, makeTransaction } from '@/test/fixtures';
+import {
+  makeAccount,
+  makeDividend,
+  makeHolding,
+  makeProfile,
+  makeTransaction,
+} from '@/test/fixtures';
 import { freshRealStore } from '@/test/realStore';
 import { createFinanceActions } from './financeActions';
 import { formatDay } from '@/lib/format';
 import { createInvestActions, saleBeforePurchase, SHARES_GONE } from './investActions';
 
 const TODAY = '2026-10-14';
+const MAIN = 'acct-main';
+const SAVINGS = 'acct-savings';
+const CARD = 'card-1';
+const OLD = 'acct-old';
 const ASOF = '2026-10-14T09:00:00.000Z';
 const HOURS = 3_600_000;
 const ago = (hours: number) => new Date(Date.now() - hours * HOURS).toISOString();
@@ -65,21 +82,77 @@ function fakeMarket(over: Partial<Market> = {}) {
   };
 }
 
+/**
+ * A euro profile with Main account (10,000) and Savings (5,000) opened on Oct 1, a card in use,
+ * and an account archived on Oct 2.
+ */
 async function setup(over: Partial<Market> = {}) {
   const t = await freshRealStore();
-  await t.store.getState().put(
-    'profile',
-    makeProfile({
-      currency: 'EUR',
-      openingDate: '2026-10-01',
-      openingCash: 10_000_00,
-      openingSavings: 5_000_00,
-    }),
-  );
+  await t.store.getState().putMany([
+    { table: 'profile', record: makeProfile({ currency: 'EUR', openingDate: '2026-10-01' }) },
+    {
+      table: 'account',
+      record: makeAccount({ id: MAIN, openingDate: '2026-10-01', openingBalance: 10_000_00 }),
+    },
+    {
+      table: 'account',
+      record: makeAccount({
+        id: SAVINGS,
+        name: 'Savings',
+        kind: 'savings',
+        skin: 'mint',
+        inAvailable: false,
+        order: 1,
+        openingDate: '2026-10-01',
+        openingBalance: 5_000_00,
+      }),
+    },
+    {
+      table: 'account',
+      record: makeAccount({
+        id: CARD,
+        name: 'Visa',
+        kind: 'credit',
+        skin: 'violet',
+        inAvailable: false,
+        order: 2,
+        openingDate: '2026-10-01',
+        openingBalance: 0,
+        credit: {
+          limit: null,
+          statementDay: null,
+          dueDay: 21,
+          payInFull: true,
+          minimumPayment: 0,
+          interestRate: 0,
+        },
+      }),
+    },
+    {
+      table: 'account',
+      record: makeAccount({
+        id: OLD,
+        name: 'Old bank',
+        order: 3,
+        openingDate: '2026-10-01',
+        archivedOn: '2026-10-02',
+      }),
+    },
+  ]);
   const market = fakeMarket(over);
   const actions = createInvestActions(t.store, market);
   const tables = () => t.store.getState().data.tables;
-  const balances = () => bucketBalances(t.store.getState().data, TODAY);
+  /** What Main account and Savings hold today. */
+  const balances = () => {
+    const data = t.store.getState().data;
+    const held = (id: string) =>
+      accountBalance(
+        data.tables.account.find((a) => a.id === id)!,
+        data,
+        TODAY,
+      );
+    return { main: held(MAIN), savings: held(SAVINGS) };
+  };
   const holding = (id: string) => tables().holding.find((h) => h.id === id)!;
   return { ...t, market, actions, tables, balances, holding };
 }
@@ -89,7 +162,7 @@ const purchase = {
   shares: 10,
   costBasis: 500_00,
   purchaseDate: '2026-10-01',
-  paidFrom: 'cash' as const,
+  paidFrom: MAIN,
   withholdingPct: 15,
 };
 
@@ -97,9 +170,9 @@ beforeEach(() => vi.stubEnv('VITE_FUNANCIAL_API_TOKEN', 'test-token'));
 afterEach(() => vi.unstubAllEnvs());
 
 describe('adding a holding', () => {
-  it('adds a holding from the profile and records an investment when paid from cash', async () => {
+  it('adds a holding from the profile and records an investment when paid from an account', async () => {
     const { actions, market, tables, balances } = await setup();
-    const cashBefore = balances().cash;
+    const before = balances();
     await actions.addHolding({ ...purchase, symbol: 'ko' });
     expect(market.fetchProfile).toHaveBeenCalledWith('KO');
     expect(tables().holding).toMatchObject([
@@ -121,20 +194,58 @@ describe('adding a holding', () => {
       },
     ]);
     expect(tables().transaction).toMatchObject([
-      { type: 'investment', amount: 500_00, date: '2026-10-01', from: 'cash', to: null },
+      {
+        type: 'investment',
+        amount: 500_00,
+        date: '2026-10-01',
+        fromAccountId: MAIN,
+        toAccountId: null,
+        debtId: null,
+        note: 'Bought KO',
+      },
     ]);
-    expect(balances().cash).toBe(cashBefore - 500_00);
+    expect(TransactionSchema.safeParse(tables().transaction[0]).success).toBe(true);
+    expect(balances()).toEqual({ main: before.main - 500_00, savings: before.savings });
   });
 
   it('takes savings for an investment too, and nothing for a holding already owned', async () => {
     const { actions, tables, balances } = await setup();
-    await actions.addHolding({ ...purchase, paidFrom: 'savings' });
-    expect(tables().transaction.map((t) => t.from)).toEqual(['savings']);
-    const { cash, savings } = balances();
+    const before = balances();
+    await actions.addHolding({ ...purchase, paidFrom: SAVINGS });
+    expect(tables().transaction).toMatchObject([{ type: 'investment', fromAccountId: SAVINGS }]);
+    expect(balances()).toEqual({ main: before.main, savings: before.savings - 500_00 });
+    const held = balances();
     await actions.addHolding({ ...purchase, paidFrom: 'owned' });
     expect(tables().holding).toHaveLength(2);
     expect(tables().transaction).toHaveLength(1);
-    expect(balances()).toMatchObject({ cash, savings });
+    expect(balances()).toEqual(held);
+  });
+
+  it('refuses to pay from a credit card, an account that is gone, or one archived, writing nothing', async () => {
+    const { actions, tables, store } = await setup();
+    const before = store.getState().data;
+    for (const [paidFrom, message] of [
+      [CARD, CREDIT_CANT_PAY],
+      ['acct-gone', NO_ACCOUNT],
+      [OLD, ACCOUNT_ARCHIVED],
+    ] as const) {
+      await expect(actions.addHolding({ ...purchase, paidFrom }), paidFrom).rejects.toThrow(
+        message,
+      );
+    }
+    expect(CREDIT_CANT_PAY).toBe('Only a bank account, cash or savings can pay.');
+    expect(tables().holding).toEqual([]);
+    expect(tables().transaction).toEqual([]);
+    expect(store.getState().data).toBe(before);
+  });
+
+  it('refuses an archived account when buying', async () => {
+    const { actions, tables } = await setup();
+    await expect(actions.addHolding({ ...purchase, paidFrom: OLD })).rejects.toThrow(
+      'That account is no longer in use.',
+    );
+    expect(tables().holding).toEqual([]);
+    expect(tables().transaction).toEqual([]);
   });
 
   it('needs name and currency when the profile lookup fails', async () => {
@@ -201,7 +312,7 @@ describe('editing a holding', () => {
     await store.getState().putMany([
       { table: 'holding', record: h },
       { table: 'dividend', record: makeDividend({ holdingId: h.id }) },
-      { table: 'transaction', record: makeTransaction({ type: 'investment', to: null }) },
+      { table: 'transaction', record: makeTransaction({ type: 'investment', toAccountId: null }) },
     ]);
     await actions.deleteHolding(h.id);
     expect(tables().holding).toEqual([]);
@@ -622,7 +733,7 @@ describe('dividend payouts', () => {
     await actions.confirmDividend(payout, {
       amount: 3_79,
       paidOn: '2026-10-12',
-      bucket: 'savings',
+      to: { accountId: SAVINGS },
     });
     expect(tables().dividend).toMatchObject([
       {
@@ -631,23 +742,29 @@ describe('dividend payouts', () => {
         paidOn: '2026-10-12',
         status: 'confirmed',
         amount: 3_79,
-        bucket: 'savings',
+        accountId: SAVINGS,
+        reinvested: false,
         sharesAdded: null,
       },
     ]);
+    expect(DividendSchema.safeParse(tables().dividend[0]).success).toBe(true);
     expect(due()).toEqual([]);
-    expect(balances()).toMatchObject({ savings: before.savings + 3_79, cash: before.cash });
+    expect(balances()).toEqual({ main: before.main, savings: before.savings + 3_79 });
 
     // Asking again changes nothing.
-    await actions.confirmDividend(payout, { amount: 3_79, paidOn: '2026-10-12', bucket: 'cash' });
+    await actions.confirmDividend(payout, {
+      amount: 3_79,
+      paidOn: '2026-10-12',
+      to: { accountId: MAIN },
+    });
     expect(tables().dividend).toHaveLength(1);
-    expect(balances()).toMatchObject({ savings: before.savings + 3_79, cash: before.cash });
+    expect(balances()).toEqual({ main: before.main, savings: before.savings + 3_79 });
   });
 
   it('confirms once when it is asked twice before the first save is done', async () => {
     const { actions, tables, balances, payout } = await withDuePayout();
     const before = balances();
-    const input = { amount: 3_79, paidOn: '2026-10-12', bucket: 'savings' as const };
+    const input = { amount: 3_79, paidOn: '2026-10-12', to: { accountId: SAVINGS } };
     await Promise.all([
       actions.confirmDividend(payout, input),
       actions.confirmDividend(payout, input),
@@ -658,7 +775,7 @@ describe('dividend payouts', () => {
 
   it('reinvests once when it is asked twice before the first save is done', async () => {
     const { actions, tables, holding, h, payout } = await withDuePayout();
-    const input = { amount: 3_79, paidOn: '2026-10-12', bucket: 'reinvest' as const };
+    const input = { amount: 3_79, paidOn: '2026-10-12', to: 'reinvest' as const };
     await Promise.all([
       actions.confirmDividend(payout, input),
       actions.confirmDividend(payout, input),
@@ -669,16 +786,45 @@ describe('dividend payouts', () => {
 
   it('stays settled when the person gives another date for it', async () => {
     const { actions, due, payout } = await withDuePayout();
-    await actions.confirmDividend(payout, { amount: 3_79, paidOn: '2026-10-14', bucket: 'cash' });
+    await actions.confirmDividend(payout, {
+      amount: 3_79,
+      paidOn: '2026-10-14',
+      to: { accountId: MAIN },
+    });
     expect(due()).toEqual([]);
   });
 
   it('refuses a payment date in the future', async () => {
     const { actions, tables, payout } = await withDuePayout();
     await expect(
-      actions.confirmDividend(payout, { amount: 3_79, paidOn: '2026-10-15', bucket: 'cash' }),
+      actions.confirmDividend(payout, {
+        amount: 3_79,
+        paidOn: '2026-10-15',
+        to: { accountId: MAIN },
+      }),
     ).rejects.toThrow('Use today or an earlier date.');
     expect(tables().dividend).toEqual([]);
+  });
+
+  it('refuses to pay into a credit card, an account that is gone, or one archived', async () => {
+    const { actions, store, payout, due } = await withDuePayout();
+    const before = store.getState().data;
+    for (const [accountId, message] of [
+      [CARD, CREDIT_CANT_PAY],
+      ['acct-gone', NO_ACCOUNT],
+      [OLD, ACCOUNT_ARCHIVED],
+    ] as const) {
+      await expect(
+        actions.confirmDividend(payout, {
+          amount: 3_79,
+          paidOn: '2026-10-12',
+          to: { accountId },
+        }),
+        accountId,
+      ).rejects.toThrow(message);
+    }
+    expect(store.getState().data).toBe(before);
+    expect(due()).toHaveLength(1);
   });
 
   it('reinvests by adding fractional shares and cost basis, not cash', async () => {
@@ -688,14 +834,21 @@ describe('dividend payouts', () => {
     await actions.confirmDividend(payout, {
       amount: 3_79,
       paidOn: '2026-10-12',
-      bucket: 'reinvest',
+      to: 'reinvest',
     });
 
     // 60 USD at 0.9 is 54 EUR, or 5400 cents, a share.
     const sharesAdded = 3_79 / 5400;
     expect(tables().dividend).toMatchObject([
-      { status: 'confirmed', amount: 3_79, bucket: 'reinvest', sharesAdded },
+      {
+        status: 'confirmed',
+        amount: 3_79,
+        accountId: null,
+        reinvested: true,
+        sharesAdded,
+      },
     ]);
+    expect(DividendSchema.safeParse(tables().dividend[0]).success).toBe(true);
     expect(holding(h.id).shares).toBeCloseTo(10 + sharesAdded, 12);
     expect(holding(h.id).costBasis).toBe(500_00 + 3_79);
     expect(balances()).toEqual(before);
@@ -706,7 +859,7 @@ describe('dividend payouts', () => {
     await actions.confirmDividend(payout, {
       amount: 5_40,
       paidOn: '2026-10-12',
-      bucket: 'reinvest',
+      to: 'reinvest',
     });
     expect(holding(h.id).shares).toBeCloseTo(10 + 540 / 2700, 12);
   });
@@ -725,7 +878,7 @@ describe('dividend payouts', () => {
     const { actions, tables, holding, h, payout } = await withDuePayout(over);
     const kept = holding(h.id);
     await expect(
-      actions.confirmDividend(payout, { amount: 3_79, paidOn: '2026-10-12', bucket: 'reinvest' }),
+      actions.confirmDividend(payout, { amount: 3_79, paidOn: '2026-10-12', to: 'reinvest' }),
     ).rejects.toThrow(message);
     expect(tables().dividend).toEqual([]);
     expect(holding(h.id)).toEqual(kept);
@@ -738,7 +891,7 @@ describe('dividend payouts', () => {
       await actions.confirmDividend(payout, {
         amount: 3_79,
         paidOn: '2026-10-12',
-        bucket: 'savings',
+        to: { accountId: SAVINGS },
       });
       const [dividend] = tables().dividend;
       const xp = () =>
@@ -766,7 +919,7 @@ describe('dividend payouts', () => {
       await actions.confirmDividend(payout, {
         amount: 3_79,
         paidOn: '2026-10-12',
-        bucket: 'reinvest',
+        to: 'reinvest',
       });
       const putMany = vi.spyOn(store.getState(), 'putMany');
 
@@ -782,7 +935,7 @@ describe('dividend payouts', () => {
       await actions.confirmDividend(payout, {
         amount: 3_79,
         paidOn: '2026-10-12',
-        bucket: 'reinvest',
+        to: 'reinvest',
       });
       const [dividend] = tables().dividend;
       await actions.updateHolding(h.id, { shares: dividend!.sharesAdded! });
@@ -798,7 +951,7 @@ describe('dividend payouts', () => {
       await actions.confirmDividend(payout, {
         amount: 3_79,
         paidOn: '2026-10-12',
-        bucket: 'reinvest',
+        to: 'reinvest',
       });
       await actions.deleteHolding(h.id);
       await actions.deleteDividend(tables().dividend[0]!.id);
@@ -815,7 +968,7 @@ describe('dividend payouts', () => {
         shares: 10,
         pricePerShareMinor: 54_00,
         soldOn: '2026-10-13',
-        to: 'cash' as const,
+        toAccountId: MAIN,
       };
       await t.actions.sellHolding(t.h.id, sell);
       return t;
@@ -831,14 +984,21 @@ describe('dividend payouts', () => {
       await actions.confirmDividend(due()[0]!, {
         amount: 3_79,
         paidOn: '2026-10-12',
-        bucket: 'cash',
+        to: { accountId: MAIN },
       });
       expect(tables().dividend).toMatchObject([
-        { holdingId: h.id, symbol: 'KO', status: 'confirmed', amount: 3_79, bucket: 'cash' },
+        {
+          holdingId: h.id,
+          symbol: 'KO',
+          status: 'confirmed',
+          amount: 3_79,
+          accountId: MAIN,
+          reinvested: false,
+        },
       ]);
       expect(tables().holding).toEqual([]);
       expect(due()).toEqual([]);
-      expect(balances()).toEqual({ ...before, cash: before.cash + 3_79 });
+      expect(balances()).toEqual({ ...before, main: before.main + 3_79 });
     });
 
     it('cannot be reinvested', async () => {
@@ -847,7 +1007,7 @@ describe('dividend payouts', () => {
         actions.confirmDividend(due()[0]!, {
           amount: 3_79,
           paidOn: '2026-10-12',
-          bucket: 'reinvest',
+          to: 'reinvest',
         }),
       ).rejects.toThrow(
         "This holding was sold, so the dividend can't be reinvested. Choose where the money went.",
@@ -873,7 +1033,11 @@ describe('dividend payouts', () => {
       const { actions, h, payout } = await withDuePayout();
       await actions.deleteHolding(h.id);
       await expect(
-        actions.confirmDividend(payout, { amount: 3_79, paidOn: '2026-10-12', bucket: 'cash' }),
+        actions.confirmDividend(payout, {
+          amount: 3_79,
+          paidOn: '2026-10-12',
+          to: { accountId: MAIN },
+        }),
       ).rejects.toThrow('That item no longer exists.');
     });
   });
@@ -889,17 +1053,19 @@ describe('dividend payouts', () => {
         expectedPayDate: payout.payDate,
         status: 'skipped',
         amount: 0,
-        bucket: null,
+        accountId: null,
+        reinvested: false,
         sharesAdded: null,
       },
     ]);
+    expect(DividendSchema.safeParse(tables().dividend[0]).success).toBe(true);
     expect(due()).toEqual([]);
     expect(balances()).toEqual(before);
   });
 });
 
 describe('selling a holding', () => {
-  const sell = { shares: 4, pricePerShareMinor: 60_00, soldOn: '2026-10-10', to: 'cash' as const };
+  const sell = { shares: 4, pricePerShareMinor: 60_00, soldOn: '2026-10-10', toAccountId: MAIN };
 
   /** Ten KO shares that cost 500.00, priced at the last quote. */
   async function withHolding(over: Partial<Holding> = {}) {
@@ -935,18 +1101,35 @@ describe('selling a holding', () => {
         proceeds: 240_00,
         cost: 200_00,
         soldOn: '2026-10-10',
-        to: 'cash',
+        toAccountId: MAIN,
         restore: null,
       },
     ]);
-    expect(balances()).toEqual({ ...before, cash: before.cash + 240_00 });
+    expect(balances()).toEqual({ ...before, main: before.main + 240_00 });
   });
 
   it('puts the proceeds into savings when asked', async () => {
     const { actions, balances, h } = await withHolding();
     const before = balances();
-    await actions.sellHolding(h.id, { ...sell, to: 'savings' });
+    await actions.sellHolding(h.id, { ...sell, toAccountId: SAVINGS });
     expect(balances()).toEqual({ ...before, savings: before.savings + 240_00 });
+  });
+
+  it('refuses to sell into a credit card, an account that is gone, or one archived', async () => {
+    const { actions, store, tables, h } = await withHolding();
+    const before = store.getState().data;
+    for (const [toAccountId, message] of [
+      [CARD, CREDIT_CANT_PAY],
+      ['acct-gone', NO_ACCOUNT],
+      [OLD, ACCOUNT_ARCHIVED],
+    ] as const) {
+      await expect(
+        actions.sellHolding(h.id, { ...sell, toAccountId }),
+        toAccountId,
+      ).rejects.toThrow(message);
+    }
+    expect(tables().sale).toEqual([]);
+    expect(store.getState().data).toBe(before);
   });
 
   it('a full sale removes the holding and keeps it on the sale as it was', async () => {
@@ -956,6 +1139,7 @@ describe('selling a holding', () => {
 
     const plan = await actions.sellHolding(h.id, { ...sell, shares: 10 });
 
+    expect(SaleSchema.safeParse(tables().sale[0]).success).toBe(true);
     expect(putMany).toHaveBeenCalledOnce();
     expect(plan).toEqual({ shares: 10, proceeds: 600_00, cost: 500_00, profit: 100_00, all: true });
     expect(tables().holding).toEqual([]);
@@ -967,7 +1151,7 @@ describe('selling a holding', () => {
     const { actions, store, tables, h } = await withHolding();
     await store.getState().putMany([
       { table: 'dividend', record: makeDividend({ holdingId: h.id }) },
-      { table: 'transaction', record: makeTransaction({ type: 'investment', to: null }) },
+      { table: 'transaction', record: makeTransaction({ type: 'investment', toAccountId: null }) },
     ]);
     await actions.sellHolding(h.id, { ...sell, shares: 10 });
     expect(tables().dividend).toHaveLength(1);

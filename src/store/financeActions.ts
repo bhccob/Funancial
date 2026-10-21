@@ -1,10 +1,11 @@
 import type { StoreApi } from 'zustand/vanilla';
 import {
+  accountInUse,
   accountRemoval,
   activeAccounts,
-  archivedBy,
   defaultAccount,
   defaultsFor,
+  payingAccount,
 } from '@/domain/accounts';
 import { crossesOver, limitAlerts } from '@/domain/alerts';
 import { accountBalance } from '@/domain/balances';
@@ -123,13 +124,8 @@ export interface OnboardingInput {
 export const FUTURE = 'Use today or an earlier date.';
 /** Deleting an account that pays subscriptions needs another account in use for them. */
 export const PICK_SUBSCRIPTIONS_TARGET = 'Pick where its subscriptions go.';
-/** Money is paid from, and moved between, bank accounts, cash and savings: never a credit card. */
-export const CREDIT_CANT_PAY = 'Only a bank account, cash or savings can pay.';
 export const SAME_ACCOUNT = 'Use two different accounts.';
 export const NOT_A_CARD = 'Pick a credit card to pay.';
-export const NO_ACCOUNT = "That account doesn't exist.";
-/** An archived account: what lands on it would no longer count. */
-export const ACCOUNT_ARCHIVED = 'That account is no longer in use.';
 /** A credit card's balance is what is owed on it, so income paid into one would count nowhere. */
 export const INCOME_NOT_CREDIT = 'Income goes into a bank account, cash or savings.';
 /** Its history would read the other way: spending as money in, or money in as spending. */
@@ -154,22 +150,9 @@ export function createFinanceActions(store: StoreApi<AppState>) {
   const notFuture = (d: LocalDate) => {
     if (d > today()) throw new Error(FUTURE);
   };
-  /** An account money can land on or leave from: one that exists and is not archived today. */
-  const accountInUse = (id: string): Account => {
-    const account = state().data.tables.account.find((a) => a.id === id);
-    if (!account) throw new Error(NO_ACCOUNT);
-    if (archivedBy(account, today())) throw new Error(ACCOUNT_ARCHIVED);
-    return account;
-  };
-  /** An account money can be paid from or moved with: a bank account, cash or savings in use. */
-  const payingAccount = (id: string): Account => {
-    const account = accountInUse(id);
-    if (account.kind === 'credit') throw new Error(CREDIT_CANT_PAY);
-    return account;
-  };
   /** An account income can be paid into: a bank account, cash or savings in use. */
   const incomeAccount = (id: string): Account => {
-    const account = accountInUse(id);
+    const account = accountInUse(state().data, id, today());
     if (account.kind === 'credit') throw new Error(INCOME_NOT_CREDIT);
     return account;
   };
@@ -182,8 +165,8 @@ export function createFinanceActions(store: StoreApi<AppState>) {
     note: string,
   ): Transaction {
     if (fromAccountId === toAccountId) throw new Error(SAME_ACCOUNT);
-    payingAccount(fromAccountId);
-    payingAccount(toAccountId);
+    payingAccount(state().data, fromAccountId, today());
+    payingAccount(state().data, toAccountId, today());
     return {
       id: newId(),
       ...stamp(),
@@ -200,7 +183,7 @@ export function createFinanceActions(store: StoreApi<AppState>) {
   return {
     async addExpense(input: ExpenseInput): Promise<{ expense: Expense; alerts: LimitStatus[] }> {
       notFuture(input.date);
-      accountInUse(input.accountId);
+      accountInUse(state().data, input.accountId, today());
       const expense: Expense = {
         id: newId(),
         ...stamp(),
@@ -266,7 +249,7 @@ export function createFinanceActions(store: StoreApi<AppState>) {
       const next: Expense = { ...current, ...patch, updatedAt: nowIso() };
       notFuture(next.date);
       if (patch.accountId !== undefined && patch.accountId !== current.accountId) {
-        accountInUse(patch.accountId);
+        accountInUse(state().data, patch.accountId, today());
       }
       await state().put('expense', next);
     },
@@ -323,7 +306,7 @@ export function createFinanceActions(store: StoreApi<AppState>) {
 
     async saveSubscription(input: SubscriptionInput) {
       const existing = input.id ? find('subscription', input.id) : null;
-      accountInUse(input.accountId);
+      accountInUse(state().data, input.accountId, today());
       const sub: Subscription = {
         ...(existing ?? {
           id: newId(),
@@ -565,9 +548,9 @@ export function createFinanceActions(store: StoreApi<AppState>) {
       date: LocalDate,
     ): Promise<Transaction> {
       notFuture(date);
-      const card = accountInUse(cardId);
+      const card = accountInUse(state().data, cardId, today());
       if (card.kind !== 'credit') throw new Error(NOT_A_CARD);
-      payingAccount(fromAccountId);
+      payingAccount(state().data, fromAccountId, today());
       const payment: Transaction = {
         id: newId(),
         ...stamp(),
@@ -624,7 +607,7 @@ export function createFinanceActions(store: StoreApi<AppState>) {
     ): Promise<Transaction> {
       notFuture(date);
       const loan = find('debt', loanId);
-      payingAccount(fromAccountId);
+      payingAccount(state().data, fromAccountId, today());
       const payment: Transaction = {
         id: newId(),
         ...stamp(),
@@ -648,7 +631,7 @@ export function createFinanceActions(store: StoreApi<AppState>) {
      */
     async setActualBalance(accountId: string, actual: number, date: LocalDate) {
       notFuture(date);
-      const account = accountInUse(accountId);
+      const account = accountInUse(state().data, accountId, today());
       const delta = actual - accountBalance(account, state().data, date);
       if (delta === 0) return null;
       const adjustment: Transaction = {

@@ -13,6 +13,27 @@ export const archivedBy = (account: Account, day: LocalDate): boolean =>
 export const activeAccounts = (accounts: readonly Account[], day: LocalDate): Account[] =>
   accounts.filter((a) => !archivedBy(a, day)).sort((a, b) => a.order - b.order);
 
+export const NO_ACCOUNT = "That account doesn't exist.";
+/** An archived account: what lands on it would no longer count. */
+export const ACCOUNT_ARCHIVED = 'That account is no longer in use.';
+/** Money is paid from, and moved between, bank accounts, cash and savings: never a credit card. */
+export const CREDIT_CANT_PAY = 'Only a bank account, cash or savings can pay.';
+
+/** An account money can land on or leave from: one that exists and is not archived by `today`. */
+export function accountInUse(data: DataSnapshot, id: string, today: LocalDate): Account {
+  const account = data.tables.account.find((a) => a.id === id);
+  if (!account) throw new Error(NO_ACCOUNT);
+  if (archivedBy(account, today)) throw new Error(ACCOUNT_ARCHIVED);
+  return account;
+}
+
+/** An account money can be paid from or into, or moved with: a bank account, cash or savings in use. */
+export function payingAccount(data: DataSnapshot, id: string, today: LocalDate): Account {
+  const account = accountInUse(data, id, today);
+  if (account.kind === 'credit') throw new Error(CREDIT_CANT_PAY);
+  return account;
+}
+
 const DEFAULTS: Record<AccountKind, { skin: string; inAvailable: boolean }> = {
   debit: { skin: 'midnight', inAvailable: true },
   cash: { skin: 'amber', inAvailable: true },
