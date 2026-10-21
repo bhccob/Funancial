@@ -1,0 +1,452 @@
+{
+  "schemaVersion": 9,
+  "tables": {
+    "profile": [
+      {
+        "id": "profile",
+        "createdAt": "2026-01-01T12:00:00.000Z",
+        "updatedAt": "2026-01-01T12:00:00.000Z",
+        "name": "Test Player",
+        "currency": "USD",
+        "openingDate": "2026-01-01",
+        "openingCash": 100000,
+        "openingSavings": 500000,
+        "salary": {
+          "monthlyAmount": 420000,
+          "payDay": 25
+        },
+        "onboardedAt": "2026-01-01T12:00:00.000Z"
+      }
+    ],
+    "settings": [
+      {
+        "id": "settings",
+        "createdAt": "2026-01-01T12:00:00.000Z",
+        "updatedAt": "2026-01-01T12:00:00.000Z",
+        "weekStartsOn": 1,
+        "warningTone": "motivational",
+        "autoLockMinutes": 5,
+        "lastBackupAt": null,
+        "reminders": {
+          "enabled": false,
+          "dailyLog": true,
+          "dailyTime": "20:00",
+          "bills": true,
+          "freeze": true,
+          "reviews": true,
+          "backup": true,
+          "dividends": true,
+          "buyIt": true,
+          "prompted": false
+        },
+        "cosmetics": {
+          "theme": "theme-violet",
+          "avatar": "avatar-sprout",
+          "frame": "frame-none"
+        },
+        "investCurrency": null,
+        "investFx": null,
+        "inbox": {
+          "readBefore": null,
+          "read": []
+        }
+      }
+    ],
+    "income": [
+      {
+        "id": "inc-savings",
+        "createdAt": "2026-01-01T12:00:00.000Z",
+        "updatedAt": "2026-01-01T12:00:00.000Z",
+        "amount": 25000,
+        "source": "extra",
+        "label": "Bonus",
+        "date": "2026-03-15",
+        "status": "confirmed",
+        "bucket": "savings",
+        "recurrence": null,
+        "period": null,
+        "note": ""
+      }
+    ],
+    "expense": [
+      {
+        "id": "exp-before-opening",
+        "createdAt": "2026-01-01T12:00:00.000Z",
+        "updatedAt": "2026-01-01T12:00:00.000Z",
+        "amount": 777,
+        "category": "food",
+        "date": "2025-12-31",
+        "note": "",
+        "paymentMethod": "cash",
+        "cardId": null,
+        "recurrence": null,
+        "subscriptionId": null
+      },
+      {
+        "id": "exp-before-card-opening",
+        "createdAt": "2026-01-01T12:00:00.000Z",
+        "updatedAt": "2026-01-01T12:00:00.000Z",
+        "amount": 999,
+        "category": "food",
+        "date": "2025-12-31",
+        "note": "",
+        "paymentMethod": "credit_card",
+        "cardId": "card-a",
+        "recurrence": null,
+        "subscriptionId": null
+      },
+      {
+        "id": "exp-cash",
+        "createdAt": "2026-01-01T12:00:00.000Z",
+        "updatedAt": "2026-01-01T12:00:00.000Z",
+        "amount": 2000,
+        "category": "food",
+        "date": "2026-02-10",
+        "note": "",
+        "paymentMethod": "cash",
+        "cardId": null,
+        "recurrence": null,
+        "subscriptionId": null
+      },
+      {
+        "id": "exp-debit",
+        "createdAt": "2026-01-01T12:00:00.000Z",
+        "updatedAt": "2026-01-01T12:00:00.000Z",
+        "amount": 3550,
+        "category": "transport",
+        "date": "2026-02-11",
+        "note": "",
+        "paymentMethod": "debit",
+        "cardId": null,
+        "recurrence": null,
+        "subscriptionId": null
+      },
+      {
+        "id": "exp-other",
+        "createdAt": "2026-01-01T12:00:00.000Z",
+        "updatedAt": "2026-01-01T12:00:00.000Z",
+        "amount": 1225,
+        "category": "other",
+        "date": "2026-02-12",
+        "note": "",
+        "paymentMethod": "other",
+        "cardId": null,
+        "recurrence": null,
+        "subscriptionId": null
+      },
+      {
+        "id": "exp-card-a",
+        "createdAt": "2026-01-01T12:00:00.000Z",
+        "updatedAt": "2026-01-01T12:00:00.000Z",
+        "amount": 8000,
+        "category": "shopping",
+        "date": "2026-03-05",
+        "note": "",
+        "paymentMethod": "credit_card",
+        "cardId": "card-a",
+        "recurrence": null,
+        "subscriptionId": null
+      },
+      {
+        "id": "exp-card-b",
+        "createdAt": "2026-01-01T12:00:00.000Z",
+        "updatedAt": "2026-01-01T12:00:00.000Z",
+        "amount": 4500,
+        "category": "entertainment",
+        "date": "2026-08-15",
+        "note": "",
+        "paymentMethod": "credit_card",
+        "cardId": "card-b",
+        "recurrence": null,
+        "subscriptionId": null
+      }
+    ],
+    "subscription": [
+      {
+        "id": "sub-card-a",
+        "createdAt": "2026-01-01T12:00:00.000Z",
+        "updatedAt": "2026-01-01T12:00:00.000Z",
+        "name": "Streamflix",
+        "amount": 1599,
+        "cycle": "monthly",
+        "nextRenewal": "2026-11-03",
+        "anchorDay": 3,
+        "category": "entertainment",
+        "paymentMethod": "credit_card",
+        "cardId": "card-a",
+        "status": "active",
+        "audit": null,
+        "auditedAt": null,
+        "note": ""
+      }
+    ],
+    "budgetLimit": [],
+    "salaryFreeze": [
+      {
+        "createdAt": "2026-01-01T12:00:00.000Z",
+        "updatedAt": "2026-01-01T12:00:00.000Z",
+        "id": "freeze-1",
+        "start": "2026-02-09",
+        "end": "2026-02-13",
+        "lostAmount": 7500,
+        "mode": "manual",
+        "note": "Unpaid leave"
+      }
+    ],
+    "transaction": [
+      {
+        "id": "tx-loan-payment",
+        "createdAt": "2026-01-01T12:00:00.000Z",
+        "updatedAt": "2026-01-01T12:00:00.000Z",
+        "type": "debt_payment",
+        "amount": 10000,
+        "date": "2026-04-01",
+        "from": "cash",
+        "to": null,
+        "debtId": "loan-1",
+        "note": ""
+      },
+      {
+        "id": "tx-card-payment",
+        "createdAt": "2026-01-01T12:00:00.000Z",
+        "updatedAt": "2026-01-01T12:00:00.000Z",
+        "type": "card_payment",
+        "amount": 5000,
+        "date": "2026-04-20",
+        "from": "savings",
+        "to": null,
+        "debtId": "card-a",
+        "note": ""
+      },
+      {
+        "id": "tx-transfer",
+        "createdAt": "2026-01-01T12:00:00.000Z",
+        "updatedAt": "2026-01-01T12:00:00.000Z",
+        "type": "transfer",
+        "amount": 30000,
+        "date": "2026-05-02",
+        "from": "savings",
+        "to": "passive",
+        "debtId": null,
+        "note": ""
+      },
+      {
+        "id": "tx-adjustment",
+        "createdAt": "2026-01-01T12:00:00.000Z",
+        "updatedAt": "2026-01-01T12:00:00.000Z",
+        "type": "adjustment",
+        "amount": -2500,
+        "date": "2026-05-20",
+        "from": null,
+        "to": "cash",
+        "debtId": null,
+        "note": ""
+      },
+      {
+        "id": "tx-investment",
+        "createdAt": "2026-01-01T12:00:00.000Z",
+        "updatedAt": "2026-01-01T12:00:00.000Z",
+        "type": "investment",
+        "amount": 50000,
+        "date": "2026-06-01",
+        "from": "savings",
+        "to": null,
+        "debtId": null,
+        "note": ""
+      }
+    ],
+    "goal": [],
+    "debt": [
+      {
+        "id": "card-a",
+        "createdAt": "2026-01-01T12:00:00.000Z",
+        "updatedAt": "2026-01-01T12:00:00.000Z",
+        "name": "Visa A",
+        "kind": "credit_card",
+        "openingBalance": 15000,
+        "openingDate": "2026-01-01",
+        "interestRate": 22.9,
+        "minimumPayment": 2500,
+        "creditLimit": 300000,
+        "statementDay": 1,
+        "dueDay": 21,
+        "payInFull": true
+      },
+      {
+        "id": "card-b",
+        "createdAt": "2026-01-01T12:00:00.000Z",
+        "updatedAt": "2026-01-01T12:00:00.000Z",
+        "name": "Old Mastercard",
+        "kind": "credit_card",
+        "openingBalance": 0,
+        "openingDate": "2026-01-01",
+        "interestRate": 22.9,
+        "minimumPayment": 2500,
+        "creditLimit": 300000,
+        "statementDay": 1,
+        "dueDay": 21,
+        "payInFull": true,
+        "archivedOn": "2026-09-01"
+      },
+      {
+        "id": "loan-1",
+        "createdAt": "2026-01-01T12:00:00.000Z",
+        "updatedAt": "2026-01-01T12:00:00.000Z",
+        "name": "Car loan",
+        "kind": "loan",
+        "openingBalance": 120000,
+        "openingDate": "2026-01-01",
+        "interestRate": 6.5,
+        "minimumPayment": 10000,
+        "creditLimit": null,
+        "statementDay": null,
+        "dueDay": null,
+        "payInFull": false
+      }
+    ],
+    "ledger": [],
+    "checkIn": [],
+    "challenge": [],
+    "streakFreeze": [],
+    "holding": [
+      {
+        "id": "holding-1",
+        "createdAt": "2026-01-01T12:00:00.000Z",
+        "updatedAt": "2026-01-01T12:00:00.000Z",
+        "symbol": "KO",
+        "name": "Coca-Cola",
+        "type": "stock",
+        "exchange": "NYQ",
+        "sector": "Consumer Defensive",
+        "currency": "USD",
+        "shares": 6.15,
+        "costBasis": 31080,
+        "purchaseDate": "2026-06-01",
+        "withholdingPct": 15,
+        "manualPrice": null,
+        "quote": {
+          "price": 68.4,
+          "previousClose": 67.9,
+          "fxRate": 1,
+          "asOf": "2026-10-19T09:00:00.000Z"
+        },
+        "dividendInfo": null,
+        "checkedAt": null
+      }
+    ],
+    "dividend": [
+      {
+        "id": "div-passive",
+        "createdAt": "2026-01-01T12:00:00.000Z",
+        "updatedAt": "2026-01-01T12:00:00.000Z",
+        "holdingId": "holding-1",
+        "symbol": "KO",
+        "expectedPayDate": "2026-07-15",
+        "paidOn": "2026-07-15",
+        "status": "confirmed",
+        "amount": 1120,
+        "bucket": "passive",
+        "sharesAdded": null
+      },
+      {
+        "id": "div-skipped",
+        "createdAt": "2026-01-01T12:00:00.000Z",
+        "updatedAt": "2026-01-01T12:00:00.000Z",
+        "holdingId": "holding-1",
+        "symbol": "KO",
+        "expectedPayDate": "2026-08-14",
+        "paidOn": "2026-08-14",
+        "status": "skipped",
+        "amount": 0,
+        "bucket": null,
+        "sharesAdded": null
+      },
+      {
+        "id": "div-reinvest",
+        "createdAt": "2026-01-01T12:00:00.000Z",
+        "updatedAt": "2026-01-01T12:00:00.000Z",
+        "holdingId": "holding-1",
+        "symbol": "KO",
+        "expectedPayDate": "2026-09-15",
+        "paidOn": "2026-09-15",
+        "status": "confirmed",
+        "amount": 1080,
+        "bucket": "reinvest",
+        "sharesAdded": 0.15
+      }
+    ],
+    "sale": [
+      {
+        "id": "sale-1",
+        "createdAt": "2026-01-01T12:00:00.000Z",
+        "updatedAt": "2026-01-01T12:00:00.000Z",
+        "holdingId": "holding-1",
+        "symbol": "KO",
+        "name": "Coca-Cola",
+        "type": "stock",
+        "shares": 4,
+        "proceeds": 26000,
+        "cost": 20000,
+        "soldOn": "2026-08-20",
+        "to": "savings",
+        "restore": null
+      }
+    ],
+    "buyDecision": [
+      {
+        "id": "buy-1",
+        "createdAt": "2026-01-01T12:00:00.000Z",
+        "updatedAt": "2026-01-01T12:00:00.000Z",
+        "ask": {
+          "item": "Headphones",
+          "price": 10000,
+          "quantity": 1,
+          "category": "entertainment",
+          "urgency": "want",
+          "howSoon": "month",
+          "payWith": "credit_card",
+          "cardId": "card-a",
+          "link": null,
+          "why": null
+        },
+        "facts": {
+          "total": 10000,
+          "categoryAfter": null,
+          "overallAfter": null,
+          "overBy": 0,
+          "availableAfter": 40000,
+          "emergencyBefore": null,
+          "emergencyAfter": null,
+          "goalDelay": null,
+          "requiresDebt": false,
+          "resetsOn": null
+        },
+        "rulesMeter": 50,
+        "rulesVerdict": "wait",
+        "meter": 50,
+        "verdict": "wait",
+        "confidence": "low",
+        "guards": {
+          "capAtWait": false,
+          "reasons": []
+        },
+        "notes": [],
+        "status": "open",
+        "remindOn": null,
+        "boughtOn": null,
+        "usage": null
+      }
+    ],
+    "aboutYou": [
+      {
+        "id": "about",
+        "createdAt": "2026-01-01T12:00:00.000Z",
+        "updatedAt": "2026-01-01T12:00:00.000Z",
+        "situation": "Edge fixture",
+        "matters": "Every balance to the cent",
+        "overspend": ["food"],
+        "protectGoalId": null
+      }
+    ]
+  }
+}

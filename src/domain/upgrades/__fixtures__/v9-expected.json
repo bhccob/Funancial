@@ -1,0 +1,27 @@
+{
+  "demo": {
+    "asOf": "2026-10-20",
+    "cash": 531004,
+    "savings": 717000,
+    "passive": 4446,
+    "cards": {
+      "demo-card": 57294
+    },
+    "loans": {},
+    "netWorth": 2680437
+  },
+  "edge": {
+    "asOf": "2026-10-20",
+    "cash": 80725,
+    "savings": 466000,
+    "passive": 31120,
+    "cards": {
+      "card-a": 18000,
+      "card-b": 4500
+    },
+    "loans": {
+      "loan-1": 110000
+    },
+    "netWorth": 491911
+  }
+}
