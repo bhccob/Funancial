@@ -134,6 +134,21 @@ describe('accountBalance of a bank, cash or savings account', () => {
     expect(accountBalance(savings, data, AS_OF)).toBe(5_007_00);
   });
 
+  it('adds nothing for a reinvested dividend, even a malformed one that names it', () => {
+    const data = world();
+    // The schema refuses a reinvested payout with an account; the builders don't validate.
+    data.tables.dividend = [
+      makeDividend({
+        amount: 9_00,
+        paidOn: '2026-10-03',
+        accountId: 'acct-main',
+        reinvested: true,
+        sharesAdded: 0.1,
+      }),
+    ];
+    expect(accountBalance(main, data, AS_OF)).toBe(1_000_00);
+  });
+
   it('adds the proceeds of a sale paid into it, on the day of the sale', () => {
     const data = world();
     data.tables.sale = [

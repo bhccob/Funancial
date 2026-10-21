@@ -204,10 +204,11 @@ const sumBalances = (rows: AccountRow[]) => rows.reduce((s, r) => s + r.balance,
 /**
  * Available to spend: what the accounts that count in Available hold, less the subscription bills
  * charged to those accounts, every card bill, and what reserved limits hold back. A subscription
- * on a credit card is not taken off: it lands on the card and comes back as the card's bill.
+ * on a credit card is not taken off: it lands on the card and comes back as the card's bill. A
+ * credit card never counts, whatever its `inAvailable` says: what it shows is owed, not held.
  */
 export function availableBalance(rows: AccountRow[], bills: Bill[], reserved: number): number {
-  const counted = rows.filter((r) => r.account.inAvailable);
+  const counted = rows.filter((r) => r.account.inAvailable && r.account.kind !== 'credit');
   const inAvailable = new Set(counted.map((r) => r.account.id));
   const billed = bills
     .filter((b) => b.kind === 'card' || inAvailable.has(b.accountId))

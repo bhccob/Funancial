@@ -146,6 +146,27 @@ describe('available to spend', () => {
     expect(available(d)).toBe(available(world()));
   });
 
+  it('a credit card never counts toward available, even when marked to', () => {
+    // The Visa owes 230.00 and pays a subscription; marking it in Available changes nothing.
+    const withCard = (inAvailable: boolean) => {
+      const d = world();
+      d.tables.account = d.tables.account.map((a) =>
+        a.id === 'card-1' ? { ...a, inAvailable } : a,
+      );
+      d.tables.subscription.push(
+        makeSubscription({
+          name: 'Cloud',
+          amount: 9_99,
+          nextRenewal: '2026-10-18',
+          accountId: 'card-1',
+        }),
+      );
+      return d;
+    };
+    expect(available(withCard(true))).toBe(available(withCard(false)));
+    expect(available(withCard(true))).toBe(available(world()));
+  });
+
   it('a subscription on savings is not taken off available either', () => {
     const d = world();
     d.tables.subscription.push(

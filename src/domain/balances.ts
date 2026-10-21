@@ -56,7 +56,9 @@ export function accountBalance(account: Account, data: DataSnapshot, asOf: Local
     }
   }
   for (const d of dividend) {
-    if (d.status === 'confirmed' && d.accountId === id && counts(d.paidOn)) balance += d.amount;
+    if (d.status === 'confirmed' && !d.reinvested && d.accountId === id && counts(d.paidOn)) {
+      balance += d.amount;
+    }
   }
   for (const s of sale) if (s.toAccountId === id && counts(s.soldOn)) balance += s.proceeds;
   return balance;
