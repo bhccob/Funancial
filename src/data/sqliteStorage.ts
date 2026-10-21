@@ -121,8 +121,9 @@ function sqliteRecordStore(db: SqlDb): RecordStore {
         'SELECT tbl, id, updated_at, iv, ciphertext FROM records ORDER BY tbl, id',
       );
       return found.map((r): RecordRow => ({
-        // A table from a newer app version passes through; the repository skips what it doesn't know.
-        table: r.tbl as RecordRow['table'],
+        // A table from a newer app version, or one an older version had, passes through; the
+        // repository decides what it reads.
+        table: r.tbl,
         id: r.id,
         updatedAt: r.updated_at,
         iv: base64ToBytes(r.iv),

@@ -1,12 +1,22 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { CURRENT_SCHEMA_VERSION, emptySnapshot, SchemaVersionError } from '@/domain/snapshot';
+import {
+  CURRENT_SCHEMA_VERSION,
+  emptySnapshot,
+  migrateSnapshot,
+  SchemaVersionError,
+  TABLES,
+} from '@/domain/snapshot';
+import v9edge from '@/domain/upgrades/__fixtures__/v9-edge.json';
+import { V10_DROPPED_TABLES } from '@/domain/upgrades/v10Accounts';
 import { makeExpense, makeGoal, makeSettings, makeSubscription } from '@/test/fixtures';
 import { memoryStorage } from '@/test/memoryStorage';
+import { sqlJsDriver } from '@/test/sqlJsDriver';
 import { decryptRecord, encryptRecord, generateDataKey } from './crypto';
 import { dexieStorage, type Namespace } from './db';
 import { createVault, getLockMode, unlockVault } from './keys';
 import { createRepository } from './repository';
-import type { StorageBackend } from './storage';
+import { sqliteStorage } from './sqliteStorage';
+import { DATA_VERSION_KEY, type RecordRow, type StorageBackend } from './storage';
 
 const opened: Array<{ ns: Namespace; prefix: string; backend: StorageBackend }> = [];
 
@@ -27,6 +37,34 @@ afterEach(async () => {
 async function storedRow(backend: StorageBackend, table: string, id: string) {
   return (await backend.records.all()).find((r) => r.table === table && r.id === id);
 }
+
+type Stored = { id: string; updatedAt: string };
+
+/**
+ * Every row of a saved snapshot stored as that version of the app stored it: one encrypted row
+ * per record, the data version in meta. `reversed` stores them last first.
+ */
+async function seedRows(
+  backend: StorageBackend,
+  key: CryptoKey,
+  fixture: { schemaVersion: number; tables: object },
+  { reversed = false } = {},
+) {
+  const rows: RecordRow[] = [];
+  for (const [table, records] of Object.entries(fixture.tables as Record<string, Stored[]>)) {
+    for (const record of records) {
+      const sealed = await encryptRecord(key, `${table}:${record.id}`, record);
+      rows.push({ table, id: record.id, updatedAt: record.updatedAt, ...sealed });
+    }
+  }
+  await backend.records.write(reversed ? rows.toReversed() : rows, { replace: false });
+  await backend.meta.put(DATA_VERSION_KEY, fixture.schemaVersion);
+}
+
+const bySlot = <T extends { table: string; id: string }>(keys: T[]) =>
+  keys.map((k) => `${k.table}:${k.id}`).sort();
+const byId = (rows: ReadonlyArray<{ id: string }>) =>
+  rows.toSorted((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 
 describe('repository over IndexedDB', () => {
   it('never stores plaintext, but reads it back', async () => {
@@ -304,5 +342,134 @@ describe('repository: older schema versions', () => {
       { table: 'goal', record: makeGoal({ id: 'g' }) },
     ]);
     expect(await backend.records.all()).toHaveLength(2);
+  });
+});
+
+const ACCOUNT_IDS = ['acct-main', 'acct-savings', 'acct-passive', 'card-a', 'card-b'];
+const isDropped = (table: string) => (V10_DROPPED_TABLES as readonly string[]).includes(table);
+
+/** A row whose bytes no key opens. */
+function unreadable(table: string, id: string, seed: number): RecordRow {
+  return {
+    table,
+    id,
+    updatedAt: '2026-09-01T12:00:00.000Z',
+    iv: new Uint8Array(12).fill(seed),
+    ciphertext: new Uint8Array(40).fill(seed).buffer,
+  };
+}
+
+describe.each([
+  ['memory', async () => memoryStorage()],
+  ['SQLite', () => sqliteStorage(sqlJsDriver()).open('real')],
+  ['IndexedDB', () => testBackend()],
+])('repository: v9 rows over %s storage', (_, open: () => Promise<StorageBackend>) => {
+  it('upgrades v9 rows to accounts and stores them once', async () => {
+    const backend = await open();
+    const key = await generateDataKey();
+    await seedRows(backend, key, v9edge);
+    const repo = createRepository(backend, key);
+
+    const { snapshot, skipped } = await repo.loadAll();
+    expect(skipped).toEqual([]);
+    expect(snapshot.tables.account.map((a) => a.id)).toEqual(ACCOUNT_IDS);
+
+    const stored = await backend.records.all();
+    const slots = bySlot(stored);
+    expect(slots).toEqual(expect.arrayContaining(ACCOUNT_IDS.map((id) => `account:${id}`)));
+    expect(stored.filter((r) => isDropped(r.table))).toEqual([]);
+    expect(slots).not.toContain('debt:card-a');
+    expect(stored.filter((r) => r.table === 'debt').map((r) => r.id)).toEqual(['loan-1']);
+    // Nothing of v9 is left beside what was written: every stored row is a record of the snapshot.
+    const records = TABLES.flatMap((table) =>
+      snapshot.tables[table].map((r: { id: string }) => ({ table, id: r.id })),
+    );
+    expect(slots).toEqual(bySlot(records));
+    expect(await backend.meta.get(DATA_VERSION_KEY)).toBe(CURRENT_SCHEMA_VERSION);
+    expect(CURRENT_SCHEMA_VERSION).toBe(10);
+
+    const write = vi.spyOn(backend.records, 'write');
+    const remove = vi.spyOn(backend.records, 'remove');
+    const again = await repo.loadAll();
+    expect(write).not.toHaveBeenCalled();
+    expect(remove).not.toHaveBeenCalled();
+    expect(again.skipped).toEqual([]);
+    for (const table of TABLES) {
+      expect(byId(again.snapshot.tables[table]), table).toEqual(byId(snapshot.tables[table]));
+    }
+  });
+
+  it('stored and copied v9 data upgrade the same', async () => {
+    const backend = await open();
+    const key = await generateDataKey();
+    // Storage hands rows back in its own order; reversed here, so nothing rests on the fixture's.
+    await seedRows(backend, key, v9edge, { reversed: true });
+
+    const { snapshot, skipped } = await createRepository(backend, key).loadAll();
+    const copied = migrateSnapshot(structuredClone(v9edge));
+    expect(skipped).toEqual([]);
+    expect(copied.tables.account.map((a) => a.id)).toEqual(ACCOUNT_IDS);
+    for (const table of TABLES) {
+      expect(byId(snapshot.tables[table]), table).toEqual(byId(copied.tables[table]));
+    }
+  });
+
+  it('leaves an undecryptable v9 row on disk', async () => {
+    const backend = await open();
+    const key = await generateDataKey();
+    await seedRows(backend, key, v9edge);
+    // An expense, a card debt and a row of a dropped table that can no longer be read.
+    const broken = [
+      unreadable('expense', 'exp-cash', 1),
+      unreadable('debt', 'card-b', 2),
+      unreadable('salaryFreeze', 'freeze-1', 3),
+    ];
+    await backend.records.write(broken, { replace: false });
+    const before = await Promise.all(broken.map((r) => storedRow(backend, r.table, r.id)));
+    expect(before.every((r) => r !== undefined)).toBe(true);
+
+    const repo = createRepository(backend, key);
+    const { snapshot, skipped } = await repo.loadAll();
+    expect(skipped.every((s) => s.reason === 'decrypt')).toBe(true);
+    expect(bySlot(skipped)).toEqual(bySlot(broken));
+    for (const [i, r] of broken.entries()) {
+      expect(await storedRow(backend, r.table, r.id), `${r.table}:${r.id}`).toStrictEqual(
+        before[i],
+      );
+    }
+
+    // Everything else is upgraded around them, the other retired rows removed.
+    expect(await backend.meta.get(DATA_VERSION_KEY)).toBe(CURRENT_SCHEMA_VERSION);
+    expect(snapshot.tables.account.map((a) => a.id)).toEqual(ACCOUNT_IDS.slice(0, 4));
+    expect(snapshot.tables.expense.find((e) => e.id === 'exp-card-b')?.accountId).toBe('card-b');
+    expect(snapshot.tables.expense.map((e) => e.id)).not.toContain('exp-cash');
+    expect(await storedRow(backend, 'buyDecision', 'buy-1')).toBeUndefined();
+    expect(await storedRow(backend, 'debt', 'card-a')).toBeUndefined();
+
+    // They are reported again on the next load, and still kept.
+    const again = await repo.loadAll();
+    expect(bySlot(again.skipped)).toEqual(bySlot(broken));
+    expect(await Promise.all(broken.map((r) => storedRow(backend, r.table, r.id)))).toStrictEqual(
+      before,
+    );
+  });
+
+  it('keeps a card debt whose account does not validate', async () => {
+    // A card the old app saved but could not read either: its account is left out, so the row it
+    // came from stays for recovery rather than being removed as moved.
+    const backend = await open();
+    const key = await generateDataKey();
+    const v9 = structuredClone(v9edge);
+    v9.tables.debt = v9.tables.debt.map((d) => (d.id === 'card-b' ? { ...d, name: '' } : d));
+    await seedRows(backend, key, v9);
+    const before = await storedRow(backend, 'debt', 'card-b');
+
+    const { snapshot, skipped } = await createRepository(backend, key).loadAll();
+    expect(skipped).toEqual([{ table: 'account', id: 'card-b', reason: 'invalid' }]);
+    expect(snapshot.tables.account.map((a) => a.id)).toEqual(ACCOUNT_IDS.slice(0, 4));
+    expect(await storedRow(backend, 'debt', 'card-b')).toStrictEqual(before);
+    expect(await storedRow(backend, 'account', 'card-b')).toBeUndefined();
+    expect(await storedRow(backend, 'debt', 'card-a')).toBeUndefined();
+    expect(await storedRow(backend, 'account', 'card-a')).toBeDefined();
   });
 });

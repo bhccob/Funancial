@@ -48,6 +48,16 @@ function bucketAccount(bucket: unknown): string | null {
 
 const isCard = (debt: unknown): debt is Row => isRow(debt) && debt.kind === 'credit_card';
 
+const text = (v: unknown): string => (typeof v === 'string' ? v : '');
+const compare = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
+
+/**
+ * Oldest card first, then by id: stored rows come back in the storage's order and an account copy
+ * in its own, so the cards' order must not come from either.
+ */
+const byCreation = (a: Row, b: Row): number =>
+  compare(text(a.createdAt), text(b.createdAt)) || compare(text(a.id), text(b.id));
+
 /** Whether anything was ever paid into or out of the passive bucket. */
 function namesPassive(tables: RawTables): boolean {
   return (
@@ -173,7 +183,7 @@ function mapRows(tables: RawTables, table: string, upgrade: (r: Row) => Row): vo
 export function upgradeToV10(tables: RawTables): RawTables {
   const profile = rowsOf(tables, 'profile')[0];
   const debts: unknown = tables.debt;
-  const cards = Array.isArray(debts) ? debts.filter(isCard) : [];
+  const cards = Array.isArray(debts) ? debts.filter(isCard).sort(byCreation) : [];
 
   const out: RawTables = { ...tables };
   for (const table of V10_DROPPED_TABLES) delete out[table];

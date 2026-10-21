@@ -178,6 +178,27 @@ describe('record store', () => {
     expect((await backend.records.all()).map((r) => r.id)).toEqual(['b', 'c']);
   });
 
+  it('reads and removes rows of a table the app no longer has', async () => {
+    // An upgrade that retires a table removes its rows by name, though the app has no such table.
+    const { backend } = await openReal();
+    await backend.records.write([row('a', 1), row('f', 2, 'salaryFreeze')], { replace: false });
+    expect((await backend.records.all()).map((r) => `${r.table}:${r.id}`)).toEqual([
+      'expense:a',
+      'salaryFreeze:f',
+    ]);
+
+    await backend.records.write([], {
+      replace: false,
+      remove: [{ table: 'salaryFreeze', id: 'f' }],
+      dataVersion: 10,
+    });
+    expect(await backend.records.all()).toStrictEqual([row('a', 1)]);
+
+    await backend.records.write([row('g', 3, 'buyDecision')], { replace: false });
+    await backend.records.remove('buyDecision', 'g');
+    expect(await backend.records.all()).toStrictEqual([row('a', 1)]);
+  });
+
   it('write with replace drops other rows and sets dataVersion atomically', async () => {
     const { backend } = await openReal();
     await backend.records.write([row('a', 1), row('b', 2), row('c', 3, 'income')], {

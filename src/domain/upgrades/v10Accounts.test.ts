@@ -360,6 +360,27 @@ describe('upgradeToV10', () => {
     expect(row(out, 'account', 'card-a')).not.toHaveProperty('archivedOn');
   });
 
+  it('numbers the cards by when they were made, then by id, whatever order the rows come in', () => {
+    // Stored rows come back in the storage's order, an account copy in its own: both must agree.
+    const orders = (tables: RawTables) =>
+      Object.fromEntries(rows(tables, 'account').map((a) => [a.id, a.order]));
+    const forward = upgradeToV10(tablesOf(v9edge));
+    const reversed = tablesOf(v9edge);
+    reversed.debt = rows(reversed, 'debt').toReversed();
+    expect(ids(reversed, 'debt')).toEqual(['loan-1', 'card-b', 'card-a']);
+    expect(orders(upgradeToV10(reversed))).toEqual(orders(forward));
+    expect(orders(forward)).toMatchObject({ 'card-a': 3, 'card-b': 4 });
+
+    // Both cards were made at the same moment above; an earlier one comes first whatever its id.
+    const older = tablesOf(v9edge);
+    older.debt = rows(older, 'debt').map((d) =>
+      d.id === 'card-b' ? { ...d, createdAt: '2025-12-01T12:00:00.000Z' } : d,
+    );
+    const out = upgradeToV10(older);
+    expect(orders(out)).toMatchObject({ 'card-b': 3, 'card-a': 4 });
+    expect(ids(out, 'account').slice(3)).toEqual(['card-b', 'card-a']);
+  });
+
   it('has no bucket accounts and a null default without a profile', () => {
     // The edge fixture names passive, so only a missing profile keeps Passive income away too.
     const tables = tablesOf(v9edge);

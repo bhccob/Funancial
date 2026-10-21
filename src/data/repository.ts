@@ -1,4 +1,4 @@
-import { migrateRecord } from '@/domain/migrations';
+import { migrateTables, type RawTables } from '@/domain/migrations';
 import {
   CURRENT_SCHEMA_VERSION,
   emptySnapshot,
@@ -12,11 +12,19 @@ import {
   type TableName,
   type TableRecord,
 } from '@/domain/snapshot';
+import { V10_DROPPED_TABLES } from '@/domain/upgrades/v10Accounts';
 import { decryptRecord, encryptRecord } from './crypto';
-import { DATA_VERSION_KEY, type RecordRow, type StorageBackend } from './storage';
+import { DATA_VERSION_KEY, type RecordRow, type StorageBackend, type StoredKey } from './storage';
+
+/** A table whose rows an upgrade still reads, though the app no longer has it. */
+type DroppedTable = (typeof V10_DROPPED_TABLES)[number];
 
 /** A stored record that could not be loaded; reported to the user instead of breaking boot. */
-export type SkippedRecord = { table: TableName; id: string; reason: 'decrypt' | 'invalid' };
+export type SkippedRecord = {
+  table: TableName | DroppedTable;
+  id: string;
+  reason: 'decrypt' | 'invalid';
+};
 
 export type LoadResult = { snapshot: DataSnapshot; skipped: SkippedRecord[] };
 
@@ -31,8 +39,19 @@ export interface Repository {
   replaceAll(snapshot: DataSnapshot): Promise<void>;
 }
 
-const slot = (table: TableName, id: string) => `${table}:${id}`;
+const slot = (table: string, id: string) => `${table}:${id}`;
 const isTable = (t: string): t is TableName => (TABLES as readonly string[]).includes(t);
+const isDropped = (t: string): t is DroppedTable =>
+  (V10_DROPPED_TABLES as readonly string[]).includes(t);
+
+/** Whether a decrypted value is a record naming the slot it was stored in. */
+const namesSlot = (value: unknown, id: string): boolean =>
+  typeof value === 'object' && value !== null && (value as { id?: unknown }).id === id;
+
+const idOf = (value: unknown): string => {
+  const id = typeof value === 'object' && value !== null ? (value as { id?: unknown }).id : null;
+  return typeof id === 'string' ? id : '';
+};
 
 async function toRow(
   key: CryptoKey,
@@ -59,11 +78,14 @@ export function createRepository(backend: StorageBackend, key: CryptoKey): Repos
       // An older build must not open, and so rewrite, what a newer one saved: it would drop what it
       // does not know. Nothing is read or written.
       if (fromVersion > CURRENT_SCHEMA_VERSION) throw new SchemaVersionError(fromVersion);
-      const snapshot = emptySnapshot();
       const skipped: SkippedRecord[] = [];
-      const upgraded: TableRecord[] = [];
+
+      // 1. Decrypt, keeping the app's tables and the ones an upgrade retires. A row that fails
+      // never reaches the upgrade, so it is never among the rows removed below.
+      const raw: RawTables = {};
+      const read: StoredKey[] = [];
       for (const row of await records.all()) {
-        if (!isTable(row.table)) continue; // a table from a newer app version
+        if (!isTable(row.table) && !isDropped(row.table)) continue; // from a newer app version
         let value: unknown;
         try {
           value = await decryptRecord(key, slot(row.table, row.id), row);
@@ -71,20 +93,46 @@ export function createRepository(backend: StorageBackend, key: CryptoKey): Repos
           skipped.push({ table: row.table, id: row.id, reason: 'decrypt' });
           continue;
         }
-        const parsed = SCHEMAS[row.table].safeParse(migrateRecord(row.table, value, fromVersion));
-        if (!parsed.success || parsed.data.id !== row.id) {
+        // A record naming another slot is left where it is, like any other that does not load.
+        if (!namesSlot(value, row.id)) {
           skipped.push({ table: row.table, id: row.id, reason: 'invalid' });
           continue;
         }
-        (snapshot.tables[row.table] as unknown[]).push(parsed.data);
-        if (fromVersion < CURRENT_SCHEMA_VERSION) {
-          upgraded.push({ table: row.table, record: parsed.data } as TableRecord);
+        (raw[row.table] ??= []).push(value);
+        read.push({ table: row.table, id: row.id });
+      }
+
+      // 2. Upgrade every table at once, the one path an account's copy takes too: v10 builds
+      // accounts out of the profile and the card debts.
+      const upgraded = migrateTables(raw, fromVersion);
+
+      // 3. Validate.
+      const snapshot = emptySnapshot();
+      const valid: TableRecord[] = [];
+      const invalid: SkippedRecord[] = [];
+      for (const table of TABLES) {
+        for (const value of upgraded[table] ?? []) {
+          const parsed = SCHEMAS[table].safeParse(value);
+          if (!parsed.success) {
+            invalid.push({ table, id: idOf(value), reason: 'invalid' });
+            continue;
+          }
+          (snapshot.tables[table] as unknown[]).push(parsed.data);
+          valid.push({ table, record: parsed.data } as TableRecord);
         }
       }
+      skipped.push(...invalid);
+
+      // 4. Persist the upgrade once, in one write: every valid record, and the removal of the rows
+      // read that are gone (a retired table's, a card debt that is an account now). A row that
+      // did not load stays untouched for later recovery, and so does one whose record the upgrade
+      // made into something that does not load (same id): nothing replaces it.
       if (fromVersion < CURRENT_SCHEMA_VERSION) {
-        // Persist the upgrade once; skipped rows stay untouched for later recovery.
-        const rows = await Promise.all(upgraded.map((u) => toRow(key, u.table, u.record)));
-        await records.write(rows, { replace: false, dataVersion: CURRENT_SCHEMA_VERSION });
+        const written = new Set(valid.map((v) => slot(v.table, v.record.id)));
+        const leftOut = new Set(invalid.map((s) => s.id));
+        const remove = read.filter((k) => !written.has(slot(k.table, k.id)) && !leftOut.has(k.id));
+        const rows = await Promise.all(valid.map((v) => toRow(key, v.table, v.record)));
+        await records.write(rows, { replace: false, dataVersion: CURRENT_SCHEMA_VERSION, remove });
       }
       return { snapshot, skipped };
     },

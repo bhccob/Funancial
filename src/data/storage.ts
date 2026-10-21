@@ -1,4 +1,3 @@
-import type { RecordKey, TableName } from '@/domain/snapshot';
 import type { Bytes } from './crypto';
 import type { Namespace } from './db';
 import type { MetaStore } from './meta';
@@ -6,10 +5,14 @@ import type { MetaStore } from './meta';
 /** Meta key holding the schema version the stored rows were written at. */
 export const DATA_VERSION_KEY = 'dataVersion';
 
+/**
+ * One stored row's slot. Wider than the domain's `RecordKey`: storage also holds rows of tables
+ * the app no longer has (or does not have yet), and an upgrade that retires a table removes them.
+ */
+export type StoredKey = { table: string; id: string };
+
 /** One encrypted entity. Only the slot (`table`, `id`) and `updatedAt` are in the clear. */
-export type RecordRow = {
-  table: TableName;
-  id: string;
+export type RecordRow = StoredKey & {
   updatedAt: string;
   iv: Bytes;
   ciphertext: ArrayBuffer;
@@ -23,9 +26,9 @@ export interface RecordStore {
    */
   write(
     rows: RecordRow[],
-    opts: { replace: boolean; dataVersion?: number; remove?: RecordKey[] },
+    opts: { replace: boolean; dataVersion?: number; remove?: StoredKey[] },
   ): Promise<void>;
-  remove(table: TableName, id: string): Promise<void>;
+  remove(table: string, id: string): Promise<void>;
 }
 
 /** One open namespace: its unencrypted metadata and its encrypted records. */
