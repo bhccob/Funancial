@@ -14,7 +14,14 @@ import {
 } from '@/domain/snapshot';
 import { V10_DROPPED_TABLES } from '@/domain/upgrades/v10Accounts';
 import { decryptRecord, encryptRecord } from './crypto';
-import { DATA_VERSION_KEY, type RecordRow, type StorageBackend, type StoredKey } from './storage';
+import {
+  DATA_VERSION_KEY,
+  DataVersionChangedError,
+  dataVersionOf,
+  type RecordRow,
+  type StorageBackend,
+  type StoredKey,
+} from './storage';
 
 /** A table whose rows an upgrade still reads, though the app no longer has it. */
 type DroppedTable = (typeof V10_DROPPED_TABLES)[number];
@@ -62,79 +69,121 @@ async function toRow(
   return { table, id: record.id, updatedAt: record.updatedAt, ...payload };
 }
 
+/**
+ * The last load queued on each backend; it never rejects, so one failed load does not stop the
+ * next. Kept per backend, not per repository: each unlock makes its own repository.
+ */
+const loading = new WeakMap<StorageBackend, Promise<unknown>>();
+
+/**
+ * Runs the loads of one backend one after another. A load reads the data version, then the rows,
+ * then may write the upgrade: two at once (a PIN and a fingerprint unlocking together) could
+ * upgrade rows the other had already upgraded, and destroy them.
+ */
+function oneAtATime<T>(backend: StorageBackend, load: () => Promise<T>): Promise<T> {
+  const result = (loading.get(backend) ?? Promise.resolve()).then(load);
+  loading.set(
+    backend,
+    result.catch(() => {}),
+  );
+  return result;
+}
+
+/** How many times a load starts over when another connection upgraded the data meanwhile. */
+const LOAD_ATTEMPTS = 3;
+
 export function createRepository(backend: StorageBackend, key: CryptoKey): Repository {
   const { meta, records } = backend;
 
   async function storedVersion(): Promise<number> {
-    const v = await meta.get<unknown>(DATA_VERSION_KEY);
-    return typeof v === 'number' ? v : 1; // rows written before versioning are v1
+    return dataVersionOf(await meta.get<unknown>(DATA_VERSION_KEY));
+  }
+
+  /** Everything stored, upgraded to the current version: what `loadAll` returns. */
+  async function load(attempt: number): Promise<LoadResult> {
+    const fromVersion = await storedVersion();
+    // An older build must not open, and so rewrite, what a newer one saved: it would drop what it
+    // does not know. Nothing is read or written.
+    if (fromVersion > CURRENT_SCHEMA_VERSION) throw new SchemaVersionError(fromVersion);
+    const skipped: SkippedRecord[] = [];
+
+    // 1. Decrypt, keeping the app's tables and the ones an upgrade retires. A row that fails
+    // never reaches the upgrade, so it is never among the rows removed below.
+    const raw: RawTables = {};
+    const read: StoredKey[] = [];
+    for (const row of await records.all()) {
+      if (!isTable(row.table) && !isDropped(row.table)) continue; // from a newer app version
+      let value: unknown;
+      try {
+        value = await decryptRecord(key, slot(row.table, row.id), row);
+      } catch {
+        skipped.push({ table: row.table, id: row.id, reason: 'decrypt' });
+        continue;
+      }
+      // A record naming another slot is left where it is, like any other that does not load.
+      if (!namesSlot(value, row.id)) {
+        skipped.push({ table: row.table, id: row.id, reason: 'invalid' });
+        continue;
+      }
+      (raw[row.table] ??= []).push(value);
+      read.push({ table: row.table, id: row.id });
+    }
+
+    // 2. Upgrade every table at once, the one path an account's copy takes too: v10 builds
+    // accounts out of the profile and the card debts.
+    const upgraded = migrateTables(raw, fromVersion);
+
+    // 3. Validate.
+    const snapshot = emptySnapshot();
+    const valid: TableRecord[] = [];
+    const invalid: SkippedRecord[] = [];
+    for (const table of TABLES) {
+      for (const value of upgraded[table] ?? []) {
+        const parsed = SCHEMAS[table].safeParse(value);
+        if (!parsed.success) {
+          invalid.push({ table, id: idOf(value), reason: 'invalid' });
+          continue;
+        }
+        (snapshot.tables[table] as unknown[]).push(parsed.data);
+        valid.push({ table, record: parsed.data } as TableRecord);
+      }
+    }
+    skipped.push(...invalid);
+
+    // 4. Persist the upgrade once, in one write: every valid record, and the removal of the rows
+    // read that are gone (a retired table's, a card debt that is an account now). A row that
+    // did not load stays untouched for later recovery, and so does one whose record the upgrade
+    // made into something that does not load (same id): nothing replaces it.
+    if (fromVersion < CURRENT_SCHEMA_VERSION) {
+      const written = new Set(valid.map((v) => slot(v.table, v.record.id)));
+      const leftOut = new Set(invalid.map((s) => s.id));
+      const remove = read.filter((k) => !written.has(slot(k.table, k.id)) && !leftOut.has(k.id));
+      const rows = await Promise.all(valid.map((v) => toRow(key, v.table, v.record)));
+      try {
+        // Only onto the version the rows were read at: another connection (another tab) may
+        // have upgraded them since, and then what was read is stale.
+        await records.write(rows, {
+          replace: false,
+          dataVersion: CURRENT_SCHEMA_VERSION,
+          remove,
+          ifDataVersion: fromVersion,
+        });
+      } catch (e) {
+        // Nothing was written: start over from what is stored now.
+        if (e instanceof DataVersionChangedError && attempt < LOAD_ATTEMPTS) {
+          return load(attempt + 1);
+        }
+        throw e;
+      }
+    }
+    return { snapshot, skipped };
   }
 
   // Rows are always encrypted before `records.write`: IndexedDB transactions auto-commit while
   // waiting on non-IndexedDB promises such as crypto.subtle.
   return {
-    async loadAll() {
-      const fromVersion = await storedVersion();
-      // An older build must not open, and so rewrite, what a newer one saved: it would drop what it
-      // does not know. Nothing is read or written.
-      if (fromVersion > CURRENT_SCHEMA_VERSION) throw new SchemaVersionError(fromVersion);
-      const skipped: SkippedRecord[] = [];
-
-      // 1. Decrypt, keeping the app's tables and the ones an upgrade retires. A row that fails
-      // never reaches the upgrade, so it is never among the rows removed below.
-      const raw: RawTables = {};
-      const read: StoredKey[] = [];
-      for (const row of await records.all()) {
-        if (!isTable(row.table) && !isDropped(row.table)) continue; // from a newer app version
-        let value: unknown;
-        try {
-          value = await decryptRecord(key, slot(row.table, row.id), row);
-        } catch {
-          skipped.push({ table: row.table, id: row.id, reason: 'decrypt' });
-          continue;
-        }
-        // A record naming another slot is left where it is, like any other that does not load.
-        if (!namesSlot(value, row.id)) {
-          skipped.push({ table: row.table, id: row.id, reason: 'invalid' });
-          continue;
-        }
-        (raw[row.table] ??= []).push(value);
-        read.push({ table: row.table, id: row.id });
-      }
-
-      // 2. Upgrade every table at once, the one path an account's copy takes too: v10 builds
-      // accounts out of the profile and the card debts.
-      const upgraded = migrateTables(raw, fromVersion);
-
-      // 3. Validate.
-      const snapshot = emptySnapshot();
-      const valid: TableRecord[] = [];
-      const invalid: SkippedRecord[] = [];
-      for (const table of TABLES) {
-        for (const value of upgraded[table] ?? []) {
-          const parsed = SCHEMAS[table].safeParse(value);
-          if (!parsed.success) {
-            invalid.push({ table, id: idOf(value), reason: 'invalid' });
-            continue;
-          }
-          (snapshot.tables[table] as unknown[]).push(parsed.data);
-          valid.push({ table, record: parsed.data } as TableRecord);
-        }
-      }
-      skipped.push(...invalid);
-
-      // 4. Persist the upgrade once, in one write: every valid record, and the removal of the rows
-      // read that are gone (a retired table's, a card debt that is an account now). A row that
-      // did not load stays untouched for later recovery, and so does one whose record the upgrade
-      // made into something that does not load (same id): nothing replaces it.
-      if (fromVersion < CURRENT_SCHEMA_VERSION) {
-        const written = new Set(valid.map((v) => slot(v.table, v.record.id)));
-        const leftOut = new Set(invalid.map((s) => s.id));
-        const remove = read.filter((k) => !written.has(slot(k.table, k.id)) && !leftOut.has(k.id));
-        const rows = await Promise.all(valid.map((v) => toRow(key, v.table, v.record)));
-        await records.write(rows, { replace: false, dataVersion: CURRENT_SCHEMA_VERSION, remove });
-      }
-      return { snapshot, skipped };
+    loadAll() {
+      return oneAtATime(backend, () => load(1));
     },
 
     async put<T extends TableName>(table: T, record: EntityOf<T>) {

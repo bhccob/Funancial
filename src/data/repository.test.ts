@@ -6,6 +6,7 @@ import {
   SchemaVersionError,
   TABLES,
 } from '@/domain/snapshot';
+import { TABLE_STEPS } from '@/domain/migrations';
 import v9edge from '@/domain/upgrades/__fixtures__/v9-edge.json';
 import { V10_DROPPED_TABLES } from '@/domain/upgrades/v10Accounts';
 import { makeExpense, makeGoal, makeSettings, makeSubscription } from '@/test/fixtures';
@@ -14,9 +15,15 @@ import { sqlJsDriver } from '@/test/sqlJsDriver';
 import { decryptRecord, encryptRecord, generateDataKey } from './crypto';
 import { dexieStorage, type Namespace } from './db';
 import { createVault, getLockMode, unlockVault } from './keys';
-import { createRepository } from './repository';
+import { createRepository, type LoadResult } from './repository';
 import { sqliteStorage } from './sqliteStorage';
-import { DATA_VERSION_KEY, type RecordRow, type StorageBackend } from './storage';
+import {
+  DATA_VERSION_KEY,
+  DataVersionChangedError,
+  type RecordRow,
+  type RecordStore,
+  type StorageBackend,
+} from './storage';
 
 const opened: Array<{ ns: Namespace; prefix: string; backend: StorageBackend }> = [];
 
@@ -65,6 +72,49 @@ const bySlot = <T extends { table: string; id: string }>(keys: T[]) =>
   keys.map((k) => `${k.table}:${k.id}`).sort();
 const byId = (rows: ReadonlyArray<{ id: string }>) =>
   rows.toSorted((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+
+/** A load of `v9-edge` as it must come out: what the account copy gives, its cards included. */
+function expectUpgradedEdge({ snapshot, skipped }: LoadResult) {
+  expect(skipped).toEqual([]);
+  const copied = migrateSnapshot(structuredClone(v9edge));
+  for (const table of TABLES) {
+    expect(byId(snapshot.tables[table]), table).toEqual(byId(copied.tables[table]));
+  }
+  const accountOf = (rows: Array<{ id: string; accountId: string }>, id: string) =>
+    rows.find((r) => r.id === id)?.accountId;
+  expect(snapshot.tables.account.map((a) => a.id)).toEqual(
+    expect.arrayContaining(['acct-passive', 'card-a', 'card-b']),
+  );
+  expect(accountOf(snapshot.tables.expense, 'exp-card-a')).toBe('card-a');
+  expect(accountOf(snapshot.tables.subscription, 'sub-card-a')).toBe('card-a');
+}
+
+/**
+ * Holds the second read of the rows, across `stores`, until the first write is done: the load
+ * that read the data version before another load's upgrade landed then reads upgraded rows. Two
+ * unlocks at once can do this (a PIN and a fingerprint, or two tabs).
+ */
+function holdSecondRead(...stores: RecordStore[]) {
+  let reads = 0;
+  let wrote!: () => void;
+  const written = new Promise<void>((resolve) => (wrote = resolve));
+  for (const store of new Set(stores)) {
+    const all = store.all.bind(store);
+    const write = store.write.bind(store);
+    vi.spyOn(store, 'all').mockImplementation(async () => {
+      reads += 1;
+      if (reads === 2) await written;
+      return all();
+    });
+    vi.spyOn(store, 'write').mockImplementation(async (rows, opts) => {
+      try {
+        await write(rows, opts);
+      } finally {
+        wrote();
+      }
+    });
+  }
+}
 
 describe('repository over IndexedDB', () => {
   it('never stores plaintext, but reads it back', async () => {
@@ -427,6 +477,17 @@ describe.each([
     await backend.records.write(broken, { replace: false });
     const before = await Promise.all(broken.map((r) => storedRow(backend, r.table, r.id)));
     expect(before.every((r) => r !== undefined)).toBe(true);
+    // And a row of a table only a newer app has: neither read nor touched.
+    const wish = { id: 'w1', updatedAt: '2026-09-01T12:00:00.000Z', name: 'Bike' };
+    const sealed = await encryptRecord(key, 'wishlist:w1', wish);
+    await backend.records.write(
+      [{ table: 'wishlist', id: 'w1', updatedAt: wish.updatedAt, ...sealed }],
+      {
+        replace: false,
+      },
+    );
+    const future = await storedRow(backend, 'wishlist', 'w1');
+    expect(future).toBeDefined();
 
     const repo = createRepository(backend, key);
     const { snapshot, skipped } = await repo.loadAll();
@@ -437,6 +498,7 @@ describe.each([
         before[i],
       );
     }
+    expect(await storedRow(backend, 'wishlist', 'w1')).toStrictEqual(future);
 
     // Everything else is upgraded around them, the other retired rows removed.
     expect(await backend.meta.get(DATA_VERSION_KEY)).toBe(CURRENT_SCHEMA_VERSION);
@@ -452,6 +514,30 @@ describe.each([
     expect(await Promise.all(broken.map((r) => storedRow(backend, r.table, r.id)))).toStrictEqual(
       before,
     );
+    expect(await storedRow(backend, 'wishlist', 'w1')).toStrictEqual(future);
+  });
+
+  it('concurrent loads upgrade once', async () => {
+    const backend = await open();
+    const key = await generateDataKey();
+    await seedRows(backend, key, v9edge);
+    holdSecondRead(backend.records);
+    const upgrade = vi.spyOn(TABLE_STEPS, 10);
+    try {
+      // Two unlocks open the same store at once, each with its own repository.
+      const [a, b] = await Promise.all([
+        createRepository(backend, key).loadAll(),
+        createRepository(backend, key).loadAll(),
+      ]);
+
+      expect(upgrade).toHaveBeenCalledTimes(1);
+      expectUpgradedEdge(a);
+      expectUpgradedEdge(b);
+      expectUpgradedEdge(await createRepository(backend, key).loadAll());
+      expect(await backend.meta.get(DATA_VERSION_KEY)).toBe(CURRENT_SCHEMA_VERSION);
+    } finally {
+      upgrade.mockRestore();
+    }
   });
 
   it('keeps a card debt whose account does not validate', async () => {
@@ -473,3 +559,87 @@ describe.each([
     expect(await storedRow(backend, 'account', 'card-a')).toBeDefined();
   });
 });
+
+/** Two connections to one store, as two tabs have: loads through them are not queued together. */
+describe.each([
+  [
+    'memory',
+    async (): Promise<[StorageBackend, StorageBackend]> => {
+      const backend = memoryStorage();
+      return [backend, { ...backend, records: { ...backend.records } }];
+    },
+  ],
+  [
+    'SQLite',
+    async (): Promise<[StorageBackend, StorageBackend]> => {
+      const provider = sqliteStorage(sqlJsDriver());
+      return [await provider.open('real'), await provider.open('real')];
+    },
+  ],
+  [
+    'IndexedDB',
+    async (): Promise<[StorageBackend, StorageBackend]> => {
+      const prefix = `test-${crypto.randomUUID()}`;
+      return [await testBackend('real', prefix), await testBackend('real', prefix)];
+    },
+  ],
+])('repository: v9 rows over two %s connections', (_, open) => {
+  it('a load that finds the rows upgraded meanwhile starts over instead of upgrading them again', async () => {
+    const [tabA, tabB] = await open();
+    const key = await generateDataKey();
+    await seedRows(tabA, key, v9edge);
+    holdSecondRead(tabA.records, tabB.records);
+
+    const [a, b] = await Promise.all([
+      createRepository(tabA, key).loadAll(),
+      createRepository(tabB, key).loadAll(),
+    ]);
+
+    expectUpgradedEdge(a);
+    expectUpgradedEdge(b);
+    expectUpgradedEdge(await createRepository(tabA, key).loadAll());
+  });
+});
+
+describe.each([
+  ['memory', async () => memoryStorage()],
+  ['SQLite', () => sqliteStorage(sqlJsDriver()).open('real')],
+  ['IndexedDB', () => testBackend()],
+])(
+  'record store over %s: a write made for one data version',
+  (_, open: () => Promise<StorageBackend>) => {
+    const row = (id: string): RecordRow => ({ ...unreadable('expense', id, 1), updatedAt: id });
+
+    it('writes nothing, and says so, when another version is stored', async () => {
+      const backend = await open();
+      await backend.records.write([row('a')], { replace: false, dataVersion: 10 });
+
+      const write = backend.records.write([row('b')], {
+        replace: false,
+        remove: [{ table: 'expense', id: 'a' }],
+        dataVersion: 10,
+        ifDataVersion: 9,
+      });
+
+      await expect(write).rejects.toBeInstanceOf(DataVersionChangedError);
+      expect((await backend.records.all()).map((r) => r.id)).toEqual(['a']);
+      expect(await backend.meta.get(DATA_VERSION_KEY)).toBe(10);
+    });
+
+    it('writes when the version is still the one read, none stored reading as 1', async () => {
+      const backend = await open();
+      await backend.records.write([row('a')], {
+        replace: false,
+        dataVersion: 10,
+        ifDataVersion: 1,
+      });
+      await backend.records.write([row('b')], {
+        replace: false,
+        remove: [{ table: 'expense', id: 'a' }],
+        ifDataVersion: 10,
+      });
+      expect((await backend.records.all()).map((r) => r.id)).toEqual(['b']);
+      expect(await backend.meta.get(DATA_VERSION_KEY)).toBe(10);
+    });
+  },
+);

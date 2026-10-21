@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { base64ToBytes } from '@/data/crypto';
+import type { StorageProvider } from '@/data/storage';
 import { fakeBiometric } from '@/test/fakeBiometric';
 import { makeExpense } from '@/test/fixtures';
 import { freshRealStore } from '@/test/realStore';
@@ -21,6 +22,45 @@ async function lockedWithBiometric() {
   await store.getState().setSecret('2468', 'pin');
   await store.getState().enableBiometric();
   return { bio, deps, store: await reboot(deps) };
+}
+
+/**
+ * `storage`, counting each time the app reads all its rows (each open of the data) and holding the
+ * first read until `release` is called: an unlock caught in the middle of opening.
+ */
+function heldOpens(storage: StorageProvider) {
+  let release!: () => void;
+  const released = new Promise<void>((resolve) => (release = resolve));
+  let reads = 0;
+  const provider: StorageProvider = {
+    ...storage,
+    async open(ns) {
+      const backend = await storage.open(ns);
+      const all = backend.records.all.bind(backend.records);
+      const records = {
+        ...backend.records,
+        all: async () => {
+          reads += 1;
+          if (reads === 1) await released;
+          return all();
+        },
+      };
+      return { ...backend, records };
+    },
+  };
+  return { provider, release, reads: () => reads };
+}
+
+/** A PIN-locked app with biometric unlock on, restarted to its lock screen over `heldOpens`. */
+async function lockedWithHeldOpens() {
+  const bio = fakeBiometric();
+  const { store: first, deps } = await freshRealStore({ biometric: bio });
+  await first.getState().setSecret('2468', 'pin');
+  await first.getState().enableBiometric();
+  const held = heldOpens(deps.storage);
+  const store = await reboot({ ...deps, storage: held.provider });
+  expect(store.getState()).toMatchObject({ phase: 'locked', biometric: 'on' });
+  return { bio, held, store };
 }
 
 /** The `biometric` meta value as stored, read through a second connection. */
@@ -78,6 +118,53 @@ describe('biometric unlock', () => {
 
     const again = await reboot(deps);
     expect(again.getState()).toMatchObject({ phase: 'locked', biometric: 'off' });
+  });
+
+  it('a fingerprint that succeeds while the PIN is opening the app does not open it again', async () => {
+    const { bio, held, store } = await lockedWithHeldOpens();
+    const secret = bio.slots.get(SLOT)!;
+    let finger!: (outcome: { status: 'ok'; secret: string }) => void;
+    bio.read.mockImplementationOnce(() => new Promise((resolve) => (finger = resolve)));
+
+    // The prompt is up; the PIN is typed meanwhile and starts opening the data.
+    const viaFinger = store.getState().unlockWithBiometric();
+    expect(bio.read).toHaveBeenCalledWith(SLOT);
+    const viaPin = store.getState().unlock('2468');
+    await vi.waitFor(() => expect(held.reads()).toBe(1));
+    expect(store.getState()).toMatchObject({ phase: 'locked', checking: true });
+
+    // Then the fingerprint is accepted, while the PIN's open is still under way.
+    finger({ status: 'ok', secret });
+    let settled = false;
+    void viaFinger.finally(() => (settled = true));
+    await vi.waitFor(() => expect(settled || held.reads() > 1).toBe(true));
+    held.release();
+
+    expect(await viaPin).toBe('ok');
+    expect(await viaFinger).toBe('cancelled');
+    expect(held.reads()).toBe(1);
+    expect(store.getState()).toMatchObject({ phase: 'unlocked', checking: false });
+  });
+
+  it('a PIN typed while the fingerprint is opening the app waits as busy', async () => {
+    const { held, store } = await lockedWithHeldOpens();
+
+    const viaFinger = store.getState().unlockWithBiometric();
+    await vi.waitFor(() => expect(held.reads()).toBe(1));
+    expect(store.getState()).toMatchObject({ phase: 'locked', checking: true });
+
+    let pinResult: string | undefined;
+    const viaPin = store
+      .getState()
+      .unlock('2468')
+      .then((r) => (pinResult = r));
+    await vi.waitFor(() => expect(pinResult !== undefined || held.reads() > 1).toBe(true));
+    held.release();
+
+    expect(await viaPin).toBe('busy');
+    expect(await viaFinger).toBe('ok');
+    expect(held.reads()).toBe(1);
+    expect(store.getState()).toMatchObject({ phase: 'unlocked', checking: false });
   });
 
   it('a cancelled prompt leaves the PIN pad', async () => {

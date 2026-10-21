@@ -314,7 +314,14 @@ export function createAppStore(deps: AppDeps): StoreApi<AppState> {
 
     async function readBiometric(): Promise<'ok' | 'cancelled' | 'changed'> {
       const s = session;
-      if (!s || !deps.biometric || get().phase !== 'locked' || get().biometric !== 'on') {
+      // Not while the PIN is being checked or is opening the app: one unlock at a time.
+      if (
+        !s ||
+        !deps.biometric ||
+        get().phase !== 'locked' ||
+        get().biometric !== 'on' ||
+        get().checking
+      ) {
         return 'cancelled';
       }
       const result = await deps.biometric.read(biometricSlot(get().namespace));
@@ -328,12 +335,20 @@ export function createAppStore(deps: AppDeps): StoreApi<AppState> {
           .catch(() => set({ biometric: 'off' }));
         return 'changed';
       }
-      // The PIN may have opened the app meanwhile, or everything was erased.
-      if (session !== s || get().phase !== 'locked') return 'cancelled';
-      await s.backend.meta.delete(THROTTLE_KEY);
-      set({ failedAttempts: 0, lockedUntil: null });
-      await openWith(key);
-      return 'ok';
+      // The PIN may have opened the app meanwhile, or be opening it now (the phase stays locked
+      // until the data is loaded), or everything was erased.
+      if (session !== s || get().phase !== 'locked' || get().checking) return 'cancelled';
+      // Opening can take a moment (an upgrade may run): the PIN waits meanwhile, as it does for
+      // its own check, so the two never open the data at once.
+      set({ checking: true });
+      try {
+        await s.backend.meta.delete(THROTTLE_KEY);
+        set({ failedAttempts: 0, lockedUntil: null });
+        await openWith(key);
+        return 'ok';
+      } finally {
+        set({ checking: false });
+      }
     }
 
     return {

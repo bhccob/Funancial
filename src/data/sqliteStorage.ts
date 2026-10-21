@@ -3,6 +3,8 @@ import { dbName } from './db';
 import type { MetaStore } from './meta';
 import {
   DATA_VERSION_KEY,
+  DataVersionChangedError,
+  dataVersionOf,
   type RecordRow,
   type RecordStore,
   type StorageBackend,
@@ -115,6 +117,7 @@ function sqliteMetaStore(db: SqlDb): MetaStore {
 }
 
 function sqliteRecordStore(db: SqlDb): RecordStore {
+  const meta = sqliteMetaStore(db);
   return {
     async all() {
       const found = await db.query<RecordColumns>(
@@ -131,7 +134,15 @@ function sqliteRecordStore(db: SqlDb): RecordStore {
       }));
     },
 
-    async write(rows, { replace, dataVersion, remove = [] }) {
+    async write(rows, { replace, dataVersion, remove = [], ifDataVersion }) {
+      // Checked just before the transaction, not inside it: the plugin's statement set has no
+      // clean way to abort on a value it reads. That is enough on the phone, the one place this
+      // backend runs: one WebView process holds one connection per database, and the repository
+      // runs one load at a time per backend, so no other version write comes in between.
+      if (ifDataVersion !== undefined) {
+        const found = dataVersionOf(await meta.get(DATA_VERSION_KEY));
+        if (found !== ifDataVersion) throw new DataVersionChangedError(ifDataVersion, found);
+      }
       const statements: Array<{ sql: string; values?: unknown[] }> = [];
       if (replace) statements.push({ sql: 'DELETE FROM records' });
       for (const { table, id } of remove) {

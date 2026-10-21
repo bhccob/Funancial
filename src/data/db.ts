@@ -2,6 +2,8 @@ import { Dexie, type Table } from 'dexie';
 import type { MetaStore } from './meta';
 import {
   DATA_VERSION_KEY,
+  DataVersionChangedError,
+  dataVersionOf,
   type RecordRow,
   type RecordStore,
   type StorageProvider,
@@ -53,8 +55,13 @@ export function dexieMetaStore(db: FunancialDb): MetaStore {
 function dexieRecordStore(db: FunancialDb): RecordStore {
   return {
     all: () => db.records.toArray(),
-    write: (rows, { replace, dataVersion, remove = [] }) =>
+    write: (rows, { replace, dataVersion, remove = [], ifDataVersion }) =>
       db.transaction('rw', db.records, db.meta, async () => {
+        // Read inside the transaction, so another tab's write cannot land between check and write.
+        if (ifDataVersion !== undefined) {
+          const found = dataVersionOf((await db.meta.get(DATA_VERSION_KEY))?.value);
+          if (found !== ifDataVersion) throw new DataVersionChangedError(ifDataVersion, found);
+        }
         if (replace) await db.records.clear();
         await db.records.bulkDelete(remove.map((r) => [r.table, r.id]));
         await db.records.bulkPut(rows);
