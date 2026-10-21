@@ -895,6 +895,27 @@ describe('a copy stays clean', () => {
     await waitForPuts(server, 2);
     expect((await opened(puts(server)[1]!, linkedState(actions)!.dek)).tables.expense).toEqual([]);
   });
+
+  it('after starting over, stays linked and uploads the fresh start, so a log-in gets it', async () => {
+    const { actions, server, store } = await setup();
+    await store.getState().put('profile', makeProfile({ name: 'Robin', currency: 'EUR' }));
+    await store.getState().put('expense', lunch('e1'));
+    await actions.signUp(ME);
+    const linked = linkedState(actions)!;
+    await store.getState().startOver();
+    pause();
+    await waitForPuts(server, 2);
+    const copy = await opened(puts(server)[1]!, linked.dek);
+    expect(copy.tables.expense).toEqual([]);
+    expect(copy.tables.profile).toEqual([
+      expect.objectContaining({ name: 'Robin', currency: 'EUR', onboardedAt: null }),
+    ]);
+    expect(linkedState(actions)).toMatchObject({
+      username: linked.username,
+      deviceToken: linked.deviceToken,
+      status: 'linked',
+    });
+  });
 });
 
 describe('a restart or a lock', () => {

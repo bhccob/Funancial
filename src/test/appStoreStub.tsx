@@ -44,6 +44,7 @@ export function createStubStore(overrides: Partial<AppState> = {}): StoreApi<App
     putPrivate: vi.fn(async () => {}),
     deletePrivate: vi.fn(async () => {}),
     deleteAllData: vi.fn(async () => {}),
+    startOver: vi.fn(async () => {}),
     ...overrides,
   }));
 }

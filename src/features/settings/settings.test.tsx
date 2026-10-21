@@ -7,7 +7,7 @@ import { currencyOptions } from '@/features/shared/currencies';
 import { emptySnapshot } from '@/domain/snapshot';
 import { toastStore } from '@/lib/toast';
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
-import { fakeAccount, withAccount } from '@/test/fakeAccount';
+import { fakeAccount, linkedAccount, withAccount } from '@/test/fakeAccount';
 import { fakeNotifier, onPhone, type FakeNotifier } from '@/test/fakeNotifier';
 import { makeExpense, makeGoal, makeProfile, makeSettings } from '@/test/fixtures';
 import { SettingsScreen } from './SettingsScreen';
@@ -207,6 +207,36 @@ describe('Data', () => {
     expect(confirm).toBeEnabled();
     await userEvent.click(confirm);
     expect(store.getState().deleteAllData).toHaveBeenCalledTimes(1);
+  });
+
+  async function deleteEverything(account: ReturnType<typeof fakeAccount>) {
+    const { store } = renderWithStore(
+      withAccount(account, <SettingsScreen />),
+      createStubStore({ data: snapshotWith() }),
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Delete all data' }));
+    const dialog = screen.getByRole('dialog', { name: 'Delete all data?' });
+    await userEvent.type(within(dialog).getByLabelText('Type DELETE to confirm'), 'DELETE');
+    return { store, dialog };
+  }
+
+  it('with an account, starts over instead: the account copy too, keeping the person', async () => {
+    const { store, dialog } = await deleteEverything(fakeAccount(linkedAccount()));
+    expect(dialog).toHaveAccessibleDescription(
+      "This erases everything you added, on this phone and in your account's copy, and it can't be undone. You stay logged in as robin, and your name, currency, lock and settings stay. Setup then asks for your cash, savings, salary and cards again.",
+    );
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Delete everything' }));
+    expect(store.getState().startOver).toHaveBeenCalledTimes(1);
+    expect(store.getState().deleteAllData).not.toHaveBeenCalled();
+  });
+
+  it('erases only the phone once another phone has taken the account', async () => {
+    const { store, dialog } = await deleteEverything(
+      fakeAccount(linkedAccount({ status: 'moved' })),
+    );
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Delete everything' }));
+    expect(store.getState().deleteAllData).toHaveBeenCalledTimes(1);
+    expect(store.getState().startOver).not.toHaveBeenCalled();
   });
 
   it('in demo, offers leaving demo but hides lock and delete', () => {

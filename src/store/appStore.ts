@@ -35,6 +35,7 @@ import type { GameContext } from '@/domain/game/types';
 import { dueGenerated } from '@/domain/sync';
 import {
   emptySnapshot,
+  freshStart,
   SchemaVersionError,
   type DataSnapshot,
   type EntityOf,
@@ -127,6 +128,11 @@ export interface AppState {
   putPrivate(name: string, value: unknown): Promise<void>;
   deletePrivate(name: string): Promise<void>;
   deleteAllData(): Promise<void>;
+  /**
+   * Delete all data for a phone with an account: what was added goes (`freshStart`), and the lock,
+   * the account link and the settings stay. Through the restore path, so the account uploads it.
+   */
+  startOver(): Promise<void>;
 }
 
 const NAMESPACE_KEY = 'funancial.namespace';
@@ -657,6 +663,11 @@ export function createAppStore(deps: AppDeps): StoreApi<AppState> {
         deps.safeStorage.remove(NAMESPACE_KEY);
         deps.channel.post({ type: 'reload', reason: 'delete' });
         await get().boot();
+      },
+
+      async startOver() {
+        const { data } = get();
+        await get().restoreSnapshot(freshStart(data, deps.today(), nowIsoString()));
       },
     };
   });

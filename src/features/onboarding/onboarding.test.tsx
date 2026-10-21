@@ -10,6 +10,7 @@ import { AccountError } from '@/store/accountActions';
 import { useAmountsHidden } from '@/store/useAmountsHidden';
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
 import { fakeAccount, linkedAccount, withAccount } from '@/test/fakeAccount';
+import { makeProfile } from '@/test/fixtures';
 import { OnboardingWizard } from './OnboardingWizard';
 
 const actions = vi.hoisted(() => ({ completeOnboarding: vi.fn(async () => {}) }));
@@ -437,7 +438,64 @@ describe('the account step', () => {
   });
 });
 
+describe('setting up again, after Delete all data started over', () => {
+  function startedOver() {
+    const data = emptySnapshot();
+    data.tables.profile.push(makeProfile({ name: 'Robin', currency: 'EUR', onboardedAt: null }));
+    return renderWizard({
+      account: fakeAccount(linkedAccount()),
+      store: createStubStore({ data, lockMode: 'pin' }),
+    });
+  }
+
+  it('starts from the name and currency that were kept', async () => {
+    startedOver();
+    await next();
+    expect(screen.getByLabelText('Currency')).toHaveValue('EUR');
+    expect(screen.getByLabelText('What should we call you?')).toHaveValue('Robin');
+  });
+
+  it('keeps the lock there is, rather than asking for one', async () => {
+    const { store } = startedOver();
+    await next();
+    await next();
+    await fillBalances('0', '0');
+    await userEvent.click(screen.getByRole('switch', { name: "I don't have a regular salary" }));
+    await next();
+    await next();
+    expect(screen.getByRole('heading', { level: 1, name: 'Your PIN stays' })).toBeInTheDocument();
+    expect(screen.queryByRole('radio', { name: 'No lock' })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Start my adventure' }));
+    expect(actions.completeOnboarding).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'Robin', currency: 'EUR' }),
+    );
+    expect(store.getState().setSecret).not.toHaveBeenCalled();
+    expect(store.getState().clearSecret).not.toHaveBeenCalled();
+  });
+});
+
 describe('OnboardingWizard', () => {
+  it('keeps the lock step on screen while the PIN chosen on it is set', async () => {
+    const store = createStubStore();
+    vi.mocked(store.getState().setSecret).mockImplementation(async () => {
+      store.setState({ lockMode: 'pin' });
+    });
+    actions.completeOnboarding.mockReturnValueOnce(new Promise(() => {}));
+    renderWizard({ store });
+    await skipAccount();
+    await next();
+    await fillBalances('0', '0');
+    await userEvent.click(screen.getByRole('switch', { name: "I don't have a regular salary" }));
+    await next();
+    await next();
+    await userEvent.click(screen.getByRole('radio', { name: 'PIN' }));
+    await userEvent.type(screen.getByLabelText('Choose a PIN'), '2468');
+    await userEvent.type(screen.getByLabelText('Confirm PIN'), '2468');
+    await userEvent.click(screen.getByRole('button', { name: 'Start my adventure' }));
+    expect(store.getState().setSecret).toHaveBeenCalledWith('2468', 'pin');
+    expect(screen.getByRole('heading', { level: 1, name: 'Lock Funcial?' })).toBeInTheDocument();
+  });
+
   it('keeps what was entered on a step when the person goes back to it', async () => {
     renderWizard();
     await skipAccount();

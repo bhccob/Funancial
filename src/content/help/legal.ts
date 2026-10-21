@@ -11,7 +11,7 @@ export const LEGAL: {
     'If you have an account, the app also sends a locked copy of your data to that service, and keeps it there, so you can move to a new phone.',
     'Your email is used only for "forgot password".',
     'Because "forgot password" brings your data back, the service can unlock the copy, so the app\'s owner, who runs it, and anyone who got into the owner\'s Vercel account could read it.',
-    '"Delete all data" erases this phone only. An account\'s locked copy stays on the service until you delete it from the phone you use it on (Settings, Account, Turn off and delete my copy) or ask the app\'s owner to remove it.',
+    '"Delete all data" erases everything you added. With an account, its locked copy starts over with the phone, keeping only your name, currency and settings. The account and that copy stay on the service until you delete them from the phone you use it on (Settings, Account, Turn off and delete my copy) or ask the app\'s owner to remove them.',
     'An app installed from the download page also checks that page for a newer version. That check carries nothing about you.',
   ],
   terms: [

@@ -145,14 +145,17 @@ describe('glossary, FAQ and legal text', () => {
     expect(line).toMatch(/Never your amounts, balances or notes\./);
   });
 
-  it('says Delete all data erases this phone only, and how the account copy goes', () => {
+  it('says Delete all data starts the account copy over too, and how the account goes', () => {
     const line = LEGAL.privacy.find((l) => /Delete all data/.test(l))!;
-    expect(line).toMatch(/erases this phone only/);
-    expect(line).toMatch(/copy stays on the service until you delete it/);
+    expect(line).toMatch(/erases everything you added/);
+    expect(line).toMatch(
+      /With an account, its locked copy starts over with the phone, keeping only your name, currency and settings\./,
+    );
+    expect(line).toMatch(/stay on the service until you delete them/);
     // Only the phone that holds the account can delete it; a phone the account moved from cannot.
-    expect(line).toMatch(/delete it from the phone you use it on/);
+    expect(line).toMatch(/delete them from the phone you use it on/);
     expect(line).toContain('Turn off and delete my copy');
-    expect(line).toMatch(/ask the app's owner to remove it/);
+    expect(line).toMatch(/ask the app's owner to remove them/);
   });
 
   it('warns in the terms that an account copy is as is, with no promise it will always be there', () => {

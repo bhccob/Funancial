@@ -5,17 +5,22 @@ import { TextField } from '@/components/ui/TextField';
 import { useAction } from '@/lib/useAction';
 import { useApp } from '@/store/AppStoreProvider';
 
-/** Typed-confirmation erase of everything on this device. Works locked or unlocked. */
+/**
+ * Typed-confirmation erase of everything on this device. Works locked or unlocked. `erase` replaces
+ * what the confirmation does (Delete all data starting over, for a phone with an account).
+ */
 export function EraseDialog({
   open,
   title,
   description,
   onClose,
+  erase,
 }: {
   open: boolean;
   title: string;
   description: string;
   onClose(): void;
+  erase?(): Promise<void>;
 }) {
   const deleteAllData = useApp((s) => s.deleteAllData);
   const run = useAction();
@@ -46,7 +51,7 @@ export function EraseDialog({
               disabled={typed !== 'DELETE'}
               onClick={() => {
                 close();
-                void run(deleteAllData);
+                void run(erase ?? deleteAllData);
               }}
             >
               Delete everything

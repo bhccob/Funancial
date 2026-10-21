@@ -20,6 +20,7 @@ import {
   SubscriptionSchema,
   TransactionSchema,
 } from './entities';
+import type { LocalDate } from './dates';
 import { migrateRecord } from './migrations';
 
 export const TABLES = [
@@ -145,6 +146,26 @@ export function emptySnapshot(): DataSnapshot {
       aboutYou: [],
     },
   };
+}
+
+/**
+ * What Delete all data leaves when there is an account: the settings, and the name and currency
+ * for setup to start from. Everything added goes, with the game progress it earned; the money
+ * starts again today, from what setup asks.
+ */
+export function freshStart(data: DataSnapshot, today: LocalDate, now: string): DataSnapshot {
+  const fresh = emptySnapshot();
+  fresh.tables.settings = data.tables.settings;
+  fresh.tables.profile = data.tables.profile.map((p) => ({
+    ...p,
+    updatedAt: now,
+    openingDate: today,
+    openingCash: 0,
+    openingSavings: 0,
+    salary: null,
+    onboardedAt: null,
+  }));
+  return fresh;
 }
 
 export class SchemaVersionError extends Error {

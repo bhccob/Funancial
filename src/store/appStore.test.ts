@@ -5,7 +5,16 @@ import type { SyncMessage } from '@/lib/broadcast';
 import type { SafeStorage } from '@/lib/safeStorage';
 import { buildDemoSnapshot } from '@/data/demoSeed';
 import { CURRENT_SCHEMA_VERSION } from '@/domain/snapshot';
-import { makeExpense, makeLedgerEntry, makeSubscription } from '@/test/fixtures';
+import {
+  makeAboutYou,
+  makeDebt,
+  makeExpense,
+  makeGoal,
+  makeHolding,
+  makeLedgerEntry,
+  makeProfile,
+  makeSubscription,
+} from '@/test/fixtures';
 import { memoryStorage } from '@/test/memoryStorage';
 import { createAppStore, type AppDeps } from './appStore';
 
@@ -289,6 +298,80 @@ describe('delete all data', () => {
     expect(store.getState().data.tables.expense).toEqual([]);
     expect(posts).toContainEqual({ type: 'reload', reason: 'delete' });
     expect((await reboot(deps)).getState().phase).toBe('welcome');
+  });
+});
+
+describe('starting over', () => {
+  // Delete all data with an account: what was added goes, and the person, the lock and the link stay.
+  async function filled() {
+    const t = await freshStore();
+    const put = t.store.getState().put;
+    await put(
+      'profile',
+      makeProfile({
+        name: 'Robin',
+        currency: 'EUR',
+        openingDate: '2026-09-01',
+        openingCash: 900_00,
+        openingSavings: 4_000_00,
+        salary: { monthlyAmount: 3_000_00, payDay: 25 },
+      }),
+    );
+    await put('expense', makeExpense({ id: 'e1' }));
+    await put('subscription', makeSubscription({ id: 's1' }));
+    await put('debt', makeDebt({ id: 'd1' }));
+    await put('goal', makeGoal({ id: 'g1' }));
+    await put('holding', makeHolding({ id: 'h1' }));
+    await put('aboutYou', makeAboutYou());
+    await put('ledger', makeLedgerEntry({ id: 'quest:x#0', key: 'quest:x', xp: 80 }));
+    const settings = t.store.getState().data.tables.settings[0]!;
+    await put('settings', { ...settings, weekStartsOn: 0, warningTone: 'strict' });
+    return t;
+  }
+
+  it('erases everything added, and keeps the settings and the name and currency for setup', async () => {
+    const { deps, store } = await filled();
+    const settings = store.getState().data.tables.settings[0];
+    await store.getState().startOver();
+
+    for (const data of [store.getState().data, (await reboot(deps)).getState().data]) {
+      const { profile, settings: kept, ...rest } = data.tables;
+      for (const [table, rows] of Object.entries(rest)) expect(rows, table).toEqual([]);
+      expect(kept).toEqual([settings]);
+      expect(profile).toEqual([
+        expect.objectContaining({
+          name: 'Robin',
+          currency: 'EUR',
+          openingDate: '2026-10-14',
+          openingCash: 0,
+          openingSavings: 0,
+          salary: null,
+          onboardedAt: null,
+        }),
+      ]);
+    }
+  });
+
+  it('keeps the lock and what is kept outside the data, such as the account link', async () => {
+    const { deps, store } = await filled();
+    await store.getState().putPrivate('funancial.account', { token: 'tok-plain' });
+    await store.getState().setSecret('2468', 'pin');
+    await store.getState().startOver();
+    expect(store.getState()).toMatchObject({ phase: 'unlocked', lockMode: 'pin' });
+    expect(await store.getState().getPrivate('funancial.account')).toEqual({ token: 'tok-plain' });
+
+    const again = await reboot(deps);
+    expect(again.getState().phase).toBe('locked');
+    await again.getState().unlock('2468');
+    expect(await again.getState().getPrivate('funancial.account')).toEqual({ token: 'tok-plain' });
+  });
+
+  it('tells the account a change was made, so the fresh start becomes its copy', async () => {
+    const { store } = await filled();
+    const changed = vi.fn();
+    store.getState().onDataChange(changed);
+    await store.getState().startOver();
+    expect(changed).toHaveBeenCalled();
   });
 });
 

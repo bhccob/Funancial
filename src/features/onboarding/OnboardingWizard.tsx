@@ -133,6 +133,13 @@ export function OnboardingWizard({ onFinishing }: { onFinishing?(finishing: bool
   const enableBiometric = useApp((s) => s.enableBiometric);
   const deleteAllData = useApp((s) => s.deleteAllData);
   const emptyData = useApp((s) => !hasData(s.data));
+  // Set up again after Delete all data started over: the name, currency and lock it kept. The
+  // lock is the one there was as setup opened, not one the last step sets.
+  const kept = useApp((s) => s.data.tables.profile[0]);
+  const lockMode = useApp((s) => s.lockMode);
+  const [keptLock] = useState(() =>
+    lockMode === 'pin' || lockMode === 'passphrase' ? lockMode : null,
+  );
   // The person's choice from Home's eye, which a card's balance below follows (no profile yet).
   const amountsHidden = useAmountsHidden((s) => s.hidden);
   const { signUp } = useAccountActions();
@@ -161,10 +168,12 @@ export function OnboardingWizard({ onFinishing }: { onFinishing?(finishing: bool
   const { busy: signingUp, guard } = useBusy();
 
   // A guess from where the phone is; the Select still offers every currency.
-  const [currency, setCurrency] = useState(() =>
-    defaultCurrency(Intl.DateTimeFormat().resolvedOptions().timeZone, navigator.language),
+  const [currency, setCurrency] = useState(
+    () =>
+      kept?.currency ??
+      defaultCurrency(Intl.DateTimeFormat().resolvedOptions().timeZone, navigator.language),
   );
-  const [name, setName] = useState('');
+  const [name, setName] = useState(kept?.name ?? '');
   const [cash, setCash] = useState<number | null>(null);
   const [savings, setSavings] = useState<number | null>(null);
   const [noSalary, setNoSalary] = useState(false);
@@ -546,6 +555,16 @@ export function OnboardingWizard({ onFinishing }: { onFinishing?(finishing: bool
           </>
         );
       default:
+        // `lock` stays 'none', so finishing leaves the lock there is as it is.
+        if (keptLock) {
+          return (
+            <ScreenHeader
+              eyebrow="Keep it private"
+              title={`Your ${LOCK_NAMES[keptLock]} stays`}
+              lead="Funcial keeps the lock you have. You can change it anytime in Settings."
+            />
+          );
+        }
         return (
           <>
             <ScreenHeader
