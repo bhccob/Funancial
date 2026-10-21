@@ -9,7 +9,6 @@ import { localDay } from '@/domain/game/activity';
 import { monthKey } from '@/domain/periods';
 import { CardSheet } from '@/features/goals/CardSheet';
 import { BillRow } from '@/features/shared/BillRow';
-import { paidWithLabel } from '@/features/shared/paidWith';
 import { cn } from '@/lib/cn';
 import { daysUntil, formatDay, relativeDays } from '@/lib/format';
 import { useAction } from '@/lib/useAction';
@@ -49,7 +48,7 @@ export function SubscriptionsScreen() {
   const money = useMoney();
   const today = useToday();
   const subscriptions = useApp((s) => s.data.tables.subscription);
-  const debts = useApp((s) => s.data.tables.debt);
+  const accounts = useApp((s) => s.data.tables.account);
   const { setSubscriptionAudit, setSubscriptionStatus } = useFinanceActions();
   const run = useAction();
   // undefined = dialog closed, null = adding a new one.
@@ -109,7 +108,7 @@ export function SubscriptionsScreen() {
                     <div className="min-w-0">
                       <p className="truncate font-bold">{sub.name}</p>
                       <p className="text-muted text-sm font-semibold tabular-nums">
-                        {`${money(sub.amount)} / ${PER[sub.cycle]} · ${renewsText(today, sub.nextRenewal)} · ${paidWithLabel(sub.paymentMethod, sub.cardId, debts)}`}
+                        {`${money(sub.amount)} / ${PER[sub.cycle]} · ${renewsText(today, sub.nextRenewal)} · ${accounts.find((a) => a.id === sub.accountId)?.name ?? 'Unknown account'}`}
                       </p>
                     </div>
                     <Menu
@@ -204,7 +203,7 @@ export function SubscriptionsScreen() {
       )}
 
       <SubscriptionDialog sub={editing} onClose={() => setEditing(undefined)} />
-      <CardSheet debtId={cardId} onClose={() => setCardId(null)} />
+      <CardSheet accountId={cardId} onClose={() => setCardId(null)} />
     </div>
   );
 }

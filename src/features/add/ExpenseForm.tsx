@@ -14,8 +14,7 @@ import { useApp } from '@/store/AppStoreProvider';
 import type { ExpenseInput } from '@/store/financeActions';
 import { useCurrency, useFinanceActions, useToday } from '@/store/useFinance';
 import { CATEGORY_OPTIONS } from '@/features/shared/categories';
-import { PaidWithField } from '@/features/shared/PaidWithField';
-import { isCardChoice, paidWithValue, parsePaidWith } from '@/features/shared/paidWith';
+import { AccountField, useStartAccountId } from '@/features/shared/AccountField';
 import { DateField } from './DateField';
 import { pastDateProblem } from './pastDate';
 
@@ -38,17 +37,19 @@ export function ExpenseForm({ onDone, expense }: { onDone(): void; expense?: Exp
   const [amount, setAmount] = useState<number | null>(expense?.amount ?? null);
   const [category, setCategory] = useState<Category>(expense?.category ?? 'food');
   const [date, setDate] = useState(expense?.date ?? today);
-  const [paidWith, setPaidWith] = useState(() =>
-    expense ? paidWithValue(expense.paymentMethod, expense.cardId) : 'cash',
+  const startAccountId = useStartAccountId();
+  const [accountId, setAccountId] = useState(expense?.accountId ?? startAccountId);
+  const paidOnCard = useApp(
+    (s) => s.data.tables.account.find((a) => a.id === accountId)?.kind === 'credit',
   );
   const [note, setNote] = useState(expense?.note ?? '');
   const [repeat, setRepeat] = useState('none');
-  const [errors, setErrors] = useState<{ amount?: string; date?: string }>({});
+  const [errors, setErrors] = useState<{ amount?: string; date?: string; account?: string }>({});
   const [crossing, setCrossing] = useState<LimitStatus[] | null>(null);
   const [busy, setBusy] = useState(false);
 
   function fields(): Omit<ExpenseInput, 'repeat'> {
-    return { amount: amount ?? 0, category, date, note: note.trim(), ...parsePaidWith(paidWith) };
+    return { amount: amount ?? 0, category, date, note: note.trim(), accountId };
   }
 
   function input(): ExpenseInput {
@@ -92,9 +93,10 @@ export function ExpenseForm({ onDone, expense }: { onDone(): void; expense?: Exp
     const found = {
       amount: amount === null || amount <= 0 ? 'Enter an amount like 12.50' : undefined,
       date: pastDateProblem(date, today) ?? undefined,
+      account: accountId ? undefined : 'Pick an account.',
     };
     setErrors(found);
-    if (found.amount || found.date) return;
+    if (found.amount || found.date || found.account) return;
     if (expense) return void update(expense.id);
 
     const next = input();
@@ -142,14 +144,17 @@ export function ExpenseForm({ onDone, expense }: { onDone(): void; expense?: Exp
           setErrors((x) => ({ ...x, date: undefined }));
         }}
       />
-      <PaidWithField
-        value={paidWith}
-        onChange={setPaidWith}
-        keepCardId={expense?.cardId}
+      <AccountField
+        label="Paid with"
+        value={accountId}
+        onChange={(id) => {
+          setAccountId(id);
+          setErrors((x) => ({ ...x, account: undefined }));
+        }}
+        keepId={expense?.accountId}
+        error={errors.account}
         hint={
-          isCardChoice(paidWith)
-            ? 'Adds to the card balance. Paying the card later moves the cash.'
-            : undefined
+          paidOnCard ? 'Adds to the card balance. Paying the card later moves the cash.' : undefined
         }
       />
       <TextField

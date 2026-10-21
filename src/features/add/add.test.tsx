@@ -6,15 +6,18 @@ import { CATEGORY_OPTIONS } from '@/features/shared/categories';
 import { Toaster } from '@/components/ui/Toaster';
 import { periodRange } from '@/domain/periods';
 import type { LimitStatus } from '@/domain/budget';
-import type { Settings } from '@/domain/entities';
+import type { Account, Settings } from '@/domain/entities';
 import { emptySnapshot } from '@/domain/snapshot';
 import { toastStore } from '@/lib/toast';
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
-import { makeDebt, makeLimit, makeSettings } from '@/test/fixtures';
+import { makeAccount, makeExpense, makeLimit, makeSettings } from '@/test/fixtures';
 import { AddScreen } from './AddScreen';
+import { ExpenseForm } from './ExpenseForm';
 
 const actions = vi.hoisted(() => ({
   addExpense: vi.fn(),
+  updateExpense: vi.fn(),
+  deleteExpense: vi.fn(),
   wouldCrossOver: vi.fn(),
   addIncome: vi.fn(),
 }));
@@ -24,6 +27,32 @@ vi.mock('@/store/useFinance', async (importOriginal) => ({
 }));
 
 const TODAY = '2026-10-14';
+const MAIN = makeAccount({ id: 'acct-main', name: 'Main account', order: 0 });
+const SAVINGS = makeAccount({
+  id: 'acct-savings',
+  name: 'Savings',
+  kind: 'savings',
+  skin: 'mint',
+  inAvailable: false,
+  order: 1,
+});
+const VISA = makeAccount({
+  id: 'card-1',
+  name: 'Visa',
+  kind: 'credit',
+  skin: 'violet',
+  inAvailable: false,
+  openingBalance: 0,
+  order: 2,
+  credit: {
+    limit: 3_000_00,
+    statementDay: 1,
+    dueDay: 21,
+    payInFull: true,
+    minimumPayment: 25_00,
+    interestRate: 22.9,
+  },
+});
 const foodLimit = makeLimit({ id: 'lim-food', category: 'food', period: 'weekly', amount: 120_00 });
 
 function status(level: LimitStatus['level'], pct: number): LimitStatus {
@@ -41,20 +70,26 @@ function status(level: LimitStatus['level'], pct: number): LimitStatus {
 beforeEach(() => {
   toastStore.setState({ toasts: [] });
   actions.addExpense.mockReset().mockResolvedValue({ expense: {}, alerts: [] });
+  actions.updateExpense.mockReset().mockResolvedValue(undefined);
+  actions.deleteExpense.mockReset().mockResolvedValue(undefined);
   actions.wouldCrossOver.mockReset().mockReturnValue([]);
   actions.addIncome.mockReset().mockResolvedValue({});
 });
 
+function dataWith(accounts: Account[], settings: Partial<Settings> = {}) {
+  const data = emptySnapshot();
+  data.tables.settings.push(makeSettings(settings));
+  data.tables.account.push(...accounts);
+  return data;
+}
+
 function renderAdd(
   path: InitialEntry = '/add',
   tone: Settings['warningTone'] = 'motivational',
-  cards = ['Visa'],
+  accounts: Account[] = [MAIN, SAVINGS, VISA],
+  settings: Partial<Settings> = {},
 ) {
-  const data = emptySnapshot();
-  data.tables.settings.push(makeSettings({ warningTone: tone }));
-  cards.forEach((name, i) =>
-    data.tables.debt.push(makeDebt({ id: `card-${i + 1}`, name, kind: 'credit_card' })),
-  );
+  const data = dataWith(accounts, { ...settings, warningTone: tone });
   return renderWithStore(
     <MemoryRouter initialEntries={[path]}>
       <Routes>
@@ -68,9 +103,14 @@ function renderAdd(
 }
 
 const save = () => userEvent.click(screen.getByRole('button', { name: 'Save' }));
+/** The option labels of a select, in the order they are offered. */
+const optionsOf = (label: string) =>
+  within(screen.getByLabelText(label))
+    .queryAllByRole('option')
+    .map((o) => o.textContent);
 
 describe('Add expense', () => {
-  it('saves a cash expense with exactly what was entered, then goes back', async () => {
+  it('saves an expense with exactly what was entered, on the default account, then goes back', async () => {
     renderAdd();
     expect(screen.getByRole('heading', { level: 1, name: 'Add' })).toBeInTheDocument();
     expect(screen.getByLabelText('Amount')).toHaveFocus();
@@ -84,8 +124,7 @@ describe('Add expense', () => {
       category: 'food',
       date: TODAY,
       note: '',
-      paymentMethod: 'cash',
-      cardId: null,
+      accountId: 'acct-main',
       repeat: null,
     });
     expect(await screen.findByText('Expense saved.')).toBeInTheDocument();
@@ -96,17 +135,26 @@ describe('Add expense', () => {
     renderAdd();
     await userEvent.type(screen.getByLabelText('Amount'), '40');
     await userEvent.click(screen.getByRole('radio', { name: 'Fun' }));
-    await userEvent.click(screen.getByRole('radio', { name: 'Visa' }));
+    await userEvent.selectOptions(screen.getByLabelText('Paid with'), 'Visa (credit card)');
     await userEvent.selectOptions(screen.getByLabelText('Repeats'), 'Monthly');
     await save();
     expect(actions.addExpense).toHaveBeenCalledWith(
       expect.objectContaining({
         amount: 40_00,
         category: 'entertainment',
-        paymentMethod: 'credit_card',
-        cardId: 'card-1',
+        accountId: 'card-1',
         repeat: 'monthly',
       }),
+    );
+  });
+
+  it('saves the account that was picked', async () => {
+    renderAdd();
+    await userEvent.type(screen.getByLabelText('Amount'), '9');
+    await userEvent.selectOptions(screen.getByLabelText('Paid with'), 'Savings');
+    await save();
+    expect(actions.addExpense).toHaveBeenCalledWith(
+      expect.objectContaining({ amount: 9_00, accountId: 'acct-savings' }),
     );
   });
 
@@ -151,6 +199,125 @@ describe('Add expense', () => {
   });
 });
 
+describe('Paid with on the expense form', () => {
+  it('lists the accounts in use by their order, a credit card as one', () => {
+    // Handed over out of order: the carousel order decides.
+    renderAdd('/add', 'motivational', [VISA, SAVINGS, MAIN]);
+    expect(optionsOf('Paid with')).toEqual(['Main account', 'Savings', 'Visa (credit card)']);
+  });
+
+  it('lists no archived account', () => {
+    const view = renderAdd('/add', 'motivational', [
+      MAIN,
+      SAVINGS,
+      VISA,
+      makeAccount({ id: 'acct-old', name: 'Old account', order: 3 }),
+    ]);
+    expect(optionsOf('Paid with')).toEqual([
+      'Main account',
+      'Savings',
+      'Visa (credit card)',
+      'Old account',
+    ]);
+    act(() =>
+      view.store.setState((s) => {
+        const tables = { ...s.data.tables };
+        tables.account = tables.account.map((a) =>
+          a.id === 'acct-old' ? { ...a, archivedOn: TODAY } : a,
+        );
+        return { data: { ...s.data, tables } };
+      }),
+    );
+    expect(optionsOf('Paid with')).toEqual(['Main account', 'Savings', 'Visa (credit card)']);
+  });
+
+  it('starts on the default account from the settings', async () => {
+    renderAdd('/add', 'motivational', [MAIN, SAVINGS, VISA], { defaultAccountId: 'acct-savings' });
+    expect(screen.getByLabelText('Paid with')).toHaveValue('acct-savings');
+    await userEvent.type(screen.getByLabelText('Amount'), '3');
+    await save();
+    expect(actions.addExpense).toHaveBeenCalledWith(
+      expect.objectContaining({ accountId: 'acct-savings' }),
+    );
+  });
+
+  it('starts on the first bank account when the default is archived', () => {
+    const gone = makeAccount({ id: 'acct-gone', name: 'Gone', order: 5, archivedOn: '2026-10-01' });
+    renderAdd('/add', 'motivational', [SAVINGS, MAIN, gone], { defaultAccountId: 'acct-gone' });
+    expect(screen.getByLabelText('Paid with')).toHaveValue('acct-main');
+  });
+
+  it('starts on the first option when no bank account or cash is left', () => {
+    renderAdd('/add', 'motivational', [SAVINGS, VISA]);
+    expect(screen.getByLabelText('Paid with')).toHaveValue('acct-savings');
+  });
+
+  it('still renders with no account at all, and refuses to save', async () => {
+    renderAdd('/add', 'motivational', []);
+    const select = screen.getByLabelText('Paid with');
+    expect(optionsOf('Paid with')).toEqual([]);
+    await userEvent.type(screen.getByLabelText('Amount'), '5');
+    await save();
+    expect(screen.getByText('Pick an account.')).toBeInTheDocument();
+    expect(select).toBeInvalid();
+    expect(select).toHaveAccessibleDescription('Pick an account.');
+    expect(actions.addExpense).not.toHaveBeenCalled();
+  });
+
+  it('says what paying with a card does, under the select', async () => {
+    renderAdd();
+    const hint = 'Adds to the card balance. Paying the card later moves the cash.';
+    expect(screen.queryByText(hint)).not.toBeInTheDocument();
+    await userEvent.selectOptions(screen.getByLabelText('Paid with'), 'Visa (credit card)');
+    expect(screen.getByLabelText('Paid with')).toHaveAccessibleDescription(hint);
+    await userEvent.selectOptions(screen.getByLabelText('Paid with'), 'Savings');
+    expect(screen.queryByText(hint)).not.toBeInTheDocument();
+  });
+});
+
+describe('Edit expense', () => {
+  const OLD = makeAccount({
+    id: 'acct-old',
+    name: 'Old account',
+    order: 3,
+    archivedOn: '2026-10-01',
+  });
+  const expense = makeExpense({ id: 'exp-1', amount: 8_00, date: TODAY, accountId: 'acct-old' });
+
+  function renderEdit() {
+    return renderWithStore(
+      <ExpenseForm expense={expense} onDone={() => {}} />,
+      createStubStore({ data: dataWith([MAIN, SAVINGS, VISA, OLD]), today: TODAY }),
+    );
+  }
+
+  it('still offers the archived account the expense was paid with, and keeps it', async () => {
+    renderEdit();
+    expect(screen.getByLabelText('Paid with')).toHaveValue('acct-old');
+    expect(optionsOf('Paid with')).toEqual([
+      'Main account',
+      'Savings',
+      'Visa (credit card)',
+      'Old account',
+    ]);
+    await save();
+    expect(actions.updateExpense).toHaveBeenCalledWith(
+      'exp-1',
+      expect.objectContaining({ accountId: 'acct-old' }),
+    );
+  });
+
+  it('moves the expense to the account that was picked', async () => {
+    renderEdit();
+    await userEvent.selectOptions(screen.getByLabelText('Paid with'), 'Main account');
+    await save();
+    expect(actions.updateExpense).toHaveBeenCalledWith(
+      'exp-1',
+      expect.objectContaining({ accountId: 'acct-main' }),
+    );
+  });
+});
+
 describe('Add expense without Buy it?', () => {
   it('has no link to ask first, on an expense or on income', async () => {
     renderAdd();
@@ -167,14 +334,14 @@ describe('Add expense without Buy it?', () => {
           item: 'Headphones',
           amount: 249_00,
           category: 'entertainment',
-          paymentMethod: 'cash',
-          cardId: null,
+          accountId: 'acct-savings',
         },
       },
     });
     expect(screen.getByLabelText('Amount')).toHaveValue('');
     expect(screen.getByRole('radio', { name: 'Food' })).toBeChecked();
     expect(screen.getByLabelText('Note')).toHaveValue('');
+    expect(screen.getByLabelText('Paid with')).toHaveValue('acct-main');
   });
 });
 
@@ -191,7 +358,7 @@ describe('Add income', () => {
       source: 'salary',
       label: 'Salary',
       date: TODAY,
-      bucket: 'cash',
+      accountId: 'acct-main',
       note: '',
     });
     expect(await screen.findByText('Income saved.')).toBeInTheDocument();
@@ -202,11 +369,36 @@ describe('Add income', () => {
     await userEvent.type(screen.getByLabelText('Amount'), '50');
     await userEvent.click(screen.getByRole('radio', { name: 'Extra' }));
     expect(screen.getByLabelText('Label')).toHaveValue('Extra income');
-    await userEvent.click(screen.getByRole('radio', { name: 'Savings' }));
+    await userEvent.selectOptions(screen.getByLabelText('Goes to'), 'Savings');
     await save();
     expect(actions.addIncome).toHaveBeenCalledWith(
-      expect.objectContaining({ source: 'extra', label: 'Extra income', bucket: 'savings' }),
+      expect.objectContaining({
+        source: 'extra',
+        label: 'Extra income',
+        accountId: 'acct-savings',
+      }),
     );
+  });
+
+  it('does not offer a credit card under Goes to', () => {
+    renderAdd('/add?type=income', 'motivational', [VISA, SAVINGS, MAIN]);
+    expect(optionsOf('Goes to')).toEqual(['Main account', 'Savings']);
+  });
+
+  it('starts on the default account from the settings', async () => {
+    renderAdd('/add?type=income', 'motivational', [MAIN, SAVINGS, VISA], {
+      defaultAccountId: 'acct-savings',
+    });
+    expect(screen.getByLabelText('Goes to')).toHaveValue('acct-savings');
+  });
+
+  it('refuses to save when only a credit card is left', async () => {
+    renderAdd('/add?type=income', 'motivational', [VISA]);
+    expect(optionsOf('Goes to')).toEqual([]);
+    await userEvent.type(screen.getByLabelText('Amount'), '50');
+    await save();
+    expect(screen.getByLabelText('Goes to')).toHaveAccessibleDescription('Pick an account.');
+    expect(actions.addIncome).not.toHaveBeenCalled();
   });
 });
 
@@ -220,33 +412,17 @@ describe('the Add forms in the line style', () => {
 
   it('has line fields, a larger amount and underline tabs for an expense', async () => {
     renderAdd();
-    for (const label of ['Amount', 'Date', 'Note', 'Repeats']) {
+    for (const label of ['Amount', 'Date', 'Paid with', 'Note', 'Repeats']) {
       const field = screen.getByLabelText(label);
       expect(field, label).toHaveClass(...LINE);
       expect(field, label).not.toHaveClass('rounded-md');
     }
     expect(screen.getByLabelText('Amount')).toHaveClass('text-[20px]');
     expect(screen.getByLabelText('Date')).toHaveClass('text-base');
-    // The type switch and Paid with are underline tabs, still radios.
+    // The type switch is underline tabs, still radios; Paid with is a select.
     expect(tab('Expense')).toHaveClass('border-b-2', 'border-text');
     expect(tab('Income')).toHaveClass('border-transparent');
-    expect(tabsOf('Paid with')).toEqual(['Cash', 'Debit card', 'Visa', 'Other']);
-    expect(tab('Cash')).toHaveClass('border-b-2', 'border-text');
-    expect(screen.queryByLabelText('Paid with')).not.toBeInTheDocument();
-  });
-
-  it('offers no archived card under Paid with', () => {
-    const view = renderAdd('/add', 'motivational', ['Visa', 'Old card']);
-    act(() =>
-      view.store.setState((s) => {
-        const tables = { ...s.data.tables };
-        tables.debt = tables.debt.map((d) =>
-          d.name === 'Old card' ? { ...d, archivedOn: TODAY } : d,
-        );
-        return { data: { ...s.data, tables } };
-      }),
-    );
-    expect(tabsOf('Paid with')).toEqual(['Cash', 'Debit card', 'Visa', 'Other']);
+    expect(screen.queryByRole('group', { name: 'Paid with' })).not.toBeInTheDocument();
   });
 
   it('has Category as one-tap chips, not a select and not underline tabs', () => {
@@ -260,44 +436,14 @@ describe('the Add forms in the line style', () => {
     expect(tab('Fun')).not.toHaveClass('bg-overlay');
   });
 
-  it('says what paying with a card does, under the tabs', async () => {
-    renderAdd();
-    const hint = 'Adds to the card balance. Paying the card later moves the cash.';
-    expect(screen.queryByText(hint)).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole('radio', { name: 'Visa' }));
-    expect(screen.getByRole('group', { name: 'Paid with' })).toHaveAccessibleDescription(hint);
-  });
-
-  it.each([
-    ['no card', [], ['Cash', 'Debit card', 'Other']],
-    ['one card', ['Visa'], ['Cash', 'Debit card', 'Visa', 'Other']],
-  ])('has Paid with as tabs with %s', (_, cards, labels) => {
-    renderAdd('/add', 'motivational', cards);
-    expect(tabsOf('Paid with')).toEqual(labels);
-  });
-
-  it('keeps Paid with a line select once there are more than four ways to pay', async () => {
-    renderAdd('/add', 'motivational', ['Visa', 'Amex']);
-    const select = screen.getByLabelText('Paid with');
-    expect(select).toHaveClass(...LINE);
-    expect(screen.queryByRole('group', { name: 'Paid with' })).not.toBeInTheDocument();
-    await userEvent.selectOptions(select, 'Amex');
-    await userEvent.type(screen.getByLabelText('Amount'), '9');
-    await save();
-    expect(actions.addExpense).toHaveBeenCalledWith(
-      expect.objectContaining({ paymentMethod: 'credit_card', cardId: 'card-2' }),
-    );
-  });
-
   it('has line fields and underline tabs for income', () => {
     renderAdd('/add?type=income');
-    for (const label of ['Amount', 'Label', 'Date', 'Note']) {
+    for (const label of ['Amount', 'Label', 'Date', 'Goes to', 'Note']) {
       expect(screen.getByLabelText(label), label).toHaveClass(...LINE);
     }
     expect(screen.getByLabelText('Amount')).toHaveClass('text-base');
     expect(tabsOf('Source')).toEqual(['Salary', 'Extra']);
-    expect(tabsOf('Goes to')).toEqual(['Cash', 'Savings']);
+    expect(screen.queryByRole('group', { name: 'Goes to' })).not.toBeInTheDocument();
     expect(tab('Salary')).toHaveClass('border-b-2', 'border-text');
-    expect(tab('Cash')).toHaveClass('border-b-2', 'border-text');
   });
 });

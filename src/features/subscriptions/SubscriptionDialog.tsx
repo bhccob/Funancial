@@ -7,8 +7,7 @@ import { Select } from '@/components/ui/Select';
 import { TextField } from '@/components/ui/TextField';
 import type { Category, Cycle, Subscription } from '@/domain/entities';
 import { CATEGORY_OPTIONS } from '@/features/shared/categories';
-import { PaidWithField } from '@/features/shared/PaidWithField';
-import { parsePaidWith, paidWithValue } from '@/features/shared/paidWith';
+import { AccountField, useStartAccountId } from '@/features/shared/AccountField';
 import { useAction } from '@/lib/useAction';
 import { useCurrency, useFinanceActions, useToday } from '@/store/useFinance';
 
@@ -19,7 +18,7 @@ const CYCLE_OPTIONS: Array<{ value: Cycle; label: string }> = [
   { value: 'yearly', label: 'Yearly' },
 ];
 
-type Errors = { name?: string; amount?: string; nextRenewal?: string };
+type Errors = { name?: string; amount?: string; nextRenewal?: string; account?: string };
 
 function SubscriptionForm({ sub, onDone }: { sub: Subscription | null; onDone(): void }) {
   const { saveSubscription, deleteSubscription } = useFinanceActions();
@@ -32,9 +31,8 @@ function SubscriptionForm({ sub, onDone }: { sub: Subscription | null; onDone():
   const [cycle, setCycle] = useState<Cycle>(sub?.cycle ?? 'monthly');
   const [nextRenewal, setNextRenewal] = useState(sub?.nextRenewal ?? '');
   const [category, setCategory] = useState<Category>(sub?.category ?? 'entertainment');
-  const [paidWith, setPaidWith] = useState(
-    sub ? paidWithValue(sub.paymentMethod, sub.cardId) : 'debit',
-  );
+  const startAccountId = useStartAccountId();
+  const [accountId, setAccountId] = useState(sub?.accountId ?? startAccountId);
   const [errors, setErrors] = useState<Errors>({});
   const [busy, setBusy] = useState(false);
 
@@ -49,9 +47,10 @@ function SubscriptionForm({ sub, onDone }: { sub: Subscription | null; onDone():
         : nextRenewal < today && nextRenewal !== sub?.nextRenewal
           ? 'Use today or a later date.'
           : undefined,
+      account: accountId ? undefined : 'Pick an account.',
     };
     setErrors(found);
-    if (found.name || found.amount || found.nextRenewal) return;
+    if (found.name || found.amount || found.nextRenewal || found.account) return;
 
     setBusy(true);
     const saved = await run(
@@ -63,7 +62,7 @@ function SubscriptionForm({ sub, onDone }: { sub: Subscription | null; onDone():
           cycle,
           nextRenewal,
           category,
-          ...parsePaidWith(paidWith),
+          accountId,
         }),
       { success: sub ? 'Subscription updated.' : 'Subscription added.' },
     );
@@ -122,7 +121,16 @@ function SubscriptionForm({ sub, onDone }: { sub: Subscription | null; onDone():
         onChange={(v) => setCategory(v as Category)}
         options={CATEGORY_OPTIONS}
       />
-      <PaidWithField value={paidWith} onChange={setPaidWith} />
+      <AccountField
+        label="Paid with"
+        value={accountId}
+        onChange={(id) => {
+          setAccountId(id);
+          setErrors((x) => ({ ...x, account: undefined }));
+        }}
+        keepId={sub?.accountId}
+        error={errors.account}
+      />
       {sub && (
         <div className="border-border flex flex-wrap items-center gap-x-3 gap-y-1 border-t pt-4">
           <Button variant="danger-ghost" size="sm" disabled={busy} onClick={remove}>

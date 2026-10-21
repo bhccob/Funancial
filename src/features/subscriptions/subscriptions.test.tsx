@@ -2,13 +2,13 @@ import { fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Subscription } from '@/domain/entities';
+import type { Account, Subscription } from '@/domain/entities';
 import { formatMoney } from '@/domain/money';
 import { emptySnapshot } from '@/domain/snapshot';
 import { DashboardScreen } from '@/features/dashboard/DashboardScreen';
 import { formatDay, formatMonthShort } from '@/lib/format';
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
-import { localIso, makeDebt, makeSubscription } from '@/test/fixtures';
+import { localIso, makeAccount, makeSubscription } from '@/test/fixtures';
 import { SubscriptionsScreen } from './SubscriptionsScreen';
 
 const actions = vi.hoisted(() => ({
@@ -27,20 +27,41 @@ const usd = (minor: number) => formatMoney(minor, 'USD');
 
 beforeEach(() => Object.values(actions).forEach((a) => a.mockClear()));
 
+const MAIN = makeAccount({ id: 'acct-main', name: 'Main account', order: 0 });
+const SAVINGS = makeAccount({
+  id: 'acct-savings',
+  name: 'Savings',
+  kind: 'savings',
+  skin: 'mint',
+  inAvailable: false,
+  order: 1,
+});
+/** A credit card, paid in full on the 21st unless the terms say otherwise. */
+const visa = (terms: Partial<NonNullable<Account['credit']>> = {}) =>
+  makeAccount({
+    id: 'card-1',
+    name: 'Visa',
+    kind: 'credit',
+    skin: 'violet',
+    inAvailable: false,
+    openingBalance: 230_00,
+    openingDate: '2026-09-01',
+    order: 2,
+    credit: {
+      limit: 3_000_00,
+      statementDay: 1,
+      dueDay: 21,
+      payInFull: true,
+      minimumPayment: 25_00,
+      interestRate: 22.9,
+      ...terms,
+    },
+  });
+
 /** The Visa owes 230.00, due on the 21st; the month's other bill is Streamflix (15.99, 10-17). */
 function monthData() {
   const data = emptySnapshot();
-  data.tables.debt.push(
-    makeDebt({
-      id: 'card-1',
-      name: 'Visa',
-      kind: 'credit_card',
-      openingBalance: 230_00,
-      openingDate: '2026-09-01',
-      dueDay: 21,
-      payInFull: true,
-    }),
-  );
+  data.tables.account.push(MAIN, SAVINGS, visa());
   data.tables.subscription.push(
     makeSubscription({
       id: 'sub-tv',
@@ -54,8 +75,7 @@ function monthData() {
       amount: 120_00,
       cycle: 'yearly',
       nextRenewal: '2027-03-01',
-      paymentMethod: 'credit_card',
-      cardId: 'card-1',
+      accountId: 'card-1',
     }),
     makeSubscription({ id: 'sub-mag', name: 'Old Magazine', status: 'cancelled' }),
   );
@@ -129,17 +149,7 @@ describe('SubscriptionsScreen', () => {
 
   it('says "Minimum payment" for a card paid by its minimum', () => {
     const data = monthData();
-    data.tables.debt = [
-      makeDebt({
-        id: 'card-1',
-        name: 'Visa',
-        openingBalance: 230_00,
-        openingDate: '2026-09-01',
-        dueDay: 21,
-        payInFull: false,
-        minimumPayment: 25_00,
-      }),
-    ];
+    data.tables.account = [MAIN, SAVINGS, visa({ payInFull: false, minimumPayment: 25_00 })];
     renderWithStore(
       <MemoryRouter>
         <SubscriptionsScreen />
@@ -153,7 +163,7 @@ describe('SubscriptionsScreen', () => {
 
   it('has no Card payments section when no card has a payment coming', () => {
     const data = monthData();
-    data.tables.debt = [];
+    data.tables.account = [MAIN, SAVINGS];
     renderWithStore(
       <MemoryRouter>
         <SubscriptionsScreen />
@@ -174,7 +184,7 @@ describe('SubscriptionsScreen', () => {
   it('says when a renewal is close and how each is paid', () => {
     renderSubs();
     expect(
-      row('Streamflix').getByText(`${usd(15_99)} / month · Renews in 3 days · Debit card`),
+      row('Streamflix').getByText(`${usd(15_99)} / month · Renews in 3 days · Main account`),
     ).toBeInTheDocument();
     expect(
       row('Cloud Drive').getByText(
@@ -262,7 +272,7 @@ describe('SubscriptionsScreen', () => {
       target: { value: '2026-11-02' },
     });
     await userEvent.selectOptions(within(dialog).getByLabelText('Category'), 'Health');
-    await userEvent.click(within(dialog).getByRole('radio', { name: 'Visa' }));
+    await userEvent.selectOptions(within(dialog).getByLabelText('Paid with'), 'Visa (credit card)');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
     expect(actions.saveSubscription).toHaveBeenCalledWith({
       name: 'FitHub Gym',
@@ -270,8 +280,7 @@ describe('SubscriptionsScreen', () => {
       cycle: 'monthly',
       nextRenewal: '2026-11-02',
       category: 'health',
-      paymentMethod: 'credit_card',
-      cardId: 'card-1',
+      accountId: 'card-1',
     });
   });
 
@@ -281,19 +290,112 @@ describe('SubscriptionsScreen', () => {
     await userEvent.click(screen.getByRole('menuitem', { name: 'Edit' }));
     const dialog = screen.getByRole('dialog', { name: 'Edit subscription' });
     expect(within(dialog).getByLabelText('Name')).toHaveValue('Cloud Drive');
-    expect(within(dialog).getByRole('radio', { name: 'Visa' })).toBeChecked();
+    expect(within(dialog).getByLabelText('Paid with')).toHaveValue('card-1');
     expect(within(dialog).getByText('Past charges stay in your history.')).toBeInTheDocument();
     await userEvent.click(within(dialog).getByRole('button', { name: 'Delete' }));
     expect(actions.deleteSubscription).toHaveBeenCalledWith('sub-cloud');
   });
 });
 
+describe('Paid with in the subscription dialog', () => {
+  const optionsOf = (dialog: HTMLElement) =>
+    within(within(dialog).getByLabelText('Paid with'))
+      .queryAllByRole('option')
+      .map((o) => o.textContent);
+
+  async function openNew() {
+    renderSubs();
+    await userEvent.click(screen.getByRole('button', { name: 'Add' }));
+    return screen.getByRole('dialog', { name: 'Add a subscription' });
+  }
+
+  async function fillIn(dialog: HTMLElement) {
+    await userEvent.type(within(dialog).getByLabelText('Name'), 'Newsletter');
+    await userEvent.type(within(dialog).getByLabelText('Amount'), '5');
+    fireEvent.change(within(dialog).getByLabelText('Next renewal'), {
+      target: { value: '2026-11-02' },
+    });
+  }
+
+  it('lists the accounts in use, a credit card as one, and starts on the default account', async () => {
+    const dialog = await openNew();
+    expect(optionsOf(dialog)).toEqual(['Main account', 'Savings', 'Visa (credit card)']);
+    expect(within(dialog).getByLabelText('Paid with')).toHaveValue('acct-main');
+  });
+
+  it('lists no archived account', async () => {
+    const data = monthData();
+    data.tables.account.push(
+      makeAccount({ id: 'acct-old', name: 'Old account', order: 3, archivedOn: '2026-10-01' }),
+    );
+    renderWithStore(
+      <MemoryRouter>
+        <SubscriptionsScreen />
+      </MemoryRouter>,
+      createStubStore({ data, today: TODAY }),
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Add' }));
+    const dialog = screen.getByRole('dialog', { name: 'Add a subscription' });
+    expect(optionsOf(dialog)).toEqual(['Main account', 'Savings', 'Visa (credit card)']);
+  });
+
+  it('saves the account that was picked', async () => {
+    const dialog = await openNew();
+    await fillIn(dialog);
+    await userEvent.selectOptions(within(dialog).getByLabelText('Paid with'), 'Savings');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+    expect(actions.saveSubscription).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'Newsletter', accountId: 'acct-savings' }),
+    );
+  });
+
+  it('saves the default account when none was picked', async () => {
+    const dialog = await openNew();
+    await fillIn(dialog);
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+    expect(actions.saveSubscription).toHaveBeenCalledWith(
+      expect.objectContaining({ accountId: 'acct-main' }),
+    );
+  });
+
+  it('refuses to save with no account to pay from', async () => {
+    const data = monthData();
+    data.tables.account = [];
+    renderWithStore(
+      <MemoryRouter>
+        <SubscriptionsScreen />
+      </MemoryRouter>,
+      createStubStore({ data, today: TODAY }),
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Add' }));
+    const dialog = screen.getByRole('dialog', { name: 'Add a subscription' });
+    await fillIn(dialog);
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+    expect(within(dialog).getByLabelText('Paid with')).toHaveAccessibleDescription(
+      'Pick an account.',
+    );
+    expect(actions.saveSubscription).not.toHaveBeenCalled();
+  });
+
+  it('moves a subscription to the account that was picked when it is edited', async () => {
+    renderSubs();
+    await userEvent.click(screen.getByRole('button', { name: 'Actions for Cloud Drive' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Edit' }));
+    const dialog = screen.getByRole('dialog', { name: 'Edit subscription' });
+    await userEvent.selectOptions(within(dialog).getByLabelText('Paid with'), 'Main account');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+    expect(actions.saveSubscription).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'sub-cloud', accountId: 'acct-main' }),
+    );
+  });
+});
+
 describe('the subscription dialog in the line style', () => {
-  it('has line fields, underline tabs for the cycle and for paid with', async () => {
+  it('has line fields, and underline tabs for the cycle', async () => {
     renderSubs();
     await userEvent.click(screen.getByRole('button', { name: 'Add' }));
     const dialog = screen.getByRole('dialog', { name: 'Add a subscription' });
-    for (const label of ['Name', 'Amount', 'Next renewal', 'Category']) {
+    for (const label of ['Name', 'Amount', 'Next renewal', 'Category', 'Paid with']) {
       expect(within(dialog).getByLabelText(label), label).toHaveClass('border-b', 'font-extrabold');
       expect(within(dialog).getByLabelText(label), label).not.toHaveClass('rounded-md');
     }
@@ -303,8 +405,7 @@ describe('the subscription dialog in the line style', () => {
         .map((r) => r.closest('label')?.textContent);
     expect(tabs('Cycle')).toEqual(['Weekly', 'Monthly', 'Quarterly', 'Yearly']);
     expect(within(dialog).getByText('Monthly')).toHaveClass('border-b-2', 'border-text');
-    expect(tabs('Paid with')).toEqual(['Cash', 'Debit card', 'Visa', 'Other']);
-    expect(within(dialog).getByText('Debit card')).toHaveClass('border-b-2', 'border-text');
+    expect(within(dialog).queryByRole('group', { name: 'Paid with' })).not.toBeInTheDocument();
   });
 
   it('saves the cycle that was picked', async () => {

@@ -3,6 +3,8 @@ import { Button } from '@/components/ui/Button';
 import { MoneyField } from '@/components/ui/MoneyField';
 import { RadioGroup } from '@/components/ui/RadioGroup';
 import { TextField } from '@/components/ui/TextField';
+import type { Account } from '@/domain/entities';
+import { AccountField, useStartAccountId } from '@/features/shared/AccountField';
 import { useAction } from '@/lib/useAction';
 import { useCurrency, useFinanceActions, useToday } from '@/store/useFinance';
 import { DateField } from './DateField';
@@ -10,6 +12,8 @@ import { pastDateProblem } from './pastDate';
 
 type Source = 'salary' | 'extra';
 const DEFAULT_LABEL: Record<Source, string> = { salary: 'Salary', extra: 'Extra income' };
+/** Income goes into a bank account, cash or savings: never onto a credit card. */
+const NOT_CREDIT = (a: Account) => a.kind !== 'credit';
 
 export function IncomeForm({ onDone }: { onDone(): void }) {
   const { addIncome } = useFinanceActions();
@@ -21,9 +25,10 @@ export function IncomeForm({ onDone }: { onDone(): void }) {
   const [source, setSource] = useState<Source>('salary');
   const [label, setLabel] = useState(DEFAULT_LABEL.salary);
   const [date, setDate] = useState(today);
-  const [bucket, setBucket] = useState<'cash' | 'savings'>('cash');
+  const startAccountId = useStartAccountId(NOT_CREDIT);
+  const [accountId, setAccountId] = useState(startAccountId);
   const [note, setNote] = useState('');
-  const [errors, setErrors] = useState<{ amount?: string; date?: string }>({});
+  const [errors, setErrors] = useState<{ amount?: string; date?: string; account?: string }>({});
   const [busy, setBusy] = useState(false);
 
   function changeSource(next: Source) {
@@ -37,9 +42,10 @@ export function IncomeForm({ onDone }: { onDone(): void }) {
     const found = {
       amount: amount === null || amount <= 0 ? 'Enter an amount like 12.50' : undefined,
       date: pastDateProblem(date, today) ?? undefined,
+      account: accountId ? undefined : 'Pick an account.',
     };
     setErrors(found);
-    if (found.amount || found.date) return;
+    if (found.amount || found.date || found.account) return;
 
     setBusy(true);
     const saved = await run(
@@ -49,7 +55,7 @@ export function IncomeForm({ onDone }: { onDone(): void }) {
           source,
           label: label.trim() || DEFAULT_LABEL[source],
           date,
-          bucket,
+          accountId,
           note: note.trim(),
         }),
       { success: 'Income saved.' },
@@ -99,15 +105,15 @@ export function IncomeForm({ onDone }: { onDone(): void }) {
           setErrors((x) => ({ ...x, date: undefined }));
         }}
       />
-      <RadioGroup<'cash' | 'savings'>
-        variant="underline"
-        legend="Goes to"
-        value={bucket}
-        onChange={setBucket}
-        options={[
-          { value: 'cash', label: 'Cash' },
-          { value: 'savings', label: 'Savings' },
-        ]}
+      <AccountField
+        label="Goes to"
+        value={accountId}
+        onChange={(id) => {
+          setAccountId(id);
+          setErrors((x) => ({ ...x, account: undefined }));
+        }}
+        filter={NOT_CREDIT}
+        error={errors.account}
       />
       <TextField
         variant="line"
