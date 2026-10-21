@@ -69,7 +69,7 @@ export function BillsSection({ bills, total, today }: BillsSectionProps) {
           <EmptyState title="Nothing due this month" />
         )}
       </Section>
-      <CardSheet debtId={cardId} onClose={() => setCardId(null)} />
+      <CardSheet accountId={cardId} onClose={() => setCardId(null)} />
       <SubscriptionDialog sub={editing} onClose={() => setEditing(undefined)} />
     </>
   );

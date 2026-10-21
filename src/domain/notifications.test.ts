@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
+  makeAccount,
   makeDebt,
   makeDividend,
   makeExpense,
@@ -12,6 +13,8 @@ import {
 } from '@/test/fixtures';
 import { localDateTime } from './dates';
 import type {
+  Account,
+  CreditTerms,
   Debt,
   Dividend,
   Expense,
@@ -60,6 +63,9 @@ type Setup = {
   profileSince?: string;
   inbox?: Settings['inbox'];
   subscriptions?: Subscription[];
+  /** Credit cards, and any other account. */
+  accounts?: Account[];
+  /** Loans. */
   debts?: Debt[];
   expenses?: Expense[];
   incomes?: Income[];
@@ -89,6 +95,7 @@ function build(setup: Setup = {}): DataSnapshot {
     }),
   ];
   data.tables.subscription = setup.subscriptions ?? [];
+  data.tables.account = setup.accounts ?? [];
   data.tables.debt = setup.debts ?? [];
   data.tables.expense = setup.expenses ?? [];
   data.tables.income = setup.incomes ?? [];
@@ -103,20 +110,48 @@ const noon = (date: string) => localDateTime(`${date}T12:00`).toISOString();
 const keys = (rs: Reminder[]) => rs.map((r) => r.key);
 const kinds = (rs: Reminder[]) => [...new Set(rs.map((r) => r.kind))].sort();
 
-/** A card with 230.00 on it, due on the 21st. */
-function visa(over: Partial<Debt> = {}): { debts: Debt[]; expenses: Expense[] } {
+/** A credit account with 230.00 owed on it, due on the 21st. */
+function visa(over: Partial<CreditTerms> & { archivedOn?: string } = {}): {
+  accounts: Account[];
+  expenses: Expense[];
+} {
+  const { archivedOn, ...terms } = over;
   return {
-    debts: [makeDebt({ id: 'card-visa', name: 'Visa', openingDate: '2026-10-01', ...over })],
-    expenses: [
-      makeExpense({
-        amount: 230_00,
-        date: '2026-10-05',
-        paymentMethod: 'credit_card',
-        cardId: 'card-visa',
+    accounts: [
+      makeAccount({
+        id: 'card-visa',
+        name: 'Visa',
+        kind: 'credit',
+        skin: 'violet',
+        inAvailable: false,
+        order: 2,
+        openingDate: '2026-10-01',
+        openingBalance: 0,
+        ...(archivedOn ? { archivedOn } : {}),
+        credit: {
+          limit: null,
+          statementDay: null,
+          dueDay: 21,
+          payInFull: true,
+          minimumPayment: 0,
+          interestRate: 0,
+          ...terms,
+        },
       }),
     ],
+    expenses: [makeExpense({ amount: 230_00, date: '2026-10-05', accountId: 'card-visa' })],
   };
 }
+
+/** A payment from the main account into the Visa, today. */
+const paidToVisa = (amount: number) =>
+  makeTransaction({
+    type: 'card_payment',
+    amount,
+    date: '2026-10-14',
+    fromAccountId: 'acct-main',
+    toAccountId: 'card-visa',
+  });
 
 type Info = NonNullable<Holding['dividendInfo']>;
 
@@ -300,6 +335,46 @@ describe('upcomingReminders', () => {
     ]);
   });
 
+  it('reminds of each credit account in use, by its name, and of no other kind of account', () => {
+    const one = visa();
+    const other = makeAccount({
+      id: 'card-amex',
+      name: 'Amex',
+      kind: 'credit',
+      skin: 'violet',
+      inAvailable: false,
+      order: 3,
+      openingDate: '2026-10-01',
+      openingBalance: 80_00,
+      credit: {
+        limit: null,
+        statementDay: null,
+        dueDay: 25,
+        payInFull: true,
+        minimumPayment: 0,
+        interestRate: 0,
+      },
+    });
+    const savings = makeAccount({
+      id: 'acct-savings',
+      name: 'Savings',
+      kind: 'savings',
+      inAvailable: false,
+      order: 1,
+      openingDate: '2026-10-01',
+      openingBalance: 500_00,
+    });
+    const data = build({
+      reminders: { bills: true },
+      accounts: [makeAccount({ openingDate: '2026-10-01' }), savings, ...one.accounts, other],
+      expenses: one.expenses,
+    });
+    expect(upcomingReminders(data, NOW).map((r) => [r.key, r.title, r.body])).toEqual([
+      ['card:card-visa:2026-10-21', 'Visa payment due in 2 days', `${money(230_00)} to pay.`],
+      ['card:card-amex:2026-10-25', 'Amex payment due in 2 days', `${money(80_00)} to pay.`],
+    ]);
+  });
+
   it('never reminds of an archived card', () => {
     const data = build({ reminders: { bills: true }, ...visa({ archivedOn: '2026-10-14' }) });
     expect(upcomingReminders(data, NOW)).toEqual([]);
@@ -309,16 +384,7 @@ describe('upcomingReminders', () => {
     const minimum = visa({ payInFull: false, minimumPayment: 25_00 });
     const after = (amount: number) => {
       const data = build({ reminders: { bills: true }, ...minimum });
-      data.tables.transaction = [
-        makeTransaction({
-          type: 'card_payment',
-          amount,
-          date: '2026-10-14',
-          from: 'cash',
-          to: null,
-          debtId: 'card-visa',
-        }),
-      ];
+      data.tables.transaction = [paidToVisa(amount)];
       return upcomingReminders(data, NOW).map((r) => r.body);
     };
     expect(after(10_00)).toEqual([`${money(15_00)} to pay.`]);
@@ -329,16 +395,7 @@ describe('upcomingReminders', () => {
     const minimum = visa({ payInFull: false, minimumPayment: 25_00 });
     const after = (amount: number) => {
       const data = build({ reminders: { bills: true }, ...minimum });
-      data.tables.transaction = [
-        makeTransaction({
-          type: 'card_payment',
-          amount,
-          date: '2026-10-14',
-          from: 'cash',
-          to: null,
-          debtId: 'card-visa',
-        }),
-      ];
+      data.tables.transaction = [paidToVisa(amount)];
       return upcomingReminders(data, NOW, { horizonDays: 45 }).map((r) => [r.key, r.body]);
     };
     expect(after(10_00)).toEqual([

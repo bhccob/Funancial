@@ -1,4 +1,3 @@
-import { activeDebts } from '@/domain/debts';
 import { incomeByMonth } from '@/domain/income';
 import { useApp } from '@/store/AppStoreProvider';
 import { useFinanceView, useMoney, useToday } from '@/store/useFinance';
@@ -12,7 +11,6 @@ export function useMenuSubtitles(): Record<string, string> {
   const money = useMoney();
   const view = useFinanceView();
   const subscriptions = useApp((s) => s.data.tables.subscription);
-  const debts = activeDebts(useApp((s) => s.data.tables.debt));
   const goals = useApp((s) => s.data.tables.goal);
   const data = useApp((s) => s.data);
   const today = useToday();
@@ -22,7 +20,9 @@ export function useMenuSubtitles(): Record<string, string> {
   const level = game.level.level;
   const unread = useInboxItems().filter((i) => !i.read).length;
 
-  const cards = debts.filter((d) => d.kind === 'credit_card').length;
+  // The credit cards in use are accounts; the loans are debts.
+  const cards = view.accounts.filter((r) => r.account.kind === 'credit').length;
+  const debtsInUse = cards + view.loans.length;
   const active = subscriptions.filter((s) => s.status === 'active').length;
   const saved = goals.reduce((sum, g) => sum + g.current, 0);
   const target = goals.reduce((sum, g) => sum + g.target, 0);
@@ -30,9 +30,7 @@ export function useMenuSubtitles(): Record<string, string> {
   const percent = target > 0 ? Math.floor((saved * 100) / target) : 0;
   // One of them is named; two or more are "cards and loans", as the page is.
   const debtCount =
-    debts.length > 1
-      ? `${debts.length} cards and loans`
-      : plural(debts.length, cards ? 'card' : 'loan');
+    debtsInUse > 1 ? `${debtsInUse} cards and loans` : plural(debtsInUse, cards ? 'card' : 'loan');
 
   // What is inside: the subscriptions with what they cost, then the credit cards.
   const billsLine = [
@@ -45,7 +43,7 @@ export function useMenuSubtitles(): Record<string, string> {
   return {
     '/subscriptions': billsLine || 'None yet',
     '/goals': goals.length > 0 ? `${plural(goals.length, 'goal')} · ${percent}% saved` : 'None yet',
-    '/debts': debts.length > 0 ? `${debtCount} · ${money(view.debtTotal)}` : 'None yet',
+    '/debts': debtsInUse > 0 ? `${debtCount} · ${money(view.owed)}` : 'None yet',
     '/income': `${money(incomeByMonth(data, today, 1)[0]!.total)} this month`,
     '/history': 'Every entry, searchable',
     '/quests': `Level ${level}`,

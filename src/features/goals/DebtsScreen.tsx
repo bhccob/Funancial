@@ -1,66 +1,51 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { ProgressBar } from '@/components/ui/ProgressBar';
 import { Section } from '@/components/ui/Section';
-import type { Debt } from '@/domain/entities';
 import { ordinal } from '@/lib/format';
 import { useFinanceView, useMoney } from '@/store/useFinance';
-import { DebtDialog, type DebtTarget } from './DebtDialog';
+import { CardDialog, type CardTarget } from './CardDialog';
+import { LoanDialog, type LoanTarget } from './LoanDialog';
 import { PayDialog, type PayTarget } from './PayDialog';
 
+/** A card or a loan: what it is called, what it owes, and Pay and Edit. */
 function DebtRow({
-  debt,
+  name,
+  details,
   balance,
+  progress,
+  payLabel,
   onPay,
   onEdit,
 }: {
-  debt: Debt;
+  name: string;
+  /** The line under the name. */
+  details: string;
   balance: number;
+  /** A loan's payoff bar. */
+  progress?: ReactNode;
+  payLabel: string;
   onPay(): void;
   onEdit(): void;
 }) {
   const money = useMoney();
-  const card = debt.kind === 'credit_card';
-  const details: string[] = [];
-  if (card) {
-    if (debt.creditLimit)
-      details.push(`${Math.round((balance * 100) / debt.creditLimit)}% of limit`);
-    if (debt.dueDay) details.push(`Due on the ${ordinal(debt.dueDay)}`);
-  } else if (debt.minimumPayment > 0) {
-    details.push(`${money(debt.minimumPayment)} minimum a month`);
-  }
-  const paidPct =
-    debt.openingBalance > 0
-      ? Math.max(0, Math.floor(((debt.openingBalance - balance) * 100) / debt.openingBalance))
-      : 100;
-
   return (
     <li className="py-4">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="truncate font-bold">{debt.name}</p>
-          <p className="text-muted text-sm font-semibold">
-            {details.length > 0 ? details.join(' · ') : card ? 'Credit card' : 'Loan'}
-          </p>
+          <p className="truncate font-bold">{name}</p>
+          <p className="text-muted text-sm font-semibold">{details}</p>
         </div>
         <p className="shrink-0 text-lg font-extrabold tabular-nums">{money(balance)}</p>
       </div>
-      {!card && (
-        <ProgressBar
-          className="mt-3"
-          label={`${debt.name} paid off`}
-          value={paidPct}
-          level="ok"
-          valueText={`${paidPct}% paid off`}
-        />
-      )}
+      {progress}
       <div className="mt-3 flex gap-2">
         <Button size="sm" variant="secondary" disabled={balance <= 0} onClick={onPay}>
-          {card ? 'Pay card' : 'Make a payment'}
+          {payLabel}
         </Button>
-        <Button size="sm" variant="ghost" aria-label={`Edit ${debt.name}`} onClick={onEdit}>
+        <Button size="sm" variant="ghost" aria-label={`Edit ${name}`} onClick={onEdit}>
           Edit
         </Button>
       </div>
@@ -69,13 +54,17 @@ function DebtRow({
 }
 
 export function DebtsScreen() {
-  const { debts } = useFinanceView();
-  const [debtEdit, setDebtEdit] = useState<DebtTarget | null>(null);
+  const { accounts, loans } = useFinanceView();
+  const money = useMoney();
+  const [cardEdit, setCardEdit] = useState<CardTarget | null>(null);
+  const [loanEdit, setLoanEdit] = useState<LoanTarget | null>(null);
   const [pay, setPay] = useState<PayTarget | null>(null);
 
-  const sortedDebts = [...debts].sort(
-    (a, b) => a.debt.kind.localeCompare(b.debt.kind) || a.debt.name.localeCompare(b.debt.name),
-  );
+  // The cards, which are credit accounts, then the loans: each by name.
+  const cards = accounts
+    .filter((r) => r.account.kind === 'credit')
+    .sort((a, b) => a.account.name.localeCompare(b.account.name));
+  const sortedLoans = [...loans].sort((a, b) => a.debt.name.localeCompare(b.debt.name));
 
   return (
     <div>
@@ -83,35 +72,69 @@ export function DebtsScreen() {
         title="Debts"
         action={
           <div className="flex gap-2">
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={() => setDebtEdit({ kind: 'credit_card', debt: null })}
-            >
+            <Button size="sm" variant="secondary" onClick={() => setCardEdit({ card: null })}>
               Add card
             </Button>
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={() => setDebtEdit({ kind: 'loan', debt: null })}
-            >
+            <Button size="sm" variant="secondary" onClick={() => setLoanEdit({ loan: null })}>
               Add loan
             </Button>
           </div>
         }
       />
       <Section>
-        {sortedDebts.length > 0 ? (
+        {cards.length + sortedLoans.length > 0 ? (
           <ul className="divide-border -my-4 divide-y">
-            {sortedDebts.map(({ debt, balance }) => (
-              <DebtRow
-                key={debt.id}
-                debt={debt}
-                balance={balance}
-                onPay={() => setPay({ kind: 'debt', debt, balance })}
-                onEdit={() => setDebtEdit({ kind: debt.kind, debt })}
-              />
-            ))}
+            {cards.map(({ account: card, balance }) => {
+              const details: string[] = [];
+              const limit = card.credit?.limit ?? null;
+              const dueDay = card.credit?.dueDay ?? null;
+              if (limit) details.push(`${Math.round((balance * 100) / limit)}% of limit`);
+              if (dueDay) details.push(`Due on the ${ordinal(dueDay)}`);
+              return (
+                <DebtRow
+                  key={card.id}
+                  name={card.name}
+                  details={details.length > 0 ? details.join(' · ') : 'Credit card'}
+                  balance={balance}
+                  payLabel="Pay card"
+                  onPay={() => setPay({ kind: 'card', card, balance })}
+                  onEdit={() => setCardEdit({ card })}
+                />
+              );
+            })}
+            {sortedLoans.map(({ debt: loan, balance }) => {
+              const paidPct =
+                loan.openingBalance > 0
+                  ? Math.max(
+                      0,
+                      Math.floor(((loan.openingBalance - balance) * 100) / loan.openingBalance),
+                    )
+                  : 100;
+              return (
+                <DebtRow
+                  key={loan.id}
+                  name={loan.name}
+                  details={
+                    loan.minimumPayment > 0
+                      ? `${money(loan.minimumPayment)} minimum a month`
+                      : 'Loan'
+                  }
+                  balance={balance}
+                  progress={
+                    <ProgressBar
+                      className="mt-3"
+                      label={`${loan.name} paid off`}
+                      value={paidPct}
+                      level="ok"
+                      valueText={`${paidPct}% paid off`}
+                    />
+                  }
+                  payLabel="Make a payment"
+                  onPay={() => setPay({ kind: 'loan', loan, balance })}
+                  onEdit={() => setLoanEdit({ loan })}
+                />
+              );
+            })}
           </ul>
         ) : (
           <EmptyState title="No cards or loans">
@@ -120,7 +143,8 @@ export function DebtsScreen() {
         )}
       </Section>
 
-      <DebtDialog target={debtEdit} onClose={() => setDebtEdit(null)} />
+      <CardDialog target={cardEdit} onClose={() => setCardEdit(null)} />
+      <LoanDialog target={loanEdit} onClose={() => setLoanEdit(null)} />
       <PayDialog target={pay} onClose={() => setPay(null)} />
     </div>
   );

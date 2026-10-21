@@ -1274,6 +1274,39 @@ describe('money only lands on accounts in use', () => {
     ]);
   });
 
+  it('saveSubscription checks the account only when an edit changes it', async () => {
+    const { store, actions } = await withArchived();
+    const gym = {
+      name: 'Gym',
+      amount: 30_00,
+      cycle: 'monthly' as const,
+      nextRenewal: '2026-11-05',
+      category: 'health' as const,
+      accountId: OLD,
+    };
+    // Kept on an archived account as it was (an account whose subscriptions did not move), it
+    // can still be edited.
+    await store
+      .getState()
+      .put('subscription', makeSubscription({ id: 'sub-old', ...gym, anchorDay: 5 }));
+    await actions.saveSubscription({ ...gym, id: 'sub-old', amount: 35_00, name: 'Gym plus' });
+    expect(store.getState().data.tables.subscription.find((s) => s.id === 'sub-old')).toMatchObject(
+      { name: 'Gym plus', amount: 35_00, accountId: OLD },
+    );
+
+    // Moving it is checked, to an archived account or an unknown one, and a new one always is.
+    await refuses(store, [
+      [ARCHIVED, () => actions.saveSubscription({ ...gym, id: 'sub-old', accountId: 'card-old' })],
+      [UNKNOWN, () => actions.saveSubscription({ ...gym, id: 'sub-old', accountId: GONE })],
+      [ARCHIVED, () => actions.saveSubscription(gym)],
+    ]);
+    // Moving it to an account in use is fine.
+    await actions.saveSubscription({ ...gym, id: 'sub-old', accountId: SAVINGS });
+    expect(
+      store.getState().data.tables.subscription.find((s) => s.id === 'sub-old')?.accountId,
+    ).toBe(SAVINGS);
+  });
+
   it('transfer and contributeToGoal, on both sides', async () => {
     const { store, actions } = await withArchived();
     await refuses(store, [

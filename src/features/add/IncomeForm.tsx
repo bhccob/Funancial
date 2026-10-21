@@ -3,8 +3,7 @@ import { Button } from '@/components/ui/Button';
 import { MoneyField } from '@/components/ui/MoneyField';
 import { RadioGroup } from '@/components/ui/RadioGroup';
 import { TextField } from '@/components/ui/TextField';
-import type { Account } from '@/domain/entities';
-import { AccountField, useStartAccountId } from '@/features/shared/AccountField';
+import { AccountField, NOT_CREDIT, useStartAccountId } from '@/features/shared/AccountField';
 import { useAction } from '@/lib/useAction';
 import { useCurrency, useFinanceActions, useToday } from '@/store/useFinance';
 import { DateField } from './DateField';
@@ -12,8 +11,6 @@ import { pastDateProblem } from './pastDate';
 
 type Source = 'salary' | 'extra';
 const DEFAULT_LABEL: Record<Source, string> = { salary: 'Salary', extra: 'Extra income' };
-/** Income goes into a bank account, cash or savings: never onto a credit card. */
-const NOT_CREDIT = (a: Account) => a.kind !== 'credit';
 
 export function IncomeForm({ onDone }: { onDone(): void }) {
   const { addIncome } = useFinanceActions();

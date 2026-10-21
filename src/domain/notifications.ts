@@ -1,7 +1,7 @@
-import { debtBalance } from './balances';
+import { activeAccounts } from './accounts';
+import { accountBalance } from './balances';
 import { cardPayment, nextDueDate } from './budget';
 import { addDays, formatLocalDateTime, localDateTime, type LocalDate } from './dates';
-import { activeDebts } from './debts';
 import { expectedPayouts } from './dividends';
 import type { Profile, ReminderSettings, Settings } from './entities';
 import { isLoggedExpense } from './game/activity';
@@ -108,35 +108,33 @@ function renewals({ data, prefs, lastDay, money }: Context): Reminder[] {
 }
 
 /**
- * Each card's next bill is `cardPayment`'s, as in `upcomingBills`. Later months start with nothing
+ * Each credit account's next bill is `cardPayment`'s, as in `upcomingBills`. Later months start with nothing
  * paid, so they remind of the whole minimum (or the balance, for a card paid in full) on the card's
  * due day, the best figure there is until that month's bill is worked out.
  */
 function cardBills({ data, prefs, today, lastDay, money }: Context): Reminder[] {
   if (!prefs.bills) return [];
   const out: Reminder[] = [];
-  for (const debt of activeDebts(data.tables.debt)) {
+  for (const card of activeAccounts(data.tables.account, today)) {
+    const terms = card.credit;
     // With no due day every day is "due", so there is no day to remind before. It never fired: its
     // "2 days before" was always already past, and the inbox would show one new row a day.
-    if (debt.kind !== 'credit_card' || debt.dueDay === null) continue;
-    const balance = debtBalance(debt, data, today);
+    if (card.kind !== 'credit' || !terms || terms.dueDay === null) continue;
+    const dueDay = terms.dueDay;
+    const balance = accountBalance(card, data, today);
     if (balance <= 0) continue;
-    const now = cardPayment(data, debt, balance, today);
-    const later = now.inFull ? balance : Math.min(debt.minimumPayment, balance);
-    const first = nextDueDate(today, debt.dueDay);
-    for (
-      let due = first;
-      addDays(due, -2) <= lastDay;
-      due = nextDueDate(addDays(due, 1), debt.dueDay)
-    ) {
+    const now = cardPayment(data, card, balance, today);
+    const later = now.inFull ? balance : Math.min(terms.minimumPayment, balance);
+    const first = nextDueDate(today, dueDay);
+    for (let due = first; addDays(due, -2) <= lastDay; due = nextDueDate(addDays(due, 1), dueDay)) {
       const amount = due === first ? now.amount : later;
       // This due date's minimum is paid already.
       if (amount === 0) continue;
       out.push({
-        key: `card:${debt.id}:${due}`,
+        key: `card:${card.id}:${due}`,
         kind: 'card-due',
         at: moment(addDays(due, -2), MORNING),
-        title: `${debt.name} payment due in 2 days`,
+        title: `${card.name} payment due in 2 days`,
         body: `${money(amount)} to pay.`,
         route: '/debts',
       });

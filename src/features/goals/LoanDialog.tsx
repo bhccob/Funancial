@@ -2,44 +2,36 @@ import { useState, type FormEvent } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Dialog } from '@/components/ui/Dialog';
 import { MoneyField } from '@/components/ui/MoneyField';
-import { Select } from '@/components/ui/Select';
-import { Switch } from '@/components/ui/Switch';
 import { TextField } from '@/components/ui/TextField';
 import { debtBalance } from '@/domain/balances';
-import { debtRemoval } from '@/domain/debts';
+import { loanRemoval } from '@/domain/debts';
 import type { Debt } from '@/domain/entities';
 import { formatDate } from '@/lib/format';
 import { useAction } from '@/lib/useAction';
 import { useApp } from '@/store/AppStoreProvider';
 import { useCurrency, useFinanceActions, useMoney, useToday } from '@/store/useFinance';
 
-type Kind = Debt['kind'];
-export type DebtTarget = { kind: Kind; debt: Debt | null };
+/** The loan being edited, or `null` for a new one. */
+export type LoanTarget = { loan: Debt | null };
 type Errors = { name?: string; balance?: string; rate?: string };
 
-const DAY_OPTIONS = Array.from({ length: 31 }, (_, i) => ({
-  value: String(i + 1),
-  label: String(i + 1),
-}));
-
-function DebtForm({
-  kind,
-  debt,
+function LoanForm({
+  loan,
   onDone,
   onDelete,
-}: DebtTarget & { onDone(): void; onDelete(): void }) {
+}: {
+  loan: Debt | null;
+  onDone(): void;
+  onDelete(): void;
+}) {
   const { saveDebt } = useFinanceActions();
   const currency = useCurrency();
   const run = useAction();
-  const card = kind === 'credit_card';
 
-  const [name, setName] = useState(debt?.name ?? '');
-  const [balance, setBalance] = useState<number | null>(debt?.openingBalance ?? null);
-  const [rate, setRate] = useState(debt ? String(debt.interestRate) : '');
-  const [minimum, setMinimum] = useState<number | null>(debt?.minimumPayment ?? null);
-  const [limit, setLimit] = useState<number | null>(debt?.creditLimit ?? null);
-  const [dueDay, setDueDay] = useState(String(debt?.dueDay ?? 1));
-  const [payInFull, setPayInFull] = useState(debt?.payInFull ?? true);
+  const [name, setName] = useState(loan?.name ?? '');
+  const [balance, setBalance] = useState<number | null>(loan?.openingBalance ?? null);
+  const [rate, setRate] = useState(loan ? String(loan.interestRate) : '');
+  const [minimum, setMinimum] = useState<number | null>(loan?.minimumPayment ?? null);
   const [errors, setErrors] = useState<Errors>({});
   const [busy, setBusy] = useState(false);
 
@@ -57,18 +49,17 @@ function DebtForm({
     const ok = await run(
       () =>
         saveDebt({
-          ...(debt ? { id: debt.id } : {}),
+          ...(loan ? { id: loan.id } : {}),
           name: name.trim(),
-          kind,
           openingBalance: balance ?? 0,
           interestRate: interest,
           minimumPayment: minimum ?? 0,
-          creditLimit: card ? limit : null,
-          statementDay: debt?.statementDay ?? null,
-          dueDay: card ? Number(dueDay) : (debt?.dueDay ?? null),
-          payInFull: card ? payInFull : false,
+          creditLimit: null,
+          statementDay: loan?.statementDay ?? null,
+          dueDay: loan?.dueDay ?? null,
+          payInFull: false,
         }),
-      { success: debt ? 'Saved.' : card ? 'Card added.' : 'Loan added.' },
+      { success: loan ? 'Saved.' : 'Loan added.' },
     );
     setBusy(false);
     if (ok) onDone();
@@ -86,14 +77,14 @@ function DebtForm({
       />
       <MoneyField
         variant="line"
-        label={debt ? 'Balance when added' : 'Current balance'}
+        label={loan ? 'Balance when added' : 'Current balance'}
         currency={currency}
         value={balance}
         onChange={setBalance}
         error={errors.balance}
         hint={
-          debt
-            ? `On ${formatDate(debt.openingDate)}. Purchases and payments since then are added on top.`
+          loan
+            ? `On ${formatDate(loan.openingDate)}. Payments since then are taken off.`
             : undefined
         }
       />
@@ -113,28 +104,8 @@ function DebtForm({
         value={minimum}
         onChange={setMinimum}
       />
-      {card && (
-        <>
-          <MoneyField
-            variant="line"
-            label="Credit limit"
-            currency={currency}
-            value={limit}
-            onChange={setLimit}
-            hint="Optional."
-          />
-          <Select
-            variant="line"
-            label="Due day"
-            value={dueDay}
-            onChange={setDueDay}
-            options={DAY_OPTIONS}
-          />
-          <Switch label="Pay in full each month" checked={payInFull} onChange={setPayInFull} />
-        </>
-      )}
       <div className="flex flex-wrap items-center justify-between gap-2">
-        {debt ? (
+        {loan ? (
           <Button variant="danger-ghost" disabled={busy} onClick={onDelete}>
             Delete
           </Button>
@@ -154,23 +125,16 @@ function DebtForm({
   );
 }
 
-const TITLES: Record<Kind, [string, string]> = {
-  credit_card: ['Add a card', 'Edit card'],
-  loan: ['Add a loan', 'Edit loan'],
-};
-
-const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
-
 /**
- * Asks before a card or loan goes, saying what `deleteDebt` will do: whether it is archived instead
- * (and what it still owes), and how many subscriptions move to debit.
+ * Asks before a loan goes, saying what `deleteDebt` will do: whether it is archived instead (it has
+ * payments made to it) and what it still owes.
  */
-function DeleteDebtDialog({
-  debt,
+function DeleteLoanDialog({
+  loan,
   onCancel,
   onDone,
 }: {
-  debt: Debt | null;
+  loan: Debt | null;
   onCancel(): void;
   onDone(): void;
 }) {
@@ -184,29 +148,25 @@ function DeleteDebtDialog({
   let title = '';
   let description = '';
   let archive = false;
-  if (debt) {
-    const removal = debtRemoval(data, debt.id);
-    archive = removal.archive;
-    const owed = archive ? debtBalance(debt, data, today) : 0;
-    const moved = removal.subscriptions.length;
-    title = `${archive ? 'Archive' : 'Delete'} ${debt.name}?`;
+  if (loan) {
+    archive = loanRemoval(data, loan.id).archive;
+    const owed = archive ? debtBalance(loan, data, today) : 0;
+    title = `${archive ? 'Archive' : 'Delete'} ${loan.name}?`;
     description = [
       archive
-        ? `${debt.name} has past expenses or payments, so it is archived: it leaves Debts, bills and "Paid with", and past expenses keep its name.`
-        : `${debt.name} will be deleted.`,
+        ? `${loan.name} has payments made to it, so it is archived: it leaves Debts, and those payments keep its name.`
+        : `${loan.name} will be deleted.`,
       owed > 0 && `The ${money(owed)} still owed on it stops counting toward what you owe.`,
-      moved > 0 &&
-        `${moved} ${plural(moved, 'subscription', 'subscriptions')} paid with it ${plural(moved, 'switches', 'switch')} to debit.`,
     ]
       .filter(Boolean)
       .join(' ');
   }
 
   async function confirm() {
-    if (!debt) return;
+    if (!loan) return;
     setBusy(true);
-    const ok = await run(() => deleteDebt(debt.id), {
-      success: `${debt.name} ${archive ? 'archived' : 'deleted'}.`,
+    const ok = await run(() => deleteDebt(loan.id), {
+      success: `${loan.name} ${archive ? 'archived' : 'deleted'}.`,
     });
     setBusy(false);
     if (ok) onDone();
@@ -215,7 +175,7 @@ function DeleteDebtDialog({
 
   return (
     <Dialog
-      open={debt !== null}
+      open={loan !== null}
       title={title}
       description={description}
       onClose={onCancel}
@@ -233,25 +193,28 @@ function DeleteDebtDialog({
   );
 }
 
-export function DebtDialog({ target, onClose }: { target: DebtTarget | null; onClose(): void }) {
-  const title = target ? TITLES[target.kind][target.debt ? 1 : 0] : '';
+/** Add or edit a loan. A credit card is `CardDialog`'s. */
+export function LoanDialog({ target, onClose }: { target: LoanTarget | null; onClose(): void }) {
   // Beside the form's dialog, not in it: Escape on the ask must not close both.
   const [deleting, setDeleting] = useState<Debt | null>(null);
   return (
     <>
-      <Dialog open={target !== null} title={title} onClose={onClose}>
+      <Dialog
+        open={target !== null}
+        title={target ? (target.loan ? 'Edit loan' : 'Add a loan') : ''}
+        onClose={onClose}
+      >
         {target && (
-          <DebtForm
-            key={target.debt?.id ?? `new-${target.kind}`}
-            kind={target.kind}
-            debt={target.debt}
+          <LoanForm
+            key={target.loan?.id ?? 'new'}
+            loan={target.loan}
             onDone={onClose}
-            onDelete={() => setDeleting(target.debt)}
+            onDelete={() => setDeleting(target.loan)}
           />
         )}
       </Dialog>
-      <DeleteDebtDialog
-        debt={deleting}
+      <DeleteLoanDialog
+        loan={deleting}
         onCancel={() => setDeleting(null)}
         onDone={() => {
           setDeleting(null);

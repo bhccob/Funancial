@@ -1,44 +1,68 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { Debt, Transaction } from '@/domain/entities';
+import type { Account, CreditTerms, Transaction } from '@/domain/entities';
+import { accountBalance } from '@/domain/balances';
 import { formatMoney } from '@/domain/money';
 import { emptySnapshot } from '@/domain/snapshot';
+import { Toaster } from '@/components/ui/Toaster';
 import { formatDay } from '@/lib/format';
 import { useAmountsHidden } from '@/store/useAmountsHidden';
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
-import { makeDebt, makeProfile, makeTransaction } from '@/test/fixtures';
+import { makeAccount, makeProfile, makeTransaction } from '@/test/fixtures';
 import { freshRealStore } from '@/test/realStore';
 import { CardSheet } from './CardSheet';
 
 const TODAY = '2026-10-14';
 const usd = (minor: number) => formatMoney(minor, 'USD');
 
+/**
+ * The toast, once it is there. It floats inside the open dialog and moves out to the page when the
+ * dialog closes, so wait for an element that is still in the page rather than holding one.
+ */
+const toasted = (text: string) => waitFor(() => expect(screen.getByText(text)).toBeInTheDocument());
+
 afterEach(() => useAmountsHidden.setState({ hidden: false }));
 
+/** Main account, which pays the card: a debit account with 1,000.00. */
+const mainAccount = () =>
+  makeAccount({ id: 'acct-main', openingDate: '2026-10-01', openingBalance: 1_000_00 });
+
+/** The Visa: a credit account with 318.40 owed on it, a 1,500.00 limit, due on the 21st. */
+const visa = (account: Partial<Account> = {}, credit: Partial<CreditTerms> = {}) =>
+  makeAccount({
+    id: 'visa',
+    name: 'Visa',
+    kind: 'credit',
+    skin: 'violet',
+    inAvailable: false,
+    order: 2,
+    openingDate: '2026-10-01',
+    openingBalance: 318_40,
+    credit: {
+      limit: 1_500_00,
+      statementDay: null,
+      dueDay: 21,
+      payInFull: true,
+      minimumPayment: 0,
+      interestRate: 0,
+      ...credit,
+    },
+    ...account,
+  });
+
 function renderSheet(
-  overrides: Partial<Debt> = {},
-  debtId: string | null = 'visa',
+  overrides: { account?: Partial<Account>; credit?: Partial<CreditTerms> } = {},
+  accountId: string | null = 'visa',
   payments: Transaction[] = [],
 ) {
   const onClose = vi.fn();
   const data = emptySnapshot();
   data.tables.profile.push(makeProfile({ openingDate: '2026-10-01' }));
-  data.tables.debt.push(
-    makeDebt({
-      id: 'visa',
-      name: 'Visa',
-      openingDate: '2026-10-01',
-      openingBalance: 318_40,
-      creditLimit: 1_500_00,
-      dueDay: 21,
-      payInFull: true,
-      ...overrides,
-    }),
-  );
+  data.tables.account.push(mainAccount(), visa(overrides.account, overrides.credit));
   data.tables.transaction.push(...payments);
   renderWithStore(
-    <CardSheet debtId={debtId} onClose={onClose} />,
+    <CardSheet accountId={accountId} onClose={onClose} />,
     createStubStore({ data, today: TODAY }),
   );
   return onClose;
@@ -55,7 +79,17 @@ describe('CardSheet', () => {
   });
 
   it('is closed for an archived card, as one deleted from inside it', () => {
-    renderSheet({ archivedOn: TODAY });
+    renderSheet({ account: { archivedOn: TODAY } });
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('is closed for an account that is not a credit card', () => {
+    renderSheet({}, 'acct-main');
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('is closed for an account that does not exist', () => {
+    renderSheet({}, 'gone');
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
@@ -80,7 +114,7 @@ describe('CardSheet', () => {
   });
 
   it('says the minimum, and keeps that amount aside, when the card is not paid in full', () => {
-    renderSheet({ payInFull: false, minimumPayment: 25_00 });
+    renderSheet({ credit: { payInFull: false, minimumPayment: 25_00 } });
     expect(fact('You pay')).toHaveTextContent(`You pay${usd(25_00)} minimum`);
     expect(within(sheet()).getByText(/Funcial keeps/)).toHaveTextContent(
       `keeps ${usd(25_00)} aside`,
@@ -93,11 +127,10 @@ describe('CardSheet', () => {
         type: 'card_payment',
         amount,
         date: TODAY,
-        from: 'cash',
-        to: null,
-        debtId: 'visa',
+        fromAccountId: 'acct-main',
+        toAccountId: 'visa',
       });
-    const minimum = { payInFull: false, minimumPayment: 25_00 };
+    const minimum = { credit: { payInFull: false, minimumPayment: 25_00 } };
 
     it('says what is left, and keeps only that aside', () => {
       renderSheet(minimum, 'visa', [paid(10_00)]);
@@ -119,13 +152,13 @@ describe('CardSheet', () => {
   });
 
   it('drops "Limit used" when the card has no limit', () => {
-    renderSheet({ creditLimit: null });
+    renderSheet({ credit: { limit: null } });
     expect(within(sheet()).queryByText('Limit used')).not.toBeInTheDocument();
     expect(within(sheet()).getByText('You owe')).toBeInTheDocument();
   });
 
   it('has nothing to pay, and no note, when nothing is owed', () => {
-    renderSheet({ openingBalance: 0 });
+    renderSheet({ account: { openingBalance: 0 } });
     expect(within(sheet()).getByRole('button', { name: 'Pay card' })).toBeDisabled();
     expect(within(sheet()).queryByText(/Funcial keeps/)).not.toBeInTheDocument();
   });
@@ -135,6 +168,7 @@ describe('CardSheet', () => {
     await userEvent.click(within(sheet()).getByRole('button', { name: 'Pay card' }));
     const pay = screen.getByRole('dialog', { name: 'Pay Visa' });
     expect(within(pay).getByText(`You owe ${usd(318_40)}.`)).toBeInTheDocument();
+    expect(within(pay).getByLabelText('From')).toHaveValue('acct-main');
   });
 
   it('opens the card editor from Edit card', async () => {
@@ -164,14 +198,12 @@ describe('CardSheet focus after a payment', () => {
   /** A real store, so a payment really changes what is owed. The Visa owes 318.40. */
   async function renderPaying() {
     const { store } = await freshRealStore();
-    await store.getState().put('profile', makeProfile({ openingDate: '2026-10-01', salary: null }));
-    await store
-      .getState()
-      .put(
-        'debt',
-        makeDebt({ id: 'visa', name: 'Visa', openingDate: '2026-10-01', openingBalance: 318_40 }),
-      );
-    renderWithStore(<CardSheet debtId="visa" onClose={vi.fn()} />, store);
+    await store.getState().putMany([
+      { table: 'profile', record: makeProfile({ openingDate: '2026-10-01', salary: null }) },
+      { table: 'account', record: mainAccount() },
+      { table: 'account', record: visa() },
+    ]);
+    renderWithStore(<CardSheet accountId="visa" onClose={vi.fn()} />, store);
     await userEvent.click(within(sheet()).getByRole('button', { name: 'Pay card' }));
     return within(screen.getByRole('dialog', { name: 'Pay Visa' }));
   }
@@ -202,5 +234,72 @@ describe('CardSheet focus after a payment', () => {
       }),
     );
     expect(within(sheet()).getByRole('button', { name: 'Pay card' })).toHaveFocus();
+  });
+});
+
+describe('CardSheet over a real store', () => {
+  async function renderReal() {
+    const { store } = await freshRealStore();
+    await store.getState().putMany([
+      { table: 'profile', record: makeProfile({ openingDate: '2026-10-01', salary: null }) },
+      { table: 'account', record: mainAccount() },
+      { table: 'account', record: visa() },
+    ]);
+    const onClose = vi.fn();
+    renderWithStore(
+      <>
+        <CardSheet accountId="visa" onClose={onClose} />
+        <Toaster />
+      </>,
+      store,
+    );
+    return { store, onClose };
+  }
+
+  it('pays from Main account, so the card and the account both go down', async () => {
+    const { store } = await renderReal();
+    await userEvent.click(within(sheet()).getByRole('button', { name: 'Pay card' }));
+    const pay = within(screen.getByRole('dialog', { name: 'Pay Visa' }));
+    await userEvent.click(pay.getByRole('button', { name: 'Pay' }));
+    await waitFor(() => expect(fact('You owe')).toHaveTextContent(`You owe${usd(0)}`));
+    const data = store.getState().data;
+    const balance = (id: string) =>
+      accountBalance(
+        data.tables.account.find((a) => a.id === id)!,
+        data,
+        TODAY,
+      );
+    expect(balance('visa')).toBe(0);
+    expect(balance('acct-main')).toBe(1_000_00 - 318_40);
+  });
+
+  it('lets the card be edited from the sheet, and the sheet follows the edit', async () => {
+    await renderReal();
+    await userEvent.click(within(sheet()).getByRole('button', { name: 'Edit card' }));
+    const edit = screen.getByRole('dialog', { name: 'Edit card' });
+    const limit = within(edit).getByLabelText('Credit limit');
+    await userEvent.clear(limit);
+    await userEvent.type(limit, '1000');
+    await userEvent.click(within(edit).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Edit card' })).toBeNull());
+    // 318.40 of 1,000.00 is 31.8%.
+    expect(fact('Limit used')).toHaveTextContent(`Limit used32% of ${usd(1_000_00)}`);
+  });
+
+  it('closes the sheet when the card is deleted from inside it', async () => {
+    await renderReal();
+    await userEvent.click(within(sheet()).getByRole('button', { name: 'Edit card' }));
+    await userEvent.click(
+      within(screen.getByRole('dialog', { name: 'Edit card' })).getByRole('button', {
+        name: 'Delete',
+      }),
+    );
+    await userEvent.click(
+      within(screen.getByRole('dialog', { name: 'Delete Visa?' })).getByRole('button', {
+        name: 'Delete',
+      }),
+    );
+    await toasted('Visa deleted.');
+    expect(screen.queryByRole('dialog', { name: 'Visa credit card' })).toBeNull();
   });
 });

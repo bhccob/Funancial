@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { Sheet } from '@/components/ui/Sheet';
 import type { FinanceView } from '@/domain/view';
-import { DebtDialog, type DebtTarget } from '@/features/goals/DebtDialog';
+import { CardDialog, type CardTarget } from '@/features/goals/CardDialog';
+import { LoanDialog, type LoanTarget } from '@/features/goals/LoanDialog';
 import { ActualBalanceDialog, type Which } from '@/features/history/ActualBalanceDialog';
 import { useMoney } from '@/store/useFinance';
 import { Row, Total } from './BreakdownRows';
@@ -25,7 +26,9 @@ export function NetWorthSheet({
 }) {
   const money = useMoney();
   const [correcting, setCorrecting] = useState<Which | null>(null);
-  const [editing, setEditing] = useState<DebtTarget | null>(null);
+  const [editingCard, setEditingCard] = useState<CardTarget | null>(null);
+  const [editingLoan, setEditingLoan] = useState<LoanTarget | null>(null);
+  const cards = view.accounts.filter((r) => r.account.kind === 'credit');
 
   const correct = (which: Which) => ({ label: 'Correct', onClick: () => setCorrecting(which) });
 
@@ -59,20 +62,28 @@ export function NetWorthSheet({
               )}
             </ul>
             <h3 className={HEADING}>What you owe</h3>
-            {view.debts.length === 0 ? (
+            {cards.length + view.loans.length === 0 ? (
               <p className="text-muted min-h-11 py-2.5 text-[15px] font-semibold">
                 No cards or loans.
               </p>
             ) : (
               <ul>
-                {view.debts.map(({ debt, balance }) => (
+                {cards.map(({ account, balance }) => (
                   <Row
-                    key={debt.id}
-                    label={debt.name}
+                    key={account.id}
+                    label={account.name}
                     // Owing is taken off and a card paid past its balance is a credit, which adds. Zero
                     // is 0 - balance, never -balance: that is -0, which prints as "-$0.00".
                     value={money(0 - balance)}
-                    action={{ label: 'Edit', onClick: () => setEditing({ kind: debt.kind, debt }) }}
+                    action={{ label: 'Edit', onClick: () => setEditingCard({ card: account }) }}
+                  />
+                ))}
+                {view.loans.map(({ debt, balance }) => (
+                  <Row
+                    key={debt.id}
+                    label={debt.name}
+                    value={money(0 - balance)}
+                    action={{ label: 'Edit', onClick: () => setEditingLoan({ loan: debt }) }}
                   />
                 ))}
               </ul>
@@ -86,7 +97,8 @@ export function NetWorthSheet({
         initial={correcting ?? 'cash'}
         onClose={() => setCorrecting(null)}
       />
-      <DebtDialog target={editing} onClose={() => setEditing(null)} />
+      <CardDialog target={editingCard} onClose={() => setEditingCard(null)} />
+      <LoanDialog target={editingLoan} onClose={() => setEditingLoan(null)} />
     </>
   );
 }

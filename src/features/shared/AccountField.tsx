@@ -6,6 +6,13 @@ import type { Account } from '@/domain/entities';
 import { useApp } from '@/store/AppStoreProvider';
 import { useToday } from '@/store/useFinance';
 
+/**
+ * Narrows an account picker to the accounts that hold money: a bank account, cash or savings, never
+ * a credit card. For the accounts that pay, and the ones income goes into. Module-level, as
+ * `useAccountOptions` wants a filter that keeps its identity.
+ */
+export const NOT_CREDIT = (a: Account): boolean => a.kind !== 'credit';
+
 /** What a credit account is called in a picker, so a card isn't taken for a bank account. */
 function labelOf(account: Account): string {
   return account.kind === 'credit' ? `${account.name} (credit card)` : account.name;

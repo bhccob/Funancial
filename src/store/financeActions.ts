@@ -299,7 +299,11 @@ export function createFinanceActions(store: StoreApi<AppState>) {
 
     async saveSubscription(input: SubscriptionInput) {
       const existing = input.id ? find('subscription', input.id) : null;
-      accountInUse(state().data, input.accountId, today());
+      // Only an account the subscription moves to has to be in use: one kept on an archived
+      // account, as its history, can still be edited (as `updateExpense` does).
+      if (!existing || input.accountId !== existing.accountId) {
+        accountInUse(state().data, input.accountId, today());
+      }
       const sub: Subscription = {
         ...(existing ?? {
           id: newId(),

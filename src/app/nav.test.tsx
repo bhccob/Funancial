@@ -2,6 +2,7 @@ import { cleanup, fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { Account } from '@/domain/entities';
 import { levelStart } from '@/domain/game/levels';
 import { formatMoney } from '@/domain/money';
 import { emptySnapshot, type DataSnapshot } from '@/domain/snapshot';
@@ -10,6 +11,7 @@ import { useAmountsHidden } from '@/store/useAmountsHidden';
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
 import { INBOX_NOW, inboxData } from '@/test/inboxData';
 import {
+  makeAccount,
   makeDebt,
   makeDividend,
   makeGoal,
@@ -28,6 +30,26 @@ function renderAt(path: string, data: DataSnapshot = emptySnapshot()) {
   renderWithStore(<RouterProvider router={router} />, createStubStore({ data }));
   return router;
 }
+
+/** A credit card's account with `owed` on it. */
+const card = (id: string, owed = 0, overrides: Partial<Account> = {}) =>
+  makeAccount({
+    id,
+    name: id,
+    kind: 'credit',
+    skin: 'violet',
+    inAvailable: false,
+    openingBalance: owed,
+    credit: {
+      limit: null,
+      statementDay: null,
+      dueDay: 21,
+      payInFull: true,
+      minimumPayment: 0,
+      interestRate: 0,
+    },
+    ...overrides,
+  });
 
 /** Two active subscriptions ($15.99 a month and $120 a year), one cancelled, two goals, 130 coins. */
 function liveData(): DataSnapshot {
@@ -162,11 +184,8 @@ describe('Menu sheet', () => {
 
   it('adds the number of credit cards to the Bills & cards row, when there are any', async () => {
     const data = liveData();
-    data.tables.debt.push(
-      makeDebt({ kind: 'credit_card' }),
-      makeDebt({ kind: 'credit_card' }),
-      makeDebt({ kind: 'loan' }),
-    );
+    data.tables.account.push(card('visa'), card('amex'));
+    data.tables.debt.push(makeDebt({ kind: 'loan' }));
     renderAt('/', data);
     expect(row(await openMenu(), 'Bills & cards')).toHaveTextContent(
       `2 active · ${usd(25_99)}/mo · 2 cards`,
@@ -174,7 +193,7 @@ describe('Menu sheet', () => {
     cleanup();
 
     const oneCard = emptySnapshot();
-    oneCard.tables.debt.push(makeDebt({ kind: 'credit_card' }));
+    oneCard.tables.account.push(card('visa'));
     renderAt('/', oneCard);
     expect(row(await openMenu(), 'Bills & cards')).toHaveTextContent(/^Bills & cards1 card$/);
   });
@@ -185,10 +204,8 @@ describe('Menu sheet', () => {
     const owing = () => {
       const data = emptySnapshot();
       data.tables.profile.push(makeProfile({ currency: 'USD' }));
-      data.tables.debt.push(
-        makeDebt({ kind: 'credit_card', openingBalance: 230_00 }),
-        makeDebt({ kind: 'loan', openingBalance: 1_000_00 }),
-      );
+      data.tables.account.push(card('visa', 230_00));
+      data.tables.debt.push(makeDebt({ kind: 'loan', openingBalance: 1_000_00 }));
       return data;
     };
 
@@ -200,9 +217,9 @@ describe('Menu sheet', () => {
     });
 
     it('names the one card or loan there is', async () => {
-      const card = emptySnapshot();
-      card.tables.debt.push(makeDebt({ kind: 'credit_card', openingBalance: 230_00 }));
-      renderAt('/', card);
+      const withCard = emptySnapshot();
+      withCard.tables.account.push(card('visa', 230_00));
+      renderAt('/', withCard);
       expect(row(await openMenu(), 'Debts')).toHaveTextContent(`1 card · ${usd(230_00)}`);
       cleanup();
 
@@ -220,7 +237,8 @@ describe('Menu sheet', () => {
 
     it('leaves archived cards out of the count, as the Debts page does', async () => {
       const data = owing();
-      data.tables.debt.push(makeDebt({ kind: 'credit_card', archivedOn: '2026-10-01' }));
+      data.tables.account.push(card('old', 90_00, { archivedOn: '2026-10-01' }));
+      data.tables.debt.push(makeDebt({ kind: 'loan', archivedOn: '2026-10-01' }));
       renderAt('/', data);
       const sheet = await openMenu();
       expect(row(sheet, 'Debts')).toHaveTextContent(`2 cards and loans · ${usd(1_230_00)}`);

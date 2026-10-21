@@ -14,7 +14,7 @@ import { createGameActions } from '@/store/gameActions';
 import { useGameView } from '@/store/useGame';
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
 import {
-  makeDebt,
+  makeAccount,
   makeExpense,
   makeLedgerEntry,
   makeLimit,
@@ -40,6 +40,26 @@ function dataWith(patch: (data: DataSnapshot) => void): DataSnapshot {
   patch(data);
   return data;
 }
+
+/** A credit card owing 500.00, due on `dueDay`. */
+const visa = (dueDay: number) =>
+  makeAccount({
+    id: 'card-visa',
+    name: 'Visa',
+    kind: 'credit',
+    skin: 'violet',
+    inAvailable: false,
+    openingBalance: 500_00,
+    openingDate: '2026-10-01',
+    credit: {
+      limit: null,
+      statementDay: null,
+      dueDay,
+      payInFull: true,
+      minimumPayment: 0,
+      interestRate: 0,
+    },
+  });
 
 function quest(id: QuestId, over: Partial<QuestView> = {}): QuestView {
   return {
@@ -382,9 +402,7 @@ describe('WeeklyCheckInDialog', () => {
         makeSubscription({ name: 'Day 7', amount: 4_00, nextRenewal: '2026-10-21' }),
       ];
       // A card's next bill is its due day: the 21st is the seventh day after today.
-      d.tables.debt = [
-        makeDebt({ name: 'Visa', openingBalance: 500_00, openingDate: '2026-10-01', dueDay: 21 }),
-      ];
+      d.tables.account = [visa(21)];
     });
     renderIn(
       <WeeklyCheckInDialog open onClose={() => {}} />,
@@ -396,9 +414,7 @@ describe('WeeklyCheckInDialog', () => {
 
   it('counts a card due on the sixth day after today', () => {
     const data = dataWith((d) => {
-      d.tables.debt = [
-        makeDebt({ name: 'Visa', openingBalance: 500_00, openingDate: '2026-10-01', dueDay: 20 }),
-      ];
+      d.tables.account = [visa(20)];
     });
     renderIn(
       <WeeklyCheckInDialog open onClose={() => {}} />,

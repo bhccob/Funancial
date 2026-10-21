@@ -1,14 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Sheet } from '@/components/ui/Sheet';
-import { debtBalance } from '@/domain/balances';
+import { archivedBy } from '@/domain/accounts';
+import { accountBalance } from '@/domain/balances';
 import { cardPayment, nextDueDate } from '@/domain/budget';
-import { activeDebts } from '@/domain/debts';
-import type { Debt } from '@/domain/entities';
+import type { Account } from '@/domain/entities';
 import { formatDay } from '@/lib/format';
 import { useApp } from '@/store/AppStoreProvider';
 import { useMoney, useToday } from '@/store/useFinance';
-import { DebtDialog, type DebtTarget } from './DebtDialog';
+import { CardDialog, type CardTarget } from './CardDialog';
 import { PayDialog, type PayTarget } from './PayDialog';
 
 function Fact({ label, value }: { label: string; value: string }) {
@@ -22,18 +22,21 @@ function Fact({ label, value }: { label: string; value: string }) {
 
 /**
  * What a credit card means for you, in plain words, with Pay and Edit one tap away. Open while
- * `debtId` names a card; the pay and edit dialogs are the Debts page's, stacked over it.
+ * `accountId` names a credit card in use; the pay and edit dialogs are the Debts page's, stacked
+ * over it.
  */
-export function CardSheet({ debtId, onClose }: { debtId: string | null; onClose(): void }) {
+export function CardSheet({ accountId, onClose }: { accountId: string | null; onClose(): void }) {
   const today = useToday();
   const data = useApp((s) => s.data);
   const [pay, setPay] = useState<PayTarget | null>(null);
-  const [edit, setEdit] = useState<DebtTarget | null>(null);
+  const [edit, setEdit] = useState<CardTarget | null>(null);
   const editButton = useRef<HTMLButtonElement>(null);
 
   // Deleting it from inside closes the sheet, archived or gone.
-  const debt = activeDebts(data.tables.debt).find((d) => d.id === debtId);
-  const balance = debt ? debtBalance(debt, data, today) : 0;
+  const card = data.tables.account.find(
+    (a) => a.id === accountId && a.kind === 'credit' && !archivedBy(a, today),
+  );
+  const balance = card ? accountBalance(card, data, today) : 0;
 
   // Paying the card off disables "Pay card", which is where the pay dialog hands focus back to, so
   // it would fall to the page: "Edit card" takes it.
@@ -44,11 +47,11 @@ export function CardSheet({ debtId, onClose }: { debtId: string | null; onClose(
   return (
     <>
       <Sheet
-        open={debt !== undefined}
-        title={debt ? `${debt.name} credit card` : ''}
+        open={card !== undefined}
+        title={card ? `${card.name} credit card` : ''}
         onClose={onClose}
       >
-        {debt && (
+        {card && (
           <>
             {/* The sheet is named by its title; these are the drawn copy of it. */}
             <p aria-hidden="true" className="text-muted text-[13px] font-bold">
@@ -58,21 +61,17 @@ export function CardSheet({ debtId, onClose }: { debtId: string | null; onClose(
               aria-hidden="true"
               className="truncate text-[22px] leading-tight font-extrabold tracking-[-0.02em]"
             >
-              {debt.name}
+              {card.name}
             </p>
-            <CardFacts debt={debt} balance={balance} />
+            <CardFacts card={card} balance={balance} />
             <div className="mt-4 flex flex-col gap-2">
               <Button
                 disabled={balance <= 0}
-                onClick={() => setPay({ kind: 'debt', debt, balance })}
+                onClick={() => setPay({ kind: 'card', card, balance })}
               >
                 Pay card
               </Button>
-              <Button
-                ref={editButton}
-                variant="secondary"
-                onClick={() => setEdit({ kind: debt.kind, debt })}
-              >
+              <Button ref={editButton} variant="secondary" onClick={() => setEdit({ card })}>
                 Edit card
               </Button>
             </div>
@@ -80,17 +79,18 @@ export function CardSheet({ debtId, onClose }: { debtId: string | null; onClose(
         )}
       </Sheet>
       <PayDialog target={pay} onClose={() => setPay(null)} />
-      <DebtDialog target={edit} onClose={() => setEdit(null)} />
+      <CardDialog target={edit} onClose={() => setEdit(null)} />
     </>
   );
 }
 
-function CardFacts({ debt, balance }: { debt: Debt; balance: number }) {
+function CardFacts({ card, balance }: { card: Account; balance: number }) {
   const money = useMoney();
   const today = useToday();
   const data = useApp((s) => s.data);
-  const { amount, inFull } = cardPayment(data, debt, balance, today);
-  const due = formatDay(nextDueDate(today, debt.dueDay));
+  const { amount, inFull } = cardPayment(data, card, balance, today);
+  const limit = card.credit?.limit ?? null;
+  const due = formatDay(nextDueDate(today, card.credit?.dueDay ?? null));
 
   return (
     <>
@@ -103,10 +103,10 @@ function CardFacts({ debt, balance }: { debt: Debt; balance: number }) {
             inFull ? 'The full balance' : amount === 0 ? 'Minimum paid' : `${money(amount)} minimum`
           }
         />
-        {debt.creditLimit ? (
+        {limit ? (
           <Fact
             label="Limit used"
-            value={`${Math.round((balance * 100) / debt.creditLimit)}% of ${money(debt.creditLimit)}`}
+            value={`${Math.round((balance * 100) / limit)}% of ${money(limit)}`}
           />
         ) : null}
       </dl>
