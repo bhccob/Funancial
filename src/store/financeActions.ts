@@ -1,5 +1,11 @@
 import type { StoreApi } from 'zustand/vanilla';
-import { accountRemoval, activeAccounts, defaultAccount, defaultsFor } from '@/domain/accounts';
+import {
+  accountRemoval,
+  activeAccounts,
+  archivedBy,
+  defaultAccount,
+  defaultsFor,
+} from '@/domain/accounts';
 import { crossesOver, limitAlerts } from '@/domain/alerts';
 import { accountBalance } from '@/domain/balances';
 import type { LimitStatus } from '@/domain/budget';
@@ -121,6 +127,13 @@ export const PICK_SUBSCRIPTIONS_TARGET = 'Pick where its subscriptions go.';
 export const CREDIT_CANT_PAY = 'Only a bank account, cash or savings can pay.';
 export const SAME_ACCOUNT = 'Use two different accounts.';
 export const NOT_A_CARD = 'Pick a credit card to pay.';
+export const NO_ACCOUNT = "That account doesn't exist.";
+/** An archived account: what lands on it would no longer count. */
+export const ACCOUNT_ARCHIVED = 'That account is no longer in use.';
+/** A credit card's balance is what is owed on it, so income paid into one would count nowhere. */
+export const INCOME_NOT_CREDIT = 'Income goes into a bank account, cash or savings.';
+/** Its history would read the other way: spending as money in, or money in as spending. */
+export const CREDIT_SWITCH = "A card with history can't switch between credit and debit.";
 
 export type FinanceActions = ReturnType<typeof createFinanceActions>;
 
@@ -141,10 +154,23 @@ export function createFinanceActions(store: StoreApi<AppState>) {
   const notFuture = (d: LocalDate) => {
     if (d > today()) throw new Error(FUTURE);
   };
-  /** An account money can be paid from or moved with: a bank account, cash or savings. */
+  /** An account money can land on or leave from: one that exists and is not archived today. */
+  const accountInUse = (id: string): Account => {
+    const account = state().data.tables.account.find((a) => a.id === id);
+    if (!account) throw new Error(NO_ACCOUNT);
+    if (archivedBy(account, today())) throw new Error(ACCOUNT_ARCHIVED);
+    return account;
+  };
+  /** An account money can be paid from or moved with: a bank account, cash or savings in use. */
   const payingAccount = (id: string): Account => {
-    const account = find('account', id);
+    const account = accountInUse(id);
     if (account.kind === 'credit') throw new Error(CREDIT_CANT_PAY);
+    return account;
+  };
+  /** An account income can be paid into: a bank account, cash or savings in use. */
+  const incomeAccount = (id: string): Account => {
+    const account = accountInUse(id);
+    if (account.kind === 'credit') throw new Error(INCOME_NOT_CREDIT);
     return account;
   };
   /** A transfer between two different accounts, neither of them a credit card. */
@@ -174,6 +200,7 @@ export function createFinanceActions(store: StoreApi<AppState>) {
   return {
     async addExpense(input: ExpenseInput): Promise<{ expense: Expense; alerts: LimitStatus[] }> {
       notFuture(input.date);
+      accountInUse(input.accountId);
       const expense: Expense = {
         id: newId(),
         ...stamp(),
@@ -230,10 +257,17 @@ export function createFinanceActions(store: StoreApi<AppState>) {
       return crossesOver(state().data, probe, today(), weekStartsOn());
     },
 
+    /**
+     * Edits an expense. Moving it to another account needs one in use; an expense left on an
+     * archived account (its history) can still be edited.
+     */
     async updateExpense(id: string, patch: Partial<Omit<ExpenseInput, 'repeat'>>) {
       const current = find('expense', id);
       const next: Expense = { ...current, ...patch, updatedAt: nowIso() };
       notFuture(next.date);
+      if (patch.accountId !== undefined && patch.accountId !== current.accountId) {
+        accountInUse(patch.accountId);
+      }
       await state().put('expense', next);
     },
 
@@ -241,6 +275,7 @@ export function createFinanceActions(store: StoreApi<AppState>) {
 
     async addIncome(input: IncomeInput): Promise<Income> {
       notFuture(input.date);
+      incomeAccount(input.accountId);
       const period = input.source === 'salary' ? monthKey(input.date) : null;
       const expected = state().data.tables.income.find(
         (i) =>
@@ -256,9 +291,12 @@ export function createFinanceActions(store: StoreApi<AppState>) {
       return income;
     },
 
+    /** Confirms an expected income into the account it names, which must be one income counts in. */
     async confirmIncome(id: string, amount: number) {
+      const income = find('income', id);
+      incomeAccount(income.accountId);
       await state().put('income', {
-        ...find('income', id),
+        ...income,
         amount,
         status: 'confirmed',
         updatedAt: nowIso(),
@@ -285,6 +323,7 @@ export function createFinanceActions(store: StoreApi<AppState>) {
 
     async saveSubscription(input: SubscriptionInput) {
       const existing = input.id ? find('subscription', input.id) : null;
+      accountInUse(input.accountId);
       const sub: Subscription = {
         ...(existing ?? {
           id: newId(),
@@ -401,11 +440,21 @@ export function createFinanceActions(store: StoreApi<AppState>) {
     /**
      * Adds or edits an account. A new one opens today, after every other one in the carousel,
      * unfrozen, with its kind's look and Available choice where the input leaves them out; an edit
-     * keeps its own. A credit card never counts toward Available, whatever the input says.
+     * keeps its own, unless it changes kind, when it takes the new kind's. A credit card never
+     * counts toward Available, whatever the input says. One with history can't switch between
+     * credit and the other kinds, as its history would then read the other way.
      */
     async saveAccount(input: AccountInput): Promise<Account> {
       const existing = input.id ? find('account', input.id) : null;
+      if (
+        existing &&
+        (existing.kind === 'credit') !== (input.kind === 'credit') &&
+        accountRemoval(state().data, existing.id).archive
+      ) {
+        throw new Error(CREDIT_SWITCH);
+      }
       const defaults = defaultsFor(input.kind);
+      const kept = existing?.kind === input.kind ? existing : null;
       const orders = state().data.tables.account.map((a) => a.order);
       const account: Account = {
         ...(existing ?? {
@@ -417,12 +466,12 @@ export function createFinanceActions(store: StoreApi<AppState>) {
         }),
         name: input.name,
         kind: input.kind,
-        skin: input.skin ?? existing?.skin ?? defaults.skin,
+        skin: input.skin ?? kept?.skin ?? defaults.skin,
         last4: input.last4,
         openingBalance: input.openingBalance,
         inAvailable:
           input.kind !== 'credit' &&
-          (input.inAvailable ?? existing?.inAvailable ?? defaults.inAvailable),
+          (input.inAvailable ?? kept?.inAvailable ?? defaults.inAvailable),
         credit: input.credit,
         updatedAt: nowIso(),
       };
@@ -433,7 +482,10 @@ export function createFinanceActions(store: StoreApi<AppState>) {
     /**
      * Deletes an account, or archives one with history (`accountRemoval` says which), in one write.
      * The subscriptions it pays move to `moveSubscriptionsTo`, another account in use, so no renewal
-     * lands on it; when it was the default, the default moves to `defaultAccount` of what is left.
+     * lands on it. The default once it is gone is `defaultAccount` of what is left: it becomes the
+     * settings' default when this one was, and the incomes still expected on this one move to it
+     * (none moves when there is none). Those have not counted yet, so they are not history that
+     * keeps it. One already archived keeps the day it was archived on.
      */
     async deleteAccount(
       id: string,
@@ -441,46 +493,53 @@ export function createFinanceActions(store: StoreApi<AppState>) {
     ): Promise<'deleted' | 'archived'> {
       const account = find('account', id);
       const data = state().data;
-      const { subscriptions, archive } = accountRemoval(data, id);
+      const day = today();
       const at = nowIso();
-      const moved: TableRecord[] = [];
+      const changes: TableRecord[] = [];
+      const { subscriptions } = accountRemoval(data, id);
       if (subscriptions.length > 0) {
         const to = opts.moveSubscriptionsTo;
-        const inUse = activeAccounts(data.tables.account, today()).some((a) => a.id === to);
+        const inUse = activeAccounts(data.tables.account, day).some((a) => a.id === to);
         if (to === null || to === id || !inUse) throw new Error(PICK_SUBSCRIPTIONS_TARGET);
         for (const s of subscriptions) {
-          moved.push({ table: 'subscription', record: { ...s, accountId: to, updatedAt: at } });
+          changes.push({ table: 'subscription', record: { ...s, accountId: to, updatedAt: at } });
         }
       }
-      const archived: Account = { ...account, archivedOn: today(), updatedAt: at };
-      const left: DataSnapshot = {
+
+      // Archived or deleted, it is out of use from today: the default comes from the others.
+      const others: DataSnapshot = {
         ...data,
-        tables: {
-          ...data.tables,
-          account: archive
-            ? data.tables.account.map((a) => (a.id === id ? archived : a))
-            : data.tables.account.filter((a) => a.id !== id),
-        },
+        tables: { ...data.tables, account: data.tables.account.filter((a) => a.id !== id) },
       };
+      const nextDefault = defaultAccount(others, day);
+      const moved = new Map<string, Income>();
+      if (nextDefault) {
+        for (const i of data.tables.income) {
+          if (i.accountId !== id || i.status !== 'expected') continue;
+          moved.set(i.id, { ...i, accountId: nextDefault.id, updatedAt: at });
+        }
+      }
+      for (const record of moved.values()) changes.push({ table: 'income', record });
       const settings = data.tables.settings[0];
-      const newDefault: TableRecord[] =
-        settings?.defaultAccountId === id
-          ? [
-              {
-                table: 'settings',
-                record: {
-                  ...settings,
-                  defaultAccountId: defaultAccount(left, today())?.id ?? null,
-                  updatedAt: at,
-                },
-              },
-            ]
-          : [];
+      if (settings?.defaultAccountId === id) {
+        changes.push({
+          table: 'settings',
+          record: { ...settings, defaultAccountId: nextDefault?.id ?? null, updatedAt: at },
+        });
+      }
+
+      const income = data.tables.income.map((i) => moved.get(i.id) ?? i);
+      const { archive } = accountRemoval({ ...data, tables: { ...data.tables, income } }, id);
       if (archive) {
-        await state().putMany([...moved, ...newDefault, { table: 'account', record: archived }]);
+        const archived: Account = {
+          ...account,
+          archivedOn: account.archivedOn ?? day,
+          updatedAt: at,
+        };
+        await state().putMany([...changes, { table: 'account', record: archived }]);
         return 'archived';
       }
-      await state().putMany([...moved, ...newDefault], [{ table: 'account', id }]);
+      await state().putMany(changes, [{ table: 'account', id }]);
       return 'deleted';
     },
 
@@ -506,7 +565,7 @@ export function createFinanceActions(store: StoreApi<AppState>) {
       date: LocalDate,
     ): Promise<Transaction> {
       notFuture(date);
-      const card = find('account', cardId);
+      const card = accountInUse(cardId);
       if (card.kind !== 'credit') throw new Error(NOT_A_CARD);
       payingAccount(fromAccountId);
       const payment: Transaction = {
@@ -589,7 +648,7 @@ export function createFinanceActions(store: StoreApi<AppState>) {
      */
     async setActualBalance(accountId: string, actual: number, date: LocalDate) {
       notFuture(date);
-      const account = find('account', accountId);
+      const account = accountInUse(accountId);
       const delta = actual - accountBalance(account, state().data, date);
       if (delta === 0) return null;
       const adjustment: Transaction = {

@@ -7,6 +7,7 @@ import type { GameContext } from '@/domain/game/types';
 import { computeGameView } from '@/domain/game/engine';
 import {
   localIso,
+  makeAccount,
   makeExpense,
   makeGoal,
   makeLedgerEntry,
@@ -40,6 +41,8 @@ afterEach(() => {
 
 async function setup() {
   const t = await freshRealStore();
+  // The account the expenses below are paid with.
+  await t.store.getState().put('account', makeAccount());
   return { ...t, finance: createFinanceActions(t.store), game: createGameActions(t.store) };
 }
 

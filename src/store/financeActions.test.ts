@@ -565,17 +565,15 @@ describe('cards and loans', () => {
 
   it('payDebt pays a loan from an account', async () => {
     const { store, actions } = await setup();
-    await store
-      .getState()
-      .put(
-        'debt',
-        makeDebt({
-          id: 'loan',
-          name: 'Car loan',
-          openingBalance: 1_000_00,
-          openingDate: '2026-10-01',
-        }),
-      );
+    await store.getState().put(
+      'debt',
+      makeDebt({
+        id: 'loan',
+        name: 'Car loan',
+        openingBalance: 1_000_00,
+        openingDate: '2026-10-01',
+      }),
+    );
     const payment = await actions.payDebt('loan', MAIN, 50_00, TODAY);
     const data = store.getState().data;
     expect(payment).toMatchObject({
@@ -1028,5 +1026,326 @@ describe('expected salary that never arrives', () => {
     // It came after all: the skipped month is confirmed rather than doubled.
     expect(late.id).toBe('salary-2026-10');
     expect(store.getState().data.tables.income).toHaveLength(1);
+  });
+});
+
+describe('switching kind', () => {
+  const asDebit = {
+    id: 'card-1',
+    name: 'Visa',
+    kind: 'debit' as const,
+    last4: null,
+    openingBalance: 0,
+    credit: null,
+  };
+
+  it("a card with history can't switch between credit and debit, and nothing is written", async () => {
+    const { store, actions } = await setup();
+    await store.getState().putMany([
+      { table: 'account', record: makeCard() },
+      { table: 'expense', record: makeExpense({ accountId: 'card-1', date: '2026-10-02' }) },
+      { table: 'expense', record: makeExpense({ accountId: MAIN, date: '2026-10-02' }) },
+    ]);
+    const before = store.getState().data;
+    await expect(actions.saveAccount(asDebit)).rejects.toThrow(
+      "A card with history can't switch between credit and debit.",
+    );
+    await expect(
+      actions.saveAccount({
+        id: MAIN,
+        name: 'Main account',
+        kind: 'credit',
+        last4: null,
+        openingBalance: 1_000_00,
+        credit: terms(),
+      }),
+    ).rejects.toThrow("A card with history can't switch between credit and debit.");
+    expect(store.getState().data).toBe(before);
+  });
+
+  it("without history, a card can become a bank account and back, taking the new kind's look", async () => {
+    const { store, actions } = await setup();
+    await store.getState().put('account', makeCard());
+    expect(await actions.saveAccount(asDebit)).toMatchObject({
+      id: 'card-1',
+      kind: 'debit',
+      skin: 'midnight',
+      inAvailable: true,
+      credit: null,
+    });
+    expect(
+      await actions.saveAccount({ ...asDebit, kind: 'credit', credit: terms() }),
+    ).toMatchObject({ id: 'card-1', kind: 'credit', skin: 'violet', inAvailable: false });
+  });
+
+  it("with history, a bank account can become savings or cash, taking the new kind's look where the input leaves it out", async () => {
+    const { store, actions } = await setup();
+    await store.getState().put('expense', makeExpense({ accountId: MAIN, date: '2026-10-02' }));
+    const main = {
+      id: MAIN,
+      name: 'Main account',
+      last4: null,
+      openingBalance: 1_000_00,
+      credit: null,
+    };
+    expect(await actions.saveAccount({ ...main, kind: 'savings' })).toMatchObject({
+      kind: 'savings',
+      skin: 'mint',
+      inAvailable: false,
+    });
+    // What the input gives is kept.
+    expect(
+      await actions.saveAccount({ ...main, kind: 'cash', skin: 'ocean', inAvailable: false }),
+    ).toMatchObject({ kind: 'cash', skin: 'ocean', inAvailable: false });
+    expect(await actions.saveAccount({ ...main, kind: 'debit' })).toMatchObject({
+      kind: 'debit',
+      skin: 'midnight',
+      inAvailable: true,
+    });
+  });
+});
+
+describe('deleteAccount: expected incomes and archived accounts', () => {
+  const wallet = makeAccount({ id: 'acct-cash', name: 'Wallet', kind: 'cash', order: 3 });
+  const expectedSalary = makeIncome({
+    id: 'salary-2026-10',
+    amount: 3_100_00,
+    date: '2026-10-05',
+    status: 'expected',
+    accountId: MAIN,
+    period: '2026-10',
+  });
+  const incomeOn = (store: Store) =>
+    store.getState().data.tables.income.map((i) => [i.id, i.status, i.accountId]);
+
+  it('moves the incomes still expected on it to the new default, in the same write', async () => {
+    const { store, actions } = await setup();
+    await store.getState().putMany([
+      { table: 'account', record: wallet },
+      { table: 'income', record: expectedSalary },
+    ]);
+    const putMany = vi.spyOn(store.getState(), 'putMany');
+    // An expected income has not counted yet: it is no history that keeps the account.
+    expect(await actions.deleteAccount(MAIN, { moveSubscriptionsTo: null })).toBe('deleted');
+    expect(incomeOn(store)).toEqual([['salary-2026-10', 'expected', 'acct-cash']]);
+    expect(store.getState().data.tables.settings[0]?.defaultAccountId).toBe('acct-cash');
+    expect(putMany).toHaveBeenCalledTimes(1);
+    expect(putMany.mock.calls[0]![0].map((i) => i.table).sort()).toEqual(['income', 'settings']);
+    expect(putMany.mock.calls[0]![1]).toEqual([{ table: 'account', id: MAIN }]);
+  });
+
+  it('leaves the confirmed ones, which keep it archived', async () => {
+    const { store, actions } = await setup();
+    const paid = makeIncome({ id: 'bonus', source: 'extra', period: null, date: '2026-10-03' });
+    await store.getState().putMany([
+      { table: 'account', record: wallet },
+      { table: 'income', record: expectedSalary },
+      { table: 'income', record: paid },
+    ]);
+    expect(await actions.deleteAccount(MAIN, { moveSubscriptionsTo: null })).toBe('archived');
+    expect(incomeOn(store)).toEqual([
+      ['salary-2026-10', 'expected', 'acct-cash'],
+      ['bonus', 'confirmed', MAIN],
+    ]);
+  });
+
+  it('moves them to the default when another account goes', async () => {
+    const { store, actions } = await setup();
+    const gift = makeIncome({
+      id: 'gift',
+      source: 'extra',
+      period: null,
+      date: '2026-10-10',
+      status: 'expected',
+      accountId: SAVINGS,
+    });
+    await store.getState().put('income', gift);
+    expect(await actions.deleteAccount(SAVINGS, { moveSubscriptionsTo: null })).toBe('deleted');
+    expect(incomeOn(store)).toEqual([['gift', 'expected', MAIN]]);
+    expect(store.getState().data.tables.settings[0]?.defaultAccountId).toBe(MAIN);
+  });
+
+  it('leaves them where they are when no default is left, so the account is archived', async () => {
+    const { store, actions } = await setup();
+    await store.getState().put('income', expectedSalary);
+    expect(await actions.deleteAccount(MAIN, { moveSubscriptionsTo: null })).toBe('archived');
+    expect(incomeOn(store)).toEqual([['salary-2026-10', 'expected', MAIN]]);
+    expect(store.getState().data.tables.settings[0]?.defaultAccountId).toBeNull();
+  });
+
+  it('keeps the day an account was archived on when it is deleted again', async () => {
+    const { store, actions } = await setup();
+    await store.getState().putMany([
+      {
+        table: 'account',
+        record: makeAccount({ id: 'acct-old', order: 5, archivedOn: '2026-10-02' }),
+      },
+      { table: 'expense', record: makeExpense({ accountId: 'acct-old', date: '2026-10-01' }) },
+    ]);
+    expect(await actions.deleteAccount('acct-old', { moveSubscriptionsTo: null })).toBe('archived');
+    expect(store.getState().data.tables.account.find((a) => a.id === 'acct-old')?.archivedOn).toBe(
+      '2026-10-02',
+    );
+  });
+});
+
+describe('money only lands on accounts in use', () => {
+  const ARCHIVED = 'That account is no longer in use.';
+  const UNKNOWN = "That account doesn't exist.";
+  const NOT_CREDIT = 'Income goes into a bank account, cash or savings.';
+  const OLD = 'acct-old';
+  const GONE = 'acct-gone';
+
+  /** Adds an account and a card both archived on Oct 2, a card in use, a goal and a loan. */
+  async function withArchived() {
+    const t = await setup();
+    await t.store.getState().putMany([
+      {
+        table: 'account',
+        record: makeAccount({
+          id: OLD,
+          name: 'Old bank',
+          order: 5,
+          openingDate: '2026-10-01',
+          archivedOn: '2026-10-02',
+        }),
+      },
+      { table: 'account', record: makeCard({ openingBalance: 230_00 }) },
+      {
+        table: 'account',
+        record: makeCard({ id: 'card-old', name: 'Old Visa', order: 6, archivedOn: '2026-10-02' }),
+      },
+      { table: 'goal', record: makeGoal({ id: 'g1', current: 100_00 }) },
+      {
+        table: 'debt',
+        record: makeDebt({ id: 'loan', openingBalance: 1_000_00, openingDate: '2026-10-01' }),
+      },
+    ]);
+    return t;
+  }
+
+  /** Each call is refused with its message, and nothing is written. */
+  async function refuses(store: Store, calls: Array<[string, () => Promise<unknown>]>) {
+    const before = store.getState().data;
+    for (const [message, call] of calls) await expect(call(), message).rejects.toThrow(message);
+    expect(store.getState().data).toBe(before);
+  }
+
+  it('addExpense', async () => {
+    const { store, actions } = await withArchived();
+    await refuses(store, [
+      [ARCHIVED, () => actions.addExpense({ ...lunch, accountId: OLD })],
+      [ARCHIVED, () => actions.addExpense({ ...lunch, accountId: 'card-old', repeat: 'monthly' })],
+      [UNKNOWN, () => actions.addExpense({ ...lunch, accountId: GONE })],
+    ]);
+  });
+
+  it('updateExpense, when it moves the expense to another account', async () => {
+    const { store, actions } = await withArchived();
+    const { expense } = await actions.addExpense(lunch);
+    await refuses(store, [
+      [ARCHIVED, () => actions.updateExpense(expense.id, { accountId: OLD })],
+      [UNKNOWN, () => actions.updateExpense(expense.id, { note: 'x', accountId: GONE })],
+    ]);
+    // An expense kept on an archived account, as its history, can still be edited.
+    const old = makeExpense({ id: 'old', accountId: OLD, date: '2026-10-01' });
+    await store.getState().put('expense', old);
+    await actions.updateExpense('old', { note: 'Groceries', accountId: OLD });
+    expect(store.getState().data.tables.expense.find((e) => e.id === 'old')).toMatchObject({
+      note: 'Groceries',
+      accountId: OLD,
+    });
+  });
+
+  it('saveSubscription', async () => {
+    const { store, actions } = await withArchived();
+    const gym = {
+      name: 'Gym',
+      amount: 30_00,
+      cycle: 'monthly' as const,
+      nextRenewal: '2026-11-05',
+      category: 'health' as const,
+      accountId: MAIN,
+    };
+    const saved = await actions.saveSubscription(gym);
+    await refuses(store, [
+      [ARCHIVED, () => actions.saveSubscription({ ...gym, accountId: OLD })],
+      [UNKNOWN, () => actions.saveSubscription({ ...gym, id: saved.id, accountId: GONE })],
+    ]);
+  });
+
+  it('transfer and contributeToGoal, on both sides', async () => {
+    const { store, actions } = await withArchived();
+    await refuses(store, [
+      [ARCHIVED, () => actions.transfer(OLD, SAVINGS, 10_00, TODAY, '')],
+      [ARCHIVED, () => actions.transfer(MAIN, OLD, 10_00, TODAY, '')],
+      [UNKNOWN, () => actions.transfer(GONE, SAVINGS, 10_00, TODAY, '')],
+      [UNKNOWN, () => actions.transfer(MAIN, GONE, 10_00, TODAY, '')],
+      [ARCHIVED, () => actions.contributeToGoal('g1', 10_00, TODAY, OLD, SAVINGS)],
+      [UNKNOWN, () => actions.contributeToGoal('g1', 10_00, TODAY, MAIN, GONE)],
+    ]);
+  });
+
+  it('payCard, for the card and what pays it', async () => {
+    const { store, actions } = await withArchived();
+    await refuses(store, [
+      [ARCHIVED, () => actions.payCard('card-old', MAIN, 10_00, TODAY)],
+      [ARCHIVED, () => actions.payCard('card-1', OLD, 10_00, TODAY)],
+      [UNKNOWN, () => actions.payCard('card-gone', MAIN, 10_00, TODAY)],
+      [UNKNOWN, () => actions.payCard('card-1', GONE, 10_00, TODAY)],
+    ]);
+  });
+
+  it('payDebt, for what pays it', async () => {
+    const { store, actions } = await withArchived();
+    await refuses(store, [
+      [ARCHIVED, () => actions.payDebt('loan', OLD, 10_00, TODAY)],
+      [UNKNOWN, () => actions.payDebt('loan', GONE, 10_00, TODAY)],
+    ]);
+  });
+
+  it('setActualBalance', async () => {
+    const { store, actions } = await withArchived();
+    await refuses(store, [
+      [ARCHIVED, () => actions.setActualBalance(OLD, 10_00, TODAY)],
+      [ARCHIVED, () => actions.setActualBalance('card-old', 10_00, TODAY)],
+      [UNKNOWN, () => actions.setActualBalance(GONE, 10_00, TODAY)],
+    ]);
+  });
+
+  it('addIncome refuses a credit card too', async () => {
+    const { store, actions } = await withArchived();
+    const gift = {
+      amount: 100_00,
+      source: 'extra' as const,
+      label: 'Gift',
+      date: TODAY,
+      note: '',
+    };
+    await refuses(store, [
+      [NOT_CREDIT, () => actions.addIncome({ ...gift, accountId: 'card-1' })],
+      [ARCHIVED, () => actions.addIncome({ ...gift, accountId: OLD })],
+      [UNKNOWN, () => actions.addIncome({ ...gift, accountId: GONE })],
+    ]);
+  });
+
+  it('confirmIncome refuses the credit card an expected income names', async () => {
+    const { store, actions } = await withArchived();
+    await store.getState().put(
+      'income',
+      makeIncome({
+        id: 'on-card',
+        source: 'extra',
+        period: null,
+        date: '2026-10-10',
+        status: 'expected',
+        accountId: 'card-1',
+      }),
+    );
+    await refuses(store, [[NOT_CREDIT, () => actions.confirmIncome('on-card', 120_00)]]);
+    expect(store.getState().data.tables.income[0]).toMatchObject({
+      status: 'expected',
+      amount: 420_000,
+    });
   });
 });
