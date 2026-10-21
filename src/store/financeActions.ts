@@ -4,6 +4,7 @@ import { bucketBalances } from '@/domain/balances';
 import type { LimitStatus } from '@/domain/budget';
 import { categoryLabel } from '@/domain/budget';
 import type { LocalDate } from '@/domain/dates';
+import { debtRemoval } from '@/domain/debts';
 import {
   defaultSettings,
   type Bucket,
@@ -108,10 +109,6 @@ export interface OnboardingInput {
 }
 
 export const FUTURE = 'Use today or an earlier date.';
-const PAYS_SUBSCRIPTION =
-  'A subscription is paid with this card. Change how it is paid first, or keep the card.';
-const HAS_HISTORY =
-  'This card or loan has history. Delete its expenses and payments first, or keep it.';
 
 export type FinanceActions = ReturnType<typeof createFinanceActions>;
 
@@ -425,13 +422,23 @@ export function createFinanceActions(store: StoreApi<AppState>) {
       return debt;
     },
 
+    /** Deletes a card or loan, or archives one with history; `debtRemoval` says which, in one write. */
     async deleteDebt(id: string) {
-      const { expense, transaction, subscription } = state().data.tables;
-      if (expense.some((e) => e.cardId === id) || transaction.some((t) => t.debtId === id)) {
-        throw new Error(HAS_HISTORY);
+      const debt = find('debt', id);
+      const { subscriptions, archive } = debtRemoval(state().data, id);
+      const at = nowIso();
+      const moved = subscriptions.map((s): TableRecord => ({
+        table: 'subscription',
+        record: { ...s, paymentMethod: 'debit', cardId: null, updatedAt: at },
+      }));
+      if (archive) {
+        await state().putMany([
+          ...moved,
+          { table: 'debt', record: { ...debt, archivedOn: today(), updatedAt: at } },
+        ]);
+      } else {
+        await state().putMany(moved, [{ table: 'debt', id }]);
       }
-      if (subscription.some((s) => s.cardId === id)) throw new Error(PAYS_SUBSCRIPTION);
-      await state().remove('debt', id);
     },
 
     async payDebt(debtId: string, amount: number, from: 'cash' | 'savings', date: LocalDate) {

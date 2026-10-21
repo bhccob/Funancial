@@ -54,6 +54,11 @@ describe('CardSheet', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
+  it('is closed for an archived card, as one deleted from inside it', () => {
+    renderSheet({ archivedOn: TODAY });
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
   it('names the card and gives the four facts', () => {
     renderSheet();
     expect(within(sheet()).getByText('Credit card')).toBeInTheDocument();

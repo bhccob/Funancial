@@ -1,5 +1,6 @@
 import { debtBalance, type Buckets } from './balances';
 import type { LocalDate } from './dates';
+import { activeDebts } from './debts';
 import type { BudgetLimit, Category, Debt, Expense } from './entities';
 import {
   dayOfMonth,
@@ -163,7 +164,7 @@ export function upcomingBills(
         bills.push({ date: d, name: s.name, amount: s.amount, kind: 'subscription', refId: s.id });
     }
   }
-  for (const debt of data.tables.debt) {
+  for (const debt of activeDebts(data.tables.debt)) {
     if (debt.kind !== 'credit_card') continue;
     const balance = debtBalance(debt, data, today);
     if (balance <= 0) continue;

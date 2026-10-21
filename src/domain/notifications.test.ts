@@ -325,6 +325,11 @@ describe('upcomingReminders', () => {
     ]);
   });
 
+  it('never reminds of an archived card', () => {
+    const data = build({ reminders: { bills: true }, ...visa({ archivedOn: '2026-10-14' }) });
+    expect(upcomingReminders(data, NOW)).toEqual([]);
+  });
+
   it('reminds of what is left of a minimum, and not at all once it is paid', () => {
     const minimum = visa({ payInFull: false, minimumPayment: 25_00 });
     const after = (amount: number) => {

@@ -1,6 +1,7 @@
 import { debtBalance } from './balances';
 import { cardPayment, nextDueDate } from './budget';
 import { addDays, formatLocalDateTime, localDateTime, type LocalDate } from './dates';
+import { activeDebts } from './debts';
 import { expectedPayouts } from './dividends';
 import type { Profile, ReminderSettings, Settings } from './entities';
 import { isLoggedExpense } from './game/activity';
@@ -119,7 +120,7 @@ function renewals({ data, prefs, lastDay, money }: Context): Reminder[] {
 function cardBills({ data, prefs, today, lastDay, money }: Context): Reminder[] {
   if (!prefs.bills) return [];
   const out: Reminder[] = [];
-  for (const debt of data.tables.debt) {
+  for (const debt of activeDebts(data.tables.debt)) {
     // With no due day every day is "due", so there is no day to remind before. It never fired: its
     // "2 days before" was always already past, and the inbox would show one new row a day.
     if (debt.kind !== 'credit_card' || debt.dueDay === null) continue;

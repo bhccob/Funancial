@@ -1,6 +1,7 @@
 import { bucketBalances, debtBalance, netWorth } from './balances';
 import { categoryBreakdown, categoryLabel } from './budget';
 import { addDays, type LocalDate } from './dates';
+import { archivedBy } from './debts';
 import type { Expense } from './entities';
 import { monthRange, periodRange, type Range } from './periods';
 import { holdingValue } from './portfolio';
@@ -68,7 +69,10 @@ function soldLater(data: DataSnapshot, day: LocalDate): number {
  * their sale price), less everything owed, as of the end of `day`.
  */
 export function netWorthOn(data: DataSnapshot, day: LocalDate): number {
-  const debtTotal = data.tables.debt.reduce((sum, d) => sum + debtBalance(d, data, day), 0);
+  const debtTotal = data.tables.debt.reduce(
+    (sum, d) => (archivedBy(d, day) ? sum : sum + debtBalance(d, data, day)),
+    0,
+  );
   // shortcut: no price history, uses today's prices; upgrade when prices are stored by day
   const currency = data.tables.profile[0]?.currency;
   const investments = currency

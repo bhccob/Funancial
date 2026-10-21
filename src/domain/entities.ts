@@ -301,6 +301,11 @@ export const DebtSchema = z.object({
   statementDay: DayOfMonth.nullable(),
   dueDay: DayOfMonth.nullable(),
   payInFull: z.boolean(),
+  /**
+   * Set when one with history is deleted: it is kept only for the expenses and payments that name
+   * it, and from this day on it is hidden and what it owes no longer counts.
+   */
+  archivedOn: LocalDateSchema.optional(),
 });
 export type Debt = z.infer<typeof DebtSchema>;
 

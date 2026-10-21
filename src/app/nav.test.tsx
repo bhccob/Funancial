@@ -240,6 +240,15 @@ describe('Menu sheet', () => {
       renderAt('/', owing());
       expect(row(await openMenu(), 'Debts')).toHaveTextContent('2 cards and loans · ••••');
     });
+
+    it('leaves archived cards out of the count, as the Debts page does', async () => {
+      const data = owing();
+      data.tables.debt.push(makeDebt({ kind: 'credit_card', archivedOn: '2026-10-01' }));
+      renderAt('/', data);
+      const sheet = await openMenu();
+      expect(row(sheet, 'Debts')).toHaveTextContent(`2 cards and loans · ${usd(1_230_00)}`);
+      expect(row(sheet, 'Bills & cards')).toHaveTextContent(/^Bills & cards1 card$/);
+    });
   });
 
   describe('Income row', () => {

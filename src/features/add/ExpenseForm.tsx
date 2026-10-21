@@ -57,7 +57,7 @@ export function ExpenseForm({
     expense?.category ?? prefill?.category ?? 'food',
   );
   const [date, setDate] = useState(expense?.date ?? today);
-  const paidWithOptions = usePaidWithOptions();
+  const paidWithOptions = usePaidWithOptions(expense?.cardId);
   const [paidWith, setPaidWith] = useState(() => {
     if (expense) return paidWithValue(expense.paymentMethod, expense.cardId);
     const asked = prefill ? paidWithValue(prefill.paymentMethod, prefill.cardId) : 'cash';
@@ -168,6 +168,7 @@ export function ExpenseForm({
       <PaidWithField
         value={paidWith}
         onChange={setPaidWith}
+        keepCardId={expense?.cardId}
         hint={
           isCardChoice(paidWith)
             ? 'Adds to the card balance. Paying the card later moves the cash.'

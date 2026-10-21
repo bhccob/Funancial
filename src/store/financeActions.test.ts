@@ -1,6 +1,8 @@
 import { describe, expect, expectTypeOf, it, vi } from 'vitest';
 import { bucketBalances, debtBalance } from '@/domain/balances';
+import { SubscriptionSchema } from '@/domain/entities';
 import { holdingRate, holdingValue } from '@/domain/portfolio';
+import type { DataSnapshot } from '@/domain/snapshot';
 import { freshRealStore } from '@/test/realStore';
 import {
   makeDebt,
@@ -171,7 +173,7 @@ describe('goals, debts and corrections', () => {
     expect(data.tables.transaction[0]?.type).toBe('card_payment');
   });
 
-  it('refuses to delete a card with history, but deletes one without', async () => {
+  it('archives a card with history instead of deleting it, and deletes one without', async () => {
     const { store, actions } = await setup();
     await store.getState().put('debt', makeDebt({ id: 'used', openingDate: '2026-10-01' }));
     await store.getState().put('debt', makeDebt({ id: 'unused', openingDate: '2026-10-01' }));
@@ -181,11 +183,22 @@ describe('goals, debts and corrections', () => {
         'expense',
         makeExpense({ paymentMethod: 'credit_card', cardId: 'used', date: '2026-10-02' }),
       );
-    await expect(actions.deleteDebt('used')).rejects.toThrow(
-      'This card or loan has history. Delete its expenses and payments first, or keep it.',
-    );
+    const cashBefore = bucketBalances(store.getState().data, '2026-10-14').cash;
+    await actions.deleteDebt('used');
     await actions.deleteDebt('unused');
-    expect(store.getState().data.tables.debt.map((d) => d.id)).toEqual(['used']);
+    const data = store.getState().data;
+    expect(data.tables.debt.map((d) => [d.id, d.archivedOn])).toEqual([['used', '2026-10-14']]);
+    // The past expense still names it, and nothing it paid for changes.
+    expect(data.tables.expense[0]).toMatchObject({ paymentMethod: 'credit_card', cardId: 'used' });
+    expect(bucketBalances(data, '2026-10-14').cash).toBe(cashBefore);
+  });
+
+  it('archives a loan with payments too', async () => {
+    const { store, actions } = await setup();
+    await store.getState().put('debt', makeDebt({ id: 'loan', kind: 'loan' }));
+    await actions.payDebt('loan', 50_00, 'cash', '2026-10-14');
+    await actions.deleteDebt('loan');
+    expect(store.getState().data.tables.debt.map((d) => d.archivedOn)).toEqual(['2026-10-14']);
   });
 
   it('deleting a subscription keeps its past charges', async () => {
@@ -531,21 +544,60 @@ describe('expected salary that never arrives', () => {
 });
 
 describe('deleting a card a subscription pays with', () => {
-  it('is refused, so later renewals never point at a missing card', async () => {
-    const { store, actions } = await setup();
-    await store.getState().put('debt', makeDebt({ id: 'card-x', name: 'Visa', openingBalance: 0 }));
-    await store.getState().put(
+  async function withSubscriptions() {
+    const t = await setup();
+    const put = t.store.getState().put;
+    await put('debt', makeDebt({ id: 'card-x', name: 'Visa', openingBalance: 0 }));
+    await put(
+      'subscription',
+      makeSubscription({ id: 'sub-gym', paymentMethod: 'credit_card', cardId: 'card-x' }),
+    );
+    await put(
       'subscription',
       makeSubscription({
-        id: 'sub-gym',
+        id: 'sub-old',
         paymentMethod: 'credit_card',
         cardId: 'card-x',
         status: 'cancelled',
       }),
     );
-    await expect(actions.deleteDebt('card-x')).rejects.toThrow(
-      'A subscription is paid with this card. Change how it is paid first, or keep the card.',
-    );
-    expect(store.getState().data.tables.debt).toHaveLength(1);
+    await put('subscription', makeSubscription({ id: 'sub-cash', paymentMethod: 'cash' }));
+    return t;
+  }
+
+  const paidWith = (data: DataSnapshot) =>
+    data.tables.subscription.map((s) => [s.id, s.paymentMethod, s.cardId]);
+
+  it('moves them to debit and deletes the card, in one write', async () => {
+    const { store, actions } = await withSubscriptions();
+    const putMany = vi.spyOn(store.getState(), 'putMany');
+    await actions.deleteDebt('card-x');
+    const data = store.getState().data;
+    expect(data.tables.debt).toEqual([]);
+    expect(paidWith(data)).toEqual([
+      ['sub-gym', 'debit', null],
+      ['sub-old', 'debit', null],
+      ['sub-cash', 'cash', null],
+    ]);
+    // Every moved one still holds together: a card exactly when paying by credit card.
+    for (const s of data.tables.subscription)
+      expect(SubscriptionSchema.safeParse(s).success).toBe(true);
+    expect(putMany).toHaveBeenCalledTimes(1);
+    expect(putMany.mock.calls[0]![1]).toEqual([{ table: 'debt', id: 'card-x' }]);
+  });
+
+  it('moves them to debit when the card is archived too, so no renewal lands on it', async () => {
+    const { store, actions } = await withSubscriptions();
+    await store
+      .getState()
+      .put('expense', makeExpense({ paymentMethod: 'credit_card', cardId: 'card-x' }));
+    await actions.deleteDebt('card-x');
+    const data = store.getState().data;
+    expect(data.tables.debt.map((d) => d.archivedOn)).toEqual(['2026-10-14']);
+    expect(paidWith(data)).toEqual([
+      ['sub-gym', 'debit', null],
+      ['sub-old', 'debit', null],
+      ['sub-cash', 'cash', null],
+    ]);
   });
 });

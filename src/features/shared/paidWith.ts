@@ -11,19 +11,24 @@ const NAMES: Record<Exclude<PaymentMethod, 'credit_card'>, string> = {
   other: 'Other',
 };
 
-/** Options for a "Paid with" select: cash, debit, each credit card by name, other. */
-export function usePaidWithOptions(): Array<{ value: string; label: string }> {
+/**
+ * Options for a "Paid with" select: cash, debit, each credit card by name, other. An archived card
+ * is offered only as `keepCardId`, the card an expense being edited was already paid with.
+ */
+export function usePaidWithOptions(
+  keepCardId: string | null = null,
+): Array<{ value: string; label: string }> {
   const debts = useApp((s) => s.data.tables.debt);
   return useMemo(
     () => [
       { value: 'cash', label: NAMES.cash },
       { value: 'debit', label: NAMES.debit },
       ...debts
-        .filter((d) => d.kind === 'credit_card')
+        .filter((d) => d.kind === 'credit_card' && (!d.archivedOn || d.id === keepCardId))
         .map((d) => ({ value: `${CARD_PREFIX}${d.id}`, label: d.name })),
       { value: 'other', label: NAMES.other },
     ],
-    [debts],
+    [debts, keepCardId],
   );
 }
 

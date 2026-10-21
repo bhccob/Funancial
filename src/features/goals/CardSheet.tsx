@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/Button';
 import { Sheet } from '@/components/ui/Sheet';
 import { debtBalance } from '@/domain/balances';
 import { cardPayment, nextDueDate } from '@/domain/budget';
+import { activeDebts } from '@/domain/debts';
 import type { Debt } from '@/domain/entities';
 import { formatDay } from '@/lib/format';
 import { useApp } from '@/store/AppStoreProvider';
@@ -30,7 +31,8 @@ export function CardSheet({ debtId, onClose }: { debtId: string | null; onClose(
   const [edit, setEdit] = useState<DebtTarget | null>(null);
   const editButton = useRef<HTMLButtonElement>(null);
 
-  const debt = data.tables.debt.find((d) => d.id === debtId);
+  // Deleting it from inside closes the sheet, archived or gone.
+  const debt = activeDebts(data.tables.debt).find((d) => d.id === debtId);
   const balance = debt ? debtBalance(debt, data, today) : 0;
 
   // Paying the card off disables "Pay card", which is where the pay dialog hands focus back to, so

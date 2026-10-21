@@ -149,6 +149,18 @@ describe('HistoryScreen', () => {
     expect(actions.addExpense).not.toHaveBeenCalled();
   });
 
+  it('keeps an archived card on the expenses it paid for, and in their edit form', async () => {
+    const data = structuredClone(bal!.data);
+    const card = data.tables.debt.find((d) => d.id === 'card-1')!;
+    card.archivedOn = bal!.today;
+    renderHistory(data);
+    const jacket = screen.getByRole('button', { name: /^Jacket/ });
+    expect(jacket).toHaveTextContent(card.name);
+    await userEvent.click(jacket);
+    const dialog = screen.getByRole('dialog', { name: 'Edit expense' });
+    expect(within(dialog).getByRole('radio', { name: card.name })).toBeChecked();
+  });
+
   it('gives each delete button the 44px a touch target needs', () => {
     renderHistory();
     expect(row('Side gig').getByRole('button', { name: 'Delete Side gig' })).toHaveClass('size-11');

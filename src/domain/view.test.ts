@@ -30,6 +30,16 @@ describe('computeFinanceView', () => {
     expect(v.debts.map((d) => [d.debt.id, d.balance])).toEqual([['card-1', 230_00]]);
   });
 
+  it('leaves an archived card out: no row, no bill, and what it owes no longer counts', () => {
+    const data = structuredClone(avl.data);
+    data.tables.debt = data.tables.debt.map((d) => ({ ...d, archivedOn: '2026-10-14' }));
+    const v = computeFinanceView(data, '2026-10-14', 1);
+    expect(v.debts).toEqual([]);
+    expect(v.debtTotal).toBe(0);
+    expect(v.netWorth).toBe(3_870_00 + 230_00);
+    expect(v.bills.filter((b) => b.kind === 'card')).toEqual([]);
+  });
+
   it('does not take a card minimum off Available to spend twice once it is paid', () => {
     const data = emptySnapshot();
     data.tables.profile = [

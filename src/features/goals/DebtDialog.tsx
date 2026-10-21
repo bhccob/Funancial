@@ -5,10 +5,13 @@ import { MoneyField } from '@/components/ui/MoneyField';
 import { Select } from '@/components/ui/Select';
 import { Switch } from '@/components/ui/Switch';
 import { TextField } from '@/components/ui/TextField';
+import { debtBalance } from '@/domain/balances';
+import { debtRemoval } from '@/domain/debts';
 import type { Debt } from '@/domain/entities';
 import { formatDate } from '@/lib/format';
 import { useAction } from '@/lib/useAction';
-import { useCurrency, useFinanceActions } from '@/store/useFinance';
+import { useApp } from '@/store/AppStoreProvider';
+import { useCurrency, useFinanceActions, useMoney, useToday } from '@/store/useFinance';
 
 type Kind = Debt['kind'];
 export type DebtTarget = { kind: Kind; debt: Debt | null };
@@ -19,8 +22,13 @@ const DAY_OPTIONS = Array.from({ length: 31 }, (_, i) => ({
   label: String(i + 1),
 }));
 
-function DebtForm({ kind, debt, onDone }: DebtTarget & { onDone(): void }) {
-  const { saveDebt, deleteDebt } = useFinanceActions();
+function DebtForm({
+  kind,
+  debt,
+  onDone,
+  onDelete,
+}: DebtTarget & { onDone(): void; onDelete(): void }) {
+  const { saveDebt } = useFinanceActions();
   const currency = useCurrency();
   const run = useAction();
   const card = kind === 'credit_card';
@@ -62,15 +70,6 @@ function DebtForm({ kind, debt, onDone }: DebtTarget & { onDone(): void }) {
         }),
       { success: debt ? 'Saved.' : card ? 'Card added.' : 'Loan added.' },
     );
-    setBusy(false);
-    if (ok) onDone();
-  }
-
-  async function remove() {
-    if (!debt) return;
-    setBusy(true);
-    // Refused when it has history; useAction shows that message.
-    const ok = await run(() => deleteDebt(debt.id), { success: `${debt.name} deleted.` });
     setBusy(false);
     if (ok) onDone();
   }
@@ -136,7 +135,7 @@ function DebtForm({ kind, debt, onDone }: DebtTarget & { onDone(): void }) {
       )}
       <div className="flex flex-wrap items-center justify-between gap-2">
         {debt ? (
-          <Button variant="danger-ghost" disabled={busy} onClick={remove}>
+          <Button variant="danger-ghost" disabled={busy} onClick={onDelete}>
             Delete
           </Button>
         ) : (
@@ -160,18 +159,105 @@ const TITLES: Record<Kind, [string, string]> = {
   loan: ['Add a loan', 'Edit loan'],
 };
 
+const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
+
+/**
+ * Asks before a card or loan goes, saying what `deleteDebt` will do: whether it is archived instead
+ * (and what it still owes), and how many subscriptions move to debit.
+ */
+function DeleteDebtDialog({
+  debt,
+  onCancel,
+  onDone,
+}: {
+  debt: Debt | null;
+  onCancel(): void;
+  onDone(): void;
+}) {
+  const { deleteDebt } = useFinanceActions();
+  const data = useApp((s) => s.data);
+  const today = useToday();
+  const money = useMoney();
+  const run = useAction();
+  const [busy, setBusy] = useState(false);
+
+  let title = '';
+  let description = '';
+  let archive = false;
+  if (debt) {
+    const removal = debtRemoval(data, debt.id);
+    archive = removal.archive;
+    const owed = archive ? debtBalance(debt, data, today) : 0;
+    const moved = removal.subscriptions.length;
+    title = `${archive ? 'Archive' : 'Delete'} ${debt.name}?`;
+    description = [
+      archive
+        ? `${debt.name} has past expenses or payments, so it is archived: it leaves Debts, bills and "Paid with", and past expenses keep its name.`
+        : `${debt.name} will be deleted.`,
+      owed > 0 && `The ${money(owed)} still owed on it stops counting toward what you owe.`,
+      moved > 0 &&
+        `${moved} ${plural(moved, 'subscription', 'subscriptions')} paid with it ${plural(moved, 'switches', 'switch')} to debit.`,
+    ]
+      .filter(Boolean)
+      .join(' ');
+  }
+
+  async function confirm() {
+    if (!debt) return;
+    setBusy(true);
+    const ok = await run(() => deleteDebt(debt.id), {
+      success: `${debt.name} ${archive ? 'archived' : 'deleted'}.`,
+    });
+    setBusy(false);
+    if (ok) onDone();
+    else onCancel();
+  }
+
+  return (
+    <Dialog
+      open={debt !== null}
+      title={title}
+      description={description}
+      onClose={onCancel}
+      actions={
+        <>
+          <Button variant="secondary" onClick={onCancel}>
+            Cancel
+          </Button>
+          <Button variant="danger" disabled={busy} onClick={() => void confirm()}>
+            {archive ? 'Archive' : 'Delete'}
+          </Button>
+        </>
+      }
+    />
+  );
+}
+
 export function DebtDialog({ target, onClose }: { target: DebtTarget | null; onClose(): void }) {
   const title = target ? TITLES[target.kind][target.debt ? 1 : 0] : '';
+  // Beside the form's dialog, not in it: Escape on the ask must not close both.
+  const [deleting, setDeleting] = useState<Debt | null>(null);
   return (
-    <Dialog open={target !== null} title={title} onClose={onClose}>
-      {target && (
-        <DebtForm
-          key={target.debt?.id ?? `new-${target.kind}`}
-          kind={target.kind}
-          debt={target.debt}
-          onDone={onClose}
-        />
-      )}
-    </Dialog>
+    <>
+      <Dialog open={target !== null} title={title} onClose={onClose}>
+        {target && (
+          <DebtForm
+            key={target.debt?.id ?? `new-${target.kind}`}
+            kind={target.kind}
+            debt={target.debt}
+            onDone={onClose}
+            onDelete={() => setDeleting(target.debt)}
+          />
+        )}
+      </Dialog>
+      <DeleteDebtDialog
+        debt={deleting}
+        onCancel={() => setDeleting(null)}
+        onDone={() => {
+          setDeleting(null);
+          onClose();
+        }}
+      />
+    </>
   );
 }

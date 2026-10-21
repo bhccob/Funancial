@@ -1,3 +1,4 @@
+import { activeDebts } from '@/domain/debts';
 import { incomeByMonth } from '@/domain/income';
 import { formatDay } from '@/lib/format';
 import { useApp } from '@/store/AppStoreProvider';
@@ -12,7 +13,7 @@ export function useMenuSubtitles(): Record<string, string> {
   const money = useMoney();
   const view = useFinanceView();
   const subscriptions = useApp((s) => s.data.tables.subscription);
-  const debts = useApp((s) => s.data.tables.debt);
+  const debts = activeDebts(useApp((s) => s.data.tables.debt));
   const goals = useApp((s) => s.data.tables.goal);
   const data = useApp((s) => s.data);
   const today = useToday();

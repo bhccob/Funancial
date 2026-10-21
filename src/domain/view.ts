@@ -9,6 +9,7 @@ import {
   type LimitStatus,
 } from './budget';
 import type { LocalDate } from './dates';
+import { activeDebts } from './debts';
 import type { Debt, Income, SalaryFreeze } from './entities';
 import { monthKey } from './periods';
 import { portfolio } from './portfolio';
@@ -42,7 +43,10 @@ export function computeFinanceView(
   weekStartsOn: 0 | 1,
 ): FinanceView {
   const buckets = bucketBalances(data, today);
-  const debts = data.tables.debt.map((debt) => ({ debt, balance: debtBalance(debt, data, today) }));
+  const debts = activeDebts(data.tables.debt).map((debt) => ({
+    debt,
+    balance: debtBalance(debt, data, today),
+  }));
   const debtTotal = debts.reduce((s, d) => s + d.balance, 0);
   const bills = upcomingBills(data, today);
   const reserved = reservedTotal(data, today, weekStartsOn);

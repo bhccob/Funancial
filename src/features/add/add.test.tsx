@@ -1,4 +1,4 @@
-import { fireEvent, screen, within } from '@testing-library/react';
+import { act, fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes, type InitialEntry } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -326,6 +326,20 @@ describe('the Add forms in the line style', () => {
     expect(tabsOf('Paid with')).toEqual(['Cash', 'Debit card', 'Visa', 'Other']);
     expect(tab('Cash')).toHaveClass('border-b-2', 'border-text');
     expect(screen.queryByLabelText('Paid with')).not.toBeInTheDocument();
+  });
+
+  it('offers no archived card under Paid with', () => {
+    const view = renderAdd('/add', 'motivational', ['Visa', 'Old card']);
+    act(() =>
+      view.store.setState((s) => {
+        const tables = { ...s.data.tables };
+        tables.debt = tables.debt.map((d) =>
+          d.name === 'Old card' ? { ...d, archivedOn: TODAY } : d,
+        );
+        return { data: { ...s.data, tables } };
+      }),
+    );
+    expect(tabsOf('Paid with')).toEqual(['Cash', 'Debit card', 'Visa', 'Other']);
   });
 
   it('has Category as one-tap chips, not a select and not underline tabs', () => {

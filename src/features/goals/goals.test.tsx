@@ -10,7 +10,14 @@ import { formatDate } from '@/lib/format';
 import { toastStore } from '@/lib/toast';
 import { useAmountsHidden } from '@/store/useAmountsHidden';
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
-import { makeDebt, makeGoal, makeProfile, makeTransaction } from '@/test/fixtures';
+import {
+  makeDebt,
+  makeExpense,
+  makeGoal,
+  makeProfile,
+  makeSubscription,
+  makeTransaction,
+} from '@/test/fixtures';
 import { DebtsScreen } from './DebtsScreen';
 import { GoalsScreen } from './GoalsScreen';
 
@@ -29,8 +36,6 @@ vi.mock('@/store/useFinance', async (importOriginal) => ({
 
 const TODAY = '2026-10-14';
 const usd = (minor: number) => formatMoney(minor, 'USD');
-const HISTORY =
-  'This card or loan has history. Delete its expenses and payments first, or keep it.';
 
 beforeEach(() => {
   toastStore.setState({ toasts: [] });
@@ -247,14 +252,65 @@ describe('Debts', () => {
     expect(within(dialog).getByLabelText('Amount')).toHaveValue('250.00');
   });
 
-  it('explains when a card with history cannot be deleted', async () => {
-    actions.deleteDebt.mockRejectedValueOnce(new Error(HISTORY));
-    renderDebts();
+  async function deleteVisa(data: DataSnapshot) {
+    renderDebts(data);
     await userEvent.click(row('Visa').getByRole('button', { name: 'Edit Visa' }));
-    const dialog = screen.getByRole('dialog', { name: 'Edit card' });
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Delete' }));
+    const edit = screen.getByRole('dialog', { name: 'Edit card' });
+    await userEvent.click(within(edit).getByRole('button', { name: 'Delete' }));
+  }
+
+  it('asks before deleting a card, and says its subscriptions switch to debit', async () => {
+    const data = filledData();
+    data.tables.subscription.push(
+      makeSubscription({ id: 's1', paymentMethod: 'credit_card', cardId: 'card-1' }),
+      makeSubscription({ id: 's2', paymentMethod: 'credit_card', cardId: 'card-1' }),
+      makeSubscription({ id: 's3', paymentMethod: 'debit' }),
+    );
+    await deleteVisa(data);
+    expect(actions.deleteDebt).not.toHaveBeenCalled();
+    const ask = screen.getByRole('dialog', { name: 'Delete Visa?' });
+    expect(ask).toHaveAccessibleDescription(
+      'Visa will be deleted. 2 subscriptions paid with it switch to debit.',
+    );
+    await userEvent.click(within(ask).getByRole('button', { name: 'Delete' }));
     expect(actions.deleteDebt).toHaveBeenCalledWith('card-1');
-    expect(await screen.findByText(HISTORY)).toBeInTheDocument();
+    expect(await screen.findByText('Visa deleted.')).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Edit card' })).toBeNull();
+  });
+
+  it('says a card with history is archived, and that what it owes stops counting', async () => {
+    const data = filledData();
+    data.tables.expense.push(
+      makeExpense({ amount: 20_00, paymentMethod: 'credit_card', cardId: 'card-1', date: TODAY }),
+    );
+    data.tables.subscription.push(
+      makeSubscription({ id: 's1', paymentMethod: 'credit_card', cardId: 'card-1' }),
+    );
+    await deleteVisa(data);
+    const ask = screen.getByRole('dialog', { name: 'Archive Visa?' });
+    expect(ask).toHaveAccessibleDescription(
+      `Visa has past expenses or payments, so it is archived: it leaves Debts, bills and "Paid with", and past expenses keep its name. The ${usd(250_00)} still owed on it stops counting toward what you owe. 1 subscription paid with it switches to debit.`,
+    );
+    await userEvent.click(within(ask).getByRole('button', { name: 'Archive' }));
+    expect(actions.deleteDebt).toHaveBeenCalledWith('card-1');
+    expect(await screen.findByText('Visa archived.')).toBeInTheDocument();
+  });
+
+  it('keeps the card when the ask is cancelled', async () => {
+    await deleteVisa(filledData());
+    const ask = screen.getByRole('dialog', { name: 'Delete Visa?' });
+    await userEvent.click(within(ask).getByRole('button', { name: 'Cancel' }));
+    expect(actions.deleteDebt).not.toHaveBeenCalled();
+    expect(screen.queryByRole('dialog', { name: 'Delete Visa?' })).toBeNull();
+    expect(screen.getByRole('dialog', { name: 'Edit card' })).toBeInTheDocument();
+  });
+
+  it('has no row for an archived card', () => {
+    const data = filledData();
+    data.tables.debt[0]!.archivedOn = TODAY;
+    renderDebts(data);
+    expect(screen.queryByText('Visa')).toBeNull();
+    expect(screen.getByText('Car loan')).toBeInTheDocument();
   });
 });
 

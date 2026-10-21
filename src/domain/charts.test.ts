@@ -163,6 +163,15 @@ describe('net worth over time', () => {
     expect(netWorthChangeThisMonth(data, TODAY)).toBe(-200_00);
   });
 
+  it('stops counting what an archived card owes from the day it was archived', () => {
+    const data = worth();
+    data.tables.debt = [
+      makeDebt({ openingDate: '2026-09-01', openingBalance: 300_00, archivedOn: '2026-10-10' }),
+    ];
+    expect(netWorthOn(data, '2026-10-09')).toBe(800_00 - 300_00);
+    expect(netWorthOn(data, '2026-10-10')).toBe(800_00);
+  });
+
   it('subtracts debts as they stood on the day', () => {
     const data = worth();
     data.tables.debt = [

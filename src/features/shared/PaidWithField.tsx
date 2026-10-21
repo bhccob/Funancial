@@ -10,12 +10,15 @@ export function PaidWithField({
   value,
   onChange,
   hint,
+  keepCardId,
 }: {
   value: string;
   onChange(value: string): void;
   hint?: string;
+  /** An archived card to offer still: the one an expense being edited was paid with. */
+  keepCardId?: string | null;
 }) {
-  const options = usePaidWithOptions();
+  const options = usePaidWithOptions(keepCardId);
   return options.length <= MAX_TABS ? (
     <RadioGroup
       variant="underline"
