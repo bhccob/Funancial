@@ -523,7 +523,7 @@ describe('Quests screen: badges', () => {
     });
 
     const badges = within(region('Badges')).getAllByRole('listitem');
-    expect(badges).toHaveLength(12);
+    expect(badges).toHaveLength(9);
 
     const earned = badges[0]!;
     expect(within(earned).getByText('First Expense Logged')).toBeInTheDocument();
@@ -542,9 +542,6 @@ describe('Quests screen: badges', () => {
       'First Dividend': ['Confirm your first dividend.', 'coins'],
       'Dividend Collector': ['Confirm 12 dividends.', 'hand-coins'],
       'Passive Income Pro': ['Collect 100 in dividends in one month.', 'piggy-bank'],
-      'Smart Shopper': ['Rate a purchase 4 or 5.', 'shopping-bag'],
-      'Impulse Controller': ['Skip 5 purchases.', 'hand'],
-      'Budget Defender': ['Skip 3 purchases that would have gone over a limit.', 'shield-check'],
     } as const;
     for (const [name, [description, icon]] of Object.entries(locked)) {
       const row = screen.getByText(name).closest('li')!;
@@ -554,7 +551,7 @@ describe('Quests screen: badges', () => {
       expect(within(row).queryByText(/Earned/)).not.toBeInTheDocument();
       expect(row.querySelector('[class*="ring-"]')).not.toBeInTheDocument();
     }
-    expect(container.querySelectorAll('svg.lucide-lock')).toHaveLength(11);
+    expect(container.querySelectorAll('svg.lucide-lock')).toHaveLength(8);
   });
 });
 
@@ -616,9 +613,6 @@ describe('Quests screen: how to earn', () => {
     expect(badges.getByText('First Dividend — +100 XP, +25 coins')).toBeInTheDocument();
     expect(badges.getByText('Dividend Collector — +150 XP, +40 coins')).toBeInTheDocument();
     expect(badges.getByText('Passive Income Pro — +200 XP, +50 coins')).toBeInTheDocument();
-    expect(badges.getByText('Smart Shopper — +100 XP, +25 coins')).toBeInTheDocument();
-    expect(badges.getByText('Impulse Controller — +150 XP, +40 coins')).toBeInTheDocument();
-    expect(badges.getByText('Budget Defender — +150 XP, +40 coins')).toBeInTheDocument();
 
     const challenges = list('Challenges');
     expect(challenges.getByText('No-Spend Weekend — +120 XP, +30 coins')).toBeInTheDocument();

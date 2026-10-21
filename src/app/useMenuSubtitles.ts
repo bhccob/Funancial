@@ -52,9 +52,7 @@ export function useMenuSubtitles(): Record<string, string> {
     '/freeze': view.activeFreeze
       ? `Active until ${formatDay(view.activeFreeze.end)}`
       : 'None right now',
-    '/buy': 'Ask before you spend',
     '/quests': `Level ${level}`,
-    '/about-you': 'What the buy check knows',
     '/shop': `${plural(coins, 'coin')} to spend`,
     // Nothing under the name when there is nothing new.
     '/inbox': unread > 0 ? `${unread} new` : '',

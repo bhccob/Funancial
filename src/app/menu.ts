@@ -8,13 +8,11 @@ import {
   Inbox,
   Repeat,
   Settings,
-  ShoppingBag,
   Snowflake,
   Store,
   Target,
   Trophy,
   TrendingUp,
-  UserRound,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -53,14 +51,12 @@ export const MENU_GROUPS: MenuGroup[] = [
       { path: '/income', label: 'Income', icon: HandCoins, color: '#2e7d32' },
       { path: '/history', label: 'History', icon: Clock, color: '#d9541e' },
       { path: '/freeze', label: 'Salary freeze', icon: Snowflake, color: '#4458d6' },
-      { path: '/buy', label: 'Buy it?', icon: ShoppingBag, color: '#c43b6a' },
     ],
   },
   {
     title: 'You',
     items: [
       { path: '/quests', label: 'Quests', icon: Trophy, color: '#b86e00' },
-      { path: '/about-you', label: 'About you', icon: UserRound, color: '#0e7490' },
       { path: '/shop', label: 'Shop', icon: Store, color: '#6b46f5' },
       { path: '/inbox', label: 'Inbox', icon: Inbox, color: '#3b82c4' },
       { path: '/help', label: 'Help', icon: CircleQuestionMark, color: '#128a60' },

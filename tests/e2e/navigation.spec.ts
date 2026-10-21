@@ -80,21 +80,19 @@ test('add is reachable from the sidebar on desktop and opens Add Expense', async
   await expect(page.getByRole('radio', { name: 'Expense' })).toBeChecked();
 });
 
-test('mobile: Home has a Buy it? action in History’s place, and it opens the Ask form', async ({
+test('mobile: Home has three actions, and History stays one tap away in Last 7 days', async ({
   page,
 }, testInfo) => {
   test.skip(testInfo.project.name !== 'mobile-chromium', 'mobile layout only');
   await startFresh(page);
-  // History stays one tap away in Last 7 days.
+  await expect(page.getByRole('link', { name: 'Expense', exact: true })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Income', exact: true })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Goals', exact: true })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Buy it?' })).toHaveCount(0);
   await expect(page.getByRole('link', { name: 'History' })).toHaveCount(1);
-  await page.getByRole('link', { name: 'Buy it?' }).click();
-  await expect(page.getByRole('heading', { level: 1, name: 'Should I buy it?' })).toBeVisible();
-  await expect(page.getByText('Your numbers stay with your data, encrypted.')).toBeVisible();
 });
 
-test('mobile: the Menu lists Buy it? under Your money, no longer marked Soon', async ({
-  page,
-}, testInfo) => {
+test('mobile: the Menu has no Buy it? and no About you', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'mobile-chromium', 'mobile layout only');
   await startFresh(page);
   await page
@@ -103,55 +101,23 @@ test('mobile: the Menu lists Buy it? under Your money, no longer marked Soon', a
     .click();
   const menu = page.getByRole('dialog', { name: 'Menu' });
   await expect(menu.getByRole('heading', { level: 3 })).toHaveText(['Your money', 'You']);
-  const row = menu.getByRole('link', { name: /^Buy it\?/ });
-  await expect(row).not.toContainText('Soon');
-  await row.click();
-  await expect(page.getByRole('heading', { level: 1, name: 'Should I buy it?' })).toBeVisible();
+  await expect(menu.getByRole('link', { name: /^Buy it\?/ })).toHaveCount(0);
+  await expect(menu.getByRole('link', { name: /^About you/ })).toHaveCount(0);
 });
 
-test('desktop: the sidebar lists Buy it? without Soon and opens the Ask form', async ({
-  page,
-}, testInfo) => {
+test('desktop: the sidebar has no Buy it? and no About you', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop-chromium', 'desktop layout only');
   await startFresh(page);
-  const link = page
-    .getByRole('navigation', { name: 'All sections' })
-    .getByRole('link', { name: /^Buy it\?/ });
-  await expect(link).not.toContainText('Soon');
-  await link.click();
-  await expect(page.getByRole('heading', { level: 1, name: 'Should I buy it?' })).toBeVisible();
+  const sidebar = page.getByRole('navigation', { name: 'All sections' });
+  await expect(sidebar.getByRole('link', { name: /^Quests/ })).toBeVisible();
+  await expect(sidebar.getByRole('link', { name: /^Buy it\?/ })).toHaveCount(0);
+  await expect(sidebar.getByRole('link', { name: /^About you/ })).toHaveCount(0);
 });
 
-test('Add Expense says to ask first, and asking works with no link', async ({ page }) => {
+test('Add Expense does not send you off to ask first', async ({ page }) => {
   await startFresh(page, '/add');
-  await page.getByRole('link', { name: "Haven't bought it yet? Ask first →" }).click();
-  await expect(page.getByRole('heading', { level: 1, name: 'Should I buy it?' })).toBeVisible();
-
-  await page.getByLabel('What is it?').fill('Noise-cancelling headphones');
-  await page.getByLabel('Price', { exact: true }).fill('249');
-  await page.getByRole('button', { name: 'Ask' }).click();
-
-  // The answer comes from the phone alone: a meter, a verdict, the facts and the disclaimer.
-  await expect(
-    page.getByRole('heading', { level: 1, name: 'Noise-cancelling headphones' }),
-  ).toBeVisible();
-  await expect(page.getByRole('meter', { name: 'Buy meter' })).toBeVisible();
-  await expect(page.getByText(/^· confidence (low|medium|high)$/)).toBeVisible();
-  await expect(page.getByText('Available after')).toBeVisible();
-  await expect(page.getByText('Not financial advice')).toBeVisible();
-
-  // "I bought it" opens Add Expense with the item, its price and its category filled in.
-  await page.getByRole('button', { name: 'I bought it' }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Add' })).toBeVisible();
-  await expect(page.getByLabel('Amount')).toHaveValue('249.00');
-  await expect(page.getByRole('radio', { name: 'Shopping', exact: true })).toBeChecked();
-  await expect(page.getByLabel('Note')).toHaveValue('Noise-cancelling headphones');
-
-  // Back on the answer, what was bought can be rated.
-  await page.goBack();
-  await expect(page.getByText(/^Bought /)).toBeVisible();
-  await page.getByRole('radio', { name: '4' }).click();
-  await expect(page.getByRole('radio', { name: '4' })).toBeChecked();
+  await expect(page.getByRole('link', { name: /Ask first/ })).toHaveCount(0);
 });
 
 test('mobile: a new screen opens at its top, and Back returns to where the last was left', async ({

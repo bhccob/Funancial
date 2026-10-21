@@ -440,7 +440,6 @@ describe('Reminders', () => {
     ['Salary freeze start and end', 'freeze'],
     ['Weekly and monthly reviews', 'reviews'],
     ['Dividends', 'dividends'],
-    ['Buy it?', 'buyIt'],
   ] as const;
 
   /** What a fresh install holds: reminders off, the rest at their defaults, nobody asked yet. */
@@ -586,6 +585,18 @@ describe('Reminders', () => {
 
     expect(finance.updateSettings).toHaveBeenCalledExactlyOnceWith({
       reminders: { ...on, backup: true, dividends: false },
+    });
+  });
+
+  it('offers no Buy it? reminder, and keeps the saved choice when another switch changes', async () => {
+    // Buy it? is gone. Its switch stays in the saved data until the next upgrade drops it.
+    renderReminders(fakeNotifier(), { ...on, buyIt: false });
+    expect(within(section()).queryByRole('switch', { name: /buy it/i })).not.toBeInTheDocument();
+
+    await userEvent.click(switchNamed('Dividends'));
+
+    expect(finance.updateSettings).toHaveBeenCalledExactlyOnceWith({
+      reminders: { ...on, buyIt: false, dividends: false },
     });
   });
 

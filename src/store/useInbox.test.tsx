@@ -24,7 +24,6 @@ describe('useInboxItems', () => {
     expect(result.current.map((i) => i.key)).toEqual([
       'freeze-end:freeze-1',
       'freeze-start:freeze-1',
-      'buy-wait:kettle:2026-10-12',
       'week:2026-10-11',
       'week:2026-10-04',
       'month:2026-09-30',

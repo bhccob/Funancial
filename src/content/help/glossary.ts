@@ -31,11 +31,6 @@ export const GLOSSARY: Array<{ term: string; meaning: string }> = [
   },
   { term: 'Gain', meaning: 'What a holding is worth now, minus what you paid for it.' },
   {
-    term: 'Guard',
-    meaning:
-      "A rule in the buy check that keeps the meter out of the Buy zone, for example when a purchase needs money you don't have.",
-  },
-  {
     term: 'Holding',
     meaning: 'An investment you own, like shares of a company or of a fund.',
   },

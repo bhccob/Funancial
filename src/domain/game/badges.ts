@@ -38,13 +38,6 @@ export const BADGES: readonly { id: BadgeId; name: string; description: string }
     name: 'Passive Income Pro',
     description: 'Collect 100 in dividends in one month.',
   },
-  { id: 'smart-shopper', name: 'Smart Shopper', description: 'Rate a purchase 4 or 5.' },
-  { id: 'impulse-controller', name: 'Impulse Controller', description: 'Skip 5 purchases.' },
-  {
-    id: 'budget-defender',
-    name: 'Budget Defender',
-    description: 'Skip 3 purchases that would have gone over a limit.',
-  },
 ];
 
 export type BadgeView = {
@@ -97,9 +90,6 @@ const passiveIncomePro: Condition = (data) => {
   return false;
 };
 
-const skipped = (data: DataSnapshot) =>
-  data.tables.buyDecision.filter((d) => d.status === 'skipped');
-
 const CONDITIONS: Record<BadgeId, Condition> = {
   'first-expense': (data) => loggedEntries(data).some((e) => e.table === 'expense'),
   'subscription-slayer': (data) => data.tables.subscription.some((s) => s.status === 'cancelled'),
@@ -113,10 +103,6 @@ const CONDITIONS: Record<BadgeId, Condition> = {
   'first-dividend': (data) => confirmedDividends(data).length >= 1,
   'dividend-collector': (data) => confirmedDividends(data).length >= 12,
   'passive-income-pro': passiveIncomePro,
-  'smart-shopper': (data) =>
-    data.tables.buyDecision.some((d) => d.status === 'bought' && d.usage !== null && d.usage >= 4),
-  'impulse-controller': (data) => skipped(data).length >= 5,
-  'budget-defender': (data) => skipped(data).filter((d) => d.facts.overBy > 0).length >= 3,
 };
 
 /** The badges whose condition holds and that are not in the ledger yet. */

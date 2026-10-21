@@ -117,7 +117,7 @@ describe('scanDiff', () => {
     it.each([
       'api/_lib/accounts.test.ts',
       'site/reset/main.test.ts',
-      'tests/e2e/buy.spec.ts',
+      'tests/e2e/finance.spec.ts',
       'tests/unit/helpers.ts',
       'src/features/c.spec.tsx',
       'deep/tests/d.ts',

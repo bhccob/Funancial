@@ -3,7 +3,7 @@ import { expect, test, type Locator, type Page } from '@playwright/test';
 /**
  * The main flows with the keyboard alone: only Tab, Enter, Escape and typing, no mouse. Every
  * Tab stop must show where focus is, and a dialog or sheet must hand focus back to what opened it.
- * No network: Buy it? is asked without a link, so nothing leaves the page.
+ * No network on demo money: nothing leaves the page.
  */
 
 /**
@@ -184,47 +184,6 @@ test('set a limit with the keyboard alone, and focus comes back to Add a limit',
   await expect(opener).toBeFocused();
   await expectFocusShown(page, 'Add a limit after saving');
   await expect(page.getByRole('button', { name: 'Edit Health limit' })).toBeVisible();
-  expect(api).toEqual([]);
-});
-
-test('ask Buy it? on demo money with the keyboard alone', async ({ page }) => {
-  const api = watchApi(page);
-  await demoByKeyboard(page);
-  await tabTo(page, page.getByRole('main').getByRole('link', { name: 'Buy it?', exact: true }));
-  await page.keyboard.press('Enter');
-  const title = page.getByRole('heading', { level: 1, name: 'Should I buy it?' });
-  await expect(title).toBeVisible();
-  // The link that was used left with the Home screen; focus lands on the new screen's name.
-  await expect(title).toBeFocused();
-
-  await tabTo(page, page.getByLabel('What is it?'));
-  await page.keyboard.type('Noise-cancelling headphones');
-  await tabTo(page, page.getByLabel('Price', { exact: true }));
-  await page.keyboard.type('120');
-  const category = page.getByLabel('Category');
-  await tabTo(page, category);
-  await page.keyboard.type('Fun');
-  await expect(category).toHaveValue('entertainment');
-
-  // Need / Want / Treat are tabs, still radios.
-  await tabTo(page, page.getByRole('radio', { name: 'Want' }));
-  await page.keyboard.press('ArrowRight');
-  await expect(page.getByRole('radio', { name: 'Treat' })).toBeChecked();
-
-  await tabTo(page, page.getByRole('button', { name: 'Ask', exact: true }));
-  await page.keyboard.press('Enter');
-
-  await expect(
-    page.getByRole('heading', { level: 1, name: 'Noise-cancelling headphones' }),
-  ).toBeVisible();
-  await expect(page.getByRole('meter', { name: 'Buy meter' })).toBeVisible();
-
-  // The "?" on the meter is a sheet too.
-  await openAndEscape(
-    page,
-    page.getByRole('button', { name: 'What is the buy meter?' }),
-    page.getByRole('dialog', { name: 'Should I buy it?' }),
-  );
   expect(api).toEqual([]);
 });
 

@@ -19,9 +19,7 @@ export type ReminderKind =
   | 'weekly-review'
   | 'monthly-review'
   | 'dividend-ex'
-  | 'dividend-pay'
-  | 'buy-wait'
-  | 'buy-usage';
+  | 'dividend-pay';
 
 export type Reminder = {
   /** Stable for the same occasion, so a reminder can be replaced or cancelled by key. */
@@ -41,7 +39,6 @@ const MORNING = '09:00';
 const EVENING = '18:00';
 /** An ex-date reminder comes before its payout pays, so payouts are looked for this far past the horizon. */
 const PAY_LAG_DAYS = 60;
-const USAGE_ASK_AFTER_DAYS = 14;
 const DIVIDENDS_ROUTE = '/invest?tab=dividends';
 
 type Context = {
@@ -240,40 +237,7 @@ function dividends({ data, profile, prefs, today, firstDay, lastDay, money }: Co
   });
 }
 
-/** A waiting decision on the day it was set to come back, and a purchase 14 days on, if still unrated. */
-function buyIt({ data, prefs }: Context): Reminder[] {
-  if (!prefs.buyIt) return [];
-  return data.tables.buyDecision.flatMap((d): Reminder[] => {
-    const route = `/buy/${d.id}`;
-    if (d.status === 'waiting' && d.remindOn) {
-      return [
-        {
-          key: `buy-wait:${d.id}:${d.remindOn}`,
-          kind: 'buy-wait',
-          at: moment(d.remindOn, MORNING),
-          title: `Still want it? ${d.ask.item}`,
-          body: 'You chose to wait. See your check again.',
-          route,
-        },
-      ];
-    }
-    if (d.status === 'bought' && d.boughtOn && d.usage === null) {
-      return [
-        {
-          key: `buy-usage:${d.id}`,
-          kind: 'buy-usage',
-          at: moment(addDays(d.boughtOn, USAGE_ASK_AFTER_DAYS), MORNING),
-          title: `Was ${d.ask.item} worth it?`,
-          body: 'Rate it, and your next check takes it into account.',
-          route,
-        },
-      ];
-    }
-    return [];
-  });
-}
-
-const RULES: Rule[] = [dailyLog, renewals, cardBills, freezes, reviews, dividends, buyIt];
+const RULES: Rule[] = [dailyLog, renewals, cardBills, freezes, reviews, dividends];
 
 /** What the rules plan for a context's days. Each caller keeps the moments that suit its window. */
 const plan = (ctx: Context): Reminder[] => RULES.flatMap((rule) => rule(ctx));
@@ -377,8 +341,6 @@ export const REMINDER_AREA: Record<ReminderKind, string> = {
   'monthly-review': 'Budget',
   'dividend-ex': 'Invest',
   'dividend-pay': 'Invest',
-  'buy-wait': 'Buy it?',
-  'buy-usage': 'Buy it?',
   'daily-log': 'Today',
 };
 

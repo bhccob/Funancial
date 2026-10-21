@@ -3,7 +3,6 @@ import userEvent from '@testing-library/user-event';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
 import { FAQ, GLOSSARY, HELP_PAGES, LEGAL, RESULT_ROWS } from '@/content/help';
-import { BUY_FROM, GUARD_CAP, WAIT_FROM } from '@/domain/advisor';
 import { EXAMPLES, ex, type WorkedExample } from '@/domain/examples';
 import { formatMoney } from '@/domain/money';
 import { useAmountsHidden } from '@/store/useAmountsHidden';
@@ -157,14 +156,10 @@ describe('a help page', () => {
     expect(screen.queryByText(LEGAL.disclaimers[0]!.text)).not.toBeInTheDocument();
   });
 
-  it('draws the buy-it zones and the guard cap from the meter, not from the page', () => {
-    renderHelp('/help/buy-it');
-    const zones = screen.getByRole('list', { name: 'Meter zones' });
-    const [skip, wait, buy] = within(zones).getAllByRole('listitem');
-    expect(skip).toHaveTextContent(`Skip0–${WAIT_FROM - 1}`);
-    expect(wait).toHaveTextContent(`Wait${WAIT_FROM}–${BUY_FROM - 1}`);
-    expect(buy).toHaveTextContent(`Buy${BUY_FROM}–100`);
-    expect(screen.getByText(new RegExp(`caps the meter at ${GUARD_CAP}\\b`))).toBeInTheDocument();
+  it('has no Should I buy it? page: its old address goes back to the index', () => {
+    const router = renderHelp('/help/buy-it');
+    expect(router.state.location.pathname).toBe('/help');
+    expect(screen.queryByRole('list', { name: 'Meter zones' })).not.toBeInTheDocument();
   });
 
   it('lists every word of the glossary', () => {

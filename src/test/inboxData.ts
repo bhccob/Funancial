@@ -1,6 +1,6 @@
 import type { ReminderSettings, Settings } from '@/domain/entities';
 import { emptySnapshot, type DataSnapshot } from '@/domain/snapshot';
-import { makeBuyDecision, makeProfile, makeSettings } from '@/test/fixtures';
+import { makeProfile, makeSettings } from '@/test/fixtures';
 
 /** The local moment the inbox tests run at: a Wednesday, 10:00. */
 export const INBOX_NOW = new Date(2026, 9, 14, 10, 0);
@@ -12,14 +12,12 @@ const ONLY_THESE: Partial<ReminderSettings> = {
   reviews: true,
   backup: false,
   dividends: false,
-  buyIt: true,
 };
 
 /**
- * Data whose last 30 days hold eight reminders at `INBOX_NOW`, newest first: a freeze that ended on
- * the 13th and started on the 12th, a Kettle to think about again on the 12th, and the weekly
- * check-ins of the 11th, the 4th, the 27th and the 20th with the monthly review of the 30th. The
- * master switch is off, which the inbox does not mind.
+ * Data whose last 30 days hold seven reminders at `INBOX_NOW`, newest first: a freeze that ended on
+ * the 13th and started on the 12th, and the weekly check-ins of the 11th, the 4th, the 27th and the
+ * 20th with the monthly review of the 30th. The master switch is off, which the inbox does not mind.
  */
 export function inboxData(inbox: Settings['inbox'] = { readBefore: null, read: [] }): DataSnapshot {
   const data = emptySnapshot();
@@ -42,14 +40,6 @@ export function inboxData(inbox: Settings['inbox'] = { readBefore: null, read: [
       mode: 'manual',
       note: '',
     },
-  ];
-  data.tables.buyDecision = [
-    makeBuyDecision({
-      id: 'kettle',
-      status: 'waiting',
-      remindOn: '2026-10-12',
-      ask: { ...makeBuyDecision().ask, item: 'Kettle' },
-    }),
   ];
   return data;
 }

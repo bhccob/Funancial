@@ -11,7 +11,7 @@ export type InboxActions = ReturnType<typeof createInboxActions>;
 /**
  * What the person has read in the inbox, kept in the settings. shortcut: two writes that start
  * before either lands both read the settings as they were, so one is lost; a tap opens a screen and
- * "Mark all as read" is one tap, so upgrade to a queue like About you's if a screen ever fires many.
+ * "Mark all as read" is one tap, so upgrade to a queue if a screen ever fires many.
  */
 export function createInboxActions(store: StoreApi<AppState>) {
   const state = () => store.getState();

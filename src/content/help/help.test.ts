@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { EXAMPLES } from '@/domain/examples';
 import { FAQ, GLOSSARY, HELP_PAGES, LEGAL, RESULT_ROWS, helpPage } from '.';
 
-/** Every line of help prose, the game and buy-it pages included. */
+/** Every line of help prose, the game page included. */
 const allProse = () => [
   ...HELP_PAGES.flatMap((p) => [p.summary, ...p.body]),
   ...GLOSSARY.flatMap((g) => [g.term, g.meaning]),
@@ -23,7 +23,6 @@ const PAGE_IDS = [
   'net-worth',
   'investments',
   'dividends',
-  'buy-it',
   'game',
   'glossary',
   'faq',
@@ -39,6 +38,15 @@ describe('help pages', () => {
   it('are found by id', () => {
     expect(helpPage('available')?.title).toBe('Available to spend');
     expect(helpPage('nope')).toBeUndefined();
+  });
+
+  it('have no page about Should I buy it?, and nothing else explains its meter or guard', () => {
+    expect(helpPage('buy-it')).toBeUndefined();
+    expect(GLOSSARY.map((g) => g.term)).not.toContain('Guard');
+    const prose = allProse();
+    expect(prose.filter((line) => /buy it|buy check|buy meter/i.test(line))).toEqual([]);
+    // Case-sensitive: the page was called About you, and 'nothing about you' is another matter.
+    expect(prose.filter((line) => line.includes('About you'))).toEqual([]);
   });
 
   it('give each page a title, a summary and something to read', () => {
@@ -263,9 +271,9 @@ describe('help copy says what the code does', () => {
 
 describe('numbers in help prose', () => {
   it('come from the examples or the app, never typed in', () => {
-    // The game and buy-it pages read theirs from the game rules and the meter's constants.
+    // The game page reads its numbers from the game rules.
     const prose = [
-      ...HELP_PAGES.filter((p) => p.id !== 'game' && p.id !== 'buy-it').flatMap((p) => p.body),
+      ...HELP_PAGES.filter((p) => p.id !== 'game').flatMap((p) => p.body),
       ...GLOSSARY.flatMap((g) => [g.term, g.meaning]),
       ...FAQ.flatMap((f) => [f.q, f.a]),
       ...LEGAL.privacy,

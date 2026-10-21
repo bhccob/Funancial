@@ -44,14 +44,10 @@ test('desktop: the sidebar lists Help without Soon and opens it', async ({ page 
   await expect(page.getByRole('heading', { level: 1, name: 'Help' })).toBeVisible();
 });
 
-test('Help: the buy-it page draws its zones from the meter', async ({ page }) => {
+test('Help: the old Should I buy it? address goes back to the index', async ({ page }) => {
   await startFresh(page, '/help/buy-it');
-  const zones = page.getByRole('list', { name: 'Meter zones' });
-  await expect(zones.getByRole('listitem')).toHaveText([
-    /Skip\s*0–33/,
-    /Wait\s*34–66/,
-    /Buy\s*67–100/,
-  ]);
+  await expect(page.getByRole('heading', { level: 1, name: 'Help' })).toBeVisible();
+  await expect(page.getByRole('link', { name: /Should I buy it/ })).toHaveCount(0);
 });
 
 test('Home: the "?" on Available to spend opens a tip, gives focus back, and links to its page', async ({

@@ -6,7 +6,6 @@ import type { SafeStorage } from '@/lib/safeStorage';
 import { buildDemoSnapshot } from '@/data/demoSeed';
 import { CURRENT_SCHEMA_VERSION } from '@/domain/snapshot';
 import {
-  makeAboutYou,
   makeDebt,
   makeExpense,
   makeGoal,
@@ -322,7 +321,6 @@ describe('starting over', () => {
     await put('debt', makeDebt({ id: 'd1' }));
     await put('goal', makeGoal({ id: 'g1' }));
     await put('holding', makeHolding({ id: 'h1' }));
-    await put('aboutYou', makeAboutYou());
     await put('ledger', makeLedgerEntry({ id: 'quest:x#0', key: 'quest:x', xp: 80 }));
     const settings = t.store.getState().data.tables.settings[0]!;
     await put('settings', { ...settings, weekStartsOn: 0, warningTone: 'strict' });

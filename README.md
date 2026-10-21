@@ -1,7 +1,7 @@
 # Funcial
 
 A gamified personal finance tracker: expenses, salary (with freezes), subscriptions, limits, goals,
-a stock/ETF portfolio with dividends and news, and a "Should I Buy It?" assistant — wrapped in XP,
+and a stock/ETF portfolio with dividends and news — wrapped in XP,
 levels, quests, streaks and badges. Local-first and encrypted on your device.
 
 - Product spec: `docs/spec/original-spec.md`

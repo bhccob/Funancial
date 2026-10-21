@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   fetchDividends,
-  fetchExtract,
   fetchFx,
   fetchHistory,
   fetchNews,
@@ -106,20 +105,6 @@ describe('market client', () => {
     };
     answer(body);
     await expect(fetchHistory('VUSA.AS', '2025-03-03')).resolves.toEqual(body);
-  });
-
-  it('reads a link with the link alone, encoded, and returns what the service found', async () => {
-    const body = { name: 'Trail shoes', price: 79.9, currency: 'EUR' };
-    answer(body);
-    await expect(fetchExtract('https://shop.test/p?id=1&x=2')).resolves.toEqual(body);
-    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect(url).toBe(
-      'https://prices.example/api/extract?url=https%3A%2F%2Fshop.test%2Fp%3Fid%3D1%26x%3D2',
-    );
-    expect(init.headers).toEqual({ 'X-Funancial-Token': 'secret' });
-    expect(init.signal).toBeInstanceOf(AbortSignal);
-    fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'));
-    await expect(fetchExtract('https://shop.test/p')).rejects.toBeInstanceOf(MarketError);
   });
 
   it('sends 26 symbols as two requests and joins the answers', async () => {

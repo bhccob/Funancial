@@ -326,7 +326,7 @@ describe('DashboardScreen hero', () => {
 });
 
 describe('DashboardScreen actions', () => {
-  it('shows four labelled actions', () => {
+  it('shows three labelled actions', () => {
     renderDashboard(emptySnapshot(), TODAY);
     expect(screen.getByRole('link', { name: 'Expense' })).toHaveAttribute('href', '/add');
     expect(screen.getByRole('link', { name: 'Income' })).toHaveAttribute(
@@ -334,12 +334,11 @@ describe('DashboardScreen actions', () => {
       '/add?type=income',
     );
     expect(screen.getByRole('link', { name: 'Goals' })).toHaveAttribute('href', '/goals');
-    const buy = screen.getByRole('link', { name: 'Buy it?' });
-    expect(buy).toHaveAttribute('href', '/buy');
-    expect(buy.querySelector('svg.lucide-shopping-bag')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Buy it?' })).not.toBeInTheDocument();
+    expect(document.querySelector('svg.lucide-shopping-bag')).not.toBeInTheDocument();
   });
 
-  it("gives History's place to Buy it?; History stays one tap away in Last 7 days", () => {
+  it('keeps History one tap away in Last 7 days, not among the actions', () => {
     renderDashboard(emptySnapshot(), TODAY);
     expect(screen.getAllByRole('link', { name: 'History' })).toHaveLength(1);
     expect(within(region('Last 7 days')).getByRole('link', { name: 'History' })).toHaveAttribute(

@@ -62,7 +62,6 @@ function fakeMarket(over: Partial<Market> = {}) {
     fetchHistory: vi.fn<Market['fetchHistory']>(
       over.fetchHistory ?? (async (symbol) => ({ symbol, currency: 'USD', points: [] })),
     ),
-    fetchExtract: vi.fn<Market['fetchExtract']>(over.fetchExtract ?? down),
   };
 }
 

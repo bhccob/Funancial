@@ -1,9 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
   localIso,
-  makeAboutYou,
-  makeBuyAsk,
-  makeBuyDecision,
   makeChallenge,
   makeCheckIn,
   makeDebt,
@@ -21,6 +18,7 @@ import {
   makeSubscription,
   makeTransaction,
 } from '@/test/fixtures';
+import { makeAboutYou, makeBuyAsk, makeBuyDecision } from '@/test/retiredFixtures';
 import { toLocalDate } from './dates';
 import {
   AboutYouSchema,

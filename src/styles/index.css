@@ -40,9 +40,6 @@
   /* The Menu sheet rising from the bottom edge; only used as `motion-safe:animate-sheet-up`. */
   --animate-sheet-up: sheet-up 280ms ease-out both;
 
-  /* The buy meter's marker swinging from Skip to its reading; only used as `motion-safe:animate-meter-sweep`. */
-  --animate-meter-sweep: meter-sweep 700ms cubic-bezier(0.22, 1, 0.36, 1) both;
-
   /*
    * Setup and the welcome screens: the new step rises 70px (or, going back, comes down) while it
    * fades in, and the old one leaves the other way. Only used as `motion-safe:animate-step-*`; for
@@ -100,12 +97,6 @@
   @keyframes blob-drift {
     to {
       translate: 28px 36px;
-    }
-  }
-
-  @keyframes meter-sweep {
-    from {
-      transform: rotate(0deg);
     }
   }
 

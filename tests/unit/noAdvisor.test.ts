@@ -4,8 +4,7 @@ import { describe, expect, it } from 'vitest';
 const path = (file: string) => new URL(`../../${file}`, import.meta.url);
 const text = (file: string) => readFileSync(path(file), 'utf8');
 
-// The owner chose no AI: the buy check is the offline rules, and the only call that leaves the phone
-// is the optional product link fill.
+// The owner chose no AI: there is no advisor route, no Claude client and no model setting anywhere.
 describe('no AI advisor', () => {
   it('has no Anthropic SDK, in the manifest or the lockfile', () => {
     const pkg = JSON.parse(text('package.json')) as Record<string, Record<string, string>>;

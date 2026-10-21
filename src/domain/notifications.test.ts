@@ -1,7 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
-  makeBuyAsk,
-  makeBuyDecision,
   makeDebt,
   makeDividend,
   makeExpense,
@@ -72,6 +70,7 @@ type Setup = {
   freezes?: SalaryFreeze[];
   holdings?: Holding[];
   dividends?: Dividend[];
+  /** Rows an older build saved for the retired Buy it? feature: nothing reads them. */
   decisions?: BuyDecision[];
 };
 
@@ -590,74 +589,37 @@ describe('upcomingReminders', () => {
     expect(upcomingReminders(data, NOW)[0]?.body).toBe('Confirm it when it arrives.');
   });
 
-  describe('Buy it? decisions', () => {
-    const waiting = makeBuyDecision({
-      id: 'dec-wait',
-      status: 'waiting',
-      remindOn: '2026-10-20',
-      ask: makeBuyAsk({ item: 'Kettle' }),
-    });
-    const bought = makeBuyDecision({
-      id: 'dec-bought',
-      status: 'bought',
-      boughtOn: '2026-10-10',
-      ask: makeBuyAsk({ item: 'Headphones' }),
-    });
-    const on = (...decisions: BuyDecision[]) =>
-      upcomingReminders(build({ reminders: { buyIt: true }, decisions }), NOW);
+  describe('Buy it? is gone', () => {
+    /** A row the retired feature saved: the part of it that used to bring a reminder back. */
+    const decision = (over: Record<string, unknown>) =>
+      ({
+        id: 'dec',
+        status: 'open',
+        remindOn: null,
+        boughtOn: null,
+        usage: null,
+        ...over,
+      }) as never;
+    const left: BuyDecision[] = [
+      decision({ id: 'dec-wait', status: 'waiting', remindOn: '2026-10-20' }),
+      decision({ id: 'dec-bought', status: 'bought', boughtOn: '2026-10-10' }),
+    ];
 
-    it('brings a waiting decision back on its remind day at 09:00', () => {
-      expect(on(waiting)).toEqual([
-        {
-          key: 'buy-wait:dec-wait:2026-10-20',
-          kind: 'buy-wait',
-          at: '2026-10-20T09:00',
-          title: 'Still want it? Kettle',
-          body: 'You chose to wait. See your check again.',
-          route: '/buy/dec-wait',
-        },
-      ]);
-    });
-
-    it('asks 14 days after buying whether it was worth it, until it is rated', () => {
-      expect(on(bought)).toEqual([
-        {
-          key: 'buy-usage:dec-bought',
-          kind: 'buy-usage',
-          at: '2026-10-24T09:00',
-          title: 'Was Headphones worth it?',
-          body: 'Rate it, and your next check takes it into account.',
-          route: '/buy/dec-bought',
-        },
-      ]);
-      expect(on({ ...bought, usage: 4 })).toEqual([]);
-    });
-
-    it('stays quiet with the switch off', () => {
-      const data = build({ reminders: { buyIt: false }, decisions: [waiting, bought] });
-      expect(upcomingReminders(data, NOW)).toEqual([]);
-    });
-
-    it('reminds only for a waiting decision with a day, and a bought one with a date', () => {
-      const others = [
-        makeBuyDecision({ status: 'open', remindOn: '2026-10-20', boughtOn: '2026-10-10' }),
-        makeBuyDecision({ status: 'skipped', remindOn: '2026-10-20', boughtOn: '2026-10-10' }),
-        makeBuyDecision({ status: 'bought', remindOn: '2026-10-20', boughtOn: null }),
-        makeBuyDecision({ status: 'waiting', remindOn: null, boughtOn: '2026-10-10' }),
-        // Bought after waiting: only the question about use is left.
-        { ...bought, id: 'dec-after', remindOn: '2026-10-20' },
-      ];
-      expect(keys(on(...others))).toEqual(['buy-usage:dec-after']);
+    it('brings no reminder for a saved decision, whatever its switch says', () => {
+      for (const buyIt of [true, false]) {
+        const setup = { all: true, reminders: { buyIt } };
+        const bare = build(setup);
+        const saved = build({ ...setup, decisions: left });
+        expect(saved.tables.buyDecision).toHaveLength(2);
+        expect(upcomingReminders(saved, NOW)).toEqual(upcomingReminders(bare, NOW));
+        expect(pastReminders(saved, NOW)).toEqual(pastReminders(bare, NOW));
+      }
     });
   });
 
   it('honours each switch', () => {
     const setup = {
       all: true,
-      decisions: [
-        makeBuyDecision({ id: 'dec-wait', status: 'waiting', remindOn: '2026-10-20' }),
-        makeBuyDecision({ id: 'dec-bought', status: 'bought', boughtOn: '2026-10-10' }),
-      ],
       lastBackupAt: noon('2026-10-07'),
       subscriptions: [makeSubscription({ id: 'sub-tv', nextRenewal: '2026-10-20' })],
       freezes: [freeze()],
@@ -666,8 +628,6 @@ describe('upcomingReminders', () => {
     };
     const everything = upcomingReminders(build(setup), NOW);
     expect(kinds(everything)).toEqual([
-      'buy-usage',
-      'buy-wait',
       'card-due',
       'daily-log',
       'dividend-ex',
@@ -691,7 +651,6 @@ describe('upcomingReminders', () => {
     // The old backup switch is still in the data, and drops nothing.
     expect(dropped({ backup: false })).toEqual([]);
     expect(dropped({ dividends: false })).toEqual(['dividend-ex', 'dividend-pay']);
-    expect(dropped({ buyIt: false })).toEqual(['buy-usage', 'buy-wait']);
   });
 
   it('keeps the nearest 60 within 30 days, all after now', () => {
@@ -732,13 +691,10 @@ describe('pastReminders', () => {
   /** One occasion of every kind the inbox keeps, each already past at `NOW`. */
   const lately = {
     all: true,
-    decisions: [
-      makeBuyDecision({ id: 'dec-wait', status: 'waiting', remindOn: '2026-10-12' }),
-      makeBuyDecision({ id: 'dec-bought', status: 'bought', boughtOn: '2026-09-28' }),
-    ],
     lastBackupAt: noon('2026-10-01'),
     subscriptions: [makeSubscription({ id: 'sub-tv', nextRenewal: '2026-10-15' })],
-    freezes: [freeze({ start: '2026-10-05', end: '2026-10-09' })],
+    // The freeze ends the morning the dividend pays, so two reminders share one moment.
+    freezes: [freeze({ start: '2026-10-05', end: '2026-10-12' })],
     holdings: [payer({ nextExDate: '2026-10-10', nextPayDate: '2026-10-12' })],
     ...visa({ dueDay: 16 }),
   };
@@ -837,8 +793,6 @@ describe('pastReminders', () => {
   it('keeps every kind the inbox shows, and never the daily nudge', () => {
     const everything = past(lately);
     expect(kinds(everything)).toEqual([
-      'buy-usage',
-      'buy-wait',
       'card-due',
       'dividend-ex',
       'dividend-pay',
@@ -864,7 +818,6 @@ describe('pastReminders', () => {
     expect(dropped({ freeze: false })).toEqual(['freeze-end', 'freeze-start']);
     expect(dropped({ reviews: false })).toEqual(['monthly-review', 'weekly-review']);
     expect(dropped({ dividends: false })).toEqual(['dividend-ex', 'dividend-pay']);
-    expect(dropped({ buyIt: false })).toEqual(['buy-usage', 'buy-wait']);
     expect(dropped({ dailyLog: false, backup: false })).toEqual([]);
   });
 
@@ -944,24 +897,6 @@ describe('pastReminders', () => {
         past({ reminders: { dividends: true }, holdings: listed }).map((r) => [r.kind, r.at]),
       ).toEqual([['dividend-ex', '2026-10-01T09:00']]);
     });
-
-    it('lists a Buy it? reminder only while the decision is still waiting or unrated', () => {
-      const decisions = [
-        makeBuyDecision({ id: 'w', status: 'waiting', remindOn: '2026-10-12' }),
-        makeBuyDecision({
-          id: 'bought',
-          status: 'bought',
-          boughtOn: '2026-10-13',
-          remindOn: '2026-10-12',
-        }),
-        makeBuyDecision({ id: 'b', status: 'bought', boughtOn: '2026-09-28' }),
-        makeBuyDecision({ id: 'rated', status: 'bought', boughtOn: '2026-09-28', usage: 4 }),
-      ];
-      expect(keys(past({ reminders: { buyIt: true }, decisions }))).toEqual([
-        'buy-wait:w:2026-10-12',
-        'buy-usage:b',
-      ]);
-    });
   });
 });
 
@@ -1013,11 +948,14 @@ describe('REMINDER_AREA', () => {
       'monthly-review': 'Budget',
       'dividend-ex': 'Invest',
       'dividend-pay': 'Invest',
-      'buy-wait': 'Buy it?',
-      'buy-usage': 'Buy it?',
       'daily-log': 'Today',
     };
     expect(REMINDER_AREA).toEqual(area);
+  });
+
+  it('has no Buy it? kind', () => {
+    expect(Object.keys(REMINDER_AREA).filter((kind) => kind.startsWith('buy-'))).toEqual([]);
+    expect(Object.values(REMINDER_AREA)).not.toContain('Buy it?');
   });
 });
 

@@ -1,8 +1,6 @@
 import { isValidElement } from 'react';
+import { matchRoutes } from 'react-router';
 import { expect, it } from 'vitest';
-import { AboutYouScreen } from '@/features/buy/AboutYouScreen';
-import { AnswerScreen } from '@/features/buy/AnswerScreen';
-import { BuyScreen } from '@/features/buy/BuyScreen';
 import { HelpPage } from '@/features/help/HelpPage';
 import { HelpScreen } from '@/features/help/HelpScreen';
 import { DebtsScreen } from '@/features/goals/DebtsScreen';
@@ -23,11 +21,8 @@ it('routes every spec screen', () => {
   expect(APP_ROUTES.map((r) => r.path).sort()).toEqual(
     [
       '/',
-      '/about-you',
       '/add',
       '/budget',
-      '/buy',
-      '/buy/:id',
       '/debts',
       '/freeze',
       '/goals',
@@ -75,16 +70,12 @@ it("serves a holding's own page from /invest/holding/:id", () => {
   expect(isValidElement(holding?.element) && holding.element.type).toBe(HoldingPage);
 });
 
-it('serves Buy it? from its own screens: the Ask form and list, and an answer', () => {
-  const ask = APP_ROUTES.find((r) => r.path === '/buy');
-  expect(isValidElement(ask?.element) && ask.element.type).toBe(BuyScreen);
-  const answer = APP_ROUTES.find((r) => r.path === '/buy/:id');
-  expect(isValidElement(answer?.element) && answer.element.type).toBe(AnswerScreen);
-});
-
-it('serves About you from its own screen', () => {
-  const about = APP_ROUTES.find((r) => r.path === '/about-you');
-  expect(isValidElement(about?.element) && about.element.type).toBe(AboutYouScreen);
+it('has no Buy it? or About you route', () => {
+  const paths = APP_ROUTES.map((r) => r.path);
+  for (const gone of ['/buy', '/buy/:id', '/about-you']) expect(paths).not.toContain(gone);
+  for (const url of ['/buy', '/buy/x', '/about-you']) {
+    expect(matchRoutes(APP_ROUTES, url), url).toBeNull();
+  }
 });
 
 it('serves Help from its own screens: the index and a page', () => {

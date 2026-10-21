@@ -34,9 +34,6 @@ export type BadgeId =
   | 'portfolio-pro'
   | 'first-dividend'
   | 'dividend-collector'
-  | 'passive-income-pro'
-  | 'smart-shopper'
-  | 'impulse-controller'
-  | 'budget-defender';
+  | 'passive-income-pro';
 
 export type { ChallengeKind } from '../entities';

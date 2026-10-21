@@ -1,4 +1,3 @@
-import { GUARD_CAP } from '@/domain/advisor';
 import { EXAMPLES } from '@/domain/examples';
 import { MAX_LEVEL, TIERS } from '@/domain/game/levels';
 import { LOG_CAP_PER_DAY, LOG_XP } from '@/domain/game/rules';
@@ -7,7 +6,7 @@ import { LEGAL } from './legal';
 /**
  * Help is data. A "numbers" page shows one or more worked examples from `EXAMPLES`, which the domain
  * tests check against the real rules, so no figure is typed here; the few that appear in prose
- * (the game's rewards, the meter's zones) are read from the code that owns them.
+ * (the game's rewards) are read from the code that owns them.
  */
 export type HelpPage = {
   id: string;
@@ -165,19 +164,6 @@ export const HELP_PAGES: HelpPage[] = [
       'An expected payout is not money yet. When it arrives, you confirm it: check the amount you really received and the day it arrived, and choose where it goes.',
       'It can go to cash, savings or passive income, or you can reinvest it in the same holding. If a payout never comes, you can say so.',
       'Every confirmed dividend counts toward your profit & loss.',
-    ],
-  },
-  {
-    id: 'buy-it',
-    title: 'Should I buy it?',
-    summary: 'How the meter is worked out',
-    group: 'how',
-    body: [
-      'Tell Funcial what you want and what it costs. It checks the purchase against your own numbers and gives you a buy meter.',
-      'The meter moves with what the purchase does to your limits, your available balance, your emergency fund and your goals, and with how much you need it. What you say in About you counts too. The zones below say what the meter means.',
-      `Some things keep the meter out of the Buy zone, whatever else it says. A guard caps the meter at ${GUARD_CAP}. A guard applies when the purchase needs money you don't have, when it leaves your available balance below zero, or when it is something you don't need and it drops your emergency fund under a month.`,
-      'If a limit is in the way but a cheaper one would fit, the answer can say so.',
-      'The check runs on your phone with fixed rules. It is a view of your own numbers, and the choice is yours.',
     ],
   },
   {

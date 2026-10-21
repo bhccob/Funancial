@@ -151,120 +151,27 @@ describe('Add expense', () => {
   });
 });
 
-describe('Add expense from a buy check', () => {
-  const fromCheck = (prefill: unknown) => ({ pathname: '/add', state: { prefill } });
-  const bought = {
-    item: 'Noise-cancelling headphones',
-    amount: 249_00,
-    category: 'entertainment',
-    paymentMethod: 'cash',
-    cardId: null,
-  };
-  const ASK_FIRST = "Haven't bought it yet? Ask first →";
-
-  it('offers to ask first, on an expense and not on income', async () => {
+describe('Add expense without Buy it?', () => {
+  it('has no link to ask first, on an expense or on income', async () => {
     renderAdd();
-    expect(screen.getByRole('link', { name: ASK_FIRST })).toHaveAttribute('href', '/buy');
+    expect(screen.queryByRole('link', { name: /ask first/i })).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole('radio', { name: 'Income' }));
-    expect(screen.queryByRole('link', { name: ASK_FIRST })).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole('radio', { name: 'Expense' }));
-    expect(screen.getByRole('link', { name: ASK_FIRST })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /ask first/i })).not.toBeInTheDocument();
   });
 
-  it('has the item in the note, the price and the category, ready to save', async () => {
-    renderAdd(fromCheck(bought));
-    expect(screen.getByLabelText('Amount')).toHaveValue('249.00');
-    expect(screen.getByRole('radio', { name: 'Fun' })).toBeChecked();
-    expect(screen.getByLabelText('Note')).toHaveValue('Noise-cancelling headphones');
-
-    await save();
-    expect(actions.addExpense).toHaveBeenCalledWith({
-      amount: 249_00,
-      category: 'entertainment',
-      date: TODAY,
-      note: 'Noise-cancelling headphones',
-      paymentMethod: 'cash',
-      cardId: null,
-      repeat: null,
+  it('starts empty even when the router state carries a purchase', () => {
+    renderAdd({
+      pathname: '/add',
+      state: {
+        prefill: {
+          item: 'Headphones',
+          amount: 249_00,
+          category: 'entertainment',
+          paymentMethod: 'cash',
+          cardId: null,
+        },
+      },
     });
-  });
-
-  it('keeps what was bought when the type is switched to Income and back', async () => {
-    renderAdd(fromCheck(bought));
-    await userEvent.click(screen.getByRole('radio', { name: 'Income' }));
-    expect(screen.getByLabelText('Label')).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('radio', { name: 'Expense' }));
-
-    expect(screen.getByLabelText('Amount')).toHaveValue('249.00');
-    expect(screen.getByRole('radio', { name: 'Fun' })).toBeChecked();
-    expect(screen.getByLabelText('Note')).toHaveValue('Noise-cancelling headphones');
-    expect(screen.queryByRole('link', { name: ASK_FIRST })).not.toBeInTheDocument();
-  });
-
-  it('opens on the card the person said they would pay with, and saves it', async () => {
-    renderAdd(fromCheck({ ...bought, paymentMethod: 'credit_card', cardId: 'card-1' }));
-    expect(screen.getByRole('radio', { name: 'Visa' })).toBeChecked();
-    await save();
-    expect(actions.addExpense).toHaveBeenCalledWith(
-      expect.objectContaining({ paymentMethod: 'credit_card', cardId: 'card-1' }),
-    );
-  });
-
-  it('opens on the way to pay it was asked with, when that is not a card', () => {
-    renderAdd(fromCheck({ ...bought, paymentMethod: 'debit' }));
-    expect(screen.getByRole('radio', { name: 'Debit card' })).toBeChecked();
-  });
-
-  it('opens on the second card it was asked with when Paid with is a select', async () => {
-    // Two cards make five ways to pay, so Paid with is a select, not tabs.
-    renderAdd(
-      fromCheck({ ...bought, paymentMethod: 'credit_card', cardId: 'card-2' }),
-      'motivational',
-      ['Visa', 'Amex'],
-    );
-    expect(screen.queryByRole('group', { name: 'Paid with' })).not.toBeInTheDocument();
-    expect(screen.getByLabelText('Paid with')).toHaveValue('card:card-2');
-    await save();
-    expect(actions.addExpense).toHaveBeenCalledWith(
-      expect.objectContaining({ paymentMethod: 'credit_card', cardId: 'card-2' }),
-    );
-  });
-
-  it('opens on Cash when the card it names has been deleted', async () => {
-    renderAdd(fromCheck({ ...bought, paymentMethod: 'credit_card', cardId: 'gone' }));
-    expect(screen.getByRole('radio', { name: 'Cash' })).toBeChecked();
-    await save();
-    expect(actions.addExpense).toHaveBeenCalledWith(
-      expect.objectContaining({ paymentMethod: 'cash', cardId: null }),
-    );
-  });
-
-  it('can still be changed before it is saved', async () => {
-    renderAdd(fromCheck(bought));
-    await userEvent.clear(screen.getByLabelText('Amount'));
-    await userEvent.type(screen.getByLabelText('Amount'), '199');
-    await userEvent.click(screen.getByRole('radio', { name: 'Shopping' }));
-    await save();
-    expect(actions.addExpense).toHaveBeenCalledWith(
-      expect.objectContaining({ amount: 199_00, category: 'shopping' }),
-    );
-  });
-
-  it('does not ask whether to buy what was just bought', () => {
-    renderAdd(fromCheck(bought));
-    expect(screen.queryByRole('link', { name: ASK_FIRST })).not.toBeInTheDocument();
-  });
-
-  it.each([
-    ['nothing', undefined],
-    ['text', 'Headphones'],
-    ['an unknown category', { ...bought, category: 'yachts' }],
-    ['an unknown way to pay', { ...bought, paymentMethod: 'barter' }],
-    ['an amount of nothing', { ...bought, amount: 0 }],
-    ['a fractional amount', { ...bought, amount: 12.5 }],
-    ['an item that is not text', { ...bought, item: 5 }],
-  ])('starts empty for a prefill of %s', (_, prefill) => {
-    renderAdd(fromCheck(prefill));
     expect(screen.getByLabelText('Amount')).toHaveValue('');
     expect(screen.getByRole('radio', { name: 'Food' })).toBeChecked();
     expect(screen.getByLabelText('Note')).toHaveValue('');

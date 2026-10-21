@@ -31,7 +31,6 @@ function renderInbox(data: DataSnapshot = inboxData()) {
       <Routes>
         <Route path="/inbox" element={<InboxScreen />} />
         <Route path="/freeze" element={<p>The freeze page</p>} />
-        <Route path="/buy/:id" element={<p>The buy page</p>} />
         <Route path="*" element={<p>Somewhere else</p>} />
       </Routes>
     </MemoryRouter>,
@@ -49,7 +48,6 @@ describe('InboxScreen', () => {
     const expected = [
       ['Salary freeze ends today', `Salary freeze · ${day('2026-10-13', '09:00')}`],
       ['Salary freeze starts today', `Salary freeze · ${day('2026-10-12', '09:00')}`],
-      ['Still want it? Kettle', `Buy it? · ${day('2026-10-12', '09:00')}`],
       ['Weekly check-in', `Budget · ${day('2026-10-11', '18:00')}`],
       ['Weekly check-in', `Budget · ${day('2026-10-04', '18:00')}`],
       ['Monthly review', `Budget · ${day('2026-09-30', '18:00')}`],
@@ -66,29 +64,28 @@ describe('InboxScreen', () => {
   it('opens the screen a reminder is about', () => {
     renderInbox();
     expect(rows()[0]).toHaveAttribute('href', '/freeze');
-    expect(rows()[2]).toHaveAttribute('href', '/buy/kettle');
-    expect(rows()[3]).toHaveAttribute('href', '/');
+    expect(rows()[2]).toHaveAttribute('href', '/');
   });
 
   it('has New and All underline tabs, with the count of what is new', async () => {
     renderInbox(inboxData({ readBefore: null, read: ['week:2026-10-11', 'week:2026-10-04'] }));
     const group = screen.getByRole('group', { name: 'Show' });
-    const fresh = within(group).getByRole('button', { name: 'New (6)' });
+    const fresh = within(group).getByRole('button', { name: 'New (5)' });
     const all = within(group).getByRole('button', { name: 'All' });
     expect(fresh).toHaveAttribute('aria-pressed', 'true');
     expect(all).toHaveAttribute('aria-pressed', 'false');
-    expect(rows()).toHaveLength(6);
+    expect(rows()).toHaveLength(5);
 
     await userEvent.click(all);
     expect(all).toHaveAttribute('aria-pressed', 'true');
     expect(fresh).toHaveAttribute('aria-pressed', 'false');
-    expect(rows()).toHaveLength(8);
+    expect(rows()).toHaveLength(7);
     // Only the rows still to read carry the dot.
-    expect(screen.getAllByText('Unread:')).toHaveLength(6);
-    expect(rows()[3]).not.toHaveTextContent('Unread');
+    expect(screen.getAllByText('Unread:')).toHaveLength(5);
+    expect(rows()[2]).not.toHaveTextContent('Unread');
 
     await userEvent.click(fresh);
-    expect(rows()).toHaveLength(6);
+    expect(rows()).toHaveLength(5);
   });
 
   it('opens a row and marks it read', async () => {
@@ -137,7 +134,7 @@ describe('InboxScreen', () => {
     // They are all still there to read again.
     await userEvent.click(screen.getByRole('button', { name: 'All' }));
     expect(screen.queryByText('No new reminders.')).not.toBeInTheDocument();
-    expect(rows()).toHaveLength(8);
+    expect(rows()).toHaveLength(7);
   });
 
   it('says so when no reminder has come due yet, on both tabs', async () => {

@@ -1,7 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-  makeAboutYou,
-  makeBuyDecision,
   makeDividend,
   makeExpense,
   makeHolding,
@@ -10,6 +8,7 @@ import {
   makeSettings,
   makeSubscription,
 } from '@/test/fixtures';
+import { makeAboutYou, makeBuyDecision } from '@/test/retiredFixtures';
 import {
   CURRENT_SCHEMA_VERSION,
   emptySnapshot,

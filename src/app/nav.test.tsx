@@ -166,9 +166,7 @@ describe('Menu sheet', () => {
     expect(row(sheet, 'Salary freeze')).toHaveTextContent(
       `Active until ${formatDay('2026-10-20')}`,
     );
-    expect(row(sheet, 'Buy it\\?')).toHaveTextContent('Ask before you spend');
     expect(row(sheet, 'Quests')).toHaveTextContent('Level 1');
-    expect(row(sheet, 'About you')).toHaveTextContent('What the buy check knows');
     expect(row(sheet, 'Shop')).toHaveTextContent('130 coins to spend');
     expect(row(sheet, 'Inbox')).toHaveTextContent(/^Inbox$/);
     expect(row(sheet, 'Help')).toHaveTextContent('How everything works');
@@ -356,7 +354,7 @@ describe('Menu sheet', () => {
     it('says how many reminders are new', async () => {
       renderAt('/', inboxData({ readBefore: null, read: ['week:2026-10-11'] }));
       const sheet = await openMenu();
-      expect(row(sheet, 'Inbox')).toHaveTextContent('Inbox7 new');
+      expect(row(sheet, 'Inbox')).toHaveTextContent('Inbox6 new');
     });
 
     it('says nothing when there are none, whether none came due or all were read', async () => {
@@ -373,7 +371,6 @@ describe('Menu sheet', () => {
   it('marks soon items', async () => {
     renderAt('/');
     const sheet = await openMenu();
-    expect(row(sheet, 'Buy it\\?')).not.toHaveTextContent('Soon');
     expect(row(sheet, 'Inbox')).not.toHaveTextContent('Soon');
     expect(row(sheet, 'Help')).not.toHaveTextContent('Soon');
     expect(row(sheet, 'Quests')).not.toHaveTextContent('Soon');
@@ -405,7 +402,7 @@ describe('Menu sheet', () => {
     expect(screen.queryByRole('dialog', { name: 'Menu' })).not.toBeInTheDocument();
   });
 
-  it('lists Buy it? under Your money, after Salary freeze, and opens the Ask form', async () => {
+  it('has no Buy it? and no About you', async () => {
     renderAt('/');
     const sheet = await openMenu();
     const money = within(sheet).getByRole('heading', {
@@ -416,27 +413,16 @@ describe('Menu sheet', () => {
       within(money)
         .getAllByRole('link')
         .map((a) => a.getAttribute('href')),
-    ).toEqual(['/subscriptions', '/goals', '/debts', '/income', '/history', '/freeze', '/buy']);
-
-    await userEvent.click(row(sheet, 'Buy it\\?'));
-    expect(screen.getByRole('heading', { level: 1, name: 'Should I buy it?' })).toBeInTheDocument();
-    expect(screen.queryByRole('dialog', { name: 'Menu' })).not.toBeInTheDocument();
-  });
-
-  it('lists About you under You, right after Quests, and opens it', async () => {
-    renderAt('/');
-    const sheet = await openMenu();
+    ).toEqual(['/subscriptions', '/goals', '/debts', '/income', '/history', '/freeze']);
     const you = within(sheet).getByRole('heading', { level: 3, name: 'You' }).parentElement!;
     expect(
       within(you)
         .getAllByRole('link')
         .map((a) => a.getAttribute('href'))
-        .slice(0, 3),
-    ).toEqual(['/quests', '/about-you', '/shop']);
-
-    await userEvent.click(row(sheet, 'About you'));
-    expect(screen.getByRole('heading', { level: 1, name: 'About you' })).toBeInTheDocument();
-    expect(screen.queryByRole('dialog', { name: 'Menu' })).not.toBeInTheDocument();
+        .slice(0, 2),
+    ).toEqual(['/quests', '/shop']);
+    expect(within(sheet).queryByRole('link', { name: /^Buy it/ })).not.toBeInTheDocument();
+    expect(within(sheet).queryByRole('link', { name: /^About you/ })).not.toBeInTheDocument();
   });
 
   it('closes on Escape', async () => {
@@ -500,7 +486,8 @@ describe('sidebar', () => {
   it('tags the soon items', () => {
     renderAt('/');
     const sidebar = screen.getByRole('navigation', { name: 'All sections' });
-    expect(within(sidebar).getByRole('link', { name: /^Buy it/ })).not.toHaveTextContent('Soon');
+    expect(within(sidebar).queryByRole('link', { name: /^Buy it/ })).not.toBeInTheDocument();
+    expect(within(sidebar).queryByRole('link', { name: /^About you/ })).not.toBeInTheDocument();
     expect(within(sidebar).getByRole('link', { name: /^Settings/ })).not.toHaveTextContent('Soon');
     expect(within(sidebar).getByRole('link', { name: /^Help/ })).not.toHaveTextContent('Soon');
     expect(within(sidebar).getByRole('link', { name: /^Inbox/ })).not.toHaveTextContent('Soon');
@@ -523,8 +510,8 @@ describe('sidebar', () => {
 describe('menu items', () => {
   it('has the two groups in order, with a fixed chip colour that holds 3:1 against a white icon', () => {
     expect(MENU_GROUPS.map((g) => [g.title, g.items.length])).toEqual([
-      ['Your money', 7],
-      ['You', 6],
+      ['Your money', 6],
+      ['You', 5],
     ]);
     const luminance = (hex: string) => {
       const [r, g, b] = [1, 3, 5].map((i) => {
@@ -534,8 +521,6 @@ describe('menu items', () => {
       return 0.2126 * r + 0.7152 * g + 0.0722 * b;
     };
     const items = MENU_GROUPS.flatMap((g) => g.items);
-    const about = items.find((i) => i.path === '/about-you')!;
-    expect(items.filter((i) => i.color === about.color)).toEqual([about]); // a colour of its own
     for (const { label, color } of items) {
       expect(1.05 / (luminance(color) + 0.05), label).toBeGreaterThanOrEqual(3);
     }

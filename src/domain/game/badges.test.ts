@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
   localIso,
-  makeBuyDecision,
   makeDividend,
   makeExpense,
   makeHolding,
@@ -53,7 +52,7 @@ function freeze(start: string, end: string): SalaryFreeze {
 }
 
 describe('BADGES', () => {
-  it('lists the twelve badges in order', () => {
+  it('lists the nine badges in order', () => {
     expect(BADGES.map((b) => b.id)).toEqual([
       'first-expense',
       'subscription-slayer',
@@ -64,9 +63,6 @@ describe('BADGES', () => {
       'first-dividend',
       'dividend-collector',
       'passive-income-pro',
-      'smart-shopper',
-      'impulse-controller',
-      'budget-defender',
     ]);
     expect(BADGES.map((b) => b.name)).toEqual([
       'First Expense Logged',
@@ -78,9 +74,6 @@ describe('BADGES', () => {
       'First Dividend',
       'Dividend Collector',
       'Passive Income Pro',
-      'Smart Shopper',
-      'Impulse Controller',
-      'Budget Defender',
     ]);
     expect(BADGES[2]?.description).toBe('Finish a calendar month without going over any limit.');
     expect(BADGES.slice(4).map((b) => b.description)).toEqual([
@@ -89,10 +82,12 @@ describe('BADGES', () => {
       'Confirm your first dividend.',
       'Confirm 12 dividends.',
       'Collect 100 in dividends in one month.',
-      'Rate a purchase 4 or 5.',
-      'Skip 5 purchases.',
-      'Skip 3 purchases that would have gone over a limit.',
     ]);
+  });
+
+  it('has no badge for a purchase check', () => {
+    const gone = ['smart-shopper', 'impulse-controller', 'budget-defender'];
+    expect(BADGES.map((b) => b.id).filter((id) => gone.includes(id))).toEqual([]);
   });
 });
 
@@ -345,76 +340,6 @@ describe('badgeAwards', () => {
     ]);
   });
 
-  it('earns Smart Shopper from a bought decision rated 4 or 5', () => {
-    const rated = (usage: 1 | 2 | 3 | 4 | 5 | null, status: 'bought' | 'skipped' = 'bought') =>
-      snap({ buyDecision: [makeBuyDecision({ status, usage })] });
-
-    expect(earned(rated(4))).toEqual(['smart-shopper']);
-    expect(earned(rated(5))).toEqual(['smart-shopper']);
-    expect(badgeAwards(rated(5), ctx)).toEqual([
-      {
-        key: 'badge:smart-shopper',
-        kind: 'badge',
-        title: 'Smart Shopper',
-        label: 'Badge: Smart Shopper',
-        xp: 100,
-        coins: 25,
-      },
-    ]);
-
-    // One short: a 3, no rating yet, or a rating on something that was not bought.
-    expect(earned(rated(3))).toEqual([]);
-    expect(earned(rated(null))).toEqual([]);
-    expect(earned(rated(5, 'skipped'))).toEqual([]);
-  });
-
-  it('earns Impulse Controller from 5 skipped decisions', () => {
-    const skipped = (n: number) =>
-      Array.from({ length: n }, () => makeBuyDecision({ status: 'skipped' }));
-
-    expect(earned(snap({ buyDecision: skipped(5) }))).toEqual(['impulse-controller']);
-    expect(badgeAwards(snap({ buyDecision: skipped(5) }), ctx)).toEqual([
-      {
-        key: 'badge:impulse-controller',
-        kind: 'badge',
-        title: 'Impulse Controller',
-        label: 'Badge: Impulse Controller',
-        xp: 150,
-        coins: 40,
-      },
-    ]);
-
-    // One short; a decision bought or still waiting is not a skip.
-    expect(earned(snap({ buyDecision: skipped(4) }))).toEqual([]);
-    const others = [makeBuyDecision({ status: 'bought' }), makeBuyDecision({ status: 'waiting' })];
-    expect(earned(snap({ buyDecision: [...skipped(4), ...others] }))).toEqual([]);
-  });
-
-  it('earns Budget Defender from 3 skipped decisions that would have gone over a limit', () => {
-    const decision = (status: 'skipped' | 'bought', overBy: number) => {
-      const base = makeBuyDecision({ status });
-      return { ...base, facts: { ...base.facts, overBy } };
-    };
-    const over = (n: number) => Array.from({ length: n }, () => decision('skipped', 10_00));
-
-    expect(earned(snap({ buyDecision: over(3) }))).toEqual(['budget-defender']);
-    expect(badgeAwards(snap({ buyDecision: over(3) }), ctx)).toEqual([
-      {
-        key: 'badge:budget-defender',
-        kind: 'badge',
-        title: 'Budget Defender',
-        label: 'Badge: Budget Defender',
-        xp: 150,
-        coins: 40,
-      },
-    ]);
-
-    // One short; skips within the limits do not count, nor does buying over a limit.
-    expect(earned(snap({ buyDecision: over(2) }))).toEqual([]);
-    const within = [decision('skipped', 0), decision('bought', 10_00)];
-    expect(earned(snap({ buyDecision: [...over(2), ...within] }))).toEqual([]);
-  });
-
   it('keeps a badge once in the ledger', () => {
     const entry = makeLedgerEntry({
       key: 'badge:first-expense',
@@ -503,27 +428,6 @@ describe('badgeViews', () => {
         description: 'Collect 100 in dividends in one month.',
         earnedAt: null,
         reward: { xp: 200, coins: 50 },
-      },
-      {
-        id: 'smart-shopper',
-        name: 'Smart Shopper',
-        description: 'Rate a purchase 4 or 5.',
-        earnedAt: null,
-        reward: { xp: 100, coins: 25 },
-      },
-      {
-        id: 'impulse-controller',
-        name: 'Impulse Controller',
-        description: 'Skip 5 purchases.',
-        earnedAt: null,
-        reward: { xp: 150, coins: 40 },
-      },
-      {
-        id: 'budget-defender',
-        name: 'Budget Defender',
-        description: 'Skip 3 purchases that would have gone over a limit.',
-        earnedAt: null,
-        reward: { xp: 150, coins: 40 },
       },
     ]);
   });

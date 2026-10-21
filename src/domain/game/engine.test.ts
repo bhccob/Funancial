@@ -111,6 +111,21 @@ describe('gameUpdates', () => {
     ]);
   });
 
+  it('keeps the XP and coins of a badge that is no longer on offer', () => {
+    // Smart Shopper went with Buy it?: its award stays in the ledger and is never taken back.
+    const award = makeLedgerEntry({
+      id: 'badge:smart-shopper#0',
+      key: 'badge:smart-shopper',
+      kind: 'award',
+      xp: 100,
+      coins: 25,
+      label: 'Badge: Smart Shopper',
+    });
+    const data = snap({ ledger: [award] });
+    expect(gameUpdates(data, ctx)).toEqual({ records: [], gain: null });
+    expect(computeGameView(data, ctx).totals).toEqual({ xp: 100, coins: 25 });
+  });
+
   it('spends freezes and counts them in the same run', () => {
     // Logged on the 9th to the 12th and today; the 13th and 14th were missed, and two freezes are held.
     const days: LocalDate[] = ['2026-10-09', '2026-10-10', '2026-10-11', '2026-10-12', today];
@@ -327,9 +342,6 @@ describe('computeGameView', () => {
       'first-dividend',
       'dividend-collector',
       'passive-income-pro',
-      'smart-shopper',
-      'impulse-controller',
-      'budget-defender',
     ]);
     expect(view.quests.map((q) => q.id)).toEqual(['log-today', 'week-checkin']);
     expect(view.challenges.map((c) => c.challenge.id)).toEqual(['c1']);
