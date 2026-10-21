@@ -1,8 +1,10 @@
-import { bucketBalances, debtBalance, netWorth, type Buckets } from './balances';
+import { accountRows, debtBalance, netWorth, type AccountRow } from './balances';
 import {
   availableBalance,
+  cashInPocket,
   limitStatus,
   reservedTotal,
+  savedTotal,
   spendingSummary,
   upcomingBills,
   type Bill,
@@ -18,9 +20,15 @@ import { expectedSalary } from './salary';
 import type { DataSnapshot } from './snapshot';
 
 export type FinanceView = {
-  buckets: Buckets;
-  debts: Array<{ debt: Debt; balance: number }>;
-  debtTotal: number;
+  /** The accounts in use, in carousel order, with what each holds (or, for a card, owes). */
+  accounts: AccountRow[];
+  loans: Array<{ debt: Debt; balance: number }>;
+  /** What the credit cards and the loans owe together. */
+  owed: number;
+  /** Cash in pocket: what the cash accounts hold. */
+  cash: number;
+  /** What the savings accounts hold. */
+  saved: number;
   /** The priced holdings, in minor units of the profile currency; part of `netWorth`. */
   investments: number;
   netWorth: number;
@@ -41,27 +49,32 @@ export function computeFinanceView(
   today: LocalDate,
   weekStartsOn: 0 | 1,
 ): FinanceView {
-  const buckets = bucketBalances(data, today);
-  const debts = activeDebts(data.tables.debt).map((debt) => ({
+  const accounts = accountRows(data, today);
+  const loans = activeDebts(data.tables.debt).map((debt) => ({
     debt,
     balance: debtBalance(debt, data, today),
   }));
-  const debtTotal = debts.reduce((s, d) => s + d.balance, 0);
+  const loanTotal = loans.reduce((s, l) => s + l.balance, 0);
+  const cardsOwed = accounts
+    .filter((r) => r.account.kind === 'credit')
+    .reduce((s, r) => s + r.balance, 0);
   const bills = upcomingBills(data, today);
   const reserved = reservedTotal(data, today, weekStartsOn);
   const profile = data.tables.profile[0];
   const investments = profile ? portfolio(data, profile.currency).value : 0;
 
   return {
-    buckets,
-    debts,
-    debtTotal,
+    accounts,
+    loans,
+    owed: cardsOwed + loanTotal,
+    cash: cashInPocket(accounts),
+    saved: savedTotal(accounts),
     investments,
-    netWorth: netWorth(buckets, debtTotal, investments),
+    netWorth: netWorth(accounts, loanTotal, investments),
     bills,
     billsTotal: bills.reduce((s, b) => s + b.amount, 0),
     reserved,
-    available: availableBalance(buckets, bills, reserved),
+    available: availableBalance(accounts, bills, reserved),
     limits: data.tables.budgetLimit
       .map((l) => limitStatus(l, data, today, weekStartsOn))
       .sort((a, b) => b.pct - a.pct),

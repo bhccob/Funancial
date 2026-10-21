@@ -56,13 +56,13 @@ describe('incomeByMonth', () => {
     expect(at('2026-08')).toMatchObject({ salary: 0, extra: 0, dividends: 7_50, total: 7_50 });
   });
 
-  it('counts a dividend on the day it was paid, whichever bucket it went to, reinvested included', () => {
+  it('counts a dividend on the day it was paid, whichever account it went to, reinvested included', () => {
     const data = snapshot();
     data.tables.dividend.push(
-      dividend('2026-10-02', 10_00, { bucket: 'cash' }),
-      dividend('2026-10-03', 20_00, { bucket: 'savings' }),
-      dividend('2026-10-04', 30_00, { bucket: 'passive' }),
-      dividend('2026-10-05', 40_00, { bucket: 'reinvest', sharesAdded: 0.5 }),
+      dividend('2026-10-02', 10_00, { accountId: 'acct-main' }),
+      dividend('2026-10-03', 20_00, { accountId: 'acct-savings' }),
+      dividend('2026-10-04', 30_00, { accountId: 'acct-passive' }),
+      dividend('2026-10-05', 40_00, { accountId: null, reinvested: true, sharesAdded: 0.5 }),
       // Expected in September, but it arrived in October.
       makeDividend({ expectedPayDate: '2026-09-28', paidOn: '2026-10-06', amount: 5_00 }),
     );
@@ -78,29 +78,29 @@ describe('incomeByMonth', () => {
       salary('2026-08-25', 4_200_00, { status: 'confirmed' }),
     );
     data.tables.dividend.push(
-      dividend('2026-10-01', 0, { status: 'skipped', bucket: null }),
-      dividend('2026-09-01', 0, { status: 'skipped', bucket: null }),
+      dividend('2026-10-01', 0, { status: 'skipped', accountId: null }),
+      dividend('2026-09-01', 0, { status: 'skipped', accountId: null }),
     );
     const rows = incomeByMonth(data, TODAY, 12).filter((r) => r.total > 0);
     expect(rows.map((r) => [r.month, r.total])).toEqual([['2026-08', 4_200_00]]);
   });
 
-  it('does not count moving money between cash and savings, or a balance correction, as income', () => {
+  it('does not count moving money between accounts, or a balance correction, as income', () => {
     const data = snapshot();
     data.tables.transaction.push(
       makeTransaction({
         type: 'transfer',
         amount: 300_00,
         date: '2026-10-05',
-        from: 'cash',
-        to: 'savings',
+        fromAccountId: 'acct-main',
+        toAccountId: 'acct-savings',
       }),
       makeTransaction({
         type: 'adjustment',
         amount: 80_00,
         date: '2026-10-06',
-        from: null,
-        to: 'cash',
+        fromAccountId: null,
+        toAccountId: 'acct-main',
       }),
     );
     expect(incomeByMonth(data, TODAY, 12).every((r) => r.total === 0)).toBe(true);
@@ -182,7 +182,7 @@ describe('incomeThisYear', () => {
     );
     data.tables.dividend.push(
       dividend('2026-03-10', 30_00),
-      dividend('2026-04-10', 40_00, { bucket: 'reinvest' }),
+      dividend('2026-04-10', 40_00, { accountId: null, reinvested: true }),
       dividend('2025-12-30', 777_00),
     );
     const year = incomeThisYear(data, TODAY);

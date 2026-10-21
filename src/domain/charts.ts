@@ -1,4 +1,4 @@
-import { bucketBalances, debtBalance, netWorth } from './balances';
+import { accountRows, debtBalance, netWorth } from './balances';
 import { categoryBreakdown, categoryLabel } from './budget';
 import { addDays, type LocalDate } from './dates';
 import { archivedBy } from './debts';
@@ -65,11 +65,11 @@ function soldLater(data: DataSnapshot, day: LocalDate): number {
 }
 
 /**
- * Cash, savings and passive income plus the holdings bought by then (and the shares sold since, at
- * their sale price), less everything owed, as of the end of `day`.
+ * What the accounts in use on `day` hold, plus the holdings bought by then (and the shares sold
+ * since, at their sale price), less what the cards and loans in use owed, as of the end of `day`.
  */
 export function netWorthOn(data: DataSnapshot, day: LocalDate): number {
-  const debtTotal = data.tables.debt.reduce(
+  const loanTotal = data.tables.debt.reduce(
     (sum, d) => (archivedBy(d, day) ? sum : sum + debtBalance(d, data, day)),
     0,
   );
@@ -81,7 +81,7 @@ export function netWorthOn(data: DataSnapshot, day: LocalDate): number {
         0,
       )
     : 0;
-  return netWorth(bucketBalances(data, day), debtTotal, investments + soldLater(data, day));
+  return netWorth(accountRows(data, day), loanTotal, investments + soldLater(data, day));
 }
 
 /** Net worth on each of the `days` days ending `endDay`, oldest first. */

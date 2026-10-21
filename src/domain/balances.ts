@@ -1,83 +1,90 @@
+import { activeAccounts } from './accounts';
 import type { LocalDate } from './dates';
-import type { Debt } from './entities';
+import type { Account, Debt } from './entities';
 import type { DataSnapshot } from './snapshot';
 
-export type Buckets = { cash: number; savings: number; passive: number };
+/** An account and what it holds on a day, or for a credit card what is owed on it. */
+export type AccountRow = { account: Account; balance: number };
 
 /**
- * Cash, savings and passive-income balances as of a day: the opening amounts plus every event
- * dated from the opening date through `asOf`. Card expenses don't touch cash (they raise the card).
- * An investment takes money out of its bucket, and a confirmed dividend puts it into the bucket it
- * went to (a reinvested one went into shares, so no bucket). A sale puts its proceeds into the bucket
- * they went to, on the day of the sale.
+ * What an account holds as of a day: its opening balance plus every event that names it, dated
+ * from its own opening date through `asOf`.
+ *
+ * A bank, cash or savings account gains confirmed income, transfers in, adjustments, confirmed
+ * dividends paid into it (a reinvested one went into shares) and the proceeds of sales paid into
+ * it, and loses what was spent with it, transfers out, and the card payments, loan payments and
+ * investments paid from it.
+ *
+ * A credit card's balance is what is owed on it: its expenses raise it, the card payments made
+ * into it lower it, and an adjustment corrects it. Negative means overpaid (a credit).
  */
-export function bucketBalances(data: DataSnapshot, asOf: LocalDate): Buckets {
-  const profile = data.tables.profile[0];
-  const opening = profile?.openingDate ?? '0000-01-01';
-  const counts = (d: LocalDate) => d >= opening && d <= asOf;
-  const b: Buckets = {
-    cash: profile?.openingCash ?? 0,
-    savings: profile?.openingSavings ?? 0,
-    passive: 0,
-  };
+export function accountBalance(account: Account, data: DataSnapshot, asOf: LocalDate): number {
+  const id = account.id;
+  const counts = (d: LocalDate) => d >= account.openingDate && d <= asOf;
+  const { expense, income, transaction, dividend, sale } = data.tables;
+  let balance = account.openingBalance;
 
-  for (const i of data.tables.income) {
-    if (i.status === 'confirmed' && counts(i.date)) b[i.bucket] += i.amount;
+  if (account.kind === 'credit') {
+    for (const e of expense) if (e.accountId === id && counts(e.date)) balance += e.amount;
+    for (const t of transaction) {
+      if (t.toAccountId !== id || !counts(t.date)) continue;
+      if (t.type === 'card_payment') balance -= t.amount;
+      else if (t.type === 'adjustment') balance += t.amount;
+    }
+    return balance;
   }
-  for (const e of data.tables.expense) {
-    if (e.paymentMethod !== 'credit_card' && counts(e.date)) b.cash -= e.amount;
+
+  for (const i of income) {
+    if (i.status === 'confirmed' && i.accountId === id && counts(i.date)) balance += i.amount;
   }
-  for (const t of data.tables.transaction) {
+  for (const e of expense) if (e.accountId === id && counts(e.date)) balance -= e.amount;
+  for (const t of transaction) {
     if (!counts(t.date)) continue;
     switch (t.type) {
       case 'transfer':
-        if (t.from) b[t.from] -= t.amount;
-        if (t.to) b[t.to] += t.amount;
+        if (t.fromAccountId === id) balance -= t.amount;
+        if (t.toAccountId === id) balance += t.amount;
         break;
       case 'adjustment':
-        if (t.to) b[t.to] += t.amount;
+        if (t.toAccountId === id) balance += t.amount;
         break;
       case 'card_payment':
       case 'debt_payment':
       case 'investment':
-        if (t.from) b[t.from] -= t.amount;
+        if (t.fromAccountId === id) balance -= t.amount;
         break;
     }
   }
-  for (const d of data.tables.dividend) {
-    if (d.status === 'confirmed' && d.bucket && d.bucket !== 'reinvest' && counts(d.paidOn)) {
-      b[d.bucket] += d.amount;
-    }
+  for (const d of dividend) {
+    if (d.status === 'confirmed' && d.accountId === id && counts(d.paidOn)) balance += d.amount;
   }
-  for (const s of data.tables.sale) {
-    if (counts(s.soldOn)) b[s.to] += s.proceeds;
-  }
-  return b;
+  for (const s of sale) if (s.toAccountId === id && counts(s.soldOn)) balance += s.proceeds;
+  return balance;
 }
 
-/** What is owed on a card or loan as of a day. Negative means overpaid (a credit). */
+/** The accounts in use on `asOf`, in carousel order, each with its balance that day. */
+export function accountRows(data: DataSnapshot, asOf: LocalDate): AccountRow[] {
+  return activeAccounts(data.tables.account, asOf).map((account) => ({
+    account,
+    balance: accountBalance(account, data, asOf),
+  }));
+}
+
+/** What is owed on a loan as of a day: its opening balance less the payments made to it. */
 export function debtBalance(debt: Debt, data: DataSnapshot, asOf: LocalDate): number {
   const counts = (d: LocalDate) => d >= debt.openingDate && d <= asOf;
   let balance = debt.openingBalance;
-  if (debt.kind === 'credit_card') {
-    for (const e of data.tables.expense) {
-      if (e.paymentMethod === 'credit_card' && e.cardId === debt.id && counts(e.date)) {
-        balance += e.amount;
-      }
-    }
-  }
   for (const t of data.tables.transaction) {
-    if (
-      (t.type === 'card_payment' || t.type === 'debt_payment') &&
-      t.debtId === debt.id &&
-      counts(t.date)
-    ) {
-      balance -= t.amount;
-    }
+    if (t.type === 'debt_payment' && t.debtId === debt.id && counts(t.date)) balance -= t.amount;
   }
   return balance;
 }
 
-export function netWorth(buckets: Buckets, debtTotal: number, investments = 0): number {
-  return buckets.cash + buckets.savings + buckets.passive + investments - debtTotal;
+/** What the accounts hold, less what the credit cards and loans owe, plus investments. */
+export function netWorth(rows: AccountRow[], loanTotal: number, investments: number): number {
+  const accounts = rows.reduce(
+    (sum, r) => (r.account.kind === 'credit' ? sum - r.balance : sum + r.balance),
+    0,
+  );
+  return accounts - loanTotal + investments;
 }

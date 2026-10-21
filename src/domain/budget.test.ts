@@ -1,50 +1,213 @@
 import { describe, expect, it } from 'vitest';
 import {
-  makeDebt,
+  makeAccount,
   makeExpense,
   makeLimit,
-  makeProfile,
   makeSubscription,
   makeTransaction,
 } from '@/test/fixtures';
-import { bucketBalances } from './balances';
+import { accountRows } from './balances';
 import { addDays } from './dates';
 import {
   availableBalance,
   cardPayment,
+  cashInPocket,
   categoryBreakdown,
   limitLabel,
   limitStatus,
   reservedTotal,
+  savedTotal,
   spendingSummary,
   upcomingBills,
 } from './budget';
-import { EXAMPLES } from './examples';
-import { emptySnapshot } from './snapshot';
+import type { Account, CreditTerms } from './entities';
+import { emptySnapshot, type DataSnapshot } from './snapshot';
 
 const TODAY = '2026-10-14';
-const avl = EXAMPLES.find((e) => e.id === 'AVL-1')!;
 
-describe('AVL-1 available balance', () => {
-  it('lists this month’s bills: renewals to month end and the card balance', () => {
+/** A credit card's account: paid in full by default, due on the 21st. */
+function creditCard(overrides: Partial<Account> = {}, terms: Partial<CreditTerms> = {}): Account {
+  return makeAccount({
+    id: 'visa',
+    name: 'Visa',
+    kind: 'credit',
+    skin: 'violet',
+    inAvailable: false,
+    openingBalance: 0,
+    openingDate: '2026-10-01',
+    order: 3,
+    credit: {
+      limit: 3_000_00,
+      statementDay: 1,
+      dueDay: 21,
+      payInFull: true,
+      minimumPayment: 25_00,
+      interestRate: 22.9,
+      ...terms,
+    },
+    ...overrides,
+  });
+}
+
+const savingsAccount = (openingBalance: number) =>
+  makeAccount({
+    id: 'acct-savings',
+    name: 'Savings',
+    kind: 'savings',
+    skin: 'mint',
+    inAvailable: false,
+    openingBalance,
+    openingDate: '2026-10-01',
+    order: 1,
+  });
+
+describe('available to spend', () => {
+  /**
+   * Main account: 2,500.00 less 100.00 of groceries. A cash wallet with 50.00 and savings of
+   * 3,000.00. A Visa owing 230.00, due on the 21st. Streamflix renews on Main on the 20th and the
+   * gym in November. The 1,200.00 rent limit is reserved and nothing of it is spent.
+   */
+  function world(): DataSnapshot {
+    const d = emptySnapshot();
+    d.tables.account = [
+      makeAccount({ openingBalance: 2_500_00, openingDate: '2026-10-01' }),
+      savingsAccount(3_000_00),
+      makeAccount({
+        id: 'acct-cash',
+        name: 'Wallet',
+        kind: 'cash',
+        skin: 'amber',
+        openingBalance: 50_00,
+        openingDate: '2026-10-01',
+        order: 2,
+      }),
+      creditCard({ id: 'card-1', openingBalance: 230_00 }),
+    ];
+    d.tables.expense = [makeExpense({ amount: 100_00, date: '2026-10-13', category: 'food' })];
+    d.tables.subscription = [
+      makeSubscription({ name: 'Streamflix', amount: 15_99, nextRenewal: '2026-10-20' }),
+      makeSubscription({
+        name: 'FitHub Gym',
+        amount: 39_00,
+        nextRenewal: '2026-11-02',
+        category: 'health',
+      }),
+    ];
+    d.tables.budgetLimit = [
+      makeLimit({ category: 'rent', period: 'monthly', amount: 1_200_00, reserve: true }),
+      makeLimit({ category: 'food', period: 'weekly', amount: 120_00 }),
+    ];
+    return d;
+  }
+  const available = (d: DataSnapshot) =>
+    availableBalance(accountRows(d, TODAY), upcomingBills(d, TODAY), reservedTotal(d, TODAY, 1));
+
+  it('lists this month’s bills, renewals to month end and the card’s, each with its account', () => {
     expect(
-      upcomingBills(avl.data, avl.today).map((b) => [b.date, b.name, b.amount, b.kind]),
+      upcomingBills(world(), TODAY).map((b) => [b.date, b.name, b.amount, b.kind, b.accountId]),
     ).toEqual([
-      ['2026-10-20', 'Streamflix', 15_99, 'subscription'],
-      ['2026-10-21', 'Visa', 230_00, 'card'],
+      ['2026-10-20', 'Streamflix', 15_99, 'subscription', 'acct-main'],
+      ['2026-10-21', 'Visa', 230_00, 'card', 'card-1'],
     ]);
   });
 
-  it('computes reserved and available', () => {
-    const bills = upcomingBills(avl.data, avl.today);
-    const reserved = reservedTotal(avl.data, avl.today, 1);
-    expect(reserved).toBe(1_200_00);
-    expect(availableBalance(bucketBalances(avl.data, avl.today), bills, reserved)).toBe(2_654_01);
+  it('is what Main account and the wallet hold, less bills and what is reserved', () => {
+    expect(reservedTotal(world(), TODAY, 1)).toBe(1_200_00);
+    expect(available(world())).toBe(2_400_00 + 50_00 - 15_99 - 230_00 - 1_200_00);
+  });
+
+  it('available leaves savings out', () => {
+    const d = world();
+    d.tables.account = d.tables.account.map((a) =>
+      a.id === 'acct-savings' ? savingsAccount(9_999_00) : a,
+    );
+    expect(available(d)).toBe(available(world()));
+    // Savings counts once it is marked to.
+    d.tables.account = d.tables.account.map((a) =>
+      a.id === 'acct-savings' ? { ...a, inAvailable: true } : a,
+    );
+    expect(available(d)).toBe(available(world()) + 9_999_00);
+  });
+
+  it('a subscription on a credit card is not taken off available', () => {
+    const d = world();
+    d.tables.subscription.push(
+      makeSubscription({
+        name: 'Cloud',
+        amount: 9_99,
+        nextRenewal: '2026-10-18',
+        accountId: 'card-1',
+      }),
+    );
+    expect(upcomingBills(d, TODAY).map((b) => [b.name, b.accountId])).toContainEqual([
+      'Cloud',
+      'card-1',
+    ]);
+    expect(available(d)).toBe(available(world()));
+  });
+
+  it('a subscription on savings is not taken off available either', () => {
+    const d = world();
+    d.tables.subscription.push(
+      makeSubscription({
+        name: 'Vault',
+        amount: 5_00,
+        nextRenewal: '2026-10-18',
+        accountId: 'acct-savings',
+      }),
+    );
+    expect(available(d)).toBe(available(world()));
+  });
+
+  it('a subscription on the wallet is taken off available', () => {
+    const d = world();
+    d.tables.subscription.push(
+      makeSubscription({
+        name: 'Paper',
+        amount: 4_00,
+        nextRenewal: '2026-10-18',
+        accountId: 'acct-cash',
+      }),
+    );
+    expect(available(d)).toBe(available(world()) - 4_00);
+  });
+
+  it('a card bill is taken off available', () => {
+    const d = world();
+    d.tables.account = d.tables.account.map((a) =>
+      a.id === 'card-1' ? { ...a, openingBalance: 0 } : a,
+    );
+    expect(upcomingBills(d, TODAY).filter((b) => b.kind === 'card')).toEqual([]);
+    expect(available(world())).toBe(available(d) - 230_00);
+  });
+
+  it('cash in pocket sums cash accounts only', () => {
+    expect(cashInPocket(accountRows(world(), TODAY))).toBe(50_00);
+    expect(cashInPocket([])).toBe(0);
+  });
+
+  it('saved sums savings accounts only', () => {
+    expect(savedTotal(accountRows(world(), TODAY))).toBe(3_000_00);
+    expect(savedTotal([])).toBe(0);
+  });
+
+  it('an archived card has no bill', () => {
+    const archive = (archivedOn: string) => {
+      const d = world();
+      d.tables.account = d.tables.account.map((a) =>
+        a.id === 'card-1' ? { ...a, archivedOn } : a,
+      );
+      return upcomingBills(d, TODAY).filter((b) => b.kind === 'card');
+    };
+    expect(archive(TODAY)).toEqual([]);
+    // Not archived yet on the day: it still bills.
+    expect(archive('2026-10-15').map((b) => b.accountId)).toEqual(['card-1']);
   });
 
   it('puts the food limit in the warning zone', () => {
-    const food = avl.data.tables.budgetLimit.find((l) => l.category === 'food')!;
-    expect(limitStatus(food, avl.data, avl.today, 1)).toMatchObject({
+    const d = world();
+    const food = d.tables.budgetLimit.find((l) => l.category === 'food')!;
+    expect(limitStatus(food, d, TODAY, 1)).toMatchObject({
       spent: 100_00,
       remaining: 20_00,
       pct: 83,
@@ -89,8 +252,7 @@ describe('limit levels', () => {
         amount: 30_00,
         date: '2026-10-05',
         category: 'entertainment',
-        paymentMethod: 'credit_card',
-        cardId: 'c1',
+        accountId: 'c1',
       }),
       makeExpense({ amount: 50_00, date: '2026-10-06', category: 'food' }),
       makeExpense({ amount: 70_00, date: '2026-09-30', category: 'entertainment' }),
@@ -106,11 +268,7 @@ describe('limit levels', () => {
 });
 
 describe('upcomingBills', () => {
-  const data = () => {
-    const d = emptySnapshot();
-    d.tables.profile = [makeProfile({ openingDate: '2026-10-01' })];
-    return d;
-  };
+  const data = () => emptySnapshot();
 
   it('skips cancelled subscriptions and renewals after month end', () => {
     const d = data();
@@ -151,46 +309,41 @@ describe('upcomingBills', () => {
 
   it('asks only the minimum payment for cards not paid in full, and nothing for a zero balance', () => {
     const d = data();
-    d.tables.debt = [
-      makeDebt({
-        id: 'c1',
-        name: 'Store card',
-        openingBalance: 900_00,
-        openingDate: '2026-10-01',
-        payInFull: false,
-        minimumPayment: 35_00,
-        dueDay: 5,
-      }),
-      makeDebt({ id: 'c2', name: 'Empty', openingBalance: 0, openingDate: '2026-10-01' }),
+    d.tables.account = [
+      creditCard(
+        { id: 'c1', name: 'Store card', openingBalance: 900_00 },
+        { payInFull: false, minimumPayment: 35_00, dueDay: 5 },
+      ),
+      creditCard({ id: 'c2', name: 'Empty', openingBalance: 0, order: 4 }),
     ];
     expect(upcomingBills(d, TODAY).map((b) => [b.date, b.name, b.amount])).toEqual([
       ['2026-11-05', 'Store card', 35_00],
     ]);
+  });
+
+  it('bills cards only, never what a bank, cash or savings account holds', () => {
+    const d = data();
+    d.tables.account = [makeAccount({ openingBalance: 500_00, openingDate: '2026-10-01' })];
+    expect(upcomingBills(d, TODAY)).toEqual([]);
   });
 });
 
 describe('upcomingBills for a card with no minimum set', () => {
   it('bills the whole balance instead of nothing', () => {
     const d = emptySnapshot();
-    d.tables.profile = [makeProfile({ openingDate: '2026-10-01' })];
-    d.tables.debt = [
-      makeDebt({
-        id: 'c3',
-        name: 'Revolving',
-        openingBalance: 500_00,
-        openingDate: '2026-10-01',
-        payInFull: false,
-        minimumPayment: 0,
-        dueDay: 21,
-      }),
+    d.tables.account = [
+      creditCard(
+        { name: 'Revolving', openingBalance: 500_00 },
+        { payInFull: false, minimumPayment: 0, dueDay: 21 },
+      ),
     ];
     expect(upcomingBills(d, '2026-10-14').map((b) => b.amount)).toEqual([500_00]);
   });
 });
 
 describe('cardPayment', () => {
-  const pays = (overrides: Parameters<typeof makeDebt>[0], balance: number) =>
-    cardPayment(emptySnapshot(), makeDebt(overrides), balance, TODAY);
+  const pays = (terms: Partial<CreditTerms>, owed: number) =>
+    cardPayment(emptySnapshot(), creditCard({}, terms), owed, TODAY);
 
   it('is the whole balance for a card paid in full, or one with no minimum on file', () => {
     expect(pays({ payInFull: true, minimumPayment: 25_00 }, 230_00)).toEqual({
@@ -257,27 +410,28 @@ describe('spending', () => {
 
 describe('a card whose minimum is paid before its due date', () => {
   // Owes 800.00 with a 25.00 minimum due on the 21st; the cycle began after the 21st of September.
-  const card = (over: Parameters<typeof makeDebt>[0] = {}) =>
-    makeDebt({
-      id: 'visa',
-      name: 'Visa',
-      openingDate: '2025-01-01',
-      openingBalance: 800_00,
-      payInFull: false,
-      minimumPayment: 25_00,
-      dueDay: 21,
-      ...over,
+  const card = (over: Partial<CreditTerms> & { openingBalance?: number } = {}) => {
+    const { openingBalance = 800_00, ...terms } = over;
+    return creditCard(
+      { openingDate: '2025-01-01', openingBalance },
+      { payInFull: false, minimumPayment: 25_00, dueDay: 21, ...terms },
+    );
+  };
+  const paid = (amount: number, date: string, toAccountId = 'visa') =>
+    makeTransaction({
+      type: 'card_payment',
+      amount,
+      date,
+      fromAccountId: 'acct-main',
+      toAccountId,
     });
-  const paid = (amount: number, date: string, debtId = 'visa') =>
-    makeTransaction({ type: 'card_payment', amount, date, from: 'cash', to: null, debtId });
   const due = (
     today: string,
-    over: Parameters<typeof makeDebt>[0],
+    over: Parameters<typeof card>[0],
     ...payments: ReturnType<typeof paid>[]
   ) => {
     const d = emptySnapshot();
-    d.tables.profile = [makeProfile({ openingDate: '2025-01-01' })];
-    d.tables.debt = [card(over)];
+    d.tables.account = [card(over)];
     d.tables.transaction = payments;
     return upcomingBills(d, today).map((b) => [b.date, b.amount]);
   };
@@ -313,13 +467,6 @@ describe('a card whose minimum is paid before its due date', () => {
 
   it('leaves a card paid in full to its balance, which already reflects payments', () => {
     expect(due(TODAY, { payInFull: true }, paid(100_00, TODAY))).toEqual([['2026-10-21', 700_00]]);
-  });
-
-  it('counts a loan-style debt_payment as well', () => {
-    const d = emptySnapshot();
-    d.tables.debt = [card()];
-    d.tables.transaction = [{ ...paid(25_00, TODAY), type: 'debt_payment' }];
-    expect(upcomingBills(d, TODAY)).toEqual([]);
   });
 
   it('has no cycle to count payments in when there is no due day', () => {

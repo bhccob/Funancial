@@ -1,7 +1,7 @@
-import { debtBalance, type Buckets } from './balances';
+import { activeAccounts } from './accounts';
+import { accountBalance, type AccountRow } from './balances';
 import type { LocalDate } from './dates';
-import { activeDebts } from './debts';
-import type { BudgetLimit, Category, Debt, Expense } from './entities';
+import type { Account, BudgetLimit, Category, Expense } from './entities';
 import {
   dayOfMonth,
   dayRange,
@@ -86,6 +86,8 @@ export type Bill = {
   amount: number;
   kind: 'subscription' | 'card';
   refId: string;
+  /** The account it is charged to: a subscription's own account, or the card's for a card bill. */
+  accountId: string;
   /** Cards only: the payment is the whole balance, not the minimum. */
   inFull?: boolean;
 };
@@ -108,48 +110,47 @@ export function nextDueDate(today: LocalDate, dueDay: number | null): LocalDate 
 }
 
 /**
- * What has been paid toward a card since its previous due date, up to today: the payments that
+ * What has been paid into a card since its previous due date, up to today: the payments that
  * count toward the due date `nextDueDate` gives. A card with no due day has no cycle to count in.
  */
-function paidThisCycle(data: DataSnapshot, debt: Debt, today: LocalDate): number {
-  if (debt.dueDay === null) return 0; // shortcut: no cycle without a due day, unless one is asked for
-  const next = nextDueDate(today, debt.dueDay);
+function paidThisCycle(data: DataSnapshot, card: Account, today: LocalDate): number {
+  const dueDay = card.credit?.dueDay ?? null;
+  if (dueDay === null) return 0; // shortcut: no cycle without a due day, unless one is asked for
+  const next = nextDueDate(today, dueDay);
   const [y, m] = [Number(next.slice(0, 4)), Number(next.slice(5, 7))];
   const [py, pm] = m === 1 ? [y - 1, 12] : [y, m - 1];
   // The same day a month earlier, clamped to a short month the way `nextDueDate` clamps.
-  const since = `${py}-${pad(pm)}-${pad(Math.min(debt.dueDay, daysInMonth(py, pm)))}`;
+  const since = `${py}-${pad(pm)}-${pad(Math.min(dueDay, daysInMonth(py, pm)))}`;
   return data.tables.transaction
     .filter(
       (t) =>
-        (t.type === 'card_payment' || t.type === 'debt_payment') &&
-        t.debtId === debt.id &&
-        t.date > since &&
-        t.date <= today,
+        t.type === 'card_payment' && t.toAccountId === card.id && t.date > since && t.date <= today,
     )
     .reduce((sum, t) => sum + t.amount, 0);
 }
 
 /**
- * What a card's next payment is: the whole balance when it is paid in full or has no minimum on
- * file, else what is left of its minimum after the payments made since the previous due date
- * (never more than is owed, and 0 once the minimum is paid). A balance already reflects payments,
- * so a card paid in full needs no such step.
+ * What a card's next payment is: the whole of what is owed when it is paid in full or has no
+ * minimum on file, else what is left of its minimum after the payments made since the previous
+ * due date (never more than is owed, and 0 once the minimum is paid). What is owed already
+ * reflects payments, so a card paid in full needs no such step.
  */
 export function cardPayment(
   data: DataSnapshot,
-  debt: Debt,
-  balance: number,
+  card: Account,
+  owed: number,
   today: LocalDate,
 ): { amount: number; inFull: boolean } {
-  const inFull = debt.payInFull || debt.minimumPayment <= 0;
-  if (inFull) return { inFull, amount: balance };
-  const left = debt.minimumPayment - paidThisCycle(data, debt, today);
-  return { inFull, amount: Math.max(0, Math.min(balance, left)) };
+  const minimum = card.credit?.minimumPayment ?? 0;
+  const inFull = (card.credit?.payInFull ?? true) || minimum <= 0;
+  if (inFull) return { inFull, amount: owed };
+  const left = minimum - paidThisCycle(data, card, today);
+  return { inFull, amount: Math.max(0, Math.min(owed, left)) };
 }
 
 /**
  * Subscription renewals from today to `until` (month end unless asked for another day), plus what's
- * due on each credit card: its next due date, whether or not that is before `until`.
+ * due on each credit card in use today: its next due date, whether or not that is before `until`.
  */
 export function upcomingBills(
   data: DataSnapshot,
@@ -161,22 +162,30 @@ export function upcomingBills(
     if (s.status !== 'active') continue;
     for (let d = s.nextRenewal; d <= until; d = nextOccurrence(d, s.cycle, s.anchorDay)) {
       if (d >= today)
-        bills.push({ date: d, name: s.name, amount: s.amount, kind: 'subscription', refId: s.id });
+        bills.push({
+          date: d,
+          name: s.name,
+          amount: s.amount,
+          kind: 'subscription',
+          refId: s.id,
+          accountId: s.accountId,
+        });
     }
   }
-  for (const debt of activeDebts(data.tables.debt)) {
-    if (debt.kind !== 'credit_card') continue;
-    const balance = debtBalance(debt, data, today);
-    if (balance <= 0) continue;
-    const { amount, inFull } = cardPayment(data, debt, balance, today);
+  for (const card of activeAccounts(data.tables.account, today)) {
+    if (card.kind !== 'credit' || !card.credit) continue;
+    const owed = accountBalance(card, data, today);
+    if (owed <= 0) continue;
+    const { amount, inFull } = cardPayment(data, card, owed, today);
     // The minimum is paid for this due date: nothing is due.
     if (amount === 0) continue;
     bills.push({
-      date: nextDueDate(today, debt.dueDay),
-      name: debt.name,
+      date: nextDueDate(today, card.credit.dueDay),
+      name: card.name,
       amount,
       kind: 'card',
-      refId: debt.id,
+      refId: card.id,
+      accountId: card.id,
       inFull,
     });
   }
@@ -190,8 +199,30 @@ export function reservedTotal(data: DataSnapshot, today: LocalDate, weekStartsOn
     .reduce((s, l) => s + Math.max(0, limitStatus(l, data, today, weekStartsOn).remaining), 0);
 }
 
-export function availableBalance(buckets: Buckets, bills: Bill[], reserved: number): number {
-  return buckets.cash + buckets.savings - bills.reduce((s, b) => s + b.amount, 0) - reserved;
+const sumBalances = (rows: AccountRow[]) => rows.reduce((s, r) => s + r.balance, 0);
+
+/**
+ * Available to spend: what the accounts that count in Available hold, less the subscription bills
+ * charged to those accounts, every card bill, and what reserved limits hold back. A subscription
+ * on a credit card is not taken off: it lands on the card and comes back as the card's bill.
+ */
+export function availableBalance(rows: AccountRow[], bills: Bill[], reserved: number): number {
+  const counted = rows.filter((r) => r.account.inAvailable);
+  const inAvailable = new Set(counted.map((r) => r.account.id));
+  const billed = bills
+    .filter((b) => b.kind === 'card' || inAvailable.has(b.accountId))
+    .reduce((s, b) => s + b.amount, 0);
+  return sumBalances(counted) - billed - reserved;
+}
+
+/** Cash in pocket: what the cash accounts hold, with nothing taken off. */
+export function cashInPocket(rows: AccountRow[]): number {
+  return sumBalances(rows.filter((r) => r.account.kind === 'cash'));
+}
+
+/** Saved: what the savings accounts hold. Goals are labels on savings, so they are not added. */
+export function savedTotal(rows: AccountRow[]): number {
+  return sumBalances(rows.filter((r) => r.account.kind === 'savings'));
 }
 
 export function spendingSummary(

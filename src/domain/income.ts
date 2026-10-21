@@ -21,7 +21,7 @@ const sum = (items: Array<{ amount: number }>) => items.reduce((total, i) => tot
 /**
  * What arrived in each of the last `months` calendar months, oldest first, the newest being
  * `today`'s. Only confirmed income counts (an expected or skipped salary never does), and
- * confirmed dividends by the day they were paid, whichever bucket they went to, reinvested ones
+ * confirmed dividends by the day they were paid, whichever account they went to, reinvested ones
  * included. Moving money and balance corrections are not income and are never looked at.
  *
  * shortcut: dividends come from `monthlyIncome`, whose window is twelve months, so `months` is

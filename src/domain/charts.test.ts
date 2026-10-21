@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildDemoSnapshot } from '@/data/demoSeed';
 import {
+  makeAccount,
   makeDebt,
   makeExpense,
   makeHolding,
@@ -20,7 +21,7 @@ import {
   periodProgress,
   spendingByDay,
 } from './charts';
-import type { Category } from './entities';
+import type { Account, Category } from './entities';
 import { emptySnapshot } from './snapshot';
 import { computeFinanceView } from './view';
 
@@ -147,14 +148,36 @@ describe('categorySlices', () => {
 });
 
 describe('net worth over time', () => {
+  /** Main account: 1,000.00 from 1 Sep, and 200.00 spent on 5 Oct. */
   function worth() {
     const data = emptySnapshot();
-    data.tables.profile = [
-      makeProfile({ openingDate: '2026-09-01', openingCash: 1_000_00, openingSavings: 0 }),
-    ];
+    data.tables.profile = [makeProfile({ openingDate: '2026-09-01' })];
+    data.tables.account = [makeAccount({ openingBalance: 1_000_00, openingDate: '2026-09-01' })];
     data.tables.expense = [makeExpense({ date: '2026-10-05', amount: 200_00 })];
     return data;
   }
+
+  /** A credit card's account opened on 1 Sep. */
+  const card = (overrides: Partial<Account> = {}): Account =>
+    makeAccount({
+      id: 'visa',
+      name: 'Visa',
+      kind: 'credit',
+      skin: 'violet',
+      inAvailable: false,
+      openingBalance: 0,
+      openingDate: '2026-09-01',
+      order: 3,
+      credit: {
+        limit: null,
+        statementDay: null,
+        dueDay: 21,
+        payInFull: true,
+        minimumPayment: 0,
+        interestRate: 0,
+      },
+      ...overrides,
+    });
 
   it('computes net worth on a past day and the change this month', () => {
     const data = worth();
@@ -165,6 +188,28 @@ describe('net worth over time', () => {
 
   it('stops counting what an archived card owes from the day it was archived', () => {
     const data = worth();
+    data.tables.account.push(card({ openingBalance: 300_00, archivedOn: '2026-10-10' }));
+    expect(netWorthOn(data, '2026-10-09')).toBe(800_00 - 300_00);
+    expect(netWorthOn(data, '2026-10-10')).toBe(800_00);
+  });
+
+  it('stops counting what an archived bank account holds from the day it was archived', () => {
+    const data = worth();
+    data.tables.account.push(
+      makeAccount({
+        id: 'acct-old',
+        openingBalance: 50_00,
+        openingDate: '2026-09-01',
+        order: 1,
+        archivedOn: '2026-10-10',
+      }),
+    );
+    expect(netWorthOn(data, '2026-10-09')).toBe(800_00 + 50_00);
+    expect(netWorthOn(data, '2026-10-10')).toBe(800_00);
+  });
+
+  it('stops counting what an archived loan owes from the day it was archived', () => {
+    const data = worth();
     data.tables.debt = [
       makeDebt({ openingDate: '2026-09-01', openingBalance: 300_00, archivedOn: '2026-10-10' }),
     ];
@@ -172,23 +217,40 @@ describe('net worth over time', () => {
     expect(netWorthOn(data, '2026-10-10')).toBe(800_00);
   });
 
-  it('subtracts debts as they stood on the day', () => {
+  it('subtracts what a loan owed on the day', () => {
     const data = worth();
     data.tables.debt = [
-      makeDebt({ id: 'visa', openingBalance: 100_00, openingDate: '2026-09-01' }),
+      makeDebt({ id: 'loan-1', openingBalance: 20_00, openingDate: '2026-09-01' }),
     ];
     data.tables.transaction = [
       makeTransaction({
+        type: 'debt_payment',
+        fromAccountId: 'acct-main',
+        toAccountId: null,
+        debtId: 'loan-1',
+        amount: 5_00,
+        date: '2026-10-10',
+      }),
+    ];
+    expect(netWorthOn(data, '2026-10-09')).toBe(800_00 - 20_00);
+    // 5.00 left Main account and 5.00 came off the loan: net worth is unchanged by paying it.
+    expect(netWorthOn(data, '2026-10-10')).toBe(795_00 - 15_00);
+  });
+
+  it('subtracts debts as they stood on the day', () => {
+    const data = worth();
+    data.tables.account.push(card({ openingBalance: 100_00 }));
+    data.tables.transaction = [
+      makeTransaction({
         type: 'card_payment',
-        from: 'cash',
-        to: null,
-        debtId: 'visa',
+        fromAccountId: 'acct-main',
+        toAccountId: 'visa',
         amount: 40_00,
         date: '2026-10-10',
       }),
     ];
     expect(netWorthOn(data, '2026-10-09')).toBe(800_00 - 100_00);
-    // 40.00 left cash and 40.00 left the card: net worth is unchanged by paying it.
+    // 40.00 left Main account and 40.00 left the card: net worth is unchanged by paying it.
     expect(netWorthOn(data, '2026-10-10')).toBe(760_00 - 60_00);
   });
 
@@ -230,7 +292,7 @@ describe('net worth over time', () => {
       fxRate: null,
       asOf: '2026-10-15T10:00:00.000Z',
     };
-    /** 500.00 paid from cash on 10 Sep for 10 shares that are worth 600.00 at today's price. */
+    /** 500.00 paid from Main account on 10 Sep for 10 shares that are worth 600.00 at today's price. */
     const bought = makeHolding({
       id: 'ko',
       shares: 10,
@@ -240,8 +302,8 @@ describe('net worth over time', () => {
     });
     const paid = makeTransaction({
       type: 'investment',
-      from: 'cash',
-      to: null,
+      fromAccountId: 'acct-main',
+      toAccountId: null,
       amount: 500_00,
       date: '2026-09-10',
     });
@@ -327,14 +389,14 @@ describe('net worth over time', () => {
     it('skips a sale whose holding is gone with nothing stored to say when it was bought', () => {
       const data = afterSelling('2026-10-14', 4);
       data.tables.holding = [];
-      // Only the buckets: 1000 − 500 for the purchase, and the proceeds are not yet in.
+      // Only Main account: 1000 − 500 for the purchase, and the proceeds are not yet in.
       expect(netWorthOn(data, '2026-10-13')).toBe(500_00);
       expect(netWorthOn(data, TODAY)).toBe(500_00 + 240_00);
     });
 
     it('does not inflate the change this month by a sale made this month', () => {
       const data = afterSelling('2026-10-10', 10);
-      // Nothing was gained over the month: the 600.00 was investments, and is now cash.
+      // Nothing was gained over the month: the 600.00 was investments, and is now in Main account.
       expect(netWorthChangeThisMonth(data, TODAY)).toBe(0);
       expect(netWorthChangeThisMonth(held(), TODAY)).toBe(0);
     });
