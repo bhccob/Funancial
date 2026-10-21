@@ -10,17 +10,14 @@ import {
   makeSubscription,
   makeTransaction,
 } from '@/test/fixtures';
-import { makeSalaryFreeze } from '@/test/retiredFixtures';
 import { localDateTime } from './dates';
 import type {
-  BuyDecision,
   Debt,
   Dividend,
   Expense,
   Holding,
   Income,
   ReminderSettings,
-  SalaryFreeze,
   Settings,
   Subscription,
 } from './entities';
@@ -47,11 +44,9 @@ const HORIZON_END = '2026-11-13T10:00';
 const ONLY: Partial<ReminderSettings> = {
   dailyLog: false,
   bills: false,
-  freeze: false,
   reviews: false,
   backup: false,
   dividends: false,
-  buyIt: false,
 };
 
 type Setup = {
@@ -68,12 +63,8 @@ type Setup = {
   debts?: Debt[];
   expenses?: Expense[];
   incomes?: Income[];
-  /** Rows an older build saved for the retired Salary freeze feature: nothing reads them. */
-  freezes?: SalaryFreeze[];
   holdings?: Holding[];
   dividends?: Dividend[];
-  /** Rows an older build saved for the retired Buy it? feature: nothing reads them. */
-  decisions?: BuyDecision[];
 };
 
 function build(setup: Setup = {}): DataSnapshot {
@@ -101,10 +92,8 @@ function build(setup: Setup = {}): DataSnapshot {
   data.tables.debt = setup.debts ?? [];
   data.tables.expense = setup.expenses ?? [];
   data.tables.income = setup.incomes ?? [];
-  data.tables.salaryFreeze = setup.freezes ?? [];
   data.tables.holding = setup.holdings ?? [];
   data.tables.dividend = setup.dividends ?? [];
-  data.tables.buyDecision = setup.decisions ?? [];
   return data;
 }
 
@@ -113,16 +102,6 @@ const money = (minor: number) => formatMoney(minor, 'USD');
 const noon = (date: string) => localDateTime(`${date}T12:00`).toISOString();
 const keys = (rs: Reminder[]) => rs.map((r) => r.key);
 const kinds = (rs: Reminder[]) => [...new Set(rs.map((r) => r.kind))].sort();
-
-/** A row the retired Salary freeze saved. */
-const freeze = (over: Partial<SalaryFreeze> = {}): SalaryFreeze =>
-  makeSalaryFreeze({
-    id: 'freeze-1',
-    start: '2026-10-20',
-    end: '2026-10-27',
-    mode: 'manual',
-    ...over,
-  });
 
 /** A card with 230.00 on it, due on the 21st. */
 function visa(over: Partial<Debt> = {}): { debts: Debt[]; expenses: Expense[] } {
@@ -397,20 +376,6 @@ describe('upcomingReminders', () => {
     expect(upcomingReminders(loan, NOW)).toEqual([]);
   });
 
-  describe('Salary freeze is gone', () => {
-    it('brings no reminder for a saved freeze, whatever its switch says', () => {
-      const left = [freeze(), freeze({ id: 'freeze-2', start: '2026-10-01', end: '2026-10-12' })];
-      for (const on of [true, false]) {
-        const setup = { all: true, reminders: { freeze: on } };
-        const bare = build(setup);
-        const saved = build({ ...setup, freezes: left });
-        expect(saved.tables.salaryFreeze).toHaveLength(2);
-        expect(upcomingReminders(saved, NOW)).toEqual(upcomingReminders(bare, NOW));
-        expect(pastReminders(saved, NOW)).toEqual(pastReminders(bare, NOW));
-      }
-    });
-  });
-
   it('schedules weekly and monthly reviews without doubling up on the last day', () => {
     const monday = build({ reminders: { reviews: true }, weekStartsOn: 1 });
     expect(upcomingReminders(monday, NOW).map((r) => [r.key, r.at])).toEqual([
@@ -572,40 +537,11 @@ describe('upcomingReminders', () => {
     expect(upcomingReminders(data, NOW)[0]?.body).toBe('Confirm it when it arrives.');
   });
 
-  describe('Buy it? is gone', () => {
-    /** A row the retired feature saved: the part of it that used to bring a reminder back. */
-    const decision = (over: Record<string, unknown>) =>
-      ({
-        id: 'dec',
-        status: 'open',
-        remindOn: null,
-        boughtOn: null,
-        usage: null,
-        ...over,
-      }) as never;
-    const left: BuyDecision[] = [
-      decision({ id: 'dec-wait', status: 'waiting', remindOn: '2026-10-20' }),
-      decision({ id: 'dec-bought', status: 'bought', boughtOn: '2026-10-10' }),
-    ];
-
-    it('brings no reminder for a saved decision, whatever its switch says', () => {
-      for (const buyIt of [true, false]) {
-        const setup = { all: true, reminders: { buyIt } };
-        const bare = build(setup);
-        const saved = build({ ...setup, decisions: left });
-        expect(saved.tables.buyDecision).toHaveLength(2);
-        expect(upcomingReminders(saved, NOW)).toEqual(upcomingReminders(bare, NOW));
-        expect(pastReminders(saved, NOW)).toEqual(pastReminders(bare, NOW));
-      }
-    });
-  });
-
   it('honours each switch', () => {
     const setup = {
       all: true,
       lastBackupAt: noon('2026-10-07'),
       subscriptions: [makeSubscription({ id: 'sub-tv', nextRenewal: '2026-10-20' })],
-      freezes: [freeze()],
       holdings: [payer({ nextExDate: '2026-10-20', nextPayDate: '2026-10-27' })],
       ...visa(),
     };
@@ -628,8 +564,7 @@ describe('upcomingReminders', () => {
     expect(dropped({ dailyLog: false })).toEqual(['daily-log']);
     expect(dropped({ bills: false })).toEqual(['card-due', 'renewal']);
     expect(dropped({ reviews: false })).toEqual(['monthly-review', 'weekly-review']);
-    // The old freeze and backup switches are still in the data, and drop nothing.
-    expect(dropped({ freeze: false })).toEqual([]);
+    // The old backup switch is still in the data, and drops nothing.
     expect(dropped({ backup: false })).toEqual([]);
     expect(dropped({ dividends: false })).toEqual(['dividend-ex', 'dividend-pay']);
   });
@@ -674,7 +609,6 @@ describe('pastReminders', () => {
     all: true,
     lastBackupAt: noon('2026-10-01'),
     subscriptions: [makeSubscription({ id: 'sub-tv', nextRenewal: '2026-10-15' })],
-    freezes: [freeze({ start: '2026-10-05', end: '2026-10-12' })],
     // Two dividends pay the same morning, so two reminders share one moment.
     holdings: [
       payer({ nextExDate: '2026-10-10', nextPayDate: '2026-10-12' }),
@@ -804,7 +738,7 @@ describe('pastReminders', () => {
     expect(dropped({ bills: false })).toEqual(['card-due', 'renewal']);
     expect(dropped({ reviews: false })).toEqual(['monthly-review', 'weekly-review']);
     expect(dropped({ dividends: false })).toEqual(['dividend-ex', 'dividend-pay']);
-    expect(dropped({ dailyLog: false, backup: false, freeze: false })).toEqual([]);
+    expect(dropped({ dailyLog: false, backup: false })).toEqual([]);
   });
 
   it('keeps one reminder for a key', () => {

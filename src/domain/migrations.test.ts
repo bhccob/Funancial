@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { LATEST_VERSION, migrateRecord } from './migrations';
+import {
+  LATEST_VERSION,
+  migrateRecord,
+  migrateTables,
+  TABLE_STEPS,
+  type RawTables,
+} from './migrations';
 import { CURRENT_SCHEMA_VERSION } from './snapshot';
+import v9edge from './upgrades/__fixtures__/v9-edge.json';
+import { upgradeToV10 } from './upgrades/v10Accounts';
 
 const v1Sub = {
   id: 's1',
@@ -374,7 +382,7 @@ describe('v8 buy decisions and About you', () => {
 
   it('leaves every other record as it was', () => {
     const row = { id: 'h1', symbol: 'KO' };
-    for (const table of ['holding', 'profile', 'transaction', 'buyDecision', 'aboutYou'] as const) {
+    for (const table of ['holding', 'profile', 'transaction'] as const) {
       expect(migrateRecord(table, row, 7)).toEqual(row);
     }
   });
@@ -439,8 +447,94 @@ describe('v9 inbox', () => {
 
   it('leaves every other record as it was', () => {
     const row = { id: 'h1', symbol: 'KO' };
-    for (const table of ['holding', 'profile', 'buyDecision', 'aboutYou'] as const) {
+    for (const table of ['holding', 'profile'] as const) {
       expect(migrateRecord(table, row, 8)).toEqual(row);
     }
+  });
+});
+
+describe('migrateTables', () => {
+  type Log = { id: string; log?: string[] };
+  /** A record step that notes it ran on a row. */
+  const noteRecord =
+    (name: string) =>
+    (r: Record<string, unknown>): Record<string, unknown> => ({
+      ...r,
+      log: [...((r as Log).log ?? []), name],
+    });
+  /** A table step that notes it ran on every settings row. */
+  const noteTable =
+    (name: string) =>
+    (t: RawTables): RawTables => ({
+      ...t,
+      settings: (t.settings ?? []).map((r) => noteRecord(name)(r as Record<string, unknown>)),
+    });
+  const steps = {
+    9: { settings: noteRecord('record 9') },
+    10: { settings: noteRecord('record 10') },
+  };
+  const tableSteps = { 9: noteTable('table 9'), 10: noteTable('table 10') };
+  const logOf = (tables: RawTables) => (tables.settings?.[0] as Log).log;
+
+  it('counts the table steps in the latest version', () => {
+    expect(LATEST_VERSION).toBe(10);
+    expect(TABLE_STEPS[10]).toBe(upgradeToV10);
+  });
+
+  it("runs each version's record step, then its table step, version by version", () => {
+    const tables: RawTables = { settings: [{ id: 'settings' }] };
+    expect(logOf(migrateTables(tables, 8, steps, tableSteps))).toEqual([
+      'record 9',
+      'table 9',
+      'record 10',
+      'table 10',
+    ]);
+    expect(logOf(migrateTables(tables, 9, steps, tableSteps))).toEqual(['record 10', 'table 10']);
+  });
+
+  it('runs record step 9 before table step 10', () => {
+    // A v8 settings row has no inbox: step 9 adds it, then the v10 upgrade sets the default account.
+    const v8 = structuredClone(v9edge.tables) as unknown as RawTables;
+    const settings = { ...(v8.settings![0] as Record<string, unknown>) };
+    delete settings.inbox;
+    v8.settings = [settings];
+    const sawInbox: boolean[] = [];
+    const out = migrateTables(v8, 8, undefined, {
+      10: (t) => {
+        sawInbox.push('inbox' in (t.settings![0] as object));
+        return upgradeToV10(t);
+      },
+    });
+    expect(sawInbox).toEqual([true]);
+    expect(out.settings![0]).toMatchObject({
+      inbox: { readBefore: null, read: [] },
+      defaultAccountId: 'acct-main',
+    });
+    expect((out.account ?? []).length).toBe(5);
+  });
+
+  it('leaves a snapshot already at 10 unchanged', () => {
+    const v10 = upgradeToV10(structuredClone(v9edge.tables) as unknown as RawTables);
+    const before = structuredClone(v10);
+    expect(migrateTables(v10, 10)).toEqual(before);
+    expect(migrateTables(v10, 10, steps, tableSteps)).toEqual(before);
+    expect(v10).toEqual(before);
+  });
+
+  it('runs the holding steps on the holding a sale keeps to restore', () => {
+    const holdingSteps = { 10: { holding: (r: object) => ({ ...r, upgraded: true }) } };
+    const restore = { id: 'h1', symbol: 'KO' };
+    const tables: RawTables = { sale: [{ id: 's1', restore }], holding: [restore] };
+    expect(migrateTables(tables, 9, holdingSteps, {})).toEqual({
+      sale: [{ id: 's1', restore: { ...restore, upgraded: true } }],
+      holding: [{ ...restore, upgraded: true }],
+    });
+  });
+
+  it('does not change the tables it is given, and passes what is not a row through', () => {
+    const tables: RawTables = { settings: [{ id: 'settings' }, null, 'x'] };
+    const out = migrateTables(tables, 8, steps, {});
+    expect(tables).toEqual({ settings: [{ id: 'settings' }, null, 'x'] });
+    expect(out.settings).toEqual([{ id: 'settings', log: ['record 9', 'record 10'] }, null, 'x']);
   });
 });

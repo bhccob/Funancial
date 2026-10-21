@@ -1,12 +1,18 @@
 import type { TableName } from './snapshot';
+import { upgradeToV10 } from './upgrades/v10Accounts';
+
+type RecordStep = (record: Record<string, unknown>) => Record<string, unknown>;
 
 /**
  * Per-record upgrades, keyed by the schema version they produce. Stored rows and an account's copy
  * are migrated record by record on read, so a change to one entity never hides old data.
  */
-type Step = Partial<
-  Record<TableName, (record: Record<string, unknown>) => Record<string, unknown>>
->;
+type Step = Partial<Record<TableName, RecordStep>>;
+
+/** Rows by table name, as stored or as an account's copy holds them: not yet validated. */
+export type RawTables = Record<string, unknown[]>;
+
+type TableStep = (tables: RawTables) => RawTables;
 
 const STEPS: Record<number, Step> = {
   2: {
@@ -66,8 +72,8 @@ const STEPS: Record<number, Step> = {
   // The sale table is new, so it has no old rows to upgrade and no other record changes: a snapshot
   // without it gets an empty one from the schema. The step stays so the version number has one.
   7: {},
-  // The buyDecision and aboutYou tables are new, so a snapshot without them gets empty ones from the
-  // schema. Spelled out like step 3: the Buy it? reminder starts on.
+  // The buyDecision and aboutYou tables were new (v10 drops them again). Spelled out like step 3:
+  // the Buy it? reminder starts on, until v10 takes it away.
   8: {
     settings: (r) =>
       typeof r.reminders === 'object' && r.reminders !== null && !('buyIt' in r.reminders)
@@ -83,24 +89,80 @@ const STEPS: Record<number, Step> = {
   },
 };
 
-export const LATEST_VERSION = Math.max(1, ...Object.keys(STEPS).map(Number));
+/**
+ * Upgrades that have to look across tables, keyed by the schema version they produce. Each runs
+ * after that version's record steps, on every table at once.
+ */
+export const TABLE_STEPS: Record<number, TableStep> = {
+  // Accounts replace the buckets and the credit-card debts; three retired tables go.
+  10: upgradeToV10,
+};
 
-/** `steps` is for tests, to try a step that does not exist yet. */
+export const LATEST_VERSION = Math.max(
+  1,
+  ...Object.keys(STEPS).map(Number),
+  ...Object.keys(TABLE_STEPS).map(Number),
+);
+
+/** One version's record step, applied to one row. Anything that is not a record passes through. */
+function stepRecord(table: string, raw: unknown, step: Step | undefined): unknown {
+  if (typeof raw !== 'object' || raw === null || !step) return raw;
+  let record = raw as Record<string, unknown>;
+  const upgrade = (step as Partial<Record<string, RecordStep>>)[table];
+  if (upgrade) record = upgrade(record);
+  // A sale stores the holding it removed as it was then, so the holding steps upgrade it too.
+  if (
+    table === 'sale' &&
+    step.holding &&
+    typeof record.restore === 'object' &&
+    record.restore !== null
+  ) {
+    record = { ...record, restore: step.holding(record.restore as Record<string, unknown>) };
+  }
+  return record;
+}
+
+/**
+ * One record of `table` brought up from `fromVersion`, by the record steps alone: for a single row
+ * from v9 or before (a sale's `restore` holding), which no table step changes.
+ * `steps` is for tests, to try a step that does not exist yet.
+ */
 export function migrateRecord(
   table: TableName,
   raw: unknown,
   fromVersion: number,
   steps: Record<number, Step> = STEPS,
 ): unknown {
-  if (typeof raw !== 'object' || raw === null) return raw;
-  let record = raw as Record<string, unknown>;
+  let record = raw;
   for (let v = fromVersion + 1; v <= LATEST_VERSION; v++) {
-    const step = steps[v]?.[table];
-    if (step) record = step(record);
-  }
-  // A sale stores the holding it removed as it was then, so the holding steps upgrade it too.
-  if (table === 'sale' && typeof record.restore === 'object' && record.restore !== null) {
-    record = { ...record, restore: migrateRecord('holding', record.restore, fromVersion, steps) };
+    record = stepRecord(table, record, steps[v]);
   }
   return record;
+}
+
+/**
+ * Every table brought up from `fromVersion`: version by version, the record step of that version
+ * on each row, then its table step. The one upgrade path for stored rows and an account's copy.
+ * The tables given are not changed. `steps` and `tableSteps` are for tests.
+ */
+export function migrateTables(
+  tables: RawTables,
+  fromVersion: number,
+  steps: Record<number, Step> = STEPS,
+  tableSteps: Record<number, TableStep> = TABLE_STEPS,
+): RawTables {
+  let out = tables;
+  for (let v = fromVersion + 1; v <= LATEST_VERSION; v++) {
+    const step = steps[v];
+    if (step) {
+      const stepped: RawTables = {};
+      for (const [name, rows] of Object.entries(out)) {
+        stepped[name] = Array.isArray(rows) ? rows.map((r) => stepRecord(name, r, step)) : rows;
+      }
+      out = stepped;
+    }
+    const tableStep = tableSteps[v];
+    if (tableStep) out = tableStep(out);
+  }
+  return out;
 }

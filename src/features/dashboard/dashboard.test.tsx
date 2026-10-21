@@ -29,7 +29,6 @@ import {
   makeSettings,
   makeSubscription,
 } from '@/test/fixtures';
-import { makeSalaryFreeze } from '@/test/retiredFixtures';
 import { DashboardScreen } from './DashboardScreen';
 
 const actions = vi.hoisted(() => ({
@@ -854,22 +853,10 @@ describe('DashboardScreen salary', () => {
     expect(actions.skipIncome).toHaveBeenCalledWith('salary-2026-10');
   });
 
-  it('shows no freeze banner, even with a salary freeze row in the data', () => {
-    const data = structuredClone(sal.data);
-    data.tables.salaryFreeze = [makeSalaryFreeze({ start: '2026-10-01', end: '2026-10-03' })];
-    renderDashboard(data, '2026-10-02');
+  it('shows no freeze banner', () => {
+    renderDashboard(structuredClone(sal.data), '2026-10-02');
     expect(screen.queryByText(/Salary freeze/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Bills and subscriptions still apply/)).not.toBeInTheDocument();
-  });
-
-  it('expects the full salary while a salary freeze row is left in the data', () => {
-    const today = '2026-10-25';
-    const data = structuredClone(sal.data);
-    data.tables.salaryFreeze = [makeSalaryFreeze({ start: '2026-10-01', end: '2026-10-10' })];
-    renderDashboard(applyRecords(data, dueGenerated(data, today)), today);
-    expect(
-      screen.getByText(`Your ${october} salary is expected: ${usd(3_000_00)}. Did it arrive?`),
-    ).toBeInTheDocument();
   });
 
   it('puts the banners between the top line and the amount', () => {

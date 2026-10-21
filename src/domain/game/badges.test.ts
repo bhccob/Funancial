@@ -10,8 +10,6 @@ import {
   makeProfile,
   makeSubscription,
 } from '@/test/fixtures';
-import { makeSalaryFreeze } from '@/test/retiredFixtures';
-import type { SalaryFreeze } from '../entities';
 import { emptySnapshot, type DataSnapshot } from '../snapshot';
 import { BADGES, badgeAwards, badgeViews } from './badges';
 import type { BadgeId, GameContext } from './types';
@@ -37,20 +35,6 @@ const limitSince = (since: string) => makeLimit({ createdAt: localIso(since) });
 /** A food expense logged at noon on `day`, dated `day`. */
 const spent = (day: string, amount: number) =>
   makeExpense({ date: day, amount, category: 'food', createdAt: localIso(day) });
-
-/** A row the retired Salary freeze saved. */
-function freeze(start: string, end: string): SalaryFreeze {
-  const stamp = localIso(start);
-  return makeSalaryFreeze({
-    id: `freeze-${start}`,
-    createdAt: stamp,
-    updatedAt: stamp,
-    start,
-    end,
-    mode: 'manual',
-    lostAmount: 0,
-  });
-}
 
 describe('BADGES', () => {
   it('lists the eight badges in order', () => {
@@ -178,13 +162,6 @@ describe('badgeAwards', () => {
       expense: [spent('2026-07-10', 200_00), spent('2026-08-12', 200_00)],
     });
     expect(earned(data)).toEqual(['first-expense', 'limit-keeper']);
-  });
-
-  it('earns nothing from a salary freeze that ended cleanly', () => {
-    const limit = limitSince('2026-10-01');
-    const data = snap({ salaryFreeze: [freeze('2026-10-01', '2026-10-07')], budgetLimit: [limit] });
-    expect(earned(data)).toEqual([]);
-    expect(badgeAwards(data, ctx)).toEqual([]);
   });
 
   it('earns First ETF from an ETF holding, not from a stock', () => {

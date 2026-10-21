@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  makeAccount,
   makeDividend,
   makeExpense,
   makeHolding,
@@ -8,15 +9,16 @@ import {
   makeSettings,
   makeSubscription,
 } from '@/test/fixtures';
-import { makeAboutYou, makeBuyDecision } from '@/test/retiredFixtures';
 import {
   CURRENT_SCHEMA_VERSION,
   emptySnapshot,
+  freshStart,
   migrateSnapshot,
   SchemaVersionError,
   SnapshotSchema,
   TABLES,
 } from './snapshot';
+import v9edge from './upgrades/__fixtures__/v9-edge.json';
 
 describe('emptySnapshot', () => {
   it('has every table and validates', () => {
@@ -204,61 +206,23 @@ describe('sales (v7)', () => {
   });
 });
 
-describe('buy decisions and About you (v8)', () => {
-  it('gives a v7 snapshot empty decision and About you tables and the Buy it? reminder', () => {
-    const { buyDecision, aboutYou, ...tables } = emptySnapshot().tables;
-    expect([buyDecision, aboutYou]).toEqual([[], []]);
-    const old: Record<string, unknown> = { ...makeSettings() };
-    const { buyIt, ...reminders } = makeSettings().reminders;
-    expect(buyIt).toBe(true);
-    old.reminders = reminders;
-    const v7 = {
-      schemaVersion: 7,
-      tables: { ...tables, settings: [old], holding: [makeHolding({ id: 'h1' })] },
-    };
-    const s = migrateSnapshot(v7);
-    expect(s.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
-    expect(s.tables.buyDecision).toEqual([]);
-    expect(s.tables.aboutYou).toEqual([]);
-    expect(s.tables.settings[0]!.reminders).toEqual(makeSettings().reminders);
-    expect(s.tables.holding).toEqual(v7.tables.holding);
-  });
-
-  it('keeps decisions and the About you record through a round trip', () => {
-    const s = emptySnapshot();
-    s.tables.buyDecision = [makeBuyDecision({ id: 'b1' }), makeBuyDecision({ id: 'b2', usage: 4 })];
-    s.tables.aboutYou = [makeAboutYou({ situation: 'Renting.' })];
-    expect(migrateSnapshot(JSON.parse(JSON.stringify(s)))).toEqual(s);
-  });
-
-  it('holds at most one About you record, and no duplicate decision ids', () => {
-    const two = emptySnapshot();
-    two.tables.aboutYou = [makeAboutYou(), makeAboutYou()];
-    expect(SnapshotSchema.safeParse(two).success).toBe(false);
-    const dup = emptySnapshot();
-    dup.tables.buyDecision = [makeBuyDecision({ id: 'b1' }), makeBuyDecision({ id: 'b1' })];
-    expect(SnapshotSchema.safeParse(dup).success).toBe(false);
-  });
-
-  it('names the new tables and the version', () => {
-    expect(TABLES).toContain('buyDecision');
-    expect(TABLES).toContain('aboutYou');
-  });
-});
-
 describe('the inbox (v9)', () => {
   const empty = { readBefore: null, read: [] };
   const current = makeSettings();
 
-  /** Settings as a build before v9 stored them: no inbox, and from v7 back, no Buy it? reminder. */
+  /**
+   * Settings as a build before v9 stored them: no inbox and no default account, with the Salary
+   * freeze switch, and from v8 on the Buy it? one.
+   */
   function oldSettings(version: 7 | 8): Record<string, unknown> {
     const old: Record<string, unknown> = { ...current };
     delete old.inbox;
-    if (version === 7) {
-      const reminders: Record<string, unknown> = { ...current.reminders };
-      delete reminders.buyIt;
-      old.reminders = reminders;
-    }
+    delete old.defaultAccountId;
+    old.reminders = {
+      ...current.reminders,
+      freeze: true,
+      ...(version === 8 ? { buyIt: false } : {}),
+    };
     return old;
   }
 
@@ -271,14 +235,13 @@ describe('the inbox (v9)', () => {
     expect(s.tables.holding).toEqual(tables.holding);
   });
 
-  it("takes the owner's v7 data all the way: no decision tables, Buy it? on, an empty inbox", () => {
-    const { buyDecision, aboutYou, ...tables } = emptySnapshot().tables;
-    expect([buyDecision, aboutYou]).toEqual([[], []]);
-    const v7 = { schemaVersion: 7, tables: { ...tables, settings: [oldSettings(7)] } };
+  it("takes the owner's v7 data all the way: an empty inbox, and no retired switch", () => {
+    const v7 = {
+      schemaVersion: 7,
+      tables: { ...emptySnapshot().tables, settings: [oldSettings(7)] },
+    };
     const s = migrateSnapshot(v7);
     expect(s.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
-    expect(s.tables.buyDecision).toEqual([]);
-    expect(s.tables.aboutYou).toEqual([]);
     expect(s.tables.settings).toEqual([{ ...current, inbox: empty }]);
   });
 
@@ -294,8 +257,109 @@ describe('the inbox (v9)', () => {
     ];
     expect(migrateSnapshot(JSON.parse(JSON.stringify(s)))).toEqual(s);
   });
+});
+
+describe('accounts (v10)', () => {
+  const v9 = () => structuredClone(v9edge) as unknown;
 
   it('is the current version', () => {
-    expect(CURRENT_SCHEMA_VERSION).toBe(9);
+    expect(CURRENT_SCHEMA_VERSION).toBe(10);
+  });
+
+  it('names the account table after settings, and none of the removed ones', () => {
+    expect(TABLES.slice(0, 3)).toEqual(['profile', 'settings', 'account']);
+    for (const gone of ['salaryFreeze', 'buyDecision', 'aboutYou']) {
+      expect(TABLES).not.toContain(gone);
+    }
+  });
+
+  it('upgrades a v9 snapshot to accounts and drops the removed tables', () => {
+    const s = migrateSnapshot(v9());
+    expect(s.schemaVersion).toBe(10);
+    expect(s.tables.account.map((a) => a.id)).toEqual([
+      'acct-main',
+      'acct-savings',
+      'acct-passive',
+      'card-a',
+      'card-b',
+    ]);
+    expect(s.tables.debt.map((d) => d.id)).toEqual(['loan-1']);
+    expect(s.tables.settings[0]!.defaultAccountId).toBe('acct-main');
+    for (const gone of ['salaryFreeze', 'buyDecision', 'aboutYou']) {
+      expect(s.tables).not.toHaveProperty(gone);
+    }
+  });
+
+  it('upgrades a v9 snapshot the same way every time, and leaves the input as it was', () => {
+    const raw = v9();
+    const before = structuredClone(raw);
+    expect(migrateSnapshot(raw)).toEqual(migrateSnapshot(v9()));
+    expect(raw).toEqual(before);
+  });
+
+  it('keeps accounts through a round trip', () => {
+    const s = emptySnapshot();
+    s.tables.account = [
+      makeAccount(),
+      makeAccount({ id: 'acct-savings', name: 'Savings', kind: 'savings', order: 1 }),
+      makeAccount({
+        id: 'card-1',
+        name: 'Visa',
+        kind: 'credit',
+        skin: 'violet',
+        last4: '0042',
+        order: 2,
+        archivedOn: '2026-09-01',
+        credit: {
+          limit: null,
+          statementDay: null,
+          dueDay: 21,
+          payInFull: true,
+          minimumPayment: 0,
+          interestRate: 0,
+        },
+      }),
+    ];
+    expect(migrateSnapshot(JSON.parse(JSON.stringify(s)))).toEqual(s);
+  });
+
+  it('gives a current snapshot without an account table an empty one', () => {
+    const { account, ...tables } = emptySnapshot().tables;
+    expect(account).toEqual([]);
+    expect(migrateSnapshot({ schemaVersion: 10, tables }).tables.account).toEqual([]);
+  });
+
+  it('rejects duplicate account ids', () => {
+    const s = emptySnapshot();
+    s.tables.account = [makeAccount(), makeAccount()];
+    expect(SnapshotSchema.safeParse(s).success).toBe(false);
+  });
+});
+
+describe('freshStart', () => {
+  it('leaves no accounts and no default account, and keeps the name and currency', () => {
+    const data = emptySnapshot();
+    data.tables.profile = [
+      makeProfile({ name: 'Ana', currency: 'EUR', openingDate: '2026-01-01' }),
+    ];
+    data.tables.settings = [makeSettings({ defaultAccountId: 'acct-main', weekStartsOn: 0 })];
+    data.tables.account = [makeAccount()];
+    data.tables.expense = [makeExpense()];
+    const now = '2026-10-21T09:00:00.000Z';
+    const fresh = freshStart(data, '2026-10-21', now);
+    expect(fresh.tables.account).toEqual([]);
+    expect(fresh.tables.expense).toEqual([]);
+    expect(fresh.tables.settings).toEqual([
+      { ...data.tables.settings[0], defaultAccountId: null, updatedAt: now },
+    ]);
+    expect(fresh.tables.profile[0]).toMatchObject({
+      name: 'Ana',
+      currency: 'EUR',
+      openingDate: '2026-10-21',
+      salary: null,
+      onboardedAt: null,
+      updatedAt: now,
+    });
+    expect(SnapshotSchema.safeParse(fresh).success).toBe(true);
   });
 });

@@ -1,6 +1,7 @@
 import { addDays, toLocalDate, type LocalDate } from '@/domain/dates';
 import {
   defaultSettings,
+  type Account,
   type BudgetLimit,
   type Challenge,
   type CheckIn,
@@ -42,16 +43,34 @@ export function makeProfile(overrides: Partial<Profile> = {}): Profile {
     name: 'Test Player',
     currency: 'USD',
     openingDate: today(),
-    openingCash: 100_000,
-    openingSavings: 500_000,
     salary: { monthlyAmount: 420_000, payDay: 25 },
     onboardedAt: null,
     ...overrides,
   };
 }
 
+/** Settings as `defaultSettings` makes them: no default account until setup names one. */
 export function makeSettings(overrides: Partial<Settings> = {}): Settings {
   return { ...defaultSettings(nowIso()), ...overrides };
+}
+
+/** Main account: a debit account the money rows below are paid from and into by default. */
+export function makeAccount(overrides: Partial<Account> = {}): Account {
+  return {
+    id: 'acct-main',
+    ...stamp(),
+    name: 'Main account',
+    kind: 'debit',
+    skin: 'midnight',
+    last4: null,
+    openingBalance: 100_000,
+    openingDate: today(),
+    inAvailable: true,
+    frozen: false,
+    order: 0,
+    credit: null,
+    ...overrides,
+  };
 }
 
 export function makeExpense(overrides: Partial<Expense> = {}): Expense {
@@ -62,8 +81,7 @@ export function makeExpense(overrides: Partial<Expense> = {}): Expense {
     category: 'food',
     date: today(),
     note: '',
-    paymentMethod: 'cash',
-    cardId: null,
+    accountId: 'acct-main',
     recurrence: null,
     subscriptionId: null,
     ...overrides,
@@ -79,7 +97,7 @@ export function makeIncome(overrides: Partial<Income> = {}): Income {
     label: 'Salary',
     date: today(),
     status: 'confirmed',
-    bucket: 'cash',
+    accountId: 'acct-main',
     recurrence: null,
     period: today().slice(0, 7),
     note: '',
@@ -98,8 +116,7 @@ export function makeSubscription(overrides: Partial<Subscription> = {}): Subscri
     nextRenewal,
     anchorDay: Number(nextRenewal.slice(8, 10)),
     category: 'entertainment',
-    paymentMethod: 'debit',
-    cardId: null,
+    accountId: 'acct-main',
     status: 'active',
     audit: null,
     auditedAt: null,
@@ -123,20 +140,21 @@ export function makeLimit(overrides: Partial<BudgetLimit> = {}): BudgetLimit {
   };
 }
 
+/** A loan: credit cards are accounts (`makeAccount({ kind: 'credit', credit: … })`). */
 export function makeDebt(overrides: Partial<Debt> = {}): Debt {
   return {
     id: newId(),
     ...stamp(),
-    name: 'Visa',
-    kind: 'credit_card',
+    name: 'Car loan',
+    kind: 'loan',
     openingBalance: 0,
     openingDate: today(),
-    interestRate: 22.9,
-    minimumPayment: 25_00,
-    creditLimit: 300_000,
-    statementDay: 1,
-    dueDay: 21,
-    payInFull: true,
+    interestRate: 6.5,
+    minimumPayment: 100_00,
+    creditLimit: null,
+    statementDay: null,
+    dueDay: null,
+    payInFull: false,
     ...overrides,
   };
 }
@@ -161,8 +179,8 @@ export function makeTransaction(overrides: Partial<Transaction> = {}): Transacti
     type: 'transfer',
     amount: 100_00,
     date: today(),
-    from: 'cash',
-    to: 'savings',
+    fromAccountId: 'acct-main',
+    toAccountId: 'acct-savings',
     debtId: null,
     note: '',
     ...overrides,
@@ -249,7 +267,8 @@ export function makeDividend(overrides: Partial<Dividend> = {}): Dividend {
     paidOn: today(),
     status: 'confirmed',
     amount: 11_20,
-    bucket: 'cash',
+    accountId: 'acct-main',
+    reinvested: false,
     sharesAdded: null,
     ...overrides,
   };
@@ -267,7 +286,7 @@ export function makeSale(overrides: Partial<Sale> = {}): Sale {
     proceeds: 300_00,
     cost: 250_00,
     soldOn: today(),
-    to: 'cash',
+    toAccountId: 'acct-main',
     restore: null,
     ...overrides,
   };

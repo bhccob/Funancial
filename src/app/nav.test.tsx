@@ -18,7 +18,6 @@ import {
   makeProfile,
   makeSubscription,
 } from '@/test/fixtures';
-import { makeSalaryFreeze } from '@/test/retiredFixtures';
 import { MENU_GROUPS } from './menu';
 import { appRouteObjects } from './router';
 
@@ -30,10 +29,7 @@ function renderAt(path: string, data: DataSnapshot = emptySnapshot()) {
   return router;
 }
 
-/**
- * Two active subscriptions ($15.99 a month and $120 a year), one cancelled, two goals, 130 coins,
- * and a salary freeze an older build saved, which no row reads.
- */
+/** Two active subscriptions ($15.99 a month and $120 a year), one cancelled, two goals, 130 coins. */
 function liveData(): DataSnapshot {
   const data = emptySnapshot();
   data.tables.profile.push(makeProfile({ currency: 'USD' }));
@@ -46,7 +42,6 @@ function liveData(): DataSnapshot {
     makeGoal({ target: 1_000_00, current: 250_00 }),
     makeGoal({ target: 500_00, current: 250_00 }),
   );
-  data.tables.salaryFreeze.push(makeSalaryFreeze({ start: '2026-10-10', end: '2026-10-20' }));
   data.tables.ledger.push(makeLedgerEntry({ coins: 130, xp: 0 }));
   return data;
 }
@@ -296,15 +291,6 @@ describe('Menu sheet', () => {
     expect(row(sheet, 'Goals')).toHaveTextContent('None yet');
     expect(row(sheet, 'Debts')).toHaveTextContent('None yet');
     expect(row(sheet, 'Shop')).toHaveTextContent('0 coins to spend');
-  });
-
-  it('has no Salary freeze row, whatever an older build saved', async () => {
-    const data = emptySnapshot();
-    data.tables.salaryFreeze.push(makeSalaryFreeze({ start: '2026-10-10', end: '2026-10-20' }));
-    renderAt('/', data);
-    const sheet = await openMenu();
-    expect(within(sheet).queryByRole('link', { name: /^Salary freeze/ })).not.toBeInTheDocument();
-    expect(within(sheet).queryByRole('link', { name: /freeze/i })).not.toBeInTheDocument();
   });
 
   it('uses the singular for one goal and one coin', async () => {

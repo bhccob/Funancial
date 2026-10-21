@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { makeDebt, makeHolding, makeProfile, makeTransaction } from '@/test/fixtures';
-import { makeSalaryFreeze } from '@/test/retiredFixtures';
 import { EXAMPLES } from './examples';
 import { emptySnapshot } from './snapshot';
 import { computeFinanceView } from './view';
@@ -92,7 +91,7 @@ describe('computeFinanceView', () => {
     expect(v.netWorth).toBe(1_600_00);
   });
 
-  it('has no active freeze, even with a salary freeze row covering today', () => {
+  it('has no active freeze', () => {
     const data = emptySnapshot();
     data.tables.profile = [
       makeProfile({
@@ -100,7 +99,6 @@ describe('computeFinanceView', () => {
         salary: { monthlyAmount: 3_000_00, payDay: 25 },
       }),
     ];
-    data.tables.salaryFreeze = [makeSalaryFreeze({ start: '2026-10-10', end: '2026-10-20' })];
     const v = computeFinanceView(data, '2026-10-14', 1);
     expect(v).not.toHaveProperty('activeFreeze');
     expect(v.expectedSalaryThisMonth).toBe(3_000_00);

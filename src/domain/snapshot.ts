@@ -1,8 +1,7 @@
 import { z } from 'zod';
 import {
-  AboutYouSchema,
+  AccountSchema,
   BudgetLimitSchema,
-  BuyDecisionSchema,
   ChallengeSchema,
   CheckInSchema,
   DebtSchema,
@@ -13,7 +12,6 @@ import {
   IncomeSchema,
   LedgerEntrySchema,
   ProfileSchema,
-  SalaryFreezeSchema,
   SaleSchema,
   SettingsSchema,
   StreakFreezeSchema,
@@ -21,16 +19,16 @@ import {
   TransactionSchema,
 } from './entities';
 import type { LocalDate } from './dates';
-import { migrateRecord } from './migrations';
+import { migrateTables, type RawTables } from './migrations';
 
 export const TABLES = [
   'profile',
   'settings',
+  'account',
   'income',
   'expense',
   'subscription',
   'budgetLimit',
-  'salaryFreeze',
   'transaction',
   'goal',
   'debt',
@@ -41,19 +39,17 @@ export const TABLES = [
   'holding',
   'dividend',
   'sale',
-  'buyDecision',
-  'aboutYou',
 ] as const;
 export type TableName = (typeof TABLES)[number];
 
 export const SCHEMAS = {
   profile: ProfileSchema,
   settings: SettingsSchema,
+  account: AccountSchema,
   income: IncomeSchema,
   expense: ExpenseSchema,
   subscription: SubscriptionSchema,
   budgetLimit: BudgetLimitSchema,
-  salaryFreeze: SalaryFreezeSchema,
   transaction: TransactionSchema,
   goal: GoalSchema,
   debt: DebtSchema,
@@ -64,21 +60,19 @@ export const SCHEMAS = {
   holding: HoldingSchema,
   dividend: DividendSchema,
   sale: SaleSchema,
-  buyDecision: BuyDecisionSchema,
-  aboutYou: AboutYouSchema,
 } satisfies Record<TableName, z.ZodType>;
 
 export type EntityMap = { [K in TableName]: z.infer<(typeof SCHEMAS)[K]> };
 export type EntityOf<T extends TableName> = EntityMap[T];
 
-export const CURRENT_SCHEMA_VERSION = 9;
+export const CURRENT_SCHEMA_VERSION = 10;
 
 /** One record tagged with its table, for batch writes. */
 export type TableRecord = { [K in TableName]: { table: K; record: EntityOf<K> } }[TableName];
 /** Names one stored record, to remove it. */
 export type RecordKey = { table: TableName; id: string };
 
-const SINGLETONS = new Set<TableName>(['profile', 'settings', 'aboutYou']);
+const SINGLETONS = new Set<TableName>(['profile', 'settings']);
 
 function table<T extends z.ZodType<{ id: string }>>(name: TableName, schema: T) {
   return z
@@ -92,11 +86,12 @@ export const SnapshotSchema = z.object({
   tables: z.object({
     profile: table('profile', ProfileSchema),
     settings: table('settings', SettingsSchema),
+    // Added in v10, which builds it out of the profile and the card debts.
+    account: table('account', AccountSchema).default([]),
     income: table('income', IncomeSchema),
     expense: table('expense', ExpenseSchema),
     subscription: table('subscription', SubscriptionSchema),
     budgetLimit: table('budgetLimit', BudgetLimitSchema),
-    salaryFreeze: table('salaryFreeze', SalaryFreezeSchema),
     transaction: table('transaction', TransactionSchema),
     goal: table('goal', GoalSchema),
     debt: table('debt', DebtSchema),
@@ -110,9 +105,6 @@ export const SnapshotSchema = z.object({
     dividend: table('dividend', DividendSchema).default([]),
     // Added in v7.
     sale: table('sale', SaleSchema).default([]),
-    // Added in v8.
-    buyDecision: table('buyDecision', BuyDecisionSchema).default([]),
-    aboutYou: table('aboutYou', AboutYouSchema).default([]),
   }),
 });
 
@@ -127,11 +119,11 @@ export function emptySnapshot(): DataSnapshot {
     tables: {
       profile: [],
       settings: [],
+      account: [],
       income: [],
       expense: [],
       subscription: [],
       budgetLimit: [],
-      salaryFreeze: [],
       transaction: [],
       goal: [],
       debt: [],
@@ -142,26 +134,26 @@ export function emptySnapshot(): DataSnapshot {
       holding: [],
       dividend: [],
       sale: [],
-      buyDecision: [],
-      aboutYou: [],
     },
   };
 }
 
 /**
  * What Delete all data leaves when there is an account: the settings, and the name and currency
- * for setup to start from. Everything added goes, with the game progress it earned; the money
- * starts again today, from what setup asks.
+ * for setup to start from. Everything added goes, the accounts with it, and the game progress it
+ * earned; the money starts again today, from what setup asks.
  */
 export function freshStart(data: DataSnapshot, today: LocalDate, now: string): DataSnapshot {
   const fresh = emptySnapshot();
-  fresh.tables.settings = data.tables.settings;
+  fresh.tables.settings = data.tables.settings.map((s) => ({
+    ...s,
+    updatedAt: now,
+    defaultAccountId: null,
+  }));
   fresh.tables.profile = data.tables.profile.map((p) => ({
     ...p,
     updatedAt: now,
     openingDate: today,
-    openingCash: 0,
-    openingSavings: 0,
     salary: null,
     onboardedAt: null,
   }));
@@ -181,7 +173,7 @@ export class SchemaVersionError extends Error {
 
 /**
  * Bring stored or imported data up to the current schema, then validate it.
- * Older snapshots are upgraded record by record (see migrations.ts). Throws SchemaVersionError
+ * Older snapshots are upgraded by `migrateTables` (see migrations.ts). Throws SchemaVersionError
  * for data from a newer app, and ZodError for anything malformed.
  */
 export function migrateSnapshot(raw: unknown): DataSnapshot {
@@ -201,12 +193,9 @@ export function migrateSnapshot(raw: unknown): DataSnapshot {
 function upgradeTables(raw: { tables?: unknown }, fromVersion: number): unknown {
   const tables = raw.tables;
   if (typeof tables !== 'object' || tables === null) return raw;
-  const upgraded: Record<string, unknown> = {};
-  for (const [name, rows] of Object.entries(tables)) {
-    upgraded[name] =
-      Array.isArray(rows) && (TABLES as readonly string[]).includes(name)
-        ? rows.map((r) => migrateRecord(name as TableName, r, fromVersion))
-        : rows;
-  }
-  return { ...raw, tables: upgraded, schemaVersion: CURRENT_SCHEMA_VERSION };
+  return {
+    ...raw,
+    tables: migrateTables(tables as RawTables, fromVersion),
+    schemaVersion: CURRENT_SCHEMA_VERSION,
+  };
 }

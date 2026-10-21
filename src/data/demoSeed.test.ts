@@ -99,8 +99,7 @@ describe('demo seed', () => {
     ]);
   });
 
-  it('pays the full salary on each pay day, and has no salary freeze', () => {
-    expect(t.salaryFreeze).toEqual([]);
+  it('pays the full salary on each pay day', () => {
     expect(t.income.map((i) => [i.date, i.period, i.amount, i.status])).toEqual([
       ['2026-08-25', '2026-08', 4_200_00, 'confirmed'],
       ['2026-09-25', '2026-09', 4_200_00, 'confirmed'],
@@ -248,12 +247,5 @@ describe('demo investments', () => {
         note: 'Bought AAPL',
       },
     ]);
-  });
-});
-
-describe('demo without Buy it? and About you', () => {
-  it('holds no decisions and no About you record', () => {
-    expect(t.buyDecision).toEqual([]);
-    expect(t.aboutYou).toEqual([]);
   });
 });

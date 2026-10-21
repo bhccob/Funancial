@@ -8,7 +8,6 @@ export const INBOX_NOW = new Date(2026, 9, 14, 10, 0);
 const ONLY_THESE: Partial<ReminderSettings> = {
   dailyLog: false,
   bills: true,
-  freeze: false,
   reviews: true,
   backup: false,
   dividends: false,
