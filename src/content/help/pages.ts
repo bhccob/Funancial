@@ -68,9 +68,10 @@ export const HELP_PAGES: HelpPage[] = [
     group: 'numbers',
     body: [
       'Available to spend is the money you can use now without touching money that is already spoken for.',
-      'It starts with your cash and savings. Then it takes away the bills still to come this month, plus the next payment due on each credit card. It also takes away the unspent part of any limit you chose to reserve.',
-      'Investments, passive income and pay that is only expected are not part of it.',
-      'If it is lower than your cash plus savings, those bills and reserved limits are the reason.',
+      'It starts with the money in your bank accounts and your cash. Then it takes away the bills still to come this month, plus the next payment due on each credit card. It also takes away the unspent part of any limit you chose to reserve.',
+      "A subscription charged to a credit card is not taken off on its own. It lands on the card on the renewal day, and comes back as the card's next payment.",
+      'Savings are not part of it. They are shown apart, as Saved. Investments, passive income and pay that is only expected are not part of it either.',
+      'If it is lower than the money in your bank accounts and cash, those bills and reserved limits are the reason.',
     ],
     exampleIds: ['AVL-1'],
   },
@@ -107,7 +108,8 @@ export const HELP_PAGES: HelpPage[] = [
     group: 'numbers',
     body: [
       'A subscription is a bill that repeats. Once its renewal falls in the current month it is an upcoming bill: it lowers Available to spend, and your cash stays where it is.',
-      'On the renewal day Funcial records the charge as an expense, and your cash drops. The next renewal moves forward by one cycle.',
+      "A subscription charged to a credit card does not lower Available to spend by itself. It lands on the card on the renewal day, and shows up in the card's next payment instead.",
+      'On the renewal day Funcial records the charge as an expense, and the money drops from the account it is charged to. The next renewal moves forward by one cycle.',
       'Renewals count toward your limits like any other expense.',
     ],
     exampleIds: ['SUB-1'],

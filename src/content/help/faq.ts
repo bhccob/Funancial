@@ -1,7 +1,7 @@
 export const FAQ: Array<{ q: string; a: string }> = [
   {
-    q: 'Why is my available lower than my cash plus savings?',
-    a: 'Available to spend also takes away the bills still to come this month, plus the next payment due on each credit card, and the money you reserved for limits.',
+    q: 'Why is my available lower than the money in my bank accounts and cash?',
+    a: 'Available to spend also takes away the bills still to come this month, plus the next payment due on each credit card, and the money you reserved for limits. Savings are not in it: they are shown apart, as Saved.',
   },
   {
     q: "Why didn't my cash drop when I paid by card?",

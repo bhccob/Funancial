@@ -242,7 +242,7 @@ describe('DashboardScreen hero', () => {
     const avl = example('AVL-1');
     renderDashboard(avl.data, avl.today);
     const hero = region('Available to spend');
-    const amount = within(hero).getByText(usd(2_654_01));
+    const amount = within(hero).getByText(usd(1_054_01));
     expect(amount).toHaveClass('text-[50px]');
     expect(amount).not.toHaveClass('text-[40px]');
   });

@@ -23,7 +23,8 @@ const WINDOW_DAYS = 60;
 const MONTHLY_SALARY = 4_200_00;
 const PAY_DAY = 25;
 const CARD_ID = 'demo-card';
-const CASH_ID = 'acct-cash';
+/** The Cash wallet. */
+export const CASH_ACCOUNT_ID = 'acct-cash';
 /**
  * What the Cash wallet holds on the day the demo starts. It opens with this plus everything spent
  * from it, so it ends there for any day and seed.
@@ -191,7 +192,7 @@ export function buildDemoSnapshot(today: LocalDate, seed = 42): DataSnapshot {
       const kind = EVERYDAY.find((c) => (roll -= c.weight) < 0) ?? EVERYDAY[0]!;
       const r = rand();
       // About 30% on the card, 20% from the Cash wallet, the rest from Main account.
-      const accountId = r < 0.3 ? CARD_ID : r < 0.5 ? CASH_ID : MAIN_ACCOUNT_ID;
+      const accountId = r < 0.3 ? CARD_ID : r < 0.5 ? CASH_ACCOUNT_ID : MAIN_ACCOUNT_ID;
       t.expense.push(
         expense(date, kind.category, between(kind.min, kind.max), pick(kind.notes), accountId),
       );
@@ -478,7 +479,7 @@ export function buildDemoSnapshot(today: LocalDate, seed = 42): DataSnapshot {
   // The accounts, after the spending, because the Cash wallet opens with whatever leaves it
   // plus what it holds on the day the demo starts.
   const cashSpent = t.expense
-    .filter((e) => e.accountId === CASH_ID)
+    .filter((e) => e.accountId === CASH_ACCOUNT_ID)
     .reduce((sum, e) => sum + e.amount, 0);
   const account = (
     a: Pick<Account, 'id' | 'name' | 'kind' | 'openingBalance' | 'order'> & Partial<Account>,
@@ -522,7 +523,7 @@ export function buildDemoSnapshot(today: LocalDate, seed = 42): DataSnapshot {
       order: 2,
     }),
     account({
-      id: CASH_ID,
+      id: CASH_ACCOUNT_ID,
       name: 'Cash wallet',
       kind: 'cash',
       openingBalance: CASH_NOW + cashSpent,

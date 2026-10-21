@@ -3,7 +3,7 @@ export const GLOSSARY: Array<{ term: string; meaning: string }> = [
   {
     term: 'Available to spend',
     meaning:
-      'What is left of your cash and savings after the bills still to come this month, plus the next payment due on each credit card, and the money you reserved for limits.',
+      'What is left of the money in your bank accounts and cash after the bills still to come this month, plus the next payment due on each credit card, and the money you reserved for limits. Savings are not counted; they are shown apart, as Saved.',
   },
   {
     term: 'Badge',

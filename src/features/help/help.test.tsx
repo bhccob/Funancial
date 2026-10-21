@@ -241,7 +241,7 @@ describe('ExampleTable', () => {
     const avl = EXAMPLES.find((e) => e.id === 'AVL-1')!;
     render(<ExampleTable example={avl} />);
     const row = (label: string) => screen.getByText(label).parentElement!;
-    expect(row(RESULT_ROWS.available!.label)).toHaveTextContent('$2,654.01');
+    expect(row(RESULT_ROWS.available!.label)).toHaveTextContent('$1,054.01');
     expect(row(RESULT_ROWS.foodPct!.label)).toHaveTextContent('83%');
   });
 
@@ -253,11 +253,11 @@ describe('ExampleTable', () => {
       today: '2026-10-14',
       data: ex.snapshot({ profile: [ex.profile({ openingDate: '2026-10-01', currency: 'EUR' })] }),
       steps: ['Step'],
-      result: { available: 2_654_01 },
+      result: { available: 1_054_01 },
     };
     render(<ExampleTable example={euro} />);
     const result = screen.getByRole('group', { name: 'Result' });
-    expect(result).toHaveTextContent(formatMoney(2_654_01, 'EUR'));
+    expect(result).toHaveTextContent(formatMoney(1_054_01, 'EUR'));
     expect(result).not.toHaveTextContent('$');
   });
 
@@ -267,7 +267,7 @@ describe('ExampleTable', () => {
       const avl = EXAMPLES.find((e) => e.id === 'AVL-1')!;
       render(<ExampleTable example={avl} />);
       const row = (label: string) => screen.getByText(label).parentElement!;
-      expect(row(RESULT_ROWS.available!.label)).toHaveTextContent('$2,654.01');
+      expect(row(RESULT_ROWS.available!.label)).toHaveTextContent('$1,054.01');
       expect(screen.queryByText('••••')).not.toBeInTheDocument();
     } finally {
       useAmountsHidden.setState({ hidden: false });

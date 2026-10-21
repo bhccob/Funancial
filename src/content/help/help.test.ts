@@ -269,9 +269,31 @@ describe('help copy says what the code does', () => {
     expect(page('game')).toMatch(/check-in freeze covers one missed week/);
   });
 
-  it('compares available to spend with cash plus savings, not cash', () => {
-    expect(FAQ[0]!.q).toContain('cash plus savings');
-    expect(page('available')).toContain('lower than your cash plus savings');
+  it('compares available to spend with the bank accounts and cash, and leaves savings out', () => {
+    expect(FAQ[0]!.q).toContain('the money in my bank accounts and cash');
+    expect(page('available')).toContain('lower than the money in your bank accounts and cash');
+    expect(page('available')).toContain(
+      'It starts with the money in your bank accounts and your cash',
+    );
+    // Savings are shown apart, as Saved, in every place that says what Available is made of.
+    const places = [
+      page('available'),
+      FAQ[0]!.a,
+      GLOSSARY.find((g) => g.term === 'Available to spend')!.meaning,
+    ];
+    for (const text of places)
+      expect(text).toMatch(/Savings are not[^.;:]*[.;:][^.]*shown apart, as Saved/);
+    expect(
+      allProse().filter((line) => /cash plus savings|your cash and savings/i.test(line)),
+    ).toEqual([]);
+  });
+
+  it('says a subscription on a credit card comes back as the next card payment', () => {
+    const rule = /charged to a credit card .* lands on the card on the renewal day/;
+    expect(page('available')).toMatch(rule);
+    expect(page('available')).toContain("comes back as the card's next payment");
+    expect(page('subscriptions')).toMatch(rule);
+    expect(page('subscriptions')).toContain("shows up in the card's next payment");
   });
 
   it('names the glossary in the summary of Words, so a search for it finds the page', () => {

@@ -11,7 +11,7 @@ import {
   SAVINGS_ACCOUNT_ID,
 } from '@/domain/upgrades/v10Accounts';
 import { computeFinanceView } from '@/domain/view';
-import { buildDemoSnapshot } from './demoSeed';
+import { buildDemoSnapshot, CASH_ACCOUNT_ID } from './demoSeed';
 
 const TODAY = '2026-10-14';
 const START = '2026-08-15'; // today − 60 days
@@ -20,7 +20,6 @@ const t = demo.tables;
 const daily = t.expense.filter(
   (e) => e.subscriptionId === null && e.category !== 'rent' && e.category !== 'utilities',
 );
-const CASH_ID = 'acct-cash';
 const CARD = t.account.find((a) => a.kind === 'credit')!;
 const accountOf = (data: typeof demo, id: string) => data.tables.account.find((a) => a.id === id)!;
 
@@ -34,7 +33,7 @@ describe('demo accounts', () => {
       [MAIN_ACCOUNT_ID, 'Main account', 'debit', true],
       [CARD.id, 'Demo Visa', 'credit', false],
       [SAVINGS_ACCOUNT_ID, 'Savings', 'savings', false],
-      [CASH_ID, 'Cash wallet', 'cash', true],
+      [CASH_ACCOUNT_ID, 'Cash wallet', 'cash', true],
       [PASSIVE_ACCOUNT_ID, 'Passive income', 'savings', false],
     ]);
     expect(new Set(t.account.map((a) => a.order)).size).toBe(5);
@@ -58,7 +57,7 @@ describe('demo accounts', () => {
     expect(named.length).toBeGreaterThan(200);
     expect(named.filter((id) => !ids.has(id))).toEqual([]);
     expect(new Set(t.expense.map((e) => e.accountId))).toEqual(
-      new Set([MAIN_ACCOUNT_ID, CASH_ID, CARD.id]),
+      new Set([MAIN_ACCOUNT_ID, CASH_ACCOUNT_ID, CARD.id]),
     );
   });
 
@@ -85,13 +84,13 @@ describe('demo accounts', () => {
     const nonCredit = view.accounts.filter((r) => r.account.kind !== 'credit');
 
     it('holds 186.25 in the Cash wallet', () => {
-      expect(accountBalance(accountOf(now, CASH_ID), now, NOW)).toBe(186_25);
+      expect(accountBalance(accountOf(now, CASH_ACCOUNT_ID), now, NOW)).toBe(186_25);
       expect(view.cash).toBe(186_25);
     });
 
     it('keeps Available and every non-credit balance at or above zero', () => {
       expect(nonCredit.map((r) => r.account.id).sort()).toEqual(
-        [CASH_ID, MAIN_ACCOUNT_ID, PASSIVE_ACCOUNT_ID, SAVINGS_ACCOUNT_ID].sort(),
+        [CASH_ACCOUNT_ID, MAIN_ACCOUNT_ID, PASSIVE_ACCOUNT_ID, SAVINGS_ACCOUNT_ID].sort(),
       );
       expect(nonCredit.filter((r) => r.balance < 0)).toEqual([]);
       expect(view.available).toBeGreaterThanOrEqual(0);
@@ -195,8 +194,8 @@ describe('demo seed', () => {
     const share = (id: string) => daily.filter((e) => e.accountId === id).length / daily.length;
     expect(share(CARD.id)).toBeGreaterThan(0.2);
     expect(share(CARD.id)).toBeLessThan(0.4);
-    expect(share(CASH_ID)).toBeGreaterThan(0.1);
-    expect(share(CASH_ID)).toBeLessThan(0.3);
+    expect(share(CASH_ACCOUNT_ID)).toBeGreaterThan(0.1);
+    expect(share(CASH_ACCOUNT_ID)).toBeLessThan(0.3);
     // The rest, and rent, utilities and every bill but Streamflix, is paid from Main account.
     expect(share(MAIN_ACCOUNT_ID)).toBeGreaterThan(0.4);
     expect(

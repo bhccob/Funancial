@@ -10,10 +10,11 @@ import { computeFinanceView } from './view';
 /** How each worked example's numbers are produced from the real domain functions. */
 const RANK: Record<LimitLevel, number> = { ok: 0, warn: 1, over: 2, 'way-over': 3 };
 
-/** What an account of the example holds on a day; 0 when the example has no such account. */
+/** What an account of the example holds on a day. An account the example lacks is an error. */
 const held = (ex: WorkedExample, id: string, day = ex.today) => {
   const account = ex.data.tables.account.find((a) => a.id === id);
-  return account ? accountBalance(account, ex.data, day) : 0;
+  if (!account) throw new Error(`${ex.id} has no account ${id}`);
+  return accountBalance(account, ex.data, day);
 };
 
 /**
@@ -138,9 +139,9 @@ describe('worked examples', () => {
 
   it('AVL-1 has the documented numbers', () => {
     expect(EXAMPLES.find((e) => e.id === 'AVL-1')?.result).toEqual({
-      billsTotal: 245_99,
+      billsTotal: 256_98,
       reserved: 1_200_00,
-      available: 2_654_01,
+      available: 1_054_01,
       foodSpent: 100_00,
       foodPct: 83,
     });
@@ -158,13 +159,36 @@ describe('worked examples', () => {
     });
   });
 
-  it('counts a savings account in Available only where the example says so', () => {
-    // Savings do not count by default (spec 2.4): AVL-1 turns it on, as its steps say.
-    const counted = (id: string) =>
-      EXAMPLES.find((e) => e.id === id)!.data.tables.account.filter(
-        (a) => a.kind === 'savings' && a.inAvailable,
-      );
-    expect(counted('AVL-1').map((a) => a.id)).toEqual([SAVINGS_ACCOUNT_ID]);
-    expect(counted('BAL-1')).toEqual([]);
+  it('counts no savings account in Available: Savings are shown apart, as Saved', () => {
+    const savings = EXAMPLES.flatMap((e) =>
+      e.data.tables.account.filter((a) => a.kind === 'savings'),
+    );
+    expect(savings.length).toBeGreaterThan(0);
+    expect(savings.filter((a) => a.inAvailable)).toEqual([]);
+    // AVL-1 holds 3,000.00 in Savings: Saved shows it, and Available does not add it.
+    const avl = EXAMPLES.find((e) => e.id === 'AVL-1')!;
+    const view = computeFinanceView(avl.data, avl.today, 1);
+    expect(view.saved).toBe(3_000_00);
+  });
+
+  it('AVL-1 does not take off a subscription that is charged to a credit card', () => {
+    const avl = EXAMPLES.find((e) => e.id === 'AVL-1')!;
+    const { subscription } = avl.data.tables;
+    const onCard = subscription.filter((s) => s.accountId === 'card-1');
+    expect(onCard.map((s) => [s.name, s.amount, s.nextRenewal])).toEqual([
+      ['Tunely', 10_99, '2026-10-25'],
+    ]);
+    const without = {
+      ...avl.data,
+      tables: { ...avl.data.tables, subscription: subscription.filter((s) => !onCard.includes(s)) },
+    };
+    const view = computeFinanceView(avl.data, avl.today, 1);
+    const before = computeFinanceView(without, avl.today, 1);
+    // It is a bill to come, and Available does not move for it.
+    expect(view.billsTotal - before.billsTotal).toBe(10_99);
+    expect(view.available).toBe(before.available);
+    // What comes off is Streamflix from Main account and the Visa's balance owed.
+    expect(view.billsTotal - 10_99).toBe(15_99 + 230_00);
+    expect(held(avl, MAIN_ACCOUNT_ID) - (15_99 + 230_00) - view.reserved).toBe(view.available);
   });
 });

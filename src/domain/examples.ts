@@ -146,8 +146,8 @@ export const ex = {
 // and the savings bucket Savings. An example's "cash" is Main account.
 const mainAccount = (openingDate: LocalDate, openingBalance = 0) =>
   ex.account({ id: MAIN_ACCOUNT_ID, openingDate, openingBalance });
-/** Savings do not count in Available unless asked to: an example that adds them says so. */
-const savingsAccount = (openingDate: LocalDate, openingBalance = 0, inAvailable = false) =>
+/** Savings are shown apart, as Saved: no example counts them in Available. */
+const savingsAccount = (openingDate: LocalDate, openingBalance = 0) =>
   ex.account({
     id: SAVINGS_ACCOUNT_ID,
     name: 'Savings',
@@ -156,7 +156,7 @@ const savingsAccount = (openingDate: LocalDate, openingBalance = 0, inAvailable 
     order: 1,
     openingDate,
     openingBalance,
-    inAvailable,
+    inAvailable: false,
   });
 const passiveAccount = (openingDate: LocalDate) =>
   ex.account({
@@ -274,14 +274,13 @@ const EXP_1: WorkedExample = {
 const AVL_1: WorkedExample = {
   id: 'AVL-1',
   rule: 'Available balance',
-  title: 'Available = cash + savings − upcoming bills − reserved limits',
+  title: 'Available = bank and cash − upcoming bills − reserved limits',
   today: '2026-10-14',
   data: ex.snapshot({
     profile: [ex.profile({ openingDate: '2026-10-01' })],
     account: [
-      mainAccount('2026-10-01', 1_200_00),
-      // The rule adds savings to cash, so Savings is set to count in Available.
-      savingsAccount('2026-10-01', 3_000_00, true),
+      mainAccount('2026-10-01', 2_600_00),
+      savingsAccount('2026-10-01', 3_000_00),
       ex.card({
         id: 'card-1',
         name: 'Visa',
@@ -292,6 +291,13 @@ const AVL_1: WorkedExample = {
     expense: [ex.expense({ amount: 100_00, date: '2026-10-13', note: 'Groceries' })],
     subscription: [
       ex.subscription({ name: 'Streamflix', amount: 15_99, nextRenewal: '2026-10-20' }),
+      // On the Visa: not taken off Available, it comes back in the card's payment.
+      ex.subscription({
+        name: 'Tunely',
+        amount: 10_99,
+        nextRenewal: '2026-10-25',
+        accountId: 'card-1',
+      }),
       ex.subscription({
         name: 'FitHub Gym',
         amount: 39_00,
@@ -305,15 +311,16 @@ const AVL_1: WorkedExample = {
     ],
   }),
   steps: [
-    'Cash is $1,100.00 after $100.00 of groceries; savings are $3,000.00.',
-    'Bills still due this month: Streamflix $15.99 on Oct 20 and the Visa balance of $230.00 on Oct 21. The gym renews in November, so it waits.',
+    'Main account holds $2,500.00 after $100.00 of groceries. Savings hold $3,000.00, but savings are shown apart as Saved, so they are not counted.',
+    'Bills still due this month: Streamflix $15.99 on Oct 20 from Main account, Tunely $10.99 on Oct 25 on the Visa, and the Visa balance of $230.00 on Oct 21. That is $256.98 to come. The gym renews in November, so it waits.',
+    "Tunely is charged to a credit card, so it is not taken off now: it lands on the Visa on Oct 25 and comes back in the card's next payment. Only $245.99 comes off.",
     'Your rent limit of $1,200.00 is reserved and nothing is spent yet, so $1,200.00 is held back.',
-    '$1,100.00 + $3,000.00 − $245.99 − $1,200.00 = $2,654.01 available to spend.',
+    '$2,500.00 − $245.99 − $1,200.00 = $1,054.01 available to spend.',
   ],
   result: {
-    billsTotal: 245_99,
+    billsTotal: 256_98,
     reserved: 1_200_00,
-    available: 2_654_01,
+    available: 1_054_01,
     foodSpent: 100_00,
     foodPct: 83,
   },
