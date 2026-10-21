@@ -1,15 +1,21 @@
+import { defaultsFor } from '@/domain/accounts';
 import { addDays, type LocalDate } from '@/domain/dates';
 import {
   defaultSettings,
+  type Account,
   type Category,
   type Expense,
   type Holding,
-  type PaymentMethod,
   type Subscription,
 } from '@/domain/entities';
 import { toMinor } from '@/domain/portfolio';
 import { planSale } from '@/domain/sales';
 import { emptySnapshot, type DataSnapshot } from '@/domain/snapshot';
+import {
+  MAIN_ACCOUNT_ID,
+  PASSIVE_ACCOUNT_ID,
+  SAVINGS_ACCOUNT_ID,
+} from '@/domain/upgrades/v10Accounts';
 
 /** Fake money for demo mode. Deterministic: the same day and seed always give the same data. */
 
@@ -17,6 +23,15 @@ const WINDOW_DAYS = 60;
 const MONTHLY_SALARY = 4_200_00;
 const PAY_DAY = 25;
 const CARD_ID = 'demo-card';
+const CASH_ID = 'acct-cash';
+/**
+ * What the Cash wallet holds on the day the demo starts. It opens with this plus everything spent
+ * from it, so it ends there for any day and seed.
+ */
+const CASH_NOW = 186_25;
+/** What Main account and Savings open with, on the first day of the window. */
+const MAIN_OPENING = 2_500_00;
+const SAVINGS_OPENING = 8_000_00;
 /** Percent of each demo dividend withheld as tax. */
 const TAX = 15;
 const KO_PRICE = 68.4;
@@ -78,18 +93,12 @@ const EVERYDAY: Everyday[] = [
 const TOTAL_WEIGHT = EVERYDAY.reduce((sum, c) => sum + c.weight, 0);
 
 const SUBSCRIPTIONS: Array<
-  Pick<Subscription, 'name' | 'amount' | 'category' | 'paymentMethod'> & { day: number }
+  Pick<Subscription, 'name' | 'amount' | 'category' | 'accountId'> & { day: number }
 > = [
-  {
-    name: 'Streamflix',
-    amount: 15_99,
-    category: 'entertainment',
-    paymentMethod: 'credit_card',
-    day: 3,
-  },
-  { name: 'Tunely', amount: 10_99, category: 'entertainment', paymentMethod: 'debit', day: 12 },
-  { name: 'CloudBox', amount: 2_99, category: 'other', paymentMethod: 'debit', day: 20 },
-  { name: 'FitHub Gym', amount: 39_00, category: 'health', paymentMethod: 'debit', day: 28 },
+  { name: 'Streamflix', amount: 15_99, category: 'entertainment', accountId: CARD_ID, day: 3 },
+  { name: 'Tunely', amount: 10_99, category: 'entertainment', accountId: MAIN_ACCOUNT_ID, day: 12 },
+  { name: 'CloudBox', amount: 2_99, category: 'other', accountId: MAIN_ACCOUNT_ID, day: 20 },
+  { name: 'FitHub Gym', amount: 39_00, category: 'health', accountId: MAIN_ACCOUNT_ID, day: 28 },
 ];
 
 const pad = (n: number) => String(n).padStart(2, '0');
@@ -133,26 +142,12 @@ export function buildDemoSnapshot(today: LocalDate, seed = 42): DataSnapshot {
     name: 'Demo Player',
     currency: 'USD',
     openingDate: start,
-    openingCash: 2_500_00,
-    openingSavings: 8_000_00,
     salary: { monthlyAmount: MONTHLY_SALARY, payDay: PAY_DAY },
     onboardedAt: `${start}T12:00:00.000Z`,
   });
-  t.settings.push(defaultSettings(`${start}T12:00:00.000Z`));
-
-  t.debt.push({
-    id: CARD_ID,
-    ...stampFor(start),
-    name: 'Demo Visa',
-    kind: 'credit_card',
-    openingBalance: 0,
-    openingDate: start,
-    interestRate: 22.9,
-    minimumPayment: 25_00,
-    creditLimit: 3_000_00,
-    statementDay: 1,
-    dueDay: 21,
-    payInFull: true,
+  t.settings.push({
+    ...defaultSettings(`${start}T12:00:00.000Z`),
+    defaultAccountId: MAIN_ACCOUNT_ID,
   });
 
   const expense = (
@@ -160,7 +155,7 @@ export function buildDemoSnapshot(today: LocalDate, seed = 42): DataSnapshot {
     category: Category,
     amount: number,
     note: string,
-    paymentMethod: PaymentMethod,
+    accountId: string,
     subscriptionId: string | null = null,
   ): Expense => ({
     id: id('expense'),
@@ -169,8 +164,7 @@ export function buildDemoSnapshot(today: LocalDate, seed = 42): DataSnapshot {
     category,
     date,
     note,
-    paymentMethod,
-    cardId: paymentMethod === 'credit_card' ? CARD_ID : null,
+    accountId,
     recurrence: null,
     subscriptionId,
   });
@@ -179,13 +173,15 @@ export function buildDemoSnapshot(today: LocalDate, seed = 42): DataSnapshot {
 
   for (const date of days) {
     const day = dayOf(date);
-    if (day === 1) t.expense.push(expense(date, 'rent', 1_200_00, 'Rent', 'debit'));
+    if (day === 1) t.expense.push(expense(date, 'rent', 1_200_00, 'Rent', MAIN_ACCOUNT_ID));
     if (day === 10)
-      t.expense.push(expense(date, 'utilities', between(110_00, 170_00), 'Power & water', 'debit'));
+      t.expense.push(
+        expense(date, 'utilities', between(110_00, 170_00), 'Power & water', MAIN_ACCOUNT_ID),
+      );
     SUBSCRIPTIONS.forEach((s, i) => {
       if (day === s.day)
         t.expense.push(
-          expense(date, s.category, s.amount, s.name, s.paymentMethod, subscriptionIds[i]!),
+          expense(date, s.category, s.amount, s.name, s.accountId, subscriptionIds[i]!),
         );
     });
 
@@ -194,9 +190,10 @@ export function buildDemoSnapshot(today: LocalDate, seed = 42): DataSnapshot {
       let roll = rand() * TOTAL_WEIGHT;
       const kind = EVERYDAY.find((c) => (roll -= c.weight) < 0) ?? EVERYDAY[0]!;
       const r = rand();
-      const method: PaymentMethod = r < 0.3 ? 'credit_card' : r < 0.6 ? 'cash' : 'debit';
+      // About 30% on the card, 20% from the Cash wallet, the rest from Main account.
+      const accountId = r < 0.3 ? CARD_ID : r < 0.5 ? CASH_ID : MAIN_ACCOUNT_ID;
       t.expense.push(
-        expense(date, kind.category, between(kind.min, kind.max), pick(kind.notes), method),
+        expense(date, kind.category, between(kind.min, kind.max), pick(kind.notes), accountId),
       );
     }
 
@@ -210,7 +207,7 @@ export function buildDemoSnapshot(today: LocalDate, seed = 42): DataSnapshot {
         label: 'Salary',
         date,
         status: 'confirmed',
-        bucket: 'cash',
+        accountId: MAIN_ACCOUNT_ID,
         recurrence: null,
         period,
         note: '',
@@ -221,8 +218,8 @@ export function buildDemoSnapshot(today: LocalDate, seed = 42): DataSnapshot {
         type: 'transfer',
         amount: 300_00,
         date,
-        from: 'cash',
-        to: 'savings',
+        fromAccountId: MAIN_ACCOUNT_ID,
+        toAccountId: SAVINGS_ACCOUNT_ID,
         debtId: null,
         note: 'Pay yourself first',
       });
@@ -232,7 +229,7 @@ export function buildDemoSnapshot(today: LocalDate, seed = 42): DataSnapshot {
     if (day === 21) {
       const statementMonth = monthOf(addDays(`${monthOf(date)}-01`, -1));
       const owed = t.expense
-        .filter((e) => e.paymentMethod === 'credit_card' && monthOf(e.date) === statementMonth)
+        .filter((e) => e.accountId === CARD_ID && monthOf(e.date) === statementMonth)
         .reduce((sum, e) => sum + e.amount, 0);
       if (owed > 0) {
         t.transaction.push({
@@ -241,9 +238,9 @@ export function buildDemoSnapshot(today: LocalDate, seed = 42): DataSnapshot {
           type: 'card_payment',
           amount: owed,
           date,
-          from: 'cash',
-          to: null,
-          debtId: CARD_ID,
+          fromAccountId: MAIN_ACCOUNT_ID,
+          toAccountId: CARD_ID,
+          debtId: null,
           note: 'Demo Visa statement',
         });
       }
@@ -261,8 +258,7 @@ export function buildDemoSnapshot(today: LocalDate, seed = 42): DataSnapshot {
       nextRenewal: thisMonth > today ? thisMonth : nextMonthDay(today, s.day),
       anchorDay: s.day,
       category: s.category,
-      paymentMethod: s.paymentMethod,
-      cardId: s.paymentMethod === 'credit_card' ? CARD_ID : null,
+      accountId: s.accountId,
       status: 'active',
       audit: null,
       auditedAt: null,
@@ -427,7 +423,7 @@ export function buildDemoSnapshot(today: LocalDate, seed = 42): DataSnapshot {
     proceeds: plan.proceeds,
     cost: plan.cost,
     soldOn,
-    to: 'savings',
+    toAccountId: SAVINGS_ACCOUNT_ID,
     restore: null,
   });
   t.holding.push(
@@ -448,7 +444,7 @@ export function buildDemoSnapshot(today: LocalDate, seed = 42): DataSnapshot {
       dividendInfo: quarterly(-70, [1.52, 1.52, 1.52, 1.6], 21, 30),
     }),
   );
-  const paid = (h: Holding, payDays: number, amount: number, bucket: 'reinvest' | 'passive') => {
+  const paid = (h: Holding, payDays: number, amount: number, to: 'reinvest' | 'passive') => {
     const payDate = addDays(today, -payDays);
     t.dividend.push({
       id: `${h.id}:${payDate}`,
@@ -459,8 +455,9 @@ export function buildDemoSnapshot(today: LocalDate, seed = 42): DataSnapshot {
       paidOn: payDate,
       status: 'confirmed',
       amount,
-      bucket,
-      sharesAdded: bucket === 'reinvest' ? koAdded : null,
+      accountId: to === 'passive' ? PASSIVE_ACCOUNT_ID : null,
+      reinvested: to === 'reinvest',
+      sharesAdded: to === 'reinvest' ? koAdded : null,
     });
   };
   paid(ko, 104, koFirst, 'reinvest');
@@ -472,11 +469,75 @@ export function buildDemoSnapshot(today: LocalDate, seed = 42): DataSnapshot {
     type: 'investment',
     amount: aapl.costBasis,
     date: aapl.purchaseDate,
-    from: 'savings',
-    to: null,
+    fromAccountId: SAVINGS_ACCOUNT_ID,
+    toAccountId: null,
     debtId: null,
     note: 'Bought AAPL',
   });
+
+  // The accounts, after the spending, because the Cash wallet opens with whatever leaves it
+  // plus what it holds on the day the demo starts.
+  const cashSpent = t.expense
+    .filter((e) => e.accountId === CASH_ID)
+    .reduce((sum, e) => sum + e.amount, 0);
+  const account = (
+    a: Pick<Account, 'id' | 'name' | 'kind' | 'openingBalance' | 'order'> & Partial<Account>,
+  ): Account => ({
+    ...stampFor(start),
+    ...defaultsFor(a.kind),
+    last4: null,
+    openingDate: start,
+    frozen: false,
+    credit: null,
+    ...a,
+  });
+  t.account.push(
+    account({
+      id: MAIN_ACCOUNT_ID,
+      name: 'Main account',
+      kind: 'debit',
+      openingBalance: MAIN_OPENING,
+      order: 0,
+    }),
+    account({
+      id: CARD_ID,
+      name: 'Demo Visa',
+      kind: 'credit',
+      openingBalance: 0,
+      order: 1,
+      credit: {
+        limit: 3_000_00,
+        statementDay: 1,
+        dueDay: 21,
+        payInFull: true,
+        minimumPayment: 25_00,
+        interestRate: 22.9,
+      },
+    }),
+    account({
+      id: SAVINGS_ACCOUNT_ID,
+      name: 'Savings',
+      kind: 'savings',
+      openingBalance: SAVINGS_OPENING,
+      order: 2,
+    }),
+    account({
+      id: CASH_ID,
+      name: 'Cash wallet',
+      kind: 'cash',
+      openingBalance: CASH_NOW + cashSpent,
+      order: 3,
+    }),
+    // Both dividends paid out went here, as the upgrade names it.
+    account({
+      id: PASSIVE_ACCOUNT_ID,
+      name: 'Passive income',
+      kind: 'savings',
+      skin: 'amber',
+      openingBalance: 0,
+      order: 4,
+    }),
+  );
 
   return snap;
 }

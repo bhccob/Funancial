@@ -1,7 +1,7 @@
 import type { LocalDate } from './dates';
 import type {
+  Account,
   BudgetLimit,
-  Debt,
   Expense,
   Income,
   Profile,
@@ -9,6 +9,7 @@ import type {
   Transaction,
 } from './entities';
 import { emptySnapshot, type DataSnapshot } from './snapshot';
+import { MAIN_ACCOUNT_ID, PASSIVE_ACCOUNT_ID, SAVINGS_ACCOUNT_ID } from './upgrades/v10Accounts';
 
 /**
  * Worked examples for every calculation rule (spec Part 4). Each one is plain data; Vitest checks
@@ -36,8 +37,6 @@ export const ex = {
     ...at(p.openingDate),
     name: '',
     currency: 'USD',
-    openingCash: 0,
-    openingSavings: 0,
     salary: null,
     onboardedAt: `${p.openingDate}T12:00:00.000Z`,
     ...p,
@@ -48,7 +47,7 @@ export const ex = {
     source: 'salary',
     label: 'Salary',
     status: 'confirmed',
-    bucket: 'cash',
+    accountId: MAIN_ACCOUNT_ID,
     recurrence: null,
     period: p.date.slice(0, 7),
     note: '',
@@ -59,8 +58,7 @@ export const ex = {
     ...at(p.date),
     category: 'food',
     note: '',
-    paymentMethod: 'debit',
-    cardId: null,
+    accountId: MAIN_ACCOUNT_ID,
     recurrence: null,
     subscriptionId: null,
     ...p,
@@ -70,23 +68,45 @@ export const ex = {
   ): Transaction => ({
     id: id('tx'),
     ...at(p.date),
-    from: null,
-    to: null,
+    fromAccountId: null,
+    toAccountId: null,
     debtId: null,
     note: '',
     ...p,
   }),
-  card: (p: Partial<Debt> & Pick<Debt, 'id' | 'openingDate'>): Debt => ({
+  /** A bank account; `openingBalance` is what is on it on `openingDate`. */
+  account: (p: Partial<Account> & Pick<Account, 'id' | 'openingDate'>): Account => ({
+    ...at(p.openingDate),
+    name: 'Main account',
+    kind: 'debit',
+    skin: 'midnight',
+    last4: null,
+    openingBalance: 0,
+    inAvailable: true,
+    frozen: false,
+    order: 0,
+    credit: null,
+    ...p,
+  }),
+  /** A credit card; `openingBalance` is what is owed on it on `openingDate`. */
+  card: (p: Partial<Account> & Pick<Account, 'id' | 'openingDate'>): Account => ({
     ...at(p.openingDate),
     name: 'Visa',
-    kind: 'credit_card',
+    kind: 'credit',
+    skin: 'violet',
+    last4: null,
     openingBalance: 0,
-    interestRate: 22.9,
-    minimumPayment: 25_00,
-    creditLimit: null,
-    statementDay: 1,
-    dueDay: 21,
-    payInFull: true,
+    inAvailable: false,
+    frozen: false,
+    order: 3,
+    credit: {
+      limit: null,
+      statementDay: 1,
+      dueDay: 21,
+      payInFull: true,
+      minimumPayment: 25_00,
+      interestRate: 22.9,
+    },
     ...p,
   }),
   subscription: (
@@ -97,8 +117,7 @@ export const ex = {
     cycle: 'monthly',
     anchorDay: Number(p.nextRenewal.slice(8, 10)),
     category: 'entertainment',
-    paymentMethod: 'debit',
-    cardId: null,
+    accountId: MAIN_ACCOUNT_ID,
     status: 'active',
     audit: null,
     auditedAt: null,
@@ -123,6 +142,33 @@ export const ex = {
   },
 };
 
+// The accounts the examples use, as the v10 upgrade names them: the cash bucket became Main account
+// and the savings bucket Savings. An example's "cash" is Main account.
+const mainAccount = (openingDate: LocalDate, openingBalance = 0) =>
+  ex.account({ id: MAIN_ACCOUNT_ID, openingDate, openingBalance });
+/** Savings do not count in Available unless asked to: an example that adds them says so. */
+const savingsAccount = (openingDate: LocalDate, openingBalance = 0, inAvailable = false) =>
+  ex.account({
+    id: SAVINGS_ACCOUNT_ID,
+    name: 'Savings',
+    kind: 'savings',
+    skin: 'mint',
+    order: 1,
+    openingDate,
+    openingBalance,
+    inAvailable,
+  });
+const passiveAccount = (openingDate: LocalDate) =>
+  ex.account({
+    id: PASSIVE_ACCOUNT_ID,
+    name: 'Passive income',
+    kind: 'savings',
+    skin: 'amber',
+    order: 2,
+    openingDate,
+    inAvailable: false,
+  });
+
 // ───────────── examples ─────────────
 const BAL_1: WorkedExample = {
   id: 'BAL-1',
@@ -130,10 +176,13 @@ const BAL_1: WorkedExample = {
   title: 'Net worth = cash + savings + investments − debts',
   today: '2026-10-10',
   data: ex.snapshot({
-    profile: [
-      ex.profile({ openingDate: '2026-10-01', openingCash: 1_000_00, openingSavings: 5_000_00 }),
+    profile: [ex.profile({ openingDate: '2026-10-01' })],
+    account: [
+      mainAccount('2026-10-01', 1_000_00),
+      savingsAccount('2026-10-01', 5_000_00),
+      passiveAccount('2026-10-01'),
+      ex.card({ id: 'card-1', openingDate: '2026-10-01' }),
     ],
-    debt: [ex.card({ id: 'card-1', openingDate: '2026-10-01' })],
     income: [
       ex.income({ amount: 3_000_00, date: '2026-10-01' }),
       ex.income({
@@ -152,36 +201,30 @@ const BAL_1: WorkedExample = {
         date: '2026-10-04',
         note: 'Jacket',
         category: 'shopping',
-        paymentMethod: 'credit_card',
-        cardId: 'card-1',
+        accountId: 'card-1',
       }),
-      ex.expense({
-        amount: 50_00,
-        date: '2026-09-30',
-        note: 'Before you started',
-        paymentMethod: 'cash',
-      }),
+      ex.expense({ amount: 50_00, date: '2026-09-30', note: 'Before you started' }),
     ],
     transaction: [
       ex.transaction({
         type: 'transfer',
         amount: 500_00,
         date: '2026-10-05',
-        from: 'cash',
-        to: 'savings',
+        fromAccountId: MAIN_ACCOUNT_ID,
+        toAccountId: SAVINGS_ACCOUNT_ID,
       }),
       ex.transaction({
         type: 'card_payment',
         amount: 30_00,
         date: '2026-10-06',
-        from: 'cash',
-        debtId: 'card-1',
+        fromAccountId: MAIN_ACCOUNT_ID,
+        toAccountId: 'card-1',
       }),
       ex.transaction({
         type: 'adjustment',
         amount: -20_00,
         date: '2026-10-07',
-        to: 'cash',
+        toAccountId: MAIN_ACCOUNT_ID,
         note: 'Bank fee I forgot',
       }),
     ],
@@ -203,8 +246,11 @@ const EXP_1: WorkedExample = {
   title: 'An expense is money spent and not recovered',
   today: '2026-10-02',
   data: ex.snapshot({
-    profile: [ex.profile({ openingDate: '2026-10-01', openingCash: 500_00 })],
-    debt: [ex.card({ id: 'card-1', openingDate: '2026-10-01' })],
+    profile: [ex.profile({ openingDate: '2026-10-01' })],
+    account: [
+      mainAccount('2026-10-01', 500_00),
+      ex.card({ id: 'card-1', openingDate: '2026-10-01' }),
+    ],
     expense: [
       ex.expense({ amount: 12_50, date: '2026-10-02', note: 'Lunch' }),
       ex.expense({
@@ -212,8 +258,7 @@ const EXP_1: WorkedExample = {
         date: '2026-10-02',
         note: 'Headphones',
         category: 'shopping',
-        paymentMethod: 'credit_card',
-        cardId: 'card-1',
+        accountId: 'card-1',
       }),
     ],
   }),
@@ -232,16 +277,16 @@ const AVL_1: WorkedExample = {
   title: 'Available = cash + savings − upcoming bills − reserved limits',
   today: '2026-10-14',
   data: ex.snapshot({
-    profile: [
-      ex.profile({ openingDate: '2026-10-01', openingCash: 1_200_00, openingSavings: 3_000_00 }),
-    ],
-    debt: [
+    profile: [ex.profile({ openingDate: '2026-10-01' })],
+    account: [
+      mainAccount('2026-10-01', 1_200_00),
+      // The rule adds savings to cash, so Savings is set to count in Available.
+      savingsAccount('2026-10-01', 3_000_00, true),
       ex.card({
         id: 'card-1',
         name: 'Visa',
         openingDate: '2026-10-01',
         openingBalance: 230_00,
-        dueDay: 21,
       }),
     ],
     expense: [ex.expense({ amount: 100_00, date: '2026-10-13', note: 'Groceries' })],
@@ -280,6 +325,7 @@ const LIM_1: WorkedExample = {
   title: 'Limits warn at 80%, 100% and 120%',
   today: '2026-10-14',
   data: ex.snapshot({
+    account: [mainAccount('2026-10-01')],
     budgetLimit: [ex.limit({ category: 'food', period: 'monthly', amount: 100_00 })],
     expense: [
       ex.expense({ amount: 60_00, date: '2026-10-05', note: 'Groceries' }),
@@ -301,7 +347,8 @@ const SUB_1: WorkedExample = {
   title: 'A subscription is a recurring expense taken from your available balance',
   today: '2026-10-19',
   data: ex.snapshot({
-    profile: [ex.profile({ openingDate: '2026-10-01', openingCash: 1_000_00 })],
+    profile: [ex.profile({ openingDate: '2026-10-01' })],
+    account: [mainAccount('2026-10-01', 1_000_00)],
     subscription: [
       ex.subscription({
         id: 'sub-streamflix',
