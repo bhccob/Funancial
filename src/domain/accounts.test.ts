@@ -18,6 +18,8 @@ import {
   CREDIT_CANT_PAY,
   defaultAccount,
   defaultsFor,
+  incomeAccount,
+  INCOME_NOT_CREDIT,
   NO_ACCOUNT,
   payingAccount,
 } from './accounts';
@@ -169,7 +171,7 @@ describe('defaultAccount', () => {
   });
 });
 
-describe('accountInUse and payingAccount', () => {
+describe('accountInUse, payingAccount and incomeAccount', () => {
   const DAY = '2026-10-20';
   const main = makeAccount({ id: 'acct-main' });
   const savings = makeAccount({ id: 'acct-savings', kind: 'savings' });
@@ -188,6 +190,7 @@ describe('accountInUse and payingAccount', () => {
     expect(NO_ACCOUNT).toBe("That account doesn't exist.");
     expect(ACCOUNT_ARCHIVED).toBe('That account is no longer in use.');
     expect(CREDIT_CANT_PAY).toBe('Only a bank account, cash or savings can pay.');
+    expect(INCOME_NOT_CREDIT).toBe('Income goes into a bank account, cash or savings.');
   });
 
   it('accountInUse returns an account that exists and is not archived by the day', () => {
@@ -216,5 +219,19 @@ describe('accountInUse and payingAccount', () => {
     expect(() => payingAccount(data(), 'acct-old', DAY)).toThrow(ACCOUNT_ARCHIVED);
     // An archived card is told it is archived, as accountInUse says, before it is told it is a card.
     expect(() => payingAccount(data(), 'card-old', DAY)).toThrow(ACCOUNT_ARCHIVED);
+  });
+
+  it('incomeAccount returns a bank account, cash or savings in use', () => {
+    for (const a of [main, savings, cash, later]) {
+      expect(incomeAccount(data(), a.id, DAY)).toBe(a);
+    }
+  });
+
+  it('incomeAccount refuses a credit card with the income message, then what accountInUse refuses', () => {
+    expect(() => incomeAccount(data(), 'card-1', DAY)).toThrow(INCOME_NOT_CREDIT);
+    expect(() => incomeAccount(data(), 'acct-gone', DAY)).toThrow(NO_ACCOUNT);
+    expect(() => incomeAccount(data(), 'acct-old', DAY)).toThrow(ACCOUNT_ARCHIVED);
+    // An archived card is told it is archived before it is told it is a card.
+    expect(() => incomeAccount(data(), 'card-old', DAY)).toThrow(ACCOUNT_ARCHIVED);
   });
 });

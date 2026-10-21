@@ -27,6 +27,8 @@ const MAIN = 'acct-main';
 const SAVINGS = 'acct-savings';
 const CARD = 'card-1';
 const OLD = 'acct-old';
+/** What money arriving on a credit card is told. */
+const INCOME_NOT_CREDIT = 'Income goes into a bank account, cash or savings.';
 const ASOF = '2026-10-14T09:00:00.000Z';
 const HOURS = 3_600_000;
 const ago = (hours: number) => new Date(Date.now() - hours * HOURS).toISOString();
@@ -810,7 +812,7 @@ describe('dividend payouts', () => {
     const { actions, store, payout, due } = await withDuePayout();
     const before = store.getState().data;
     for (const [accountId, message] of [
-      [CARD, CREDIT_CANT_PAY],
+      [CARD, INCOME_NOT_CREDIT],
       ['acct-gone', NO_ACCOUNT],
       [OLD, ACCOUNT_ARCHIVED],
     ] as const) {
@@ -1119,7 +1121,7 @@ describe('selling a holding', () => {
     const { actions, store, tables, h } = await withHolding();
     const before = store.getState().data;
     for (const [toAccountId, message] of [
-      [CARD, CREDIT_CANT_PAY],
+      [CARD, INCOME_NOT_CREDIT],
       ['acct-gone', NO_ACCOUNT],
       [OLD, ACCOUNT_ARCHIVED],
     ] as const) {

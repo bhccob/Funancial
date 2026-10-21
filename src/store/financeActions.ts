@@ -5,6 +5,7 @@ import {
   activeAccounts,
   defaultAccount,
   defaultsFor,
+  incomeAccount,
   payingAccount,
 } from '@/domain/accounts';
 import { crossesOver, limitAlerts } from '@/domain/alerts';
@@ -126,8 +127,6 @@ export const FUTURE = 'Use today or an earlier date.';
 export const PICK_SUBSCRIPTIONS_TARGET = 'Pick where its subscriptions go.';
 export const SAME_ACCOUNT = 'Use two different accounts.';
 export const NOT_A_CARD = 'Pick a credit card to pay.';
-/** A credit card's balance is what is owed on it, so income paid into one would count nowhere. */
-export const INCOME_NOT_CREDIT = 'Income goes into a bank account, cash or savings.';
 /** Its history would read the other way: spending as money in, or money in as spending. */
 export const CREDIT_SWITCH = "A card with history can't switch between credit and debit.";
 
@@ -149,12 +148,6 @@ export function createFinanceActions(store: StoreApi<AppState>) {
   }
   const notFuture = (d: LocalDate) => {
     if (d > today()) throw new Error(FUTURE);
-  };
-  /** An account income can be paid into: a bank account, cash or savings in use. */
-  const incomeAccount = (id: string): Account => {
-    const account = accountInUse(state().data, id, today());
-    if (account.kind === 'credit') throw new Error(INCOME_NOT_CREDIT);
-    return account;
   };
   /** A transfer between two different accounts, neither of them a credit card. */
   function transferBetween(
@@ -258,7 +251,7 @@ export function createFinanceActions(store: StoreApi<AppState>) {
 
     async addIncome(input: IncomeInput): Promise<Income> {
       notFuture(input.date);
-      incomeAccount(input.accountId);
+      incomeAccount(state().data, input.accountId, today());
       const period = input.source === 'salary' ? monthKey(input.date) : null;
       const expected = state().data.tables.income.find(
         (i) =>
@@ -277,7 +270,7 @@ export function createFinanceActions(store: StoreApi<AppState>) {
     /** Confirms an expected income into the account it names, which must be one income counts in. */
     async confirmIncome(id: string, amount: number) {
       const income = find('income', id);
-      incomeAccount(income.accountId);
+      incomeAccount(state().data, income.accountId, today());
       await state().put('income', {
         ...income,
         amount,

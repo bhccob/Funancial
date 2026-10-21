@@ -18,6 +18,8 @@ export const NO_ACCOUNT = "That account doesn't exist.";
 export const ACCOUNT_ARCHIVED = 'That account is no longer in use.';
 /** Money is paid from, and moved between, bank accounts, cash and savings: never a credit card. */
 export const CREDIT_CANT_PAY = 'Only a bank account, cash or savings can pay.';
+/** A credit card's balance is what is owed on it, so money arriving on one would count nowhere. */
+export const INCOME_NOT_CREDIT = 'Income goes into a bank account, cash or savings.';
 
 /** An account money can land on or leave from: one that exists and is not archived by `today`. */
 export function accountInUse(data: DataSnapshot, id: string, today: LocalDate): Account {
@@ -27,10 +29,20 @@ export function accountInUse(data: DataSnapshot, id: string, today: LocalDate): 
   return account;
 }
 
-/** An account money can be paid from or into, or moved with: a bank account, cash or savings in use. */
+/** An account money can be paid from or moved with: a bank account, cash or savings in use. */
 export function payingAccount(data: DataSnapshot, id: string, today: LocalDate): Account {
   const account = accountInUse(data, id, today);
   if (account.kind === 'credit') throw new Error(CREDIT_CANT_PAY);
+  return account;
+}
+
+/**
+ * An account money can arrive on, as income, the proceeds of a sale or a dividend: a bank account,
+ * cash or savings in use.
+ */
+export function incomeAccount(data: DataSnapshot, id: string, today: LocalDate): Account {
+  const account = accountInUse(data, id, today);
+  if (account.kind === 'credit') throw new Error(INCOME_NOT_CREDIT);
   return account;
 }
 

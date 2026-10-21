@@ -1,5 +1,5 @@
 import type { StoreApi } from 'zustand/vanilla';
-import { payingAccount } from '@/domain/accounts';
+import { incomeAccount, payingAccount } from '@/domain/accounts';
 import type { LocalDate } from '@/domain/dates';
 import type { ExpectedPayout } from '@/domain/dividends';
 import {
@@ -97,8 +97,6 @@ export type InvestActions = ReturnType<typeof createInvestActions>;
 export function createInvestActions(store: StoreApi<AppState>, market: Market) {
   const state = () => store.getState();
   const holdings = () => state().data.tables.holding;
-  /** An account money can be paid from or into: a bank account, cash or savings in use today. */
-  const moneyAccount = (id: string) => payingAccount(state().data, id, state().today);
   const profileCurrency = () => state().data.tables.profile[0]?.currency ?? 'USD';
   const stamp = () => {
     const t = nowIso();
@@ -166,7 +164,7 @@ export function createInvestActions(store: StoreApi<AppState>, market: Market) {
       const items: TableRecord[] = [{ table: 'holding', record: holding }];
       if (input.paidFrom !== 'owned') {
         // After the lookup, so the account is checked as it stands when the purchase is written.
-        moneyAccount(input.paidFrom);
+        payingAccount(state().data, input.paidFrom, state().today);
         const purchase: Transaction = {
           id: newId(),
           ...stamp(),
@@ -211,7 +209,7 @@ export function createInvestActions(store: StoreApi<AppState>, market: Market) {
      */
     async sellHolding(id: string, input: SaleInput): Promise<SalePlan> {
       notFuture(input.soldOn);
-      moneyAccount(input.toAccountId);
+      incomeAccount(state().data, input.toAccountId, state().today);
       const holding = find(id);
       if (input.soldOn < holding.purchaseDate)
         throw new Error(saleBeforePurchase(holding.purchaseDate));
@@ -376,15 +374,17 @@ export function createInvestActions(store: StoreApi<AppState>, market: Market) {
     async confirmDividend(p: ExpectedPayout, input: DividendInput) {
       notFuture(input.paidOn);
       if (settledBefore(p)) return;
-      const accountId = input.to === 'reinvest' ? null : input.to.accountId;
-      const reinvest = accountId === null;
-      if (accountId !== null) moneyAccount(accountId);
+      const { to } = input;
+      const reinvested = to === 'reinvest';
+      const accountId = reinvested
+        ? null
+        : incomeAccount(state().data, to.accountId, state().today).id;
       const holding = holdings().find((h) => h.id === p.holding.id);
       const sold = state().data.tables.sale.some((s) => s.holdingId === p.holding.id && s.restore);
       if (!holding && !sold) throw new Error('That item no longer exists.');
       const items: TableRecord[] = [];
       let sharesAdded: number | null = null;
-      if (reinvest) {
+      if (reinvested) {
         if (!holding) throw new Error(SOLD_NO_REINVEST);
         const price = holdingPrice(holding) ?? 0;
         const rate = holdingRate(holding, profileCurrency());
@@ -406,7 +406,7 @@ export function createInvestActions(store: StoreApi<AppState>, market: Market) {
         status: 'confirmed',
         amount: input.amount,
         accountId,
-        reinvested: reinvest,
+        reinvested,
         sharesAdded,
       });
       await state().putMany([{ table: 'dividend', record: dividend }, ...items]);
