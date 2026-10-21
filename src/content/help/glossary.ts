@@ -18,8 +18,7 @@ export const GLOSSARY: Array<{ term: string; meaning: string }> = [
   { term: 'Dividend', meaning: 'A payment a company makes to the people who hold its shares.' },
   {
     term: 'Emergency fund',
-    meaning:
-      'Money set aside for surprises: your emergency goal if you have one, otherwise your savings.',
+    meaning: 'Money set aside for surprises: a goal of the Emergency kind.',
   },
   {
     term: 'Ex-date',

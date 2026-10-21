@@ -3,7 +3,7 @@ import { expect, test, type Locator, type Page } from '@playwright/test';
 /**
  * The main flows with the keyboard alone: only Tab, Enter, Escape and typing, no mouse. Every
  * Tab stop must show where focus is, and a dialog or sheet must hand focus back to what opened it.
- * No network on demo money: nothing leaves the page.
+ * No network: nothing leaves the page.
  */
 
 /**

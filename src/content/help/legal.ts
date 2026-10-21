@@ -7,7 +7,7 @@ export const LEGAL: {
   privacy: [
     'Your data lives on your phone, encrypted.',
     "There are no analytics, and Funcial doesn't track how you use it.",
-    "Apart from the update check below, the only network calls go to the app's own service. Its lookups fetch prices, exchange rates, dividends, news, symbol searches, price history and company logos (by symbol), and read a product link when you paste one. A lookup carries only what is needed to look something up: a symbol, the text you type in search, a currency pair, a start date, or a pasted link. Never your amounts, balances or notes.",
+    "Apart from the update check below, the only network calls go to the app's own service. Its lookups fetch prices, exchange rates, dividends, news, symbol searches, price history and company logos (by symbol). A lookup carries only what is needed to look something up: a symbol, the text you type in search, a currency pair, or a start date. Never your amounts, balances or notes.",
     'If you have an account, the app also sends a locked copy of your data to that service, and keeps it there, so you can move to a new phone.',
     'Your email is used only for "forgot password".',
     'Because "forgot password" brings your data back, the service can unlock the copy, so the app\'s owner, who runs it, and anyone who got into the owner\'s Vercel account could read it.',

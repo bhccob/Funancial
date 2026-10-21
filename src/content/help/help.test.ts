@@ -221,14 +221,10 @@ describe('help copy says what the code does', () => {
 
   it('lists what a lookup carries on the Privacy page, and the FAQ points there', () => {
     const privacy = LEGAL.privacy.join(' ');
-    const carried = [
-      'a symbol',
-      'the text you type in search',
-      'a currency pair',
-      'a start date',
-      'a pasted link',
-    ];
+    const carried = ['a symbol', 'the text you type in search', 'a currency pair', 'a start date'];
     for (const item of carried) expect(privacy).toContain(item);
+    // The product-link fill is gone, so the page must not describe it.
+    expect(privacy).not.toMatch(/pasted link|product link/);
     expect(privacy).toMatch(/never your amounts, balances or notes/i);
     expect(privacy).not.toMatch(/money data/i);
 
