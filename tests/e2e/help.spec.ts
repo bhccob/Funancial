@@ -5,14 +5,14 @@ test('Help: search the index, open a page and read its worked example', async ({
   await startFresh(page, '/help');
   await expect(page.getByRole('heading', { level: 1, name: 'Help' })).toBeVisible();
 
-  await page.getByRole('searchbox', { name: 'Search help' }).fill('freeze');
+  await page.getByRole('searchbox', { name: 'Search help' }).fill('warnings');
   await expect(page.getByRole('link', { name: /^Dividends/ })).toBeHidden();
-  await page.getByRole('link', { name: /^Salary and freezes/ }).click();
+  await page.getByRole('link', { name: /^Limits and warnings/ }).click();
 
-  await expect(page.getByRole('heading', { level: 1, name: 'Salary and freezes' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'Limits and warnings' })).toBeVisible();
   const steps = page.getByRole('list', { name: 'Steps' });
   await expect(steps.getByRole('listitem')).toHaveCount(4);
-  await expect(page.getByLabel('Result')).toContainText('$2,709.68');
+  await expect(page.getByLabel('Result')).toContainText('$85.00');
 
   await page.getByRole('link', { name: 'Back to Help' }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Help' })).toBeVisible();

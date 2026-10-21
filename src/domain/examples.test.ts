@@ -8,7 +8,6 @@ import {
   type LimitLevel,
 } from './budget';
 import { EXAMPLES, type WorkedExample } from './examples';
-import { expectedSalary, freezeAllocation, freezeLoss } from './salary';
 import { SnapshotSchema } from './snapshot';
 import { applyRecords, dueGenerated } from './sync';
 
@@ -31,19 +30,6 @@ const COMPUTE: Record<string, (ex: WorkedExample) => Record<string, number>> = {
       available: availableBalance(bucketBalances(ex.data, ex.today), bills, reserved),
       foodSpent: food.spent,
       foodPct: food.pct,
-    };
-  },
-  'SAL-1': (ex) => {
-    const profile = ex.data.tables.profile[0]!;
-    const freeze = ex.data.tables.salaryFreeze[0]!;
-    const monthly = profile.salary!.monthlyAmount;
-    const alloc = freezeAllocation(freeze, monthly);
-    return {
-      lossSep: alloc['2026-09']!,
-      lossOct: alloc['2026-10']!,
-      total: freezeLoss(freeze.start, freeze.end, monthly),
-      expectedSep: expectedSalary(profile, ex.data.tables.salaryFreeze, '2026-09'),
-      expectedOct: expectedSalary(profile, ex.data.tables.salaryFreeze, '2026-10'),
     };
   },
   'SUB-1': (ex) => {
@@ -111,6 +97,11 @@ describe('worked examples', () => {
 
   it.each(EXAMPLES.map((ex) => [ex.id, ex] as const))('%s matches the domain math', (_id, ex) => {
     expect(COMPUTE[ex.id]!(ex)).toEqual(ex.result);
+  });
+
+  it('has no salary freeze example', () => {
+    expect(EXAMPLES.map((e) => e.id)).not.toContain('SAL-1');
+    expect(EXAMPLES.map((e) => e.rule)).not.toContain('Salary freeze');
   });
 
   it('BAL-1 has the documented numbers', () => {

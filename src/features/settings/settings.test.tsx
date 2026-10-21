@@ -10,6 +10,7 @@ import { createStubStore, renderWithStore } from '@/test/appStoreStub';
 import { fakeAccount, linkedAccount, withAccount } from '@/test/fakeAccount';
 import { fakeNotifier, onPhone, type FakeNotifier } from '@/test/fakeNotifier';
 import { makeExpense, makeGoal, makeProfile, makeSettings } from '@/test/fixtures';
+import { makeSalaryFreeze } from '@/test/retiredFixtures';
 import { SettingsScreen } from './SettingsScreen';
 
 const finance = vi.hoisted(() => ({
@@ -159,6 +160,15 @@ describe('Data', () => {
     data.tables.goal = [makeGoal()];
     renderWithStore(<SettingsScreen />, createStubStore({ data }));
     expect(screen.getByText('2 expenses · 1 goal')).toBeInTheDocument();
+  });
+
+  it('does not count a salary freeze an older build saved', () => {
+    const data = snapshotWith();
+    data.tables.expense = [makeExpense()];
+    data.tables.salaryFreeze = [makeSalaryFreeze(), makeSalaryFreeze()];
+    renderWithStore(<SettingsScreen />, createStubStore({ data }));
+    expect(screen.getByText('1 expense')).toBeInTheDocument();
+    expect(screen.queryByText(/freeze/i)).not.toBeInTheDocument();
   });
 
   it('offers no backup, restore or export, with or without an old backup date', () => {
@@ -437,7 +447,6 @@ describe('Reminders', () => {
   const OTHERS = [
     ['Daily nudge to log spending', 'dailyLog'],
     ['Bills and renewals', 'bills'],
-    ['Salary freeze start and end', 'freeze'],
     ['Weekly and monthly reviews', 'reviews'],
     ['Dividends', 'dividends'],
   ] as const;
@@ -585,6 +594,18 @@ describe('Reminders', () => {
 
     expect(finance.updateSettings).toHaveBeenCalledExactlyOnceWith({
       reminders: { ...on, backup: true, dividends: false },
+    });
+  });
+
+  it('offers no Salary freeze reminder, and keeps the saved choice when another switch changes', async () => {
+    // Salary freeze is gone. Its switch stays in the saved data until the next upgrade drops it.
+    renderReminders(fakeNotifier(), { ...on, freeze: false });
+    expect(within(section()).queryByRole('switch', { name: /freeze/i })).not.toBeInTheDocument();
+
+    await userEvent.click(switchNamed('Dividends'));
+
+    expect(finance.updateSettings).toHaveBeenCalledExactlyOnceWith({
+      reminders: { ...on, freeze: false, dividends: false },
     });
   });
 

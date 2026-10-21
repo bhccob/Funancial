@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { makeDebt, makeHolding, makeProfile, makeTransaction } from '@/test/fixtures';
+import { makeSalaryFreeze } from '@/test/retiredFixtures';
 import { EXAMPLES } from './examples';
 import { emptySnapshot } from './snapshot';
 import { computeFinanceView } from './view';
 
 const avl = EXAMPLES.find((e) => e.id === 'AVL-1')!;
-const sal = EXAMPLES.find((e) => e.id === 'SAL-1')!;
 
 describe('computeFinanceView', () => {
   it('gathers the AVL-1 numbers', () => {
@@ -21,7 +21,6 @@ describe('computeFinanceView', () => {
       subscriptionsMonthly: 54_99,
       spending: { today: 0, week: 100_00, month: 100_00, year: 100_00 },
       pendingSalary: [],
-      activeFreeze: null,
     });
     expect(v.limits.map((l) => [l.limit.category, l.pct])).toEqual([
       ['food', 83],
@@ -93,13 +92,30 @@ describe('computeFinanceView', () => {
     expect(v.netWorth).toBe(1_600_00);
   });
 
-  it('finds the active freeze on its first and last day only', () => {
-    expect(computeFinanceView(sal.data, '2026-09-28', 1).activeFreeze?.id).toBeDefined();
-    expect(computeFinanceView(sal.data, '2026-10-03', 1).activeFreeze?.id).toBeDefined();
-    expect(computeFinanceView(sal.data, '2026-10-04', 1).activeFreeze).toBeNull();
+  it('has no active freeze, even with a salary freeze row covering today', () => {
+    const data = emptySnapshot();
+    data.tables.profile = [
+      makeProfile({
+        openingDate: '2026-09-01',
+        salary: { monthlyAmount: 3_000_00, payDay: 25 },
+      }),
+    ];
+    data.tables.salaryFreeze = [makeSalaryFreeze({ start: '2026-10-10', end: '2026-10-20' })];
+    const v = computeFinanceView(data, '2026-10-14', 1);
+    expect(v).not.toHaveProperty('activeFreeze');
+    expect(v.expectedSalaryThisMonth).toBe(3_000_00);
   });
 
-  it('reports this month’s expected salary after freezes', () => {
-    expect(computeFinanceView(sal.data, '2026-10-14', 1).expectedSalaryThisMonth).toBe(2_709_68);
+  it('reports this month’s expected salary: the monthly amount, or 0 without a salary', () => {
+    const data = emptySnapshot();
+    data.tables.profile = [
+      makeProfile({
+        openingDate: '2026-09-01',
+        salary: { monthlyAmount: 3_000_00, payDay: 25 },
+      }),
+    ];
+    expect(computeFinanceView(data, '2026-10-14', 1).expectedSalaryThisMonth).toBe(3_000_00);
+    data.tables.profile = [makeProfile({ openingDate: '2026-09-01', salary: null })];
+    expect(computeFinanceView(data, '2026-10-14', 1).expectedSalaryThisMonth).toBe(0);
   });
 });

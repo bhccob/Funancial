@@ -5,7 +5,7 @@ import { Section, SectionLink } from '@/components/ui/Section';
 import type { Income } from '@/domain/entities';
 import { monthKey } from '@/domain/periods';
 import { QuestList } from '@/features/game/QuestList';
-import { formatDay, formatMonth } from '@/lib/format';
+import { formatMonth } from '@/lib/format';
 import { useAction } from '@/lib/useAction';
 import { useApp } from '@/store/AppStoreProvider';
 import { useFinanceActions, useFinanceView, useMoney, useToday } from '@/store/useFinance';
@@ -39,7 +39,6 @@ export function DashboardScreen() {
 
   const profile = data.tables.profile[0];
   const weekStartsOn = data.tables.settings[0]?.weekStartsOn ?? 1;
-  const freeze = view.activeFreeze;
 
   return (
     <div>
@@ -82,11 +81,6 @@ export function DashboardScreen() {
             </Banner>
           );
         })}
-        {freeze && (
-          <Banner tone="info">
-            {`Salary freeze until ${formatDay(freeze.end)}. Bills and subscriptions still apply.`}
-          </Banner>
-        )}
         <ReminderBanner />
         <AccountReminder />
       </div>

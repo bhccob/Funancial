@@ -7,7 +7,6 @@ import {
   PiggyBank,
   Receipt,
   Scissors,
-  Snowflake,
   Target,
   type LucideIcon,
 } from 'lucide-react';
@@ -23,7 +22,6 @@ const ICONS: Record<BadgeId, LucideIcon> = {
   'first-expense': Receipt,
   'subscription-slayer': Scissors,
   'limit-keeper': Target,
-  'freeze-master': Snowflake,
   'first-etf': ChartPie,
   'portfolio-pro': Briefcase,
   'first-dividend': Coins,

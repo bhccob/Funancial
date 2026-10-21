@@ -42,7 +42,6 @@ export const BADGE_REWARDS: Record<BadgeId, Reward> = {
   'first-expense': { xp: 50, coins: 10 },
   'subscription-slayer': { xp: 100, coins: 25 },
   'limit-keeper': { xp: 150, coins: 40 },
-  'freeze-master': { xp: 150, coins: 40 },
   'first-etf': { xp: 100, coins: 25 },
   'portfolio-pro': { xp: 150, coins: 40 },
   'first-dividend': { xp: 100, coins: 25 },

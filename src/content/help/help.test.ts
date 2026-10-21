@@ -17,7 +17,6 @@ const page = (id: string) => helpPage(id)!.body.join(' ');
 const PAGE_IDS = [
   'available',
   'limits',
-  'salary-freeze',
   'cards',
   'subscriptions',
   'net-worth',
@@ -49,6 +48,17 @@ describe('help pages', () => {
     expect(prose.filter((line) => line.includes('About you'))).toEqual([]);
   });
 
+  it('have no page about a salary freeze, and nothing else explains one', () => {
+    expect(helpPage('salary-freeze')).toBeUndefined();
+    expect(GLOSSARY.map((g) => g.term)).not.toContain('Salary freeze');
+    const prose = allProse();
+    expect(
+      prose.filter((line) => /salary freeze|salary and freezes|freeze lowers/i.test(line)),
+    ).toEqual([]);
+    // Streak freezes are another thing, and stay: the Shop sells them.
+    expect(page('game')).toMatch(/logging freeze/);
+  });
+
   it('give each page a title, a summary and something to read', () => {
     for (const p of HELP_PAGES) {
       expect(p.title, p.id).not.toBe('');
@@ -61,7 +71,6 @@ describe('help pages', () => {
     const examples = (id: string) => [...(helpPage(id)?.exampleIds ?? [])].sort();
     expect(examples('available')).toEqual(['AVL-1']);
     expect(examples('limits')).toEqual(['LIM-1']);
-    expect(examples('salary-freeze')).toEqual(['SAL-1']);
     expect(examples('cards')).toEqual(['BAL-1', 'EXP-1']);
     expect(examples('subscriptions')).toEqual(['SUB-1']);
     expect(examples('net-worth')).toEqual([]);
@@ -82,6 +91,11 @@ describe('help pages', () => {
 });
 
 describe('worked example labels', () => {
+  it('have no label that no example uses', () => {
+    const used = new Set(EXAMPLES.flatMap((e) => Object.keys(e.result)));
+    expect(Object.keys(RESULT_ROWS).filter((key) => !used.has(key))).toEqual([]);
+  });
+
   it('cover every result key of every example', () => {
     for (const ex of EXAMPLES) {
       for (const key of Object.keys(ex.result)) {

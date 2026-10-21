@@ -61,10 +61,6 @@ export const GLOSSARY: Array<{ term: string; meaning: string }> = [
     term: 'Reserve',
     meaning: 'Hold back what is left of a limit, so Available to spend does not count that money.',
   },
-  {
-    term: 'Salary freeze',
-    meaning: 'Days when you are not paid. Funcial lowers your expected pay for them.',
-  },
   { term: 'Streak', meaning: 'How many days, weeks or months in a row you keep a habit.' },
   {
     term: 'Subscription',

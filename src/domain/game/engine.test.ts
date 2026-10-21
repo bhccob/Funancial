@@ -112,7 +112,8 @@ describe('gameUpdates', () => {
   });
 
   it('keeps the XP and coins of a badge that is no longer on offer', () => {
-    // Smart Shopper went with Buy it?: its award stays in the ledger and is never taken back.
+    // Smart Shopper went with Buy it?, Freeze Master with Salary freeze: an award stays in the
+    // ledger and is never taken back.
     const award = makeLedgerEntry({
       id: 'badge:smart-shopper#0',
       key: 'badge:smart-shopper',
@@ -124,6 +125,22 @@ describe('gameUpdates', () => {
     const data = snap({ ledger: [award] });
     expect(gameUpdates(data, ctx)).toEqual({ records: [], gain: null });
     expect(computeGameView(data, ctx).totals).toEqual({ xp: 100, coins: 25 });
+  });
+
+  it('keeps the XP and coins of a Freeze Master badge earned before Salary freeze went', () => {
+    const award = makeLedgerEntry({
+      id: 'badge:freeze-master#0',
+      key: 'badge:freeze-master',
+      kind: 'award',
+      xp: 150,
+      coins: 40,
+      label: 'Badge: Freeze Master',
+    });
+    const data = snap({ ledger: [award] });
+    expect(gameUpdates(data, ctx)).toEqual({ records: [], gain: null });
+    const view = computeGameView(data, ctx);
+    expect(view.totals).toEqual({ xp: 150, coins: 40 });
+    expect(view.badges.map((b) => b.id)).not.toContain('freeze-master');
   });
 
   it('spends freezes and counts them in the same run', () => {
@@ -336,7 +353,6 @@ describe('computeGameView', () => {
       'first-expense',
       'subscription-slayer',
       'limit-keeper',
-      'freeze-master',
       'first-etf',
       'portfolio-pro',
       'first-dividend',

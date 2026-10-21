@@ -1,10 +1,11 @@
-import type { AboutYou, BuyAsk, BuyDecision } from '@/domain/entities';
+import type { AboutYou, BuyAsk, BuyDecision, SalaryFreeze } from '@/domain/entities';
 import { newId, nowIso } from '@/domain/ids';
 
 /**
- * Builders for the rows of the two retired features, "Should I buy it?" and About you. No screen,
- * action or demo makes these rows any more; only the schema tests still do, because the schemas
- * stay until the v10 upgrade deletes the rows. Delete this file with them.
+ * Builders for the rows of the three retired features, "Should I buy it?", About you and Salary
+ * freeze. No screen, action or demo makes these rows any more; only tests do, to show that a row
+ * left on a phone changes nothing and to exercise the schemas, which stay until the v10 upgrade
+ * deletes the rows. Delete this file with them.
  */
 const stamp = () => {
   const now = nowIso();
@@ -67,6 +68,19 @@ export function makeAboutYou(overrides: Partial<AboutYou> = {}): AboutYou {
     matters: '',
     overspend: [],
     protectGoalId: null,
+    ...overrides,
+  };
+}
+
+export function makeSalaryFreeze(overrides: Partial<SalaryFreeze> = {}): SalaryFreeze {
+  return {
+    id: newId(),
+    ...stamp(),
+    start: '2026-10-01',
+    end: '2026-10-07',
+    lostAmount: 100_00,
+    mode: 'computed',
+    note: '',
     ...overrides,
   };
 }

@@ -10,6 +10,7 @@ import {
   makeProfile,
   makeSubscription,
 } from '@/test/fixtures';
+import { makeSalaryFreeze } from '@/test/retiredFixtures';
 import type { SalaryFreeze } from '../entities';
 import { emptySnapshot, type DataSnapshot } from '../snapshot';
 import { BADGES, badgeAwards, badgeViews } from './badges';
@@ -37,27 +38,26 @@ const limitSince = (since: string) => makeLimit({ createdAt: localIso(since) });
 const spent = (day: string, amount: number) =>
   makeExpense({ date: day, amount, category: 'food', createdAt: localIso(day) });
 
+/** A row the retired Salary freeze saved. */
 function freeze(start: string, end: string): SalaryFreeze {
   const stamp = localIso(start);
-  return {
+  return makeSalaryFreeze({
     id: `freeze-${start}`,
     createdAt: stamp,
     updatedAt: stamp,
     start,
     end,
-    lostAmount: 0,
     mode: 'manual',
-    note: '',
-  };
+    lostAmount: 0,
+  });
 }
 
 describe('BADGES', () => {
-  it('lists the nine badges in order', () => {
+  it('lists the eight badges in order', () => {
     expect(BADGES.map((b) => b.id)).toEqual([
       'first-expense',
       'subscription-slayer',
       'limit-keeper',
-      'freeze-master',
       'first-etf',
       'portfolio-pro',
       'first-dividend',
@@ -68,7 +68,6 @@ describe('BADGES', () => {
       'First Expense Logged',
       'Subscription Slayer',
       'Limit Keeper',
-      'Freeze Master',
       'First ETF',
       'Portfolio Pro',
       'First Dividend',
@@ -76,13 +75,18 @@ describe('BADGES', () => {
       'Passive Income Pro',
     ]);
     expect(BADGES[2]?.description).toBe('Finish a calendar month without going over any limit.');
-    expect(BADGES.slice(4).map((b) => b.description)).toEqual([
+    expect(BADGES.slice(3).map((b) => b.description)).toEqual([
       'Add an ETF to your portfolio.',
       'Hold five or more investments.',
       'Confirm your first dividend.',
       'Confirm 12 dividends.',
       'Collect 100 in dividends in one month.',
     ]);
+  });
+
+  it('has no badge for a salary freeze', () => {
+    expect(BADGES.map((b) => b.id)).not.toContain('freeze-master');
+    expect(BADGES.map((b) => b.name)).not.toContain('Freeze Master');
   });
 
   it('has no badge for a purchase check', () => {
@@ -176,53 +180,11 @@ describe('badgeAwards', () => {
     expect(earned(data)).toEqual(['first-expense', 'limit-keeper']);
   });
 
-  it('earns Freeze Master after a freeze ends cleanly', () => {
+  it('earns nothing from a salary freeze that ended cleanly', () => {
     const limit = limitSince('2026-10-01');
-    expect(
-      earned(snap({ salaryFreeze: [freeze('2026-10-01', '2026-10-07')], budgetLimit: [limit] })),
-    ).toEqual(['freeze-master']);
-    expect(
-      badgeAwards(
-        snap({ salaryFreeze: [freeze('2026-10-01', '2026-10-07')], budgetLimit: [limit] }),
-        ctx,
-      )[0],
-    ).toMatchObject({
-      key: 'badge:freeze-master',
-      kind: 'badge',
-      title: 'Freeze Master',
-      label: 'Badge: Freeze Master',
-      xp: 150,
-      coins: 40,
-    });
-
-    // Still running, or ending today: not through it yet.
-    expect(
-      earned(snap({ salaryFreeze: [freeze('2026-10-01', '2026-10-20')], budgetLimit: [limit] })),
-    ).toEqual([]);
-    expect(
-      earned(snap({ salaryFreeze: [freeze('2026-10-08', '2026-10-15')], budgetLimit: [limit] })),
-    ).toEqual([]);
-
-    // No limit on the freeze's first day.
-    expect(
-      earned(
-        snap({
-          salaryFreeze: [freeze('2026-10-01', '2026-10-07')],
-          budgetLimit: [limitSince('2026-10-02')],
-        }),
-      ),
-    ).toEqual([]);
-
-    // Over a limit on a day of the freeze.
-    expect(
-      earned(
-        snap({
-          salaryFreeze: [freeze('2026-10-01', '2026-10-07')],
-          budgetLimit: [limit],
-          expense: [spent('2026-10-05', 130_00)],
-        }),
-      ),
-    ).toEqual(['first-expense']);
+    const data = snap({ salaryFreeze: [freeze('2026-10-01', '2026-10-07')], budgetLimit: [limit] });
+    expect(earned(data)).toEqual([]);
+    expect(badgeAwards(data, ctx)).toEqual([]);
   });
 
   it('earns First ETF from an ETF holding, not from a stock', () => {
@@ -384,13 +346,6 @@ describe('badgeViews', () => {
         id: 'limit-keeper',
         name: 'Limit Keeper',
         description: 'Finish a calendar month without going over any limit.',
-        earnedAt: null,
-        reward: { xp: 150, coins: 40 },
-      },
-      {
-        id: 'freeze-master',
-        name: 'Freeze Master',
-        description: 'Get through a salary freeze without going over any limit.',
         earnedAt: null,
         reward: { xp: 150, coins: 40 },
       },

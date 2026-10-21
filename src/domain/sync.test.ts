@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { makeSalaryFreeze } from '@/test/retiredFixtures';
 import { ex } from './examples';
 import { applyRecords, dueGenerated } from './sync';
 
@@ -64,10 +65,10 @@ describe('expected salary', () => {
     ]);
   });
 
-  it('reduces the expected amount by a freeze in that month', () => {
-    const freeze = ex.freeze({ start: '2026-09-08', end: '2026-09-12', lostAmount: 700_00 });
+  it('ignores a salary freeze left on the phone: the expected amount is the full salary', () => {
+    const freeze = makeSalaryFreeze({ start: '2026-09-08', end: '2026-09-12', lostAmount: 700_00 });
     const data = ex.snapshot({ profile: [profile], income: [august], salaryFreeze: [freeze] });
-    expect(dueGenerated(data, '2026-10-14')[0]?.record).toMatchObject({ amount: 3_500_00 });
+    expect(dueGenerated(data, '2026-10-14')[0]?.record).toMatchObject({ amount: 4_200_00 });
   });
 
   it('clamps pay day 31 and waits for the first pay day after opening', () => {

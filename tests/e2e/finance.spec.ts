@@ -1,14 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { onboard } from './helpers';
 
-/** Local calendar date, offset by whole days, as the app sees it (YYYY-MM-DD). */
-function localDate(offsetDays = 0): string {
-  const d = new Date();
-  d.setDate(d.getDate() + offsetDays);
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
-
 async function start(page: Page) {
   await page.goto('/');
   await page.getByRole('button', { name: 'Create an account' }).click();
@@ -110,20 +102,15 @@ test('card spending becomes a bill until the card is paid', async ({ page }) => 
   await expect(available(page)).toContainText('$5,950.00');
 });
 
-test('a salary freeze previews lower pay and shows on Home', async ({ page }) => {
+test('there is no salary freeze: its page is gone and Home has no banner for it', async ({
+  page,
+}) => {
   await start(page);
   await page.goto('/freeze');
-  await page.getByLabel('From', { exact: true }).fill(localDate(0));
-  await page.getByLabel('To', { exact: true }).fill(localDate(2));
-  await expect(page.getByText(/: \$4,200\.00 → \$[\d,]+\.\d\d$/).first()).toBeVisible();
-  await page.getByRole('button', { name: 'Add freeze' }).click();
-  await expect(page.getByText('Freeze added. Expected pay is updated.')).toBeVisible();
-  await expect(page.getByRole('region', { name: 'Your freezes' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'Page not found' })).toBeVisible();
 
   await page.goto('/');
-  await expect(
-    page.getByText(/^Salary freeze until .+\. Bills and subscriptions still apply\.$/),
-  ).toBeVisible();
+  await expect(page.getByText(/^Salary freeze until/)).toHaveCount(0);
 });
 
 test('setting the actual cash balance records a correction', async ({ page }) => {

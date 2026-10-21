@@ -1,6 +1,5 @@
 import { activeDebts } from '@/domain/debts';
 import { incomeByMonth } from '@/domain/income';
-import { formatDay } from '@/lib/format';
 import { useApp } from '@/store/AppStoreProvider';
 import { useFinanceView, useMoney, useToday } from '@/store/useFinance';
 import { useGameView } from '@/store/useGame';
@@ -49,9 +48,6 @@ export function useMenuSubtitles(): Record<string, string> {
     '/debts': debts.length > 0 ? `${debtCount} · ${money(view.debtTotal)}` : 'None yet',
     '/income': `${money(incomeByMonth(data, today, 1)[0]!.total)} this month`,
     '/history': 'Every entry, searchable',
-    '/freeze': view.activeFreeze
-      ? `Active until ${formatDay(view.activeFreeze.end)}`
-      : 'None right now',
     '/quests': `Level ${level}`,
     '/shop': `${plural(coins, 'coin')} to spend`,
     // Nothing under the name when there is nothing new.

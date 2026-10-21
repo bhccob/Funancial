@@ -1,6 +1,6 @@
 # Funcial
 
-A gamified personal finance tracker: expenses, salary (with freezes), subscriptions, limits, goals,
+A gamified personal finance tracker: expenses, salary, subscriptions, limits, goals,
 and a stock/ETF portfolio with dividends and news — wrapped in XP,
 levels, quests, streaks and badges. Local-first and encrypted on your device.
 

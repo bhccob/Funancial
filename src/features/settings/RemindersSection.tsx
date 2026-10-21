@@ -18,11 +18,10 @@ const HOURS = Array.from({ length: 17 }, (_, i) => `${String(i + 7).padStart(2, 
 
 /** The rules after the daily nudge, which has its time beside it. */
 const RULES: Array<{
-  key: 'bills' | 'freeze' | 'reviews' | 'dividends';
+  key: 'bills' | 'reviews' | 'dividends';
   label: string;
 }> = [
   { key: 'bills', label: 'Bills and renewals' },
-  { key: 'freeze', label: 'Salary freeze start and end' },
   { key: 'reviews', label: 'Weekly and monthly reviews' },
   { key: 'dividends', label: 'Dividends' },
 ];

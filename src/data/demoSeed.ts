@@ -155,23 +155,6 @@ export function buildDemoSnapshot(today: LocalDate, seed = 42): DataSnapshot {
     payInFull: true,
   });
 
-  // A five-day salary freeze last month, valued from the daily salary of that month.
-  const lastMonth = monthOf(addDays(`${monthOf(today)}-01`, -1));
-  const freezeStart = `${lastMonth}-08`;
-  const lostAmount = Math.round(
-    (MONTHLY_SALARY / daysInMonth(Number(lastMonth.slice(0, 4)), Number(lastMonth.slice(5, 7)))) *
-      5,
-  );
-  t.salaryFreeze.push({
-    id: id('freeze'),
-    ...stampFor(freezeStart),
-    start: freezeStart,
-    end: addDays(freezeStart, 4),
-    lostAmount,
-    mode: 'computed',
-    note: 'Unpaid leave',
-  });
-
   const expense = (
     date: LocalDate,
     category: Category,
@@ -219,11 +202,10 @@ export function buildDemoSnapshot(today: LocalDate, seed = 42): DataSnapshot {
 
     if (day === PAY_DAY) {
       const period = monthOf(date);
-      const frozen = period === lastMonth ? lostAmount : 0;
       t.income.push({
         id: id('income'),
         ...stampFor(date),
-        amount: MONTHLY_SALARY - frozen,
+        amount: MONTHLY_SALARY,
         source: 'salary',
         label: 'Salary',
         date,
@@ -231,7 +213,7 @@ export function buildDemoSnapshot(today: LocalDate, seed = 42): DataSnapshot {
         bucket: 'cash',
         recurrence: null,
         period,
-        note: frozen ? 'Reduced by salary freeze' : '',
+        note: '',
       });
       t.transaction.push({
         id: id('transaction'),

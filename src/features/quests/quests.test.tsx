@@ -523,7 +523,8 @@ describe('Quests screen: badges', () => {
     });
 
     const badges = within(region('Badges')).getAllByRole('listitem');
-    expect(badges).toHaveLength(9);
+    expect(badges).toHaveLength(8);
+    expect(screen.queryByText('Freeze Master')).not.toBeInTheDocument();
 
     const earned = badges[0]!;
     expect(within(earned).getByText('First Expense Logged')).toBeInTheDocument();
@@ -536,7 +537,6 @@ describe('Quests screen: badges', () => {
     const locked = {
       'Subscription Slayer': ["Cancel a subscription you don't need.", 'scissors'],
       'Limit Keeper': ['Finish a calendar month without going over any limit.', 'target'],
-      'Freeze Master': ['Get through a salary freeze without going over any limit.', 'snowflake'],
       'First ETF': ['Add an ETF to your portfolio.', 'chart-pie'],
       'Portfolio Pro': ['Hold five or more investments.', 'briefcase'],
       'First Dividend': ['Confirm your first dividend.', 'coins'],
@@ -551,7 +551,7 @@ describe('Quests screen: badges', () => {
       expect(within(row).queryByText(/Earned/)).not.toBeInTheDocument();
       expect(row.querySelector('[class*="ring-"]')).not.toBeInTheDocument();
     }
-    expect(container.querySelectorAll('svg.lucide-lock')).toHaveLength(8);
+    expect(container.querySelectorAll('svg.lucide-lock')).toHaveLength(7);
   });
 });
 
@@ -607,7 +607,7 @@ describe('Quests screen: how to earn', () => {
     expect(badges.getByText('First Expense Logged — +50 XP, +10 coins')).toBeInTheDocument();
     expect(badges.getByText('Subscription Slayer — +100 XP, +25 coins')).toBeInTheDocument();
     expect(badges.getByText('Limit Keeper — +150 XP, +40 coins')).toBeInTheDocument();
-    expect(badges.getByText('Freeze Master — +150 XP, +40 coins')).toBeInTheDocument();
+    expect(badges.queryByText(/Freeze Master/)).not.toBeInTheDocument();
     expect(badges.getByText('First ETF — +100 XP, +25 coins')).toBeInTheDocument();
     expect(badges.getByText('Portfolio Pro — +150 XP, +40 coins')).toBeInTheDocument();
     expect(badges.getByText('First Dividend — +100 XP, +25 coins')).toBeInTheDocument();

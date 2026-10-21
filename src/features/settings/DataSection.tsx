@@ -14,7 +14,6 @@ const SUMMARY: Array<[TableName, string, string]> = [
   ['subscription', 'subscription', 'subscriptions'],
   ['budgetLimit', 'limit', 'limits'],
   ['income', 'income entry', 'income entries'],
-  ['salaryFreeze', 'salary freeze', 'salary freezes'],
   ['transaction', 'transaction', 'transactions'],
   ['goal', 'goal', 'goals'],
   ['debt', 'debt or card', 'debts and cards'],

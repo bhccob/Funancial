@@ -17,7 +17,6 @@ import {
   type Income,
   type PaymentMethod,
   type Profile,
-  type SalaryFreeze,
   type Settings,
   type Subscription,
   type Transaction,
@@ -26,7 +25,6 @@ import { newId, nowIso } from '@/domain/ids';
 import { minorDigits } from '@/domain/money';
 import { dayOfMonth, monthKey } from '@/domain/periods';
 import { nextOccurrence } from '@/domain/recurrence';
-import { expectedSalary, freezeLoss } from '@/domain/salary';
 import type { EntityOf, TableName, TableRecord } from '@/domain/snapshot';
 import type { AppState } from './appStore';
 
@@ -64,13 +62,6 @@ export interface LimitInput {
   period: 'weekly' | 'monthly';
   amount: number;
   reserve: boolean;
-}
-export interface FreezeInput {
-  start: LocalDate;
-  end: LocalDate;
-  mode: 'manual' | 'computed';
-  lostAmount?: number;
-  note: string;
 }
 export interface GoalInput {
   id?: string;
@@ -131,24 +122,6 @@ export function createFinanceActions(store: StoreApi<AppState>) {
   };
   const cardFor = (method: PaymentMethod, cardId: string | null) =>
     method === 'credit_card' ? cardId : null;
-
-  /** Expected salaries follow freezes: re-price them (removing any that drop to zero). */
-  async function repriceExpectedSalaries(freezes: SalaryFreeze[]) {
-    const profile = state().data.tables.profile[0];
-    if (!profile) return;
-    const updates: TableRecord[] = [];
-    const removals: string[] = [];
-    for (const i of state().data.tables.income) {
-      if (i.source !== 'salary' || i.status !== 'expected' || !i.period) continue;
-      const amount = expectedSalary(profile, freezes, i.period);
-      if (amount === 0) removals.push(i.id);
-      else if (amount !== i.amount) {
-        updates.push({ table: 'income', record: { ...i, amount, updatedAt: nowIso() } });
-      }
-    }
-    await state().putMany(updates);
-    for (const id of removals) await state().remove('income', id);
-  }
 
   return {
     async addExpense(input: ExpenseInput): Promise<{ expense: Expense; alerts: LimitStatus[] }> {
@@ -338,32 +311,6 @@ export function createFinanceActions(store: StoreApi<AppState>) {
     },
 
     deleteLimit: (id: string) => state().remove('budgetLimit', id),
-
-    async addFreeze(input: FreezeInput) {
-      if (input.end < input.start)
-        throw new Error('The end date must be on or after the start date.');
-      const monthly = state().data.tables.profile[0]?.salary?.monthlyAmount ?? 0;
-      const freeze: SalaryFreeze = {
-        id: newId(),
-        ...stamp(),
-        start: input.start,
-        end: input.end,
-        mode: input.mode,
-        lostAmount:
-          input.mode === 'computed'
-            ? freezeLoss(input.start, input.end, monthly)
-            : (input.lostAmount ?? 0),
-        note: input.note,
-      };
-      await state().put('salaryFreeze', freeze);
-      await repriceExpectedSalaries(state().data.tables.salaryFreeze);
-      return freeze;
-    },
-
-    async deleteFreeze(id: string) {
-      await state().remove('salaryFreeze', id);
-      await repriceExpectedSalaries(state().data.tables.salaryFreeze);
-    },
 
     async saveGoal(input: GoalInput) {
       const existing = input.id ? find('goal', input.id) : null;

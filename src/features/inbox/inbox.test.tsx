@@ -30,7 +30,7 @@ function renderInbox(data: DataSnapshot = inboxData()) {
     <MemoryRouter initialEntries={['/inbox']}>
       <Routes>
         <Route path="/inbox" element={<InboxScreen />} />
-        <Route path="/freeze" element={<p>The freeze page</p>} />
+        <Route path="/subscriptions" element={<p>The subscriptions page</p>} />
         <Route path="*" element={<p>Somewhere else</p>} />
       </Routes>
     </MemoryRouter>,
@@ -46,8 +46,8 @@ describe('InboxScreen', () => {
     expect(screen.getByRole('heading', { level: 1, name: 'Inbox' })).toBeInTheDocument();
     const day = (d: string, time: string) => `${formatDay(d)}, ${time}`;
     const expected = [
-      ['Salary freeze ends today', `Salary freeze · ${day('2026-10-13', '09:00')}`],
-      ['Salary freeze starts today', `Salary freeze · ${day('2026-10-12', '09:00')}`],
+      ['Streamflix renews tomorrow', `Subscriptions · ${day('2026-10-13', '09:00')}`],
+      ['Tunely renews tomorrow', `Subscriptions · ${day('2026-10-12', '09:00')}`],
       ['Weekly check-in', `Budget · ${day('2026-10-11', '18:00')}`],
       ['Weekly check-in', `Budget · ${day('2026-10-04', '18:00')}`],
       ['Monthly review', `Budget · ${day('2026-09-30', '18:00')}`],
@@ -63,7 +63,7 @@ describe('InboxScreen', () => {
 
   it('opens the screen a reminder is about', () => {
     renderInbox();
-    expect(rows()[0]).toHaveAttribute('href', '/freeze');
+    expect(rows()[0]).toHaveAttribute('href', '/subscriptions');
     expect(rows()[2]).toHaveAttribute('href', '/');
   });
 
@@ -92,23 +92,23 @@ describe('InboxScreen', () => {
     renderInbox();
     await userEvent.click(rows()[0]!);
     expect(actions.markRead).toHaveBeenCalledTimes(1);
-    expect(actions.markRead).toHaveBeenCalledWith('freeze-end:freeze-1');
-    expect(screen.getByText('The freeze page')).toBeInTheDocument();
+    expect(actions.markRead).toHaveBeenCalledWith('renewal:sub-streamflix:2026-10-14');
+    expect(screen.getByText('The subscriptions page')).toBeInTheDocument();
   });
 
   it('opens a row that was read without marking it again', async () => {
-    renderInbox(inboxData({ readBefore: null, read: ['freeze-end:freeze-1'] }));
+    renderInbox(inboxData({ readBefore: null, read: ['renewal:sub-streamflix:2026-10-14'] }));
     await userEvent.click(screen.getByRole('button', { name: 'All' }));
     await userEvent.click(rows()[0]!);
     expect(actions.markRead).not.toHaveBeenCalled();
-    expect(screen.getByText('The freeze page')).toBeInTheDocument();
+    expect(screen.getByText('The subscriptions page')).toBeInTheDocument();
   });
 
   it('still opens the row when marking it read fails, and says so', async () => {
     actions.markRead.mockRejectedValueOnce(new Error('Storage is full.'));
     renderInbox();
     await userEvent.click(rows()[0]!);
-    expect(screen.getByText('The freeze page')).toBeInTheDocument();
+    expect(screen.getByText('The subscriptions page')).toBeInTheDocument();
     await waitFor(() =>
       expect(toastStore.getState().toasts.map((t) => [t.tone, t.message])).toEqual([
         ['danger', 'Storage is full.'],

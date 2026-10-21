@@ -12,10 +12,6 @@ export const FAQ: Array<{ q: string; a: string }> = [
     a: 'Money only counts once it has arrived. Expected pay and dividends stay out of your balances until you confirm them.',
   },
   {
-    q: 'Does a salary freeze lower my bills?',
-    a: 'No. A freeze lowers your expected pay. Bills and subscriptions carry on as usual.',
-  },
-  {
     q: 'What does a ~ in front of a date mean?',
     a: "The date is a guess. A date with no ~ comes from the price service's real ex-dates.",
   },

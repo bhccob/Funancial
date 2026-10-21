@@ -51,8 +51,8 @@ describe('Help index', () => {
     renderHelp();
     const search = screen.getByRole('searchbox', { name: 'Search help' });
 
-    await userEvent.type(search, 'FREEZE');
-    expect(screen.getByRole('link', { name: /^Salary and freezes/ })).toBeInTheDocument();
+    await userEvent.type(search, 'WARNINGS');
+    expect(screen.getByRole('link', { name: /^Limits and warnings/ })).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /^Words/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('region', { name: 'More' })).not.toBeInTheDocument();
 
@@ -68,8 +68,8 @@ describe('Help index', () => {
     const search = screen.getByRole('searchbox', { name: 'Search help' });
     const hrefs = () => screen.queryAllByRole('link').map((a) => a.getAttribute('href'));
 
-    await userEvent.type(search, 'salary freeze');
-    expect(hrefs()).toEqual(['/help/salary-freeze']);
+    await userEvent.type(search, 'net worth');
+    expect(hrefs()).toEqual(['/help/net-worth']);
 
     await userEvent.clear(search);
     await userEvent.type(search, 'glossary');
@@ -78,6 +78,29 @@ describe('Help index', () => {
     await userEvent.clear(search);
     await userEvent.type(search, 'salary dividends');
     expect(hrefs()).toEqual([]);
+  });
+
+  it('suggests only words that find a page', async () => {
+    renderHelp();
+    const search = screen.getByRole('searchbox', { name: 'Search help' });
+    const words = search
+      .getAttribute('placeholder')!
+      .replace(/^e.g. /, '')
+      .split(', ');
+    expect(words.length).toBeGreaterThan(1);
+    for (const word of words) {
+      await userEvent.clear(search);
+      await userEvent.type(search, word);
+      expect(screen.queryAllByRole('link').length, word).toBeGreaterThan(0);
+    }
+  });
+
+  it('finds no page about a salary freeze', async () => {
+    renderHelp();
+    const search = screen.getByRole('searchbox', { name: 'Search help' });
+    await userEvent.type(search, 'freeze');
+    expect(screen.getByRole('status')).toHaveTextContent('No help page matches “freeze”.');
+    expect(screen.queryAllByRole('link')).toHaveLength(0);
   });
 
   it('says so when nothing matches, and comes back when the search is cleared', async () => {

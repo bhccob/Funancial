@@ -10,7 +10,7 @@ import {
 } from './budget';
 import type { LocalDate } from './dates';
 import { activeDebts } from './debts';
-import type { Debt, Income, SalaryFreeze } from './entities';
+import type { Debt, Income } from './entities';
 import { monthKey } from './periods';
 import { portfolio } from './portfolio';
 import { monthlyEquivalent } from './recurrence';
@@ -32,7 +32,6 @@ export type FinanceView = {
   spending: { today: number; week: number; month: number; year: number };
   pendingSalary: Income[];
   expectedSalaryThisMonth: number;
-  activeFreeze: SalaryFreeze | null;
   subscriptionsMonthly: number;
 };
 
@@ -70,10 +69,7 @@ export function computeFinanceView(
     pendingSalary: data.tables.income
       .filter((i) => i.source === 'salary' && i.status === 'expected')
       .sort((a, b) => a.date.localeCompare(b.date)),
-    expectedSalaryThisMonth: profile
-      ? expectedSalary(profile, data.tables.salaryFreeze, monthKey(today))
-      : 0,
-    activeFreeze: data.tables.salaryFreeze.find((f) => f.start <= today && today <= f.end) ?? null,
+    expectedSalaryThisMonth: profile ? expectedSalary(profile, monthKey(today)) : 0,
     subscriptionsMonthly: data.tables.subscription
       .filter((s) => s.status === 'active')
       .reduce((s, sub) => s + monthlyEquivalent(sub.amount, sub.cycle), 0),

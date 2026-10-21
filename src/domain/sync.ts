@@ -53,10 +53,11 @@ export function dueGenerated(data: DataSnapshot, today: LocalDate): TableRecord[
     );
     for (const month of monthsBetween(monthKey(profile.openingDate), monthKey(today))) {
       const date = payDate(month, salary.payDay);
-      // Pay on the opening day is already in the opening cash; pay before `since` predates the salary.
-      if (date <= profile.openingDate || (salary.since && date <= salary.since)) continue;
+      // Pay on the opening day is already in the opening cash.
+      if (date <= profile.openingDate) continue;
       if (date > today || paid.has(month)) continue;
-      const amount = expectedSalary(profile, data.tables.salaryFreeze, month);
+      // Nothing is expected for pay that predates the salary (`since`).
+      const amount = expectedSalary(profile, month);
       if (amount <= 0) continue;
       const income: Income = {
         id: `salary-${month}`,

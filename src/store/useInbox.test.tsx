@@ -22,8 +22,8 @@ describe('useInboxItems', () => {
     const { wrapper } = setup();
     const { result } = renderHook(() => useInboxItems(), { wrapper });
     expect(result.current.map((i) => i.key)).toEqual([
-      'freeze-end:freeze-1',
-      'freeze-start:freeze-1',
+      'renewal:sub-streamflix:2026-10-14',
+      'renewal:sub-tunely:2026-10-13',
       'week:2026-10-11',
       'week:2026-10-04',
       'month:2026-09-30',

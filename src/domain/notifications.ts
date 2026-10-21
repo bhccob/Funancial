@@ -14,8 +14,6 @@ export type ReminderKind =
   | 'daily-log'
   | 'renewal'
   | 'card-due'
-  | 'freeze-start'
-  | 'freeze-end'
   | 'weekly-review'
   | 'monthly-review'
   | 'dividend-ex'
@@ -147,28 +145,6 @@ function cardBills({ data, prefs, today, lastDay, money }: Context): Reminder[] 
   return out;
 }
 
-function freezes({ data, prefs }: Context): Reminder[] {
-  if (!prefs.freeze) return [];
-  return data.tables.salaryFreeze.flatMap((f): Reminder[] => [
-    {
-      key: `freeze-start:${f.id}`,
-      kind: 'freeze-start',
-      at: moment(f.start, MORNING),
-      title: 'Salary freeze starts today',
-      body: 'Expected pay is lower while it lasts. Bills still apply.',
-      route: '/freeze',
-    },
-    {
-      key: `freeze-end:${f.id}`,
-      kind: 'freeze-end',
-      at: moment(f.end, MORNING),
-      title: 'Salary freeze ends today',
-      body: 'Your expected pay goes back to normal.',
-      route: '/freeze',
-    },
-  ]);
-}
-
 /** A weekly check-in on each week's last day, or the monthly review when that day also ends the month. */
 function reviews({ prefs, settings, firstDay, lastDay }: Context): Reminder[] {
   if (!prefs.reviews) return [];
@@ -237,7 +213,7 @@ function dividends({ data, profile, prefs, today, firstDay, lastDay, money }: Co
   });
 }
 
-const RULES: Rule[] = [dailyLog, renewals, cardBills, freezes, reviews, dividends];
+const RULES: Rule[] = [dailyLog, renewals, cardBills, reviews, dividends];
 
 /** What the rules plan for a context's days. Each caller keeps the moments that suit its window. */
 const plan = (ctx: Context): Reminder[] => RULES.flatMap((rule) => rule(ctx));
@@ -335,8 +311,6 @@ export function pastReminders(
 export const REMINDER_AREA: Record<ReminderKind, string> = {
   renewal: 'Subscriptions',
   'card-due': 'Cards',
-  'freeze-start': 'Salary freeze',
-  'freeze-end': 'Salary freeze',
   'weekly-review': 'Budget',
   'monthly-review': 'Budget',
   'dividend-ex': 'Invest',

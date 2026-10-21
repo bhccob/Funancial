@@ -24,11 +24,6 @@ export const BADGES: readonly { id: BadgeId; name: string; description: string }
     name: 'Limit Keeper',
     description: 'Finish a calendar month without going over any limit.',
   },
-  {
-    id: 'freeze-master',
-    name: 'Freeze Master',
-    description: 'Get through a salary freeze without going over any limit.',
-  },
   { id: 'first-etf', name: 'First ETF', description: 'Add an ETF to your portfolio.' },
   { id: 'portfolio-pro', name: 'Portfolio Pro', description: 'Hold five or more investments.' },
   { id: 'first-dividend', name: 'First Dividend', description: 'Confirm your first dividend.' },
@@ -94,10 +89,6 @@ const CONDITIONS: Record<BadgeId, Condition> = {
   'first-expense': (data) => loggedEntries(data).some((e) => e.table === 'expense'),
   'subscription-slayer': (data) => data.tables.subscription.some((s) => s.status === 'cancelled'),
   'limit-keeper': limitKeeper,
-  'freeze-master': (data, ctx, spend) =>
-    data.tables.salaryFreeze.some(
-      (f) => f.end < ctx.today && spend.limitsOn(f.start) && !anyOver(spend, f.start, f.end),
-    ),
   'first-etf': (data) => data.tables.holding.some((h) => h.type === 'etf'),
   'portfolio-pro': (data) => data.tables.holding.length >= 5,
   'first-dividend': (data) => confirmedDividends(data).length >= 1,

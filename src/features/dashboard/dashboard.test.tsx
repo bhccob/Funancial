@@ -29,6 +29,7 @@ import {
   makeSettings,
   makeSubscription,
 } from '@/test/fixtures';
+import { makeSalaryFreeze } from '@/test/retiredFixtures';
 import { DashboardScreen } from './DashboardScreen';
 
 const actions = vi.hoisted(() => ({
@@ -808,20 +809,30 @@ describe('DashboardScreen with nothing set up', () => {
   });
 });
 
-describe('DashboardScreen salary and freeze', () => {
-  const sal = example('SAL-1');
+describe('DashboardScreen salary', () => {
+  /** A $3,000.00 salary paid on the 25th, set up on 2026-09-01. */
+  const sal = (() => {
+    const data = emptySnapshot();
+    data.tables.profile = [
+      makeProfile({
+        openingDate: '2026-09-01',
+        salary: { monthlyAmount: 3_000_00, payDay: 25 },
+      }),
+    ];
+    return { data };
+  })();
 
   it('asks whether an expected salary arrived and confirms the amount', async () => {
     const today = '2026-10-25';
     renderDashboard(applyRecords(sal.data, dueGenerated(sal.data, today)), today);
     expect(
-      screen.getByText(`Your ${october} salary is expected: ${usd(2_709_68)}. Did it arrive?`),
+      screen.getByText(`Your ${october} salary is expected: ${usd(3_000_00)}. Did it arrive?`),
     ).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: `Confirm ${october} salary` }));
     const dialog = screen.getByRole('dialog', { name: 'Confirm salary' });
-    expect(within(dialog).getByLabelText('Amount received')).toHaveValue('2,709.68');
+    expect(within(dialog).getByLabelText('Amount received')).toHaveValue('3,000.00');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Confirm' }));
-    expect(actions.confirmIncome).toHaveBeenCalledWith('salary-2026-10', 270968);
+    expect(actions.confirmIncome).toHaveBeenCalledWith('salary-2026-10', 300000);
   });
 
   it('confirms the salary on a line field', async () => {
@@ -843,12 +854,21 @@ describe('DashboardScreen salary and freeze', () => {
     expect(actions.skipIncome).toHaveBeenCalledWith('salary-2026-10');
   });
 
-  it('explains an active freeze', () => {
-    renderDashboard(sal.data, '2026-10-02');
+  it('shows no freeze banner, even with a salary freeze row in the data', () => {
+    const data = structuredClone(sal.data);
+    data.tables.salaryFreeze = [makeSalaryFreeze({ start: '2026-10-01', end: '2026-10-03' })];
+    renderDashboard(data, '2026-10-02');
+    expect(screen.queryByText(/Salary freeze/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Bills and subscriptions still apply/)).not.toBeInTheDocument();
+  });
+
+  it('expects the full salary while a salary freeze row is left in the data', () => {
+    const today = '2026-10-25';
+    const data = structuredClone(sal.data);
+    data.tables.salaryFreeze = [makeSalaryFreeze({ start: '2026-10-01', end: '2026-10-10' })];
+    renderDashboard(applyRecords(data, dueGenerated(data, today)), today);
     expect(
-      screen.getByText(
-        `Salary freeze until ${formatDay('2026-10-03')}. Bills and subscriptions still apply.`,
-      ),
+      screen.getByText(`Your ${october} salary is expected: ${usd(3_000_00)}. Did it arrive?`),
     ).toBeInTheDocument();
   });
 

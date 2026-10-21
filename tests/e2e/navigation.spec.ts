@@ -92,7 +92,9 @@ test('mobile: Home has three actions, and History stays one tap away in Last 7 d
   await expect(page.getByRole('link', { name: 'History' })).toHaveCount(1);
 });
 
-test('mobile: the Menu has no Buy it? and no About you', async ({ page }, testInfo) => {
+test('mobile: the Menu has no Buy it?, no About you and no Salary freeze', async ({
+  page,
+}, testInfo) => {
   test.skip(testInfo.project.name !== 'mobile-chromium', 'mobile layout only');
   await startFresh(page);
   await page
@@ -103,15 +105,19 @@ test('mobile: the Menu has no Buy it? and no About you', async ({ page }, testIn
   await expect(menu.getByRole('heading', { level: 3 })).toHaveText(['Your money', 'You']);
   await expect(menu.getByRole('link', { name: /^Buy it\?/ })).toHaveCount(0);
   await expect(menu.getByRole('link', { name: /^About you/ })).toHaveCount(0);
+  await expect(menu.getByRole('link', { name: /^Salary freeze/ })).toHaveCount(0);
 });
 
-test('desktop: the sidebar has no Buy it? and no About you', async ({ page }, testInfo) => {
+test('desktop: the sidebar has no Buy it?, no About you and no Salary freeze', async ({
+  page,
+}, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop-chromium', 'desktop layout only');
   await startFresh(page);
   const sidebar = page.getByRole('navigation', { name: 'All sections' });
   await expect(sidebar.getByRole('link', { name: /^Quests/ })).toBeVisible();
   await expect(sidebar.getByRole('link', { name: /^Buy it\?/ })).toHaveCount(0);
   await expect(sidebar.getByRole('link', { name: /^About you/ })).toHaveCount(0);
+  await expect(sidebar.getByRole('link', { name: /^Salary freeze/ })).toHaveCount(0);
 });
 
 test('Add Expense does not send you off to ask first', async ({ page }) => {

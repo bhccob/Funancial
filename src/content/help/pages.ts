@@ -46,12 +46,6 @@ export const RESULT_ROWS: Record<string, { label: string; kind: ResultKind }> = 
   levelRank: { label: 'Warning level', kind: 'level' },
   pctAfterLunch: { label: 'Limit used after the lunch', kind: 'percent' },
   levelRankAfterLunch: { label: 'Warning level after the lunch', kind: 'level' },
-  // Salary and freezes
-  lossSep: { label: 'Lost in September', kind: 'money' },
-  lossOct: { label: 'Lost in October', kind: 'money' },
-  total: { label: 'Total lost', kind: 'money' },
-  expectedSep: { label: 'Expected pay, September', kind: 'money' },
-  expectedOct: { label: 'Expected pay, October', kind: 'money' },
   // Subscriptions
   billsBefore: { label: 'Bills to come before the renewal', kind: 'money' },
   availableBefore: { label: 'Available before the renewal', kind: 'money' },
@@ -92,18 +86,6 @@ export const HELP_PAGES: HelpPage[] = [
       'A limit you reserve holds back what is left of it, and Available to spend leaves that money out.',
     ],
     exampleIds: ['LIM-1'],
-  },
-  {
-    id: 'salary-freeze',
-    title: 'Salary and freezes',
-    summary: 'What a freeze takes away',
-    group: 'numbers',
-    body: [
-      'A salary freeze is a stretch of days when you are not paid. Funcial takes those days off your expected pay in each month they fall in.',
-      'A day is worth your monthly pay divided by the days in that month. A freeze that crosses two months can lose a different amount in each.',
-      'Bills and subscriptions do not stop during a freeze. They still count in Available to spend.',
-    ],
-    exampleIds: ['SAL-1'],
   },
   {
     id: 'cards',

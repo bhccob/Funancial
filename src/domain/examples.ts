@@ -5,7 +5,6 @@ import type {
   Expense,
   Income,
   Profile,
-  SalaryFreeze,
   Subscription,
   Transaction,
 } from './entities';
@@ -115,15 +114,6 @@ export const ex = {
     warnAt: [80, 100, 120],
     reserve: false,
     includeInvestments: false,
-    ...p,
-  }),
-  freeze: (
-    p: Partial<SalaryFreeze> & Pick<SalaryFreeze, 'start' | 'end' | 'lostAmount'>,
-  ): SalaryFreeze => ({
-    id: id('frz'),
-    ...at(p.start),
-    mode: 'computed',
-    note: '',
     ...p,
   }),
   snapshot: (tables: Partial<DataSnapshot['tables']>): DataSnapshot => {
@@ -305,32 +295,6 @@ const LIM_1: WorkedExample = {
   result: { spent: 85_00, pct: 85, levelRank: 1, pctAfterLunch: 105, levelRankAfterLunch: 2 },
 };
 
-const SAL_1: WorkedExample = {
-  id: 'SAL-1',
-  rule: 'Salary freeze',
-  title: 'A salary freeze lowers expected pay, but bills still apply',
-  today: '2026-10-14',
-  data: ex.snapshot({
-    profile: [
-      ex.profile({ openingDate: '2026-09-01', salary: { monthlyAmount: 3_000_00, payDay: 25 } }),
-    ],
-    salaryFreeze: [ex.freeze({ start: '2026-09-28', end: '2026-10-03', lostAmount: 590_32 })],
-  }),
-  steps: [
-    'Your take-home pay is $3,000.00 a month. The freeze runs Sep 28 to Oct 3.',
-    'September has 30 days, so each day is worth $100.00: 3 frozen days lose $300.00.',
-    'October has 31 days, so each day is worth $96.77: 3 frozen days lose $290.32.',
-    'Expected pay: September $2,700.00, October $2,709.68. Subscriptions and bills still apply as usual.',
-  ],
-  result: {
-    lossSep: 300_00,
-    lossOct: 290_32,
-    total: 590_32,
-    expectedSep: 2_700_00,
-    expectedOct: 2_709_68,
-  },
-};
-
 const SUB_1: WorkedExample = {
   id: 'SUB-1',
   rule: 'Subscription',
@@ -365,4 +329,4 @@ const SUB_1: WorkedExample = {
   },
 };
 
-export const EXAMPLES: WorkedExample[] = [EXP_1, SUB_1, LIM_1, SAL_1, BAL_1, AVL_1];
+export const EXAMPLES: WorkedExample[] = [EXP_1, SUB_1, LIM_1, BAL_1, AVL_1];

@@ -2,7 +2,6 @@ import type { ReactNode } from 'react';
 import { AddScreen } from '@/features/add/AddScreen';
 import { BudgetScreen } from '@/features/budget/BudgetScreen';
 import { DashboardScreen } from '@/features/dashboard/DashboardScreen';
-import { FreezeScreen } from '@/features/freeze/FreezeScreen';
 import { DebtsScreen } from '@/features/goals/DebtsScreen';
 import { GoalsScreen } from '@/features/goals/GoalsScreen';
 import { HelpPage } from '@/features/help/HelpPage';
@@ -33,7 +32,6 @@ export const APP_ROUTES: AppRoute[] = [
   { path: '/invest/holding/:id', element: <HoldingPage /> },
   { path: '/quests', element: <QuestsScreen /> },
   { path: '/subscriptions', element: <SubscriptionsScreen /> },
-  { path: '/freeze', element: <FreezeScreen /> },
   { path: '/goals', element: <GoalsScreen /> },
   { path: '/debts', element: <DebtsScreen /> },
   { path: '/income', element: <IncomeScreen /> },

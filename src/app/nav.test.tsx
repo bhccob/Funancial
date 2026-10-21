@@ -2,13 +2,10 @@ import { cleanup, fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { SalaryFreeze } from '@/domain/entities';
 import { levelStart } from '@/domain/game/levels';
-import { newId, nowIso } from '@/domain/ids';
 import { formatMoney } from '@/domain/money';
 import { emptySnapshot, type DataSnapshot } from '@/domain/snapshot';
 import { topDialog } from '@/lib/dialogStack';
-import { formatDay } from '@/lib/format';
 import { useAmountsHidden } from '@/store/useAmountsHidden';
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
 import { INBOX_NOW, inboxData } from '@/test/inboxData';
@@ -21,6 +18,7 @@ import {
   makeProfile,
   makeSubscription,
 } from '@/test/fixtures';
+import { makeSalaryFreeze } from '@/test/retiredFixtures';
 import { MENU_GROUPS } from './menu';
 import { appRouteObjects } from './router';
 
@@ -32,21 +30,10 @@ function renderAt(path: string, data: DataSnapshot = emptySnapshot()) {
   return router;
 }
 
-function freeze(start: string, end: string): SalaryFreeze {
-  const now = nowIso();
-  return {
-    id: newId(),
-    createdAt: now,
-    updatedAt: now,
-    start,
-    end,
-    lostAmount: 0,
-    mode: 'manual',
-    note: '',
-  };
-}
-
-/** Two active subscriptions ($15.99 a month and $120 a year), one cancelled, two goals, a freeze, 130 coins. */
+/**
+ * Two active subscriptions ($15.99 a month and $120 a year), one cancelled, two goals, 130 coins,
+ * and a salary freeze an older build saved, which no row reads.
+ */
 function liveData(): DataSnapshot {
   const data = emptySnapshot();
   data.tables.profile.push(makeProfile({ currency: 'USD' }));
@@ -59,7 +46,7 @@ function liveData(): DataSnapshot {
     makeGoal({ target: 1_000_00, current: 250_00 }),
     makeGoal({ target: 500_00, current: 250_00 }),
   );
-  data.tables.salaryFreeze.push(freeze('2026-10-10', '2026-10-20'));
+  data.tables.salaryFreeze.push(makeSalaryFreeze({ start: '2026-10-10', end: '2026-10-20' }));
   data.tables.ledger.push(makeLedgerEntry({ coins: 130, xp: 0 }));
   return data;
 }
@@ -163,9 +150,6 @@ describe('Menu sheet', () => {
     expect(row(sheet, 'Bills & cards')).toHaveTextContent(`2 active · ${usd(25_99)}/mo`);
     expect(row(sheet, 'Goals')).toHaveTextContent('2 goals · 33% saved');
     expect(row(sheet, 'History')).toHaveTextContent('Every entry, searchable');
-    expect(row(sheet, 'Salary freeze')).toHaveTextContent(
-      `Active until ${formatDay('2026-10-20')}`,
-    );
     expect(row(sheet, 'Quests')).toHaveTextContent('Level 1');
     expect(row(sheet, 'Shop')).toHaveTextContent('130 coins to spend');
     expect(row(sheet, 'Inbox')).toHaveTextContent(/^Inbox$/);
@@ -311,19 +295,16 @@ describe('Menu sheet', () => {
     expect(row(sheet, 'Bills & cards')).toHaveTextContent('None yet');
     expect(row(sheet, 'Goals')).toHaveTextContent('None yet');
     expect(row(sheet, 'Debts')).toHaveTextContent('None yet');
-    expect(row(sheet, 'Salary freeze')).toHaveTextContent('None right now');
     expect(row(sheet, 'Shop')).toHaveTextContent('0 coins to spend');
   });
 
-  it('ignores a freeze that is over or has not started', async () => {
+  it('has no Salary freeze row, whatever an older build saved', async () => {
     const data = emptySnapshot();
-    data.tables.salaryFreeze.push(
-      freeze('2026-09-01', '2026-09-30'),
-      freeze('2026-11-01', '2026-11-30'),
-    );
+    data.tables.salaryFreeze.push(makeSalaryFreeze({ start: '2026-10-10', end: '2026-10-20' }));
     renderAt('/', data);
     const sheet = await openMenu();
-    expect(row(sheet, 'Salary freeze')).toHaveTextContent('None right now');
+    expect(within(sheet).queryByRole('link', { name: /^Salary freeze/ })).not.toBeInTheDocument();
+    expect(within(sheet).queryByRole('link', { name: /freeze/i })).not.toBeInTheDocument();
   });
 
   it('uses the singular for one goal and one coin', async () => {
@@ -402,7 +383,7 @@ describe('Menu sheet', () => {
     expect(screen.queryByRole('dialog', { name: 'Menu' })).not.toBeInTheDocument();
   });
 
-  it('has no Buy it? and no About you', async () => {
+  it('has no Buy it?, no About you and no Salary freeze', async () => {
     renderAt('/');
     const sheet = await openMenu();
     const money = within(sheet).getByRole('heading', {
@@ -413,7 +394,7 @@ describe('Menu sheet', () => {
       within(money)
         .getAllByRole('link')
         .map((a) => a.getAttribute('href')),
-    ).toEqual(['/subscriptions', '/goals', '/debts', '/income', '/history', '/freeze']);
+    ).toEqual(['/subscriptions', '/goals', '/debts', '/income', '/history']);
     const you = within(sheet).getByRole('heading', { level: 3, name: 'You' }).parentElement!;
     expect(
       within(you)
@@ -423,6 +404,7 @@ describe('Menu sheet', () => {
     ).toEqual(['/quests', '/shop']);
     expect(within(sheet).queryByRole('link', { name: /^Buy it/ })).not.toBeInTheDocument();
     expect(within(sheet).queryByRole('link', { name: /^About you/ })).not.toBeInTheDocument();
+    expect(within(sheet).queryByRole('link', { name: /^Salary freeze/ })).not.toBeInTheDocument();
   });
 
   it('closes on Escape', async () => {
@@ -510,7 +492,7 @@ describe('sidebar', () => {
 describe('menu items', () => {
   it('has the two groups in order, with a fixed chip colour that holds 3:1 against a white icon', () => {
     expect(MENU_GROUPS.map((g) => [g.title, g.items.length])).toEqual([
-      ['Your money', 6],
+      ['Your money', 5],
       ['You', 5],
     ]);
     const luminance = (hex: string) => {

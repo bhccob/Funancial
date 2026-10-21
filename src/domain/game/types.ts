@@ -29,7 +29,6 @@ export type BadgeId =
   | 'first-expense'
   | 'subscription-slayer'
   | 'limit-keeper'
-  | 'freeze-master'
   | 'first-etf'
   | 'portfolio-pro'
   | 'first-dividend'

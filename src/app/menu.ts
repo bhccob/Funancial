@@ -8,7 +8,6 @@ import {
   Inbox,
   Repeat,
   Settings,
-  Snowflake,
   Store,
   Target,
   Trophy,
@@ -50,7 +49,6 @@ export const MENU_GROUPS: MenuGroup[] = [
       { path: '/debts', label: 'Debts', icon: CreditCard, color: '#b3261e' },
       { path: '/income', label: 'Income', icon: HandCoins, color: '#2e7d32' },
       { path: '/history', label: 'History', icon: Clock, color: '#d9541e' },
-      { path: '/freeze', label: 'Salary freeze', icon: Snowflake, color: '#4458d6' },
     ],
   },
   {

@@ -22,7 +22,7 @@ export function HelpScreen() {
         variant="line"
         type="search"
         label="Search help"
-        placeholder="e.g. available, freeze, dividends"
+        placeholder="e.g. available, limits, dividends"
         autoComplete="off"
         value={query}
         onChange={(e) => setQuery(e.target.value)}

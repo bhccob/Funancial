@@ -24,7 +24,6 @@ it('routes every spec screen', () => {
       '/add',
       '/budget',
       '/debts',
-      '/freeze',
       '/goals',
       '/help',
       '/help/:id',
@@ -76,6 +75,12 @@ it('has no Buy it? or About you route', () => {
   for (const url of ['/buy', '/buy/x', '/about-you']) {
     expect(matchRoutes(APP_ROUTES, url), url).toBeNull();
   }
+});
+
+it('has no Salary freeze route', () => {
+  const paths = APP_ROUTES.map((r) => r.path);
+  expect(paths).not.toContain('/freeze');
+  expect(matchRoutes(APP_ROUTES, '/freeze')).toBeNull();
 });
 
 it('serves Help from its own screens: the index and a page', () => {

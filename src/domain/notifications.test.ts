@@ -10,6 +10,7 @@ import {
   makeSubscription,
   makeTransaction,
 } from '@/test/fixtures';
+import { makeSalaryFreeze } from '@/test/retiredFixtures';
 import { localDateTime } from './dates';
 import type {
   BuyDecision,
@@ -67,6 +68,7 @@ type Setup = {
   debts?: Debt[];
   expenses?: Expense[];
   incomes?: Income[];
+  /** Rows an older build saved for the retired Salary freeze feature: nothing reads them. */
   freezes?: SalaryFreeze[];
   holdings?: Holding[];
   dividends?: Dividend[];
@@ -112,19 +114,15 @@ const noon = (date: string) => localDateTime(`${date}T12:00`).toISOString();
 const keys = (rs: Reminder[]) => rs.map((r) => r.key);
 const kinds = (rs: Reminder[]) => [...new Set(rs.map((r) => r.kind))].sort();
 
-function freeze(over: Partial<SalaryFreeze> = {}): SalaryFreeze {
-  return {
+/** A row the retired Salary freeze saved. */
+const freeze = (over: Partial<SalaryFreeze> = {}): SalaryFreeze =>
+  makeSalaryFreeze({
     id: 'freeze-1',
-    createdAt: '2026-10-01T09:00:00.000Z',
-    updatedAt: '2026-10-01T09:00:00.000Z',
     start: '2026-10-20',
     end: '2026-10-27',
-    lostAmount: 0,
     mode: 'manual',
-    note: '',
     ...over,
-  };
-}
+  });
 
 /** A card with 230.00 on it, due on the 21st. */
 function visa(over: Partial<Debt> = {}): { debts: Debt[]; expenses: Expense[] } {
@@ -169,7 +167,6 @@ describe('upcomingReminders', () => {
     const setup = {
       all: true,
       subscriptions: [makeSubscription({ id: 'sub-tv', nextRenewal: '2026-10-20' })],
-      freezes: [freeze()],
     };
     const off = build(setup);
     off.tables.settings = [
@@ -400,32 +397,18 @@ describe('upcomingReminders', () => {
     expect(upcomingReminders(loan, NOW)).toEqual([]);
   });
 
-  it('announces a freeze starting and ending', () => {
-    const data = build({ reminders: { freeze: true }, freezes: [freeze()] });
-    expect(upcomingReminders(data, NOW)).toEqual([
-      {
-        key: 'freeze-start:freeze-1',
-        kind: 'freeze-start',
-        at: '2026-10-20T09:00',
-        title: 'Salary freeze starts today',
-        body: 'Expected pay is lower while it lasts. Bills still apply.',
-        route: '/freeze',
-      },
-      {
-        key: 'freeze-end:freeze-1',
-        kind: 'freeze-end',
-        at: '2026-10-27T09:00',
-        title: 'Salary freeze ends today',
-        body: 'Your expected pay goes back to normal.',
-        route: '/freeze',
-      },
-    ]);
-
-    const running = build({
-      reminders: { freeze: true },
-      freezes: [freeze({ start: '2026-10-01' })],
+  describe('Salary freeze is gone', () => {
+    it('brings no reminder for a saved freeze, whatever its switch says', () => {
+      const left = [freeze(), freeze({ id: 'freeze-2', start: '2026-10-01', end: '2026-10-12' })];
+      for (const on of [true, false]) {
+        const setup = { all: true, reminders: { freeze: on } };
+        const bare = build(setup);
+        const saved = build({ ...setup, freezes: left });
+        expect(saved.tables.salaryFreeze).toHaveLength(2);
+        expect(upcomingReminders(saved, NOW)).toEqual(upcomingReminders(bare, NOW));
+        expect(pastReminders(saved, NOW)).toEqual(pastReminders(bare, NOW));
+      }
     });
-    expect(keys(upcomingReminders(running, NOW))).toEqual(['freeze-end:freeze-1']);
   });
 
   it('schedules weekly and monthly reviews without doubling up on the last day', () => {
@@ -632,8 +615,6 @@ describe('upcomingReminders', () => {
       'daily-log',
       'dividend-ex',
       'dividend-pay',
-      'freeze-end',
-      'freeze-start',
       'monthly-review',
       'renewal',
       'weekly-review',
@@ -646,9 +627,9 @@ describe('upcomingReminders', () => {
 
     expect(dropped({ dailyLog: false })).toEqual(['daily-log']);
     expect(dropped({ bills: false })).toEqual(['card-due', 'renewal']);
-    expect(dropped({ freeze: false })).toEqual(['freeze-end', 'freeze-start']);
     expect(dropped({ reviews: false })).toEqual(['monthly-review', 'weekly-review']);
-    // The old backup switch is still in the data, and drops nothing.
+    // The old freeze and backup switches are still in the data, and drop nothing.
+    expect(dropped({ freeze: false })).toEqual([]);
     expect(dropped({ backup: false })).toEqual([]);
     expect(dropped({ dividends: false })).toEqual(['dividend-ex', 'dividend-pay']);
   });
@@ -693,60 +674,68 @@ describe('pastReminders', () => {
     all: true,
     lastBackupAt: noon('2026-10-01'),
     subscriptions: [makeSubscription({ id: 'sub-tv', nextRenewal: '2026-10-15' })],
-    // The freeze ends the morning the dividend pays, so two reminders share one moment.
     freezes: [freeze({ start: '2026-10-05', end: '2026-10-12' })],
-    holdings: [payer({ nextExDate: '2026-10-10', nextPayDate: '2026-10-12' })],
+    // Two dividends pay the same morning, so two reminders share one moment.
+    holdings: [
+      payer({ nextExDate: '2026-10-10', nextPayDate: '2026-10-12' }),
+      payer({ nextExDate: '2026-10-09', nextPayDate: '2026-10-12' }, { id: 'pep', symbol: 'PEP' }),
+    ],
     ...visa({ dueDay: 16 }),
   };
 
   it('is what the rules planned for the last 30 days, newest first, with the master switch off', () => {
     const data = build({
-      reminders: { enabled: false, freeze: true },
-      freezes: [freeze({ start: '2026-10-12', end: '2026-10-13' })],
+      reminders: { enabled: false, bills: true },
+      subscriptions: [
+        makeSubscription({ id: 'sub-tv', nextRenewal: '2026-10-14' }),
+        makeSubscription({ id: 'sub-gym', name: 'Gym', nextRenewal: '2026-10-13', amount: 30_00 }),
+      ],
     });
     expect(upcomingReminders(data, NOW)).toEqual([]);
     expect(pastReminders(data, NOW)).toEqual([
       {
-        key: 'freeze-end:freeze-1',
-        kind: 'freeze-end',
+        key: 'renewal:sub-tv:2026-10-14',
+        kind: 'renewal',
         at: '2026-10-13T09:00',
-        title: 'Salary freeze ends today',
-        body: 'Your expected pay goes back to normal.',
-        route: '/freeze',
+        title: 'Streamflix renews tomorrow',
+        body: `${money(15_99)} will be charged.`,
+        route: '/subscriptions',
       },
       {
-        key: 'freeze-start:freeze-1',
-        kind: 'freeze-start',
+        key: 'renewal:sub-gym:2026-10-13',
+        kind: 'renewal',
         at: '2026-10-12T09:00',
-        title: 'Salary freeze starts today',
-        body: 'Expected pay is lower while it lasts. Bills still apply.',
-        route: '/freeze',
+        title: 'Gym renews tomorrow',
+        body: `${money(30_00)} will be charged.`,
+        route: '/subscriptions',
       },
     ]);
   });
 
   it('covers the 30 days up to now, both ends in, and nothing later', () => {
-    const freezes = [
-      freeze({ id: 'a', start: '2026-09-13', end: '2026-09-14' }), // 09:00, before the window's 10:00
-      freeze({ id: 'b', start: '2026-09-15', end: '2026-10-14' }),
-      freeze({ id: 'c', start: '2026-10-14', end: '2026-10-15' }), // ends tomorrow: not yet
+    // A yearly renewal has one occasion in the window, so each reminder is one moment.
+    const renewal = (id: string, nextRenewal: string) =>
+      makeSubscription({ id, nextRenewal, cycle: 'yearly' });
+    const subscriptions = [
+      renewal('a', '2026-09-15'), // 09-14 09:00, before the window's 10:00
+      renewal('b', '2026-09-16'), // 09-15 09:00
+      renewal('c', '2026-10-15'), // 10-14 09:00, this morning
+      renewal('d', '2026-10-16'), // 10-15 09:00: tomorrow, not yet
     ];
-    expect(keys(past({ reminders: { freeze: true }, freezes }))).toEqual([
-      'freeze-start:c',
-      'freeze-end:b',
-      'freeze-start:b',
+    expect(keys(past({ reminders: { bills: true }, subscriptions }))).toEqual([
+      'renewal:c:2026-10-15',
+      'renewal:b:2026-09-16',
     ]);
 
     // At 09:00 the window starts at 09:00 a month back, and a moment equal to now is past, not upcoming.
     const nine = '2026-10-14T09:00';
-    const data = build({ reminders: { freeze: true }, freezes });
+    const data = build({ reminders: { bills: true }, subscriptions });
     expect(keys(pastReminders(data, nine))).toEqual([
-      'freeze-start:c',
-      'freeze-end:b',
-      'freeze-start:b',
-      'freeze-end:a',
+      'renewal:c:2026-10-15',
+      'renewal:b:2026-09-16',
+      'renewal:a:2026-09-15',
     ]);
-    expect(keys(upcomingReminders(data, nine))).toEqual(['freeze-end:c']);
+    expect(keys(upcomingReminders(data, nine))).toEqual(['renewal:d:2026-10-16']);
   });
 
   it('takes a shorter window', () => {
@@ -796,8 +785,6 @@ describe('pastReminders', () => {
       'card-due',
       'dividend-ex',
       'dividend-pay',
-      'freeze-end',
-      'freeze-start',
       'monthly-review',
       'renewal',
       'weekly-review',
@@ -815,21 +802,20 @@ describe('pastReminders', () => {
       everything.filter((k) => !without(off).includes(k));
 
     expect(dropped({ bills: false })).toEqual(['card-due', 'renewal']);
-    expect(dropped({ freeze: false })).toEqual(['freeze-end', 'freeze-start']);
     expect(dropped({ reviews: false })).toEqual(['monthly-review', 'weekly-review']);
     expect(dropped({ dividends: false })).toEqual(['dividend-ex', 'dividend-pay']);
-    expect(dropped({ dailyLog: false, backup: false })).toEqual([]);
+    expect(dropped({ dailyLog: false, backup: false, freeze: false })).toEqual([]);
   });
 
-  it('keeps one reminder for a key, the newest', () => {
-    const freezes = [
-      freeze({ id: 'f', start: '2026-10-01', end: '2026-10-02' }),
-      freeze({ id: 'f', start: '2026-10-08', end: '2026-10-09' }),
+  it('keeps one reminder for a key', () => {
+    // Two rows with one id and one renewal date plan the same occasion twice.
+    const twice = [
+      makeSubscription({ id: 'sub-tv', nextRenewal: '2026-10-15' }),
+      makeSubscription({ id: 'sub-tv', nextRenewal: '2026-10-15' }),
     ];
-    const got = past({ reminders: { freeze: true }, freezes });
+    const got = past({ reminders: { bills: true }, subscriptions: twice });
     expect(got.map((r) => [r.key, r.at])).toEqual([
-      ['freeze-end:f', '2026-10-09T09:00'],
-      ['freeze-start:f', '2026-10-08T09:00'],
+      ['renewal:sub-tv:2026-10-15', '2026-10-14T09:00'],
     ]);
   });
 
@@ -942,8 +928,6 @@ describe('REMINDER_AREA', () => {
     const area: Record<ReminderKind, string> = {
       renewal: 'Subscriptions',
       'card-due': 'Cards',
-      'freeze-start': 'Salary freeze',
-      'freeze-end': 'Salary freeze',
       'weekly-review': 'Budget',
       'monthly-review': 'Budget',
       'dividend-ex': 'Invest',
@@ -951,6 +935,11 @@ describe('REMINDER_AREA', () => {
       'daily-log': 'Today',
     };
     expect(REMINDER_AREA).toEqual(area);
+  });
+
+  it('has no Salary freeze kind', () => {
+    expect(Object.keys(REMINDER_AREA).filter((kind) => kind.startsWith('freeze-'))).toEqual([]);
+    expect(Object.values(REMINDER_AREA)).not.toContain('Salary freeze');
   });
 
   it('has no Buy it? kind', () => {

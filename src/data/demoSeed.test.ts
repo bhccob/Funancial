@@ -99,16 +99,13 @@ describe('demo seed', () => {
     ]);
   });
 
-  it('pays salary on each pay day, reduced by the past five-day freeze', () => {
-    const [freeze] = t.salaryFreeze;
-    expect(t.salaryFreeze).toHaveLength(1);
-    expect(freeze).toMatchObject({ start: '2026-09-08', end: '2026-09-12', mode: 'computed' });
-    expect(freeze?.lostAmount).toBe(Math.round((4_200_00 / 30) * 5));
-
+  it('pays the full salary on each pay day, and has no salary freeze', () => {
+    expect(t.salaryFreeze).toEqual([]);
     expect(t.income.map((i) => [i.date, i.period, i.amount, i.status])).toEqual([
       ['2026-08-25', '2026-08', 4_200_00, 'confirmed'],
-      ['2026-09-25', '2026-09', 4_200_00 - freeze!.lostAmount, 'confirmed'],
+      ['2026-09-25', '2026-09', 4_200_00, 'confirmed'],
     ]);
+    expect(t.income.map((i) => i.note)).toEqual(['', '']);
   });
 });
 

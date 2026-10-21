@@ -229,29 +229,11 @@ describe('goals, debts and corrections', () => {
   });
 });
 
-describe('freezes', () => {
-  it('adding a freeze re-prices a pending expected salary', async () => {
-    const { store, actions } = await setup();
-    await store.getState().put('income', {
-      id: 'salary-2026-10',
-      createdAt: '2026-10-14T12:00:00.000Z',
-      updatedAt: '2026-10-14T12:00:00.000Z',
-      amount: 3_100_00,
-      source: 'salary',
-      label: 'Salary',
-      date: '2026-10-25',
-      status: 'expected',
-      bucket: 'cash',
-      recurrence: null,
-      period: '2026-10',
-      note: '',
-    });
-    await actions.addFreeze({ start: '2026-10-05', end: '2026-10-07', mode: 'computed', note: '' });
-    const data = store.getState().data;
-    expect(data.tables.salaryFreeze[0]?.lostAmount).toBe(300_00);
-    expect(data.tables.income[0]?.amount).toBe(2_800_00);
-    await actions.deleteFreeze(data.tables.salaryFreeze[0]!.id);
-    expect(store.getState().data.tables.income[0]?.amount).toBe(3_100_00);
+describe('Salary freeze is gone', () => {
+  it('has no action to add or delete a freeze', async () => {
+    const { actions } = await setup();
+    expect(actions).not.toHaveProperty('addFreeze');
+    expect(actions).not.toHaveProperty('deleteFreeze');
   });
 });
 
