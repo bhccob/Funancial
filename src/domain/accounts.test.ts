@@ -5,10 +5,18 @@ import {
   makeExpense,
   makeIncome,
   makeSale,
+  makeSettings,
   makeSubscription,
   makeTransaction,
 } from '@/test/fixtures';
-import { accountRemoval, activeAccounts, archivedBy, defaultsFor } from './accounts';
+import {
+  accountRemoval,
+  activeAccounts,
+  archivedBy,
+  defaultAccount,
+  defaultsFor,
+} from './accounts';
+import type { Account } from './entities';
 import { emptySnapshot, type DataSnapshot } from './snapshot';
 
 describe('archivedBy', () => {
@@ -98,5 +106,60 @@ describe('accountRemoval', () => {
       sale: [makeSale()],
     };
     expect(accountRemoval(data(tables), ID)).toEqual({ subscriptions: [], archive: false });
+  });
+});
+
+describe('defaultAccount', () => {
+  const DAY = '2026-10-20';
+  const main = makeAccount({ id: 'acct-main', order: 0 });
+  const savings = makeAccount({ id: 'acct-savings', kind: 'savings', order: 1 });
+  const cash = makeAccount({ id: 'acct-cash', kind: 'cash', order: 2 });
+  const card = makeAccount({
+    id: 'card-1',
+    kind: 'credit',
+    order: 3,
+    credit: {
+      limit: null,
+      statementDay: null,
+      dueDay: 21,
+      payInFull: true,
+      minimumPayment: 0,
+      interestRate: 0,
+    },
+  });
+  const data = (accounts: Account[], defaultAccountId: string | null): DataSnapshot => {
+    const s = emptySnapshot();
+    s.tables.account = accounts;
+    s.tables.settings = [makeSettings({ defaultAccountId })];
+    return s;
+  };
+  const idOf = (d: DataSnapshot) => defaultAccount(d, DAY)?.id ?? null;
+
+  it("is the settings' default while it is in use and not a credit card", () => {
+    expect(idOf(data([main, savings, cash], 'acct-main'))).toBe('acct-main');
+    expect(idOf(data([main, savings, cash], 'acct-savings'))).toBe('acct-savings');
+  });
+
+  it('default account falls back', () => {
+    const archivedMain = { ...main, archivedOn: '2026-10-01' };
+    // The default archived, or gone: the first debit or cash account still in use, by order.
+    expect(idOf(data([cash, savings, archivedMain], 'acct-main'))).toBe('acct-cash');
+    expect(idOf(data([savings, cash], 'acct-main'))).toBe('acct-cash');
+    // Archived only from a later day: still the default today.
+    expect(idOf(data([{ ...main, archivedOn: '2026-10-21' }, cash], 'acct-main'))).toBe(
+      'acct-main',
+    );
+    // None named, or a credit card named: by order, never savings or a card.
+    expect(idOf(data([{ ...cash, order: 5 }, savings, main], null))).toBe('acct-main');
+    expect(idOf(data([card, savings, cash], 'card-1'))).toBe('acct-cash');
+    // Nothing to fall back to.
+    expect(idOf(data([archivedMain, savings, card], 'acct-main'))).toBeNull();
+    expect(idOf(data([], null))).toBeNull();
+  });
+
+  it('works without settings', () => {
+    const s = data([savings, cash], null);
+    s.tables.settings = [];
+    expect(defaultAccount(s, DAY)?.id).toBe('acct-cash');
   });
 });

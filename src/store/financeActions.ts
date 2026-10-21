@@ -1,21 +1,23 @@
 import type { StoreApi } from 'zustand/vanilla';
+import { accountRemoval, activeAccounts, defaultAccount, defaultsFor } from '@/domain/accounts';
 import { crossesOver, limitAlerts } from '@/domain/alerts';
-import { bucketBalances } from '@/domain/balances';
+import { accountBalance } from '@/domain/balances';
 import type { LimitStatus } from '@/domain/budget';
 import { categoryLabel } from '@/domain/budget';
 import type { LocalDate } from '@/domain/dates';
-import { debtRemoval } from '@/domain/debts';
+import { loanRemoval } from '@/domain/debts';
 import {
   defaultSettings,
-  type Bucket,
+  type Account,
+  type AccountKind,
   type BudgetLimit,
   type Category,
+  type CreditTerms,
   type Cycle,
   type Debt,
   type Expense,
   type Goal,
   type Income,
-  type PaymentMethod,
   type Profile,
   type Settings,
   type Subscription,
@@ -25,7 +27,8 @@ import { newId, nowIso } from '@/domain/ids';
 import { minorDigits } from '@/domain/money';
 import { dayOfMonth, monthKey } from '@/domain/periods';
 import { nextOccurrence } from '@/domain/recurrence';
-import type { EntityOf, TableName, TableRecord } from '@/domain/snapshot';
+import type { DataSnapshot, EntityOf, TableName, TableRecord } from '@/domain/snapshot';
+import { MAIN_ACCOUNT_ID, SAVINGS_ACCOUNT_ID } from '@/domain/upgrades/v10Accounts';
 import type { AppState } from './appStore';
 
 export interface ExpenseInput {
@@ -33,8 +36,8 @@ export interface ExpenseInput {
   category: Category;
   date: LocalDate;
   note: string;
-  paymentMethod: PaymentMethod;
-  cardId: string | null;
+  /** The account it was paid with: on a credit card it raises what is owed. */
+  accountId: string;
   repeat: Cycle | null;
 }
 export interface IncomeInput {
@@ -42,7 +45,8 @@ export interface IncomeInput {
   source: 'salary' | 'extra';
   label: string;
   date: LocalDate;
-  bucket: 'cash' | 'savings';
+  /** The account it is paid into. */
+  accountId: string;
   note: string;
 }
 export interface SubscriptionInput {
@@ -52,8 +56,19 @@ export interface SubscriptionInput {
   cycle: Cycle;
   nextRenewal: LocalDate;
   category: Category;
-  paymentMethod: PaymentMethod;
-  cardId: string | null;
+  /** The account each renewal is paid with. */
+  accountId: string;
+}
+/** A new account takes its kind's look and Available choice (`defaultsFor`) where these leave them out. */
+export interface AccountInput {
+  id?: string;
+  name: string;
+  kind: AccountKind;
+  skin?: string;
+  last4: string | null;
+  openingBalance: number;
+  inAvailable?: boolean;
+  credit: CreditTerms | null;
 }
 export interface LimitInput {
   id?: string;
@@ -71,10 +86,10 @@ export interface GoalInput {
   current: number;
   deadline: LocalDate | null;
 }
+/** A loan. A credit card is an account (`AccountInput`). */
 export interface DebtInput {
   id?: string;
   name: string;
-  kind: Debt['kind'];
   openingBalance: number;
   interestRate: number;
   minimumPayment: number;
@@ -100,6 +115,12 @@ export interface OnboardingInput {
 }
 
 export const FUTURE = 'Use today or an earlier date.';
+/** Deleting an account that pays subscriptions needs another account in use for them. */
+export const PICK_SUBSCRIPTIONS_TARGET = 'Pick where its subscriptions go.';
+/** Money is paid from, and moved between, bank accounts, cash and savings: never a credit card. */
+export const CREDIT_CANT_PAY = 'Only a bank account, cash or savings can pay.';
+export const SAME_ACCOUNT = 'Use two different accounts.';
+export const NOT_A_CARD = 'Pick a credit card to pay.';
 
 export type FinanceActions = ReturnType<typeof createFinanceActions>;
 
@@ -120,8 +141,35 @@ export function createFinanceActions(store: StoreApi<AppState>) {
   const notFuture = (d: LocalDate) => {
     if (d > today()) throw new Error(FUTURE);
   };
-  const cardFor = (method: PaymentMethod, cardId: string | null) =>
-    method === 'credit_card' ? cardId : null;
+  /** An account money can be paid from or moved with: a bank account, cash or savings. */
+  const payingAccount = (id: string): Account => {
+    const account = find('account', id);
+    if (account.kind === 'credit') throw new Error(CREDIT_CANT_PAY);
+    return account;
+  };
+  /** A transfer between two different accounts, neither of them a credit card. */
+  function transferBetween(
+    fromAccountId: string,
+    toAccountId: string,
+    amount: number,
+    date: LocalDate,
+    note: string,
+  ): Transaction {
+    if (fromAccountId === toAccountId) throw new Error(SAME_ACCOUNT);
+    payingAccount(fromAccountId);
+    payingAccount(toAccountId);
+    return {
+      id: newId(),
+      ...stamp(),
+      type: 'transfer',
+      amount,
+      date,
+      fromAccountId,
+      toAccountId,
+      debtId: null,
+      note,
+    };
+  }
 
   return {
     async addExpense(input: ExpenseInput): Promise<{ expense: Expense; alerts: LimitStatus[] }> {
@@ -133,8 +181,7 @@ export function createFinanceActions(store: StoreApi<AppState>) {
         category: input.category,
         date: input.date,
         note: input.note,
-        paymentMethod: input.paymentMethod,
-        cardId: cardFor(input.paymentMethod, input.cardId),
+        accountId: input.accountId,
         recurrence: input.repeat ? { cycle: input.repeat } : null,
         subscriptionId: null,
       };
@@ -150,8 +197,7 @@ export function createFinanceActions(store: StoreApi<AppState>) {
           nextRenewal: nextOccurrence(input.date, input.repeat, anchorDay),
           anchorDay,
           category: input.category,
-          paymentMethod: input.paymentMethod,
-          cardId: expense.cardId,
+          accountId: input.accountId,
           status: 'active',
           audit: null,
           auditedAt: null,
@@ -177,8 +223,7 @@ export function createFinanceActions(store: StoreApi<AppState>) {
         category: input.category,
         date: input.date,
         note: '',
-        paymentMethod: input.paymentMethod,
-        cardId: cardFor(input.paymentMethod, input.cardId),
+        accountId: input.accountId,
         recurrence: null,
         subscriptionId: null,
       };
@@ -188,7 +233,6 @@ export function createFinanceActions(store: StoreApi<AppState>) {
     async updateExpense(id: string, patch: Partial<Omit<ExpenseInput, 'repeat'>>) {
       const current = find('expense', id);
       const next: Expense = { ...current, ...patch, updatedAt: nowIso() };
-      next.cardId = cardFor(next.paymentMethod, next.cardId);
       notFuture(next.date);
       await state().put('expense', next);
     },
@@ -259,8 +303,7 @@ export function createFinanceActions(store: StoreApi<AppState>) {
             ? existing.anchorDay
             : dayOfMonth(input.nextRenewal),
         category: input.category,
-        paymentMethod: input.paymentMethod,
-        cardId: cardFor(input.paymentMethod, input.cardId),
+        accountId: input.accountId,
         updatedAt: nowIso(),
       };
       await state().put('subscription', sub);
@@ -329,33 +372,165 @@ export function createFinanceActions(store: StoreApi<AppState>) {
 
     deleteGoal: (id: string) => state().remove('goal', id),
 
-    /** Moves money from cash to savings and counts it toward the goal, together. */
-    async contributeToGoal(goalId: string, amount: number, date: LocalDate) {
+    /**
+     * Moves money between two accounts (Main account to Savings, say) and counts it toward the
+     * goal, together. The accounts follow the rules of `transfer`.
+     */
+    async contributeToGoal(
+      goalId: string,
+      amount: number,
+      date: LocalDate,
+      fromAccountId: string,
+      toAccountId: string,
+    ) {
       notFuture(date);
       const goal = find('goal', goalId);
-      const transfer: Transaction = {
-        id: newId(),
-        ...stamp(),
-        type: 'transfer',
+      const transfer = transferBetween(
+        fromAccountId,
+        toAccountId,
         amount,
         date,
-        from: 'cash',
-        to: 'savings',
-        debtId: null,
-        note: `Goal: ${goal.name}`,
-      };
+        `Goal: ${goal.name}`,
+      );
       await state().putMany([
         { table: 'transaction', record: transfer },
         { table: 'goal', record: { ...goal, current: goal.current + amount, updatedAt: nowIso() } },
       ]);
     },
 
+    /**
+     * Adds or edits an account. A new one opens today, after every other one in the carousel,
+     * unfrozen, with its kind's look and Available choice where the input leaves them out; an edit
+     * keeps its own. A credit card never counts toward Available, whatever the input says.
+     */
+    async saveAccount(input: AccountInput): Promise<Account> {
+      const existing = input.id ? find('account', input.id) : null;
+      const defaults = defaultsFor(input.kind);
+      const orders = state().data.tables.account.map((a) => a.order);
+      const account: Account = {
+        ...(existing ?? {
+          id: newId(),
+          ...stamp(),
+          openingDate: today(),
+          frozen: false,
+          order: Math.max(-1, ...orders) + 1,
+        }),
+        name: input.name,
+        kind: input.kind,
+        skin: input.skin ?? existing?.skin ?? defaults.skin,
+        last4: input.last4,
+        openingBalance: input.openingBalance,
+        inAvailable:
+          input.kind !== 'credit' &&
+          (input.inAvailable ?? existing?.inAvailable ?? defaults.inAvailable),
+        credit: input.credit,
+        updatedAt: nowIso(),
+      };
+      await state().put('account', account);
+      return account;
+    },
+
+    /**
+     * Deletes an account, or archives one with history (`accountRemoval` says which), in one write.
+     * The subscriptions it pays move to `moveSubscriptionsTo`, another account in use, so no renewal
+     * lands on it; when it was the default, the default moves to `defaultAccount` of what is left.
+     */
+    async deleteAccount(
+      id: string,
+      opts: { moveSubscriptionsTo: string | null },
+    ): Promise<'deleted' | 'archived'> {
+      const account = find('account', id);
+      const data = state().data;
+      const { subscriptions, archive } = accountRemoval(data, id);
+      const at = nowIso();
+      const moved: TableRecord[] = [];
+      if (subscriptions.length > 0) {
+        const to = opts.moveSubscriptionsTo;
+        const inUse = activeAccounts(data.tables.account, today()).some((a) => a.id === to);
+        if (to === null || to === id || !inUse) throw new Error(PICK_SUBSCRIPTIONS_TARGET);
+        for (const s of subscriptions) {
+          moved.push({ table: 'subscription', record: { ...s, accountId: to, updatedAt: at } });
+        }
+      }
+      const archived: Account = { ...account, archivedOn: today(), updatedAt: at };
+      const left: DataSnapshot = {
+        ...data,
+        tables: {
+          ...data.tables,
+          account: archive
+            ? data.tables.account.map((a) => (a.id === id ? archived : a))
+            : data.tables.account.filter((a) => a.id !== id),
+        },
+      };
+      const settings = data.tables.settings[0];
+      const newDefault: TableRecord[] =
+        settings?.defaultAccountId === id
+          ? [
+              {
+                table: 'settings',
+                record: {
+                  ...settings,
+                  defaultAccountId: defaultAccount(left, today())?.id ?? null,
+                  updatedAt: at,
+                },
+              },
+            ]
+          : [];
+      if (archive) {
+        await state().putMany([...moved, ...newDefault, { table: 'account', record: archived }]);
+        return 'archived';
+      }
+      await state().putMany([...moved, ...newDefault], [{ table: 'account', id }]);
+      return 'deleted';
+    },
+
+    /** Moves money between two different accounts, neither a credit card (`payCard` pays one). */
+    async transfer(
+      fromAccountId: string,
+      toAccountId: string,
+      amount: number,
+      date: LocalDate,
+      note: string,
+    ): Promise<Transaction> {
+      notFuture(date);
+      const transfer = transferBetween(fromAccountId, toAccountId, amount, date, note);
+      await state().put('transaction', transfer);
+      return transfer;
+    },
+
+    /** Pays a credit card from a bank account, cash or savings: both what it owes and what pays go down. */
+    async payCard(
+      cardId: string,
+      fromAccountId: string,
+      amount: number,
+      date: LocalDate,
+    ): Promise<Transaction> {
+      notFuture(date);
+      const card = find('account', cardId);
+      if (card.kind !== 'credit') throw new Error(NOT_A_CARD);
+      payingAccount(fromAccountId);
+      const payment: Transaction = {
+        id: newId(),
+        ...stamp(),
+        type: 'card_payment',
+        amount,
+        date,
+        fromAccountId,
+        toAccountId: cardId,
+        debtId: null,
+        note: `Paid ${card.name}`,
+      };
+      await state().put('transaction', payment);
+      return payment;
+    },
+
+    /** Adds or edits a loan. A credit card is an account (`saveAccount`). */
     async saveDebt(input: DebtInput) {
       const existing = input.id ? find('debt', input.id) : null;
       const debt: Debt = {
         ...(existing ?? { id: newId(), ...stamp(), openingDate: today() }),
         name: input.name,
-        kind: input.kind,
+        kind: 'loan',
         openingBalance: input.openingBalance,
         interestRate: input.interestRate,
         minimumPayment: input.minimumPayment,
@@ -369,38 +544,38 @@ export function createFinanceActions(store: StoreApi<AppState>) {
       return debt;
     },
 
-    /** Deletes a card or loan, or archives one with history; `debtRemoval` says which, in one write. */
+    /** Deletes a loan, or archives one with a payment made to it; `loanRemoval` says which. */
     async deleteDebt(id: string) {
       const debt = find('debt', id);
-      const { subscriptions, archive } = debtRemoval(state().data, id);
-      const at = nowIso();
-      const moved = subscriptions.map((s): TableRecord => ({
-        table: 'subscription',
-        record: { ...s, paymentMethod: 'debit', cardId: null, updatedAt: at },
-      }));
-      if (archive) {
+      if (loanRemoval(state().data, id).archive) {
         await state().putMany([
-          ...moved,
-          { table: 'debt', record: { ...debt, archivedOn: today(), updatedAt: at } },
+          { table: 'debt', record: { ...debt, archivedOn: today(), updatedAt: nowIso() } },
         ]);
       } else {
-        await state().putMany(moved, [{ table: 'debt', id }]);
+        await state().putMany([], [{ table: 'debt', id }]);
       }
     },
 
-    async payDebt(debtId: string, amount: number, from: 'cash' | 'savings', date: LocalDate) {
+    /** Pays a loan from a bank account, cash or savings. */
+    async payDebt(
+      loanId: string,
+      fromAccountId: string,
+      amount: number,
+      date: LocalDate,
+    ): Promise<Transaction> {
       notFuture(date);
-      const debt = find('debt', debtId);
+      const loan = find('debt', loanId);
+      payingAccount(fromAccountId);
       const payment: Transaction = {
         id: newId(),
         ...stamp(),
-        type: debt.kind === 'credit_card' ? 'card_payment' : 'debt_payment',
+        type: 'debt_payment',
         amount,
         date,
-        from,
-        to: null,
-        debtId,
-        note: `Paid ${debt.name}`,
+        fromAccountId,
+        toAccountId: null,
+        debtId: loanId,
+        note: `Paid ${loan.name}`,
       };
       await state().put('transaction', payment);
       return payment;
@@ -408,14 +583,14 @@ export function createFinanceActions(store: StoreApi<AppState>) {
 
     deleteTransaction: (id: string) => state().remove('transaction', id),
 
-    /** Corrects drift: records the difference between what you have and what Funcial thinks. */
-    async setActualBalance(
-      bucket: Extract<Bucket, 'cash' | 'savings'>,
-      actual: number,
-      date: LocalDate,
-    ) {
+    /**
+     * Corrects drift: records the difference between what an account holds (for a credit card,
+     * what is owed on it) and what Funcial thinks, as an adjustment to that account.
+     */
+    async setActualBalance(accountId: string, actual: number, date: LocalDate) {
       notFuture(date);
-      const delta = actual - bucketBalances(state().data, date)[bucket];
+      const account = find('account', accountId);
+      const delta = actual - accountBalance(account, state().data, date);
       if (delta === 0) return null;
       const adjustment: Transaction = {
         id: newId(),
@@ -423,8 +598,8 @@ export function createFinanceActions(store: StoreApi<AppState>) {
         type: 'adjustment',
         amount: delta,
         date,
-        from: null,
-        to: bucket,
+        fromAccountId: null,
+        toAccountId: accountId,
         debtId: null,
         note: 'Balance correction',
       };
@@ -501,39 +676,68 @@ export function createFinanceActions(store: StoreApi<AppState>) {
       await state().put('settings', { ...settings, ...patch, updatedAt: nowIso() });
     },
 
+    /**
+     * Writes the profile, Main account (`openingCash`), Savings (`openingSavings`) and a credit
+     * account per card, all opened today, and names Main account the default, in one write.
+     */
     async completeOnboarding(input: OnboardingInput) {
       const at = nowIso();
+      const opened = today();
       const profile: Profile = {
         id: 'profile',
         createdAt: at,
         updatedAt: at,
         name: input.name.trim(),
         currency: input.currency,
-        openingDate: today(),
-        openingCash: input.openingCash,
-        openingSavings: input.openingSavings,
+        openingDate: opened,
         salary: input.salary,
         onboardedAt: at,
       };
-      const cards: TableRecord[] = input.cards.map((c) => ({
-        table: 'debt',
+      const account = (
+        id: string,
+        name: string,
+        kind: AccountKind,
+        openingBalance: number,
+        order: number,
+        credit: CreditTerms | null,
+      ): TableRecord => ({
+        table: 'account',
         record: {
-          id: newId(),
+          id,
           createdAt: at,
           updatedAt: at,
-          name: c.name.trim(),
-          kind: 'credit_card',
-          openingBalance: c.balance,
-          openingDate: today(),
-          interestRate: 0,
-          minimumPayment: 0,
-          creditLimit: c.creditLimit,
+          name,
+          kind,
+          ...defaultsFor(kind),
+          last4: null,
+          openingBalance,
+          openingDate: opened,
+          frozen: false,
+          order,
+          credit,
+        },
+      });
+      const cards = input.cards.map((c, i) =>
+        account(newId(), c.name.trim(), 'credit', c.balance, 2 + i, {
+          limit: c.creditLimit,
           statementDay: null,
           dueDay: c.dueDay,
           payInFull: c.payInFull,
+          minimumPayment: 0,
+          interestRate: 0,
+        }),
+      );
+      const settings = state().data.tables.settings[0] ?? defaultSettings(at);
+      await state().putMany([
+        { table: 'profile', record: profile },
+        account(MAIN_ACCOUNT_ID, 'Main account', 'debit', input.openingCash, 0, null),
+        account(SAVINGS_ACCOUNT_ID, 'Savings', 'savings', input.openingSavings, 1, null),
+        ...cards,
+        {
+          table: 'settings',
+          record: { ...settings, defaultAccountId: MAIN_ACCOUNT_ID, updatedAt: at },
         },
-      }));
-      await state().putMany([{ table: 'profile', record: profile }, ...cards]);
+      ]);
       await state().sync();
     },
   };

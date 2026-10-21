@@ -1,46 +1,106 @@
 import { describe, expect, expectTypeOf, it, vi } from 'vitest';
-import { bucketBalances, debtBalance } from '@/domain/balances';
-import { SubscriptionSchema } from '@/domain/entities';
+import { accountBalance, debtBalance } from '@/domain/balances';
+import { SubscriptionSchema, type Account, type CreditTerms } from '@/domain/entities';
 import { holdingRate, holdingValue } from '@/domain/portfolio';
 import type { DataSnapshot } from '@/domain/snapshot';
 import { freshRealStore } from '@/test/realStore';
 import {
+  makeAccount,
   makeDebt,
   makeExpense,
   makeGoal,
   makeHolding,
+  makeIncome,
   makeLimit,
   makeProfile,
   makeSubscription,
 } from '@/test/fixtures';
 import { createFinanceActions } from './financeActions';
 
+const MAIN = 'acct-main';
+const SAVINGS = 'acct-savings';
+const TODAY = '2026-10-14';
+
+const terms = (overrides: Partial<CreditTerms> = {}): CreditTerms => ({
+  limit: null,
+  statementDay: null,
+  dueDay: 21,
+  payInFull: true,
+  minimumPayment: 0,
+  interestRate: 0,
+  ...overrides,
+});
+
+/** A credit card's account, opened with the others; its balance is what is owed. */
+const makeCard = (overrides: Partial<Account> = {}) =>
+  makeAccount({
+    id: 'card-1',
+    name: 'Visa',
+    kind: 'credit',
+    skin: 'violet',
+    inAvailable: false,
+    order: 2,
+    openingDate: '2026-10-01',
+    openingBalance: 0,
+    credit: terms(),
+    ...overrides,
+  });
+
+/** Main account (the default) with 1,000 and Savings with 5,000, both opened on Oct 1. */
 async function setup() {
   const t = await freshRealStore();
-  await t.store.getState().put(
-    'profile',
-    makeProfile({
-      openingDate: '2026-10-01',
-      openingCash: 1_000_00,
-      openingSavings: 5_000_00,
-      salary: { monthlyAmount: 3_100_00, payDay: 25 },
-    }),
-  );
+  const settings = t.store.getState().data.tables.settings[0]!;
+  await t.store.getState().putMany([
+    {
+      table: 'profile',
+      record: makeProfile({
+        openingDate: '2026-10-01',
+        salary: { monthlyAmount: 3_100_00, payDay: 25 },
+      }),
+    },
+    {
+      table: 'account',
+      record: makeAccount({ openingDate: '2026-10-01', openingBalance: 1_000_00 }),
+    },
+    {
+      table: 'account',
+      record: makeAccount({
+        id: SAVINGS,
+        name: 'Savings',
+        kind: 'savings',
+        skin: 'mint',
+        inAvailable: false,
+        order: 1,
+        openingDate: '2026-10-01',
+        openingBalance: 5_000_00,
+      }),
+    },
+    { table: 'settings', record: { ...settings, defaultAccountId: MAIN } },
+  ]);
   return { ...t, actions: createFinanceActions(t.store) };
 }
+
+type Store = Awaited<ReturnType<typeof setup>>['store'];
+
+/** What an account holds on a day, or for a credit card what is owed on it. */
+const balanceOf = (data: DataSnapshot, id: string, day = TODAY) =>
+  accountBalance(
+    data.tables.account.find((a) => a.id === id)!,
+    data,
+    day,
+  );
 
 const lunch = {
   amount: 12_50,
   category: 'food' as const,
-  date: '2026-10-14',
+  date: TODAY,
   note: 'Lunch',
-  paymentMethod: 'cash' as const,
-  cardId: null,
+  accountId: MAIN,
   repeat: null,
 };
 
 describe('expenses', () => {
-  it('adds an expense and reports limit alerts', async () => {
+  it('adds an expense on the account it was paid with, and reports limit alerts', async () => {
     const { store, actions } = await setup();
     await store
       .getState()
@@ -49,18 +109,24 @@ describe('expenses', () => {
         makeLimit({ id: 'food', category: 'food', period: 'weekly', amount: 20_00 }),
       );
     const { expense, alerts } = await actions.addExpense({ ...lunch, amount: 17_00 });
-    expect(store.getState().data.tables.expense.map((e) => e.id)).toEqual([expense.id]);
+    const data = store.getState().data;
+    expect(data.tables.expense).toEqual([
+      expect.objectContaining({ id: expense.id, accountId: MAIN }),
+    ]);
+    expect(balanceOf(data, MAIN)).toBe(983_00);
     expect(alerts.map((a) => [a.limit.id, a.level])).toEqual([['food', 'warn']]);
   });
 
-  it('a repeating expense becomes a subscription with the next renewal one cycle later', async () => {
+  it('a repeating expense becomes a subscription on the same account, renewing one cycle later', async () => {
     const { store, actions } = await setup();
+    await store.getState().put('account', makeCard());
     const { expense } = await actions.addExpense({
       ...lunch,
       amount: 1_200_00,
       category: 'rent',
       note: 'Rent',
       date: '2026-10-01',
+      accountId: 'card-1',
       repeat: 'monthly',
     });
     const [sub] = store.getState().data.tables.subscription;
@@ -71,8 +137,9 @@ describe('expenses', () => {
       anchorDay: 1,
       nextRenewal: '2026-11-01',
       category: 'rent',
+      accountId: 'card-1',
     });
-    expect(expense.subscriptionId).toBe(sub!.id);
+    expect(expense).toMatchObject({ subscriptionId: sub!.id, accountId: 'card-1' });
   });
 
   it('refuses a future date', async () => {
@@ -82,13 +149,18 @@ describe('expenses', () => {
     );
   });
 
-  it('updates and deletes', async () => {
+  it('updates, also to another account, and deletes', async () => {
     const { store, actions } = await setup();
     const { expense } = await actions.addExpense(lunch);
-    await actions.updateExpense(expense.id, { amount: 13_00, note: 'Lunch + tip' });
+    await actions.updateExpense(expense.id, {
+      amount: 13_00,
+      note: 'Lunch + tip',
+      accountId: SAVINGS,
+    });
     expect(store.getState().data.tables.expense[0]).toMatchObject({
       amount: 13_00,
       note: 'Lunch + tip',
+      accountId: SAVINGS,
     });
     await actions.deleteExpense(expense.id);
     expect(store.getState().data.tables.expense).toEqual([]);
@@ -98,107 +170,496 @@ describe('expenses', () => {
 describe('income', () => {
   it('a manual salary entry confirms the expected one instead of duplicating it', async () => {
     const { store, actions } = await setup();
-    await store.getState().put('income', {
-      id: 'salary-2026-10',
-      createdAt: '2026-10-14T12:00:00.000Z',
-      updatedAt: '2026-10-14T12:00:00.000Z',
-      amount: 3_100_00,
-      source: 'salary',
-      label: 'Salary',
-      date: '2026-10-25',
-      status: 'expected',
-      bucket: 'cash',
-      recurrence: null,
-      period: '2026-10',
-      note: '',
-    });
+    await store.getState().put(
+      'income',
+      makeIncome({
+        id: 'salary-2026-10',
+        amount: 3_100_00,
+        date: '2026-10-25',
+        status: 'expected',
+        accountId: MAIN,
+        period: '2026-10',
+      }),
+    );
     await actions.addIncome({
       amount: 3_050_00,
       source: 'salary',
       label: 'Salary',
-      date: '2026-10-14',
-      bucket: 'cash',
+      date: TODAY,
+      accountId: SAVINGS,
       note: '',
     });
-    expect(store.getState().data.tables.income.map((i) => [i.id, i.status, i.amount])).toEqual([
-      ['salary-2026-10', 'confirmed', 3_050_00],
-    ]);
+    expect(
+      store.getState().data.tables.income.map((i) => [i.id, i.status, i.amount, i.accountId]),
+    ).toEqual([['salary-2026-10', 'confirmed', 3_050_00, SAVINGS]]);
   });
 
-  it('confirms an expected income with the received amount', async () => {
+  it('confirms an expected income with the received amount, on its account', async () => {
     const { store, actions } = await setup();
     const income = await actions.addIncome({
       amount: 100_00,
       source: 'extra',
       label: 'Gift',
-      date: '2026-10-14',
-      bucket: 'savings',
+      date: TODAY,
+      accountId: SAVINGS,
       note: '',
     });
-    expect(income).toMatchObject({ status: 'confirmed', period: null });
+    expect(income).toMatchObject({ status: 'confirmed', period: null, accountId: SAVINGS });
     await store.getState().put('income', { ...income, status: 'expected' });
     await actions.confirmIncome(income.id, 120_00);
-    expect(store.getState().data.tables.income[0]).toMatchObject({
+    const data = store.getState().data;
+    expect(data.tables.income[0]).toMatchObject({
       status: 'confirmed',
       amount: 120_00,
+      accountId: SAVINGS,
+    });
+    expect(balanceOf(data, SAVINGS)).toBe(5_120_00);
+  });
+});
+
+describe('accounts', () => {
+  const wallet = {
+    name: 'Wallet',
+    kind: 'cash' as const,
+    last4: null,
+    openingBalance: 40_00,
+    credit: null,
+  };
+
+  it("a new account opens today, after the others, with its kind's look", async () => {
+    const { store, actions } = await setup();
+    const saved = await actions.saveAccount(wallet);
+    expect(saved).toMatchObject({
+      name: 'Wallet',
+      kind: 'cash',
+      skin: 'amber',
+      inAvailable: true,
+      openingBalance: 40_00,
+      openingDate: TODAY,
+      order: 2,
+      frozen: false,
+      last4: null,
+      credit: null,
+    });
+    expect(saved.archivedOn).toBeUndefined();
+    expect(store.getState().data.tables.account.map((a) => a.id)).toEqual([
+      MAIN,
+      SAVINGS,
+      saved.id,
+    ]);
+  });
+
+  it('places a new one after the last, archived ones included', async () => {
+    const { store, actions } = await setup();
+    await store.getState().put('account', makeCard({ order: 7, archivedOn: '2026-10-02' }));
+    expect((await actions.saveAccount(wallet)).order).toBe(8);
+  });
+
+  it('keeps the look and Available choice the input gives', async () => {
+    const { actions } = await setup();
+    const saved = await actions.saveAccount({
+      ...wallet,
+      kind: 'debit',
+      skin: 'ocean',
+      inAvailable: false,
+      last4: '4242',
+    });
+    expect(saved).toMatchObject({ skin: 'ocean', inAvailable: false, last4: '4242' });
+  });
+
+  it('a credit card never counts toward Available, whatever the input says', async () => {
+    const { store, actions } = await setup();
+    const card = await actions.saveAccount({
+      name: 'Visa',
+      kind: 'credit',
+      last4: null,
+      openingBalance: 230_00,
+      inAvailable: true,
+      credit: terms({ limit: 2_000_00 }),
+    });
+    expect(card).toMatchObject({ kind: 'credit', skin: 'violet', inAvailable: false });
+    const edited = await actions.saveAccount({
+      id: card.id,
+      name: 'Visa Gold',
+      kind: 'credit',
+      last4: null,
+      openingBalance: 230_00,
+      inAvailable: true,
+      credit: card.credit,
+    });
+    expect(edited).toMatchObject({ name: 'Visa Gold', inAvailable: false });
+    expect(store.getState().data.tables.account.find((a) => a.id === card.id)?.inAvailable).toBe(
+      false,
+    );
+  });
+
+  it('editing keeps its id, opening date, place and look', async () => {
+    const { store, actions } = await setup();
+    const before = store.getState().data.tables.account.find((a) => a.id === SAVINGS)!;
+    const edited = await actions.saveAccount({
+      id: SAVINGS,
+      name: 'Rainy day',
+      kind: 'savings',
+      last4: '1234',
+      openingBalance: 5_500_00,
+      credit: null,
+    });
+    expect(edited).toEqual({
+      ...before,
+      name: 'Rainy day',
+      last4: '1234',
+      openingBalance: 5_500_00,
+      updatedAt: expect.any(String),
+    });
+    expect(store.getState().data.tables.account.map((a) => a.id)).toEqual([MAIN, SAVINGS]);
+  });
+});
+
+describe('deleteAccount', () => {
+  /** Visa pays two subscriptions (one cancelled); Main account pays a third. */
+  async function withSubscriptions() {
+    const t = await setup();
+    await t.store.getState().putMany([
+      { table: 'account', record: makeCard({ id: 'card-x' }) },
+      {
+        table: 'subscription',
+        record: makeSubscription({ id: 'sub-gym', accountId: 'card-x', nextRenewal: '2026-11-05' }),
+      },
+      {
+        table: 'subscription',
+        record: makeSubscription({
+          id: 'sub-old',
+          accountId: 'card-x',
+          nextRenewal: '2026-11-05',
+          status: 'cancelled',
+        }),
+      },
+      {
+        table: 'subscription',
+        record: makeSubscription({ id: 'sub-main', accountId: MAIN, nextRenewal: '2026-11-05' }),
+      },
+    ]);
+    return t;
+  }
+  const paidWith = (data: DataSnapshot) => data.tables.subscription.map((s) => [s.id, s.accountId]);
+
+  it('moves its subscriptions and deletes one without history, in one write', async () => {
+    const { store, actions } = await withSubscriptions();
+    const putMany = vi.spyOn(store.getState(), 'putMany');
+    expect(await actions.deleteAccount('card-x', { moveSubscriptionsTo: SAVINGS })).toBe('deleted');
+    const data = store.getState().data;
+    expect(data.tables.account.map((a) => a.id)).toEqual([MAIN, SAVINGS]);
+    expect(paidWith(data)).toEqual([
+      ['sub-gym', SAVINGS],
+      ['sub-old', SAVINGS],
+      ['sub-main', MAIN],
+    ]);
+    for (const s of data.tables.subscription)
+      expect(SubscriptionSchema.safeParse(s).success).toBe(true);
+    expect(putMany).toHaveBeenCalledTimes(1);
+    expect(putMany.mock.calls[0]![1]).toEqual([{ table: 'account', id: 'card-x' }]);
+  });
+
+  it('archives one with history: past expenses keep its name and nothing they paid changes', async () => {
+    const { store, actions } = await withSubscriptions();
+    await store
+      .getState()
+      .put('expense', makeExpense({ id: 'e1', accountId: 'card-x', date: '2026-10-02' }));
+    const mainBefore = balanceOf(store.getState().data, MAIN);
+    const putMany = vi.spyOn(store.getState(), 'putMany');
+    expect(await actions.deleteAccount('card-x', { moveSubscriptionsTo: MAIN })).toBe('archived');
+    const data = store.getState().data;
+    expect(data.tables.account.map((a) => [a.id, a.archivedOn])).toEqual([
+      [MAIN, undefined],
+      [SAVINGS, undefined],
+      ['card-x', TODAY],
+    ]);
+    expect(data.tables.expense.map((e) => [e.id, e.accountId])).toEqual([['e1', 'card-x']]);
+    expect(paidWith(data)).toEqual([
+      ['sub-gym', MAIN],
+      ['sub-old', MAIN],
+      ['sub-main', MAIN],
+    ]);
+    expect(balanceOf(data, MAIN)).toBe(mainBefore);
+    expect(putMany).toHaveBeenCalledTimes(1);
+    expect(putMany.mock.calls[0]![1] ?? []).toEqual([]);
+  });
+
+  it('refuses with no target when it pays subscriptions, and writes nothing', async () => {
+    const { store, actions } = await withSubscriptions();
+    await store
+      .getState()
+      .put('account', makeAccount({ id: 'acct-old', order: 5, archivedOn: '2026-10-02' }));
+    const before = store.getState().data;
+    await expect(actions.deleteAccount('card-x', { moveSubscriptionsTo: null })).rejects.toThrow(
+      'Pick where its subscriptions go.',
+    );
+    // The account being deleted, one already archived, or one that is gone is no target either.
+    for (const to of ['card-x', 'acct-old', 'acct-gone']) {
+      await expect(
+        actions.deleteAccount('card-x', { moveSubscriptionsTo: to }),
+        to,
+      ).rejects.toThrow('Pick where its subscriptions go.');
+    }
+    expect(store.getState().data).toBe(before);
+  });
+
+  it('needs no target when it pays no subscription', async () => {
+    const { store, actions } = await setup();
+    await store.getState().put('account', makeCard({ id: 'card-x' }));
+    expect(await actions.deleteAccount('card-x', { moveSubscriptionsTo: null })).toBe('deleted');
+    expect(store.getState().data.tables.account.map((a) => a.id)).toEqual([MAIN, SAVINGS]);
+  });
+
+  describe('deleting the default account moves the default', () => {
+    const defaultOf = (store: Store) => store.getState().data.tables.settings[0]?.defaultAccountId;
+    const wallet = makeAccount({ id: 'acct-cash', name: 'Wallet', kind: 'cash', order: 3 });
+
+    it('to the first debit or cash account left, when it is archived, in the same write', async () => {
+      const { store, actions } = await setup();
+      await store.getState().put('account', wallet);
+      await store.getState().put('expense', makeExpense({ accountId: MAIN, date: '2026-10-02' }));
+      const putMany = vi.spyOn(store.getState(), 'putMany');
+      expect(await actions.deleteAccount(MAIN, { moveSubscriptionsTo: null })).toBe('archived');
+      // Savings comes first, but a new expense and a salary land on a debit or cash account.
+      expect(defaultOf(store)).toBe('acct-cash');
+      expect(putMany).toHaveBeenCalledTimes(1);
+      expect(putMany.mock.calls[0]![0].map((i) => i.table).sort()).toEqual(['account', 'settings']);
+    });
+
+    it('when it is deleted too', async () => {
+      const { store, actions } = await setup();
+      await store.getState().put('account', wallet);
+      expect(await actions.deleteAccount(MAIN, { moveSubscriptionsTo: null })).toBe('deleted');
+      expect(defaultOf(store)).toBe('acct-cash');
+    });
+
+    it('to none when no debit or cash account is left', async () => {
+      const { store, actions } = await setup();
+      await actions.deleteAccount(MAIN, { moveSubscriptionsTo: null });
+      expect(defaultOf(store)).toBeNull();
+    });
+
+    it('and leaves it alone when another account goes', async () => {
+      const { store, actions } = await setup();
+      await store.getState().put('account', wallet);
+      const putMany = vi.spyOn(store.getState(), 'putMany');
+      await actions.deleteAccount('acct-cash', { moveSubscriptionsTo: null });
+      expect(defaultOf(store)).toBe(MAIN);
+      expect(putMany.mock.calls[0]![0]).toEqual([]);
     });
   });
 });
 
-describe('goals, debts and corrections', () => {
-  it('contributing to a goal moves cash to savings and raises the goal together', async () => {
+describe('moving money', () => {
+  it('a transfer moves money between two accounts', async () => {
+    const { store, actions } = await setup();
+    const tx = await actions.transfer(MAIN, SAVINGS, 200_00, TODAY, 'Rainy day');
+    const data = store.getState().data;
+    expect(tx).toMatchObject({
+      type: 'transfer',
+      amount: 200_00,
+      date: TODAY,
+      fromAccountId: MAIN,
+      toAccountId: SAVINGS,
+      debtId: null,
+      note: 'Rainy day',
+    });
+    expect(data.tables.transaction).toEqual([tx]);
+    expect(balanceOf(data, MAIN)).toBe(800_00);
+    expect(balanceOf(data, SAVINGS)).toBe(5_200_00);
+  });
+
+  it('transfer refuses a credit account and the same account twice', async () => {
+    const { store, actions } = await setup();
+    await store.getState().put('account', makeCard());
+    await expect(actions.transfer(MAIN, MAIN, 10_00, TODAY, '')).rejects.toThrow(
+      'Use two different accounts.',
+    );
+    await expect(actions.transfer('card-1', MAIN, 10_00, TODAY, '')).rejects.toThrow(
+      'Only a bank account, cash or savings can pay.',
+    );
+    await expect(actions.transfer(MAIN, 'card-1', 10_00, TODAY, '')).rejects.toThrow(
+      'Only a bank account, cash or savings can pay.',
+    );
+    await expect(actions.transfer(MAIN, SAVINGS, 10_00, '2026-10-15', '')).rejects.toThrow(
+      'Use today or an earlier date.',
+    );
+    expect(store.getState().data.tables.transaction).toEqual([]);
+  });
+
+  it('contributing to a goal moves money between the accounts picked and raises the goal together', async () => {
     const { store, actions } = await setup();
     await store.getState().put('goal', makeGoal({ id: 'g1', name: 'Bike', current: 100_00 }));
-    await actions.contributeToGoal('g1', 50_00, '2026-10-14');
+    const putMany = vi.spyOn(store.getState(), 'putMany');
+    await actions.contributeToGoal('g1', 50_00, TODAY, MAIN, SAVINGS);
     const data = store.getState().data;
     expect(data.tables.goal[0]?.current).toBe(150_00);
-    expect(bucketBalances(data, '2026-10-14')).toMatchObject({ cash: 950_00, savings: 5_050_00 });
+    expect(balanceOf(data, MAIN)).toBe(950_00);
+    expect(balanceOf(data, SAVINGS)).toBe(5_050_00);
     expect(data.tables.transaction[0]).toMatchObject({
       type: 'transfer',
-      from: 'cash',
-      to: 'savings',
+      fromAccountId: MAIN,
+      toAccountId: SAVINGS,
+      debtId: null,
       note: 'Goal: Bike',
     });
+    expect(putMany).toHaveBeenCalledTimes(1);
   });
 
-  it('paying a card lowers the card and cash', async () => {
+  it('a goal contribution refuses what a transfer refuses, and raises nothing', async () => {
     const { store, actions } = await setup();
-    await store
-      .getState()
-      .put('debt', makeDebt({ id: 'card-1', openingBalance: 230_00, openingDate: '2026-10-01' }));
-    await actions.payDebt('card-1', 230_00, 'cash', '2026-10-14');
+    await store.getState().putMany([
+      { table: 'goal', record: makeGoal({ id: 'g1', current: 100_00 }) },
+      { table: 'account', record: makeCard() },
+    ]);
+    await expect(actions.contributeToGoal('g1', 50_00, TODAY, MAIN, MAIN)).rejects.toThrow(
+      'Use two different accounts.',
+    );
+    await expect(actions.contributeToGoal('g1', 50_00, TODAY, 'card-1', SAVINGS)).rejects.toThrow(
+      'Only a bank account, cash or savings can pay.',
+    );
     const data = store.getState().data;
-    expect(debtBalance(data.tables.debt[0]!, data, '2026-10-14')).toBe(0);
-    expect(bucketBalances(data, '2026-10-14').cash).toBe(770_00);
-    expect(data.tables.transaction[0]?.type).toBe('card_payment');
+    expect(data.tables.goal[0]?.current).toBe(100_00);
+    expect(data.tables.transaction).toEqual([]);
+  });
+});
+
+describe('cards and loans', () => {
+  it('payCard lowers what the card owes and what the source holds', async () => {
+    const { store, actions } = await setup();
+    await store.getState().put('account', makeCard({ openingBalance: 230_00 }));
+    const payment = await actions.payCard('card-1', SAVINGS, 230_00, TODAY);
+    const data = store.getState().data;
+    expect(balanceOf(data, 'card-1')).toBe(0);
+    expect(balanceOf(data, SAVINGS)).toBe(4_770_00);
+    expect(balanceOf(data, MAIN)).toBe(1_000_00);
+    expect(payment).toMatchObject({
+      type: 'card_payment',
+      amount: 230_00,
+      fromAccountId: SAVINGS,
+      toAccountId: 'card-1',
+      debtId: null,
+      note: 'Paid Visa',
+    });
+    expect(data.tables.transaction).toEqual([payment]);
   });
 
-  it('archives a card with history instead of deleting it, and deletes one without', async () => {
+  it('payCard refuses to pay from a credit card, or to pay what is not one', async () => {
     const { store, actions } = await setup();
-    await store.getState().put('debt', makeDebt({ id: 'used', openingDate: '2026-10-01' }));
-    await store.getState().put('debt', makeDebt({ id: 'unused', openingDate: '2026-10-01' }));
+    await store.getState().putMany([
+      { table: 'account', record: makeCard({ openingBalance: 230_00 }) },
+      { table: 'account', record: makeCard({ id: 'card-2', name: 'Amex', order: 3 }) },
+    ]);
+    await expect(actions.payCard('card-1', 'card-2', 50_00, TODAY)).rejects.toThrow(
+      'Only a bank account, cash or savings can pay.',
+    );
+    await expect(actions.payCard(SAVINGS, MAIN, 50_00, TODAY)).rejects.toThrow(
+      'Pick a credit card to pay.',
+    );
+    await expect(actions.payCard('card-1', MAIN, 50_00, '2026-10-15')).rejects.toThrow(
+      'Use today or an earlier date.',
+    );
+    expect(store.getState().data.tables.transaction).toEqual([]);
+  });
+
+  it('payDebt pays a loan from an account', async () => {
+    const { store, actions } = await setup();
     await store
       .getState()
       .put(
-        'expense',
-        makeExpense({ paymentMethod: 'credit_card', cardId: 'used', date: '2026-10-02' }),
+        'debt',
+        makeDebt({
+          id: 'loan',
+          name: 'Car loan',
+          openingBalance: 1_000_00,
+          openingDate: '2026-10-01',
+        }),
       );
-    const cashBefore = bucketBalances(store.getState().data, '2026-10-14').cash;
-    await actions.deleteDebt('used');
-    await actions.deleteDebt('unused');
+    const payment = await actions.payDebt('loan', MAIN, 50_00, TODAY);
     const data = store.getState().data;
-    expect(data.tables.debt.map((d) => [d.id, d.archivedOn])).toEqual([['used', '2026-10-14']]);
-    // The past expense still names it, and nothing it paid for changes.
-    expect(data.tables.expense[0]).toMatchObject({ paymentMethod: 'credit_card', cardId: 'used' });
-    expect(bucketBalances(data, '2026-10-14').cash).toBe(cashBefore);
+    expect(payment).toMatchObject({
+      type: 'debt_payment',
+      amount: 50_00,
+      fromAccountId: MAIN,
+      toAccountId: null,
+      debtId: 'loan',
+      note: 'Paid Car loan',
+    });
+    expect(debtBalance(data.tables.debt[0]!, data, TODAY)).toBe(950_00);
+    expect(balanceOf(data, MAIN)).toBe(950_00);
   });
 
-  it('archives a loan with payments too', async () => {
+  it('payDebt refuses to pay a loan from a credit card', async () => {
     const { store, actions } = await setup();
-    await store.getState().put('debt', makeDebt({ id: 'loan', kind: 'loan' }));
-    await actions.payDebt('loan', 50_00, 'cash', '2026-10-14');
-    await actions.deleteDebt('loan');
-    expect(store.getState().data.tables.debt.map((d) => d.archivedOn)).toEqual(['2026-10-14']);
+    await store.getState().putMany([
+      { table: 'debt', record: makeDebt({ id: 'loan' }) },
+      { table: 'account', record: makeCard() },
+    ]);
+    await expect(actions.payDebt('loan', 'card-1', 50_00, TODAY)).rejects.toThrow(
+      'Only a bank account, cash or savings can pay.',
+    );
+  });
+
+  it('saveDebt saves a loan', async () => {
+    const { store, actions } = await setup();
+    const loan = await actions.saveDebt({
+      name: 'Car loan',
+      openingBalance: 8_000_00,
+      interestRate: 6.5,
+      minimumPayment: 200_00,
+      creditLimit: null,
+      statementDay: null,
+      dueDay: 5,
+      payInFull: false,
+    });
+    expect(loan).toMatchObject({ kind: 'loan', openingDate: TODAY, dueDay: 5 });
+    expect(store.getState().data.tables.debt).toEqual([loan]);
+  });
+
+  it('deleteDebt archives a loan with payments and deletes one without', async () => {
+    const { store, actions } = await setup();
+    await store.getState().putMany([
+      { table: 'debt', record: makeDebt({ id: 'paid' }) },
+      { table: 'debt', record: makeDebt({ id: 'unpaid' }) },
+    ]);
+    await actions.payDebt('paid', MAIN, 50_00, TODAY);
+    await actions.deleteDebt('paid');
+    await actions.deleteDebt('unpaid');
+    expect(store.getState().data.tables.debt.map((d) => [d.id, d.archivedOn])).toEqual([
+      ['paid', TODAY],
+    ]);
+  });
+});
+
+describe('corrections', () => {
+  it('set actual balance records only the difference, on the account', async () => {
+    const { store, actions } = await setup();
+    const adj = await actions.setActualBalance(MAIN, 1_012_34, TODAY);
+    expect(adj).toMatchObject({
+      type: 'adjustment',
+      amount: 12_34,
+      fromAccountId: null,
+      toAccountId: MAIN,
+      debtId: null,
+    });
+    expect(await actions.setActualBalance(MAIN, 1_012_34, TODAY)).toBeNull();
+    const data = store.getState().data;
+    expect(balanceOf(data, MAIN)).toBe(1_012_34);
+    expect(balanceOf(data, SAVINGS)).toBe(5_000_00);
+  });
+
+  it('setActualBalance on a credit account changes what it owes by the delta', async () => {
+    const { store, actions } = await setup();
+    await store.getState().put('account', makeCard({ openingBalance: 230_00 }));
+    const up = await actions.setActualBalance('card-1', 250_00, TODAY);
+    expect(up).toMatchObject({ type: 'adjustment', amount: 20_00, toAccountId: 'card-1' });
+    expect(balanceOf(store.getState().data, 'card-1')).toBe(250_00);
+    const down = await actions.setActualBalance('card-1', 200_00, TODAY);
+    expect(down).toMatchObject({ amount: -50_00, toAccountId: 'card-1' });
+    const data = store.getState().data;
+    expect(balanceOf(data, 'card-1')).toBe(200_00);
+    expect(balanceOf(data, MAIN)).toBe(1_000_00);
   });
 
   it('deleting a subscription keeps its past charges', async () => {
@@ -212,20 +673,12 @@ describe('goals, debts and corrections', () => {
         'expense',
         makeExpense({ id: 'charge', subscriptionId: 's1', date: '2026-10-03', amount: 15_99 }),
       );
-    const cashBefore = bucketBalances(store.getState().data, '2026-10-14').cash;
+    const mainBefore = balanceOf(store.getState().data, MAIN);
     await actions.deleteSubscription('s1');
     const data = store.getState().data;
     expect(data.tables.subscription).toEqual([]);
     expect(data.tables.expense.map((e) => [e.id, e.subscriptionId])).toEqual([['charge', 's1']]);
-    expect(bucketBalances(data, '2026-10-14').cash).toBe(cashBefore);
-  });
-
-  it('set actual balance records only the difference', async () => {
-    const { store, actions } = await setup();
-    const adj = await actions.setActualBalance('cash', 1_012_34, '2026-10-14');
-    expect(adj).toMatchObject({ type: 'adjustment', amount: 12_34, to: 'cash' });
-    expect(await actions.setActualBalance('cash', 1_012_34, '2026-10-14')).toBeNull();
-    expect(bucketBalances(store.getState().data, '2026-10-14').cash).toBe(1_012_34);
+    expect(balanceOf(data, MAIN)).toBe(mainBefore);
   });
 });
 
@@ -238,32 +691,80 @@ describe('Salary freeze is gone', () => {
 });
 
 describe('onboarding', () => {
-  it('writes the profile and cards in one go', async () => {
+  it('completeOnboarding creates the accounts and the default', async () => {
     const t = await freshRealStore();
     const actions = createFinanceActions(t.store);
+    const putMany = vi.spyOn(t.store.getState(), 'putMany');
     await actions.completeOnboarding({
-      name: 'Alex',
+      name: ' Alex ',
       currency: 'EUR',
       openingCash: 1_000_00,
       openingSavings: 5_000_00,
       salary: { monthlyAmount: 4_200_00, payDay: 25 },
-      cards: [{ name: 'Visa', balance: 230_00, creditLimit: null, dueDay: 21, payInFull: true }],
+      cards: [
+        { name: ' Visa ', balance: 230_00, creditLimit: 2_000_00, dueDay: 21, payInFull: true },
+        { name: 'Amex', balance: 0, creditLimit: null, dueDay: null, payInFull: false },
+      ],
     });
+    expect(putMany).toHaveBeenCalledTimes(1);
     const data = t.store.getState().data;
     expect(data.tables.profile[0]).toMatchObject({
       name: 'Alex',
       currency: 'EUR',
-      openingDate: '2026-10-14',
-      openingCash: 1_000_00,
+      openingDate: TODAY,
+      salary: { monthlyAmount: 4_200_00, payDay: 25 },
     });
+    expect(data.tables.profile[0]).not.toHaveProperty('openingCash');
     expect(data.tables.profile[0]?.onboardedAt).not.toBeNull();
-    expect(data.tables.debt[0]).toMatchObject({
-      name: 'Visa',
-      kind: 'credit_card',
-      openingBalance: 230_00,
-      openingDate: '2026-10-14',
-      dueDay: 21,
+    const [main, savings, visa, amex] = data.tables.account;
+    expect(main).toMatchObject({
+      id: MAIN,
+      name: 'Main account',
+      kind: 'debit',
+      skin: 'midnight',
+      openingBalance: 1_000_00,
+      openingDate: TODAY,
+      inAvailable: true,
+      frozen: false,
+      order: 0,
+      credit: null,
     });
+    expect(savings).toMatchObject({
+      id: SAVINGS,
+      name: 'Savings',
+      kind: 'savings',
+      skin: 'mint',
+      openingBalance: 5_000_00,
+      openingDate: TODAY,
+      inAvailable: false,
+      order: 1,
+      credit: null,
+    });
+    expect(visa).toMatchObject({
+      name: 'Visa',
+      kind: 'credit',
+      skin: 'violet',
+      openingBalance: 230_00,
+      openingDate: TODAY,
+      inAvailable: false,
+      order: 2,
+      credit: {
+        limit: 2_000_00,
+        statementDay: null,
+        dueDay: 21,
+        payInFull: true,
+        minimumPayment: 0,
+        interestRate: 0,
+      },
+    });
+    expect(amex).toMatchObject({
+      name: 'Amex',
+      order: 3,
+      credit: { limit: null, dueDay: null, payInFull: false },
+    });
+    expect(new Set([MAIN, SAVINGS, visa!.id, amex!.id]).size).toBe(4);
+    expect(data.tables.debt).toEqual([]);
+    expect(data.tables.settings[0]?.defaultAccountId).toBe(MAIN);
   });
 });
 
@@ -299,7 +800,9 @@ describe('subscriptions', () => {
 
   it('stamps auditedAt when a subscription is audited and clears it when the mark is removed', async () => {
     const { store, actions } = await setup();
-    await store.getState().put('subscription', makeSubscription({ id: 'sub-tv' }));
+    await store
+      .getState()
+      .put('subscription', makeSubscription({ id: 'sub-tv', nextRenewal: '2026-10-20' }));
     const read = () => store.getState().data.tables.subscription.find((s) => s.id === 'sub-tv')!;
     expect(read().auditedAt).toBeNull();
 
@@ -316,7 +819,7 @@ describe('subscriptions', () => {
     expect(read()).toMatchObject({ audit: null, auditedAt: null });
   });
 
-  it('a new subscription starts un-audited, and editing one keeps its audit stamp', async () => {
+  it('a new subscription starts un-audited on its account, and editing one keeps its audit stamp', async () => {
     const { store, actions } = await setup();
     const input = {
       name: 'Gym',
@@ -324,19 +827,24 @@ describe('subscriptions', () => {
       cycle: 'monthly' as const,
       nextRenewal: '2026-11-05',
       category: 'health' as const,
-      paymentMethod: 'debit' as const,
-      cardId: null,
+      accountId: MAIN,
     };
     const created = await actions.saveSubscription(input);
-    expect(created.auditedAt).toBeNull();
+    expect(created).toMatchObject({ auditedAt: null, accountId: MAIN });
 
     await actions.setSubscriptionAudit(created.id, 'cancel');
     const audited = store.getState().data.tables.subscription.find((s) => s.id === created.id)!;
     expect(audited.auditedAt).not.toBeNull();
 
-    const edited = await actions.saveSubscription({ ...input, id: created.id, amount: 35_00 });
+    const edited = await actions.saveSubscription({
+      ...input,
+      id: created.id,
+      amount: 35_00,
+      accountId: SAVINGS,
+    });
     expect(edited).toMatchObject({
       amount: 35_00,
+      accountId: SAVINGS,
       audit: 'cancel',
       auditedAt: audited.auditedAt,
     });
@@ -370,18 +878,16 @@ describe('changing the currency', () => {
       .putMany([ko, vwrl, manual, abroad].map((record) => ({ table: 'holding' as const, record })));
     return t;
   }
-  const holding = (store: Awaited<ReturnType<typeof setup>>['store'], id: string) =>
+  const holding = (store: Store, id: string) =>
     store.getState().data.tables.holding.find((h) => h.id === id)!;
 
   it('relabels without converting: every amount keeps its number', async () => {
     const { store, actions } = await withHoldings();
     await actions.changeCurrency('EUR');
-    expect(store.getState().data.tables.profile[0]).toMatchObject({
-      currency: 'EUR',
-      openingCash: 1_000_00,
-      openingSavings: 5_000_00,
-    });
-    expect(store.getState().data.tables.expense.map((e) => e.amount)).toEqual([1_200]);
+    const data = store.getState().data;
+    expect(data.tables.profile[0]).toMatchObject({ currency: 'EUR' });
+    expect(data.tables.account.map((a) => a.openingBalance)).toEqual([1_000_00, 5_000_00]);
+    expect(data.tables.expense.map((e) => e.amount)).toEqual([1_200]);
     expect(holding(store, 'ko').costBasis).toBe(500_00);
   });
 
@@ -444,8 +950,7 @@ describe('changing the currency', () => {
       rate: 0.9,
       asOf: '2026-10-14T09:00:00.000Z',
     });
-    const settingsOf = (store: Awaited<ReturnType<typeof setup>>['store']) =>
-      store.getState().data.tables.settings[0]!;
+    const settingsOf = (store: Store) => store.getState().data.tables.settings[0]!;
 
     it('drops the rate, which was for the old profile currency, and keeps the choice', async () => {
       const { store, actions } = await withHoldings();
@@ -491,7 +996,7 @@ describe('expected salary that never arrives', () => {
     const { store } = await paidOnThe5th();
     await store.getState().sync();
     expect(store.getState().data.tables.income).toEqual([]);
-    expect(store.getState().data.tables.profile[0]?.salary).toMatchObject({ since: '2026-10-14' });
+    expect(store.getState().data.tables.profile[0]?.salary).toMatchObject({ since: TODAY });
   });
 
   it('marking it as not arrived keeps it out of balances and the banner, for good', async () => {
@@ -502,8 +1007,9 @@ describe('expected salary that never arrives', () => {
       salary: { monthlyAmount: 3_100_00, payDay: 5 },
     });
     await store.getState().sync();
-    expect(store.getState().data.tables.income.map((i) => [i.id, i.status])).toEqual([
-      ['salary-2026-10', 'expected'],
+    // It is expected on the default account.
+    expect(store.getState().data.tables.income.map((i) => [i.id, i.status, i.accountId])).toEqual([
+      ['salary-2026-10', 'expected', MAIN],
     ]);
     await actions.deleteIncome('salary-2026-10');
     await store.getState().sync();
@@ -515,71 +1021,12 @@ describe('expected salary that never arrives', () => {
       amount: 3_000_00,
       source: 'salary',
       label: 'Salary',
-      date: '2026-10-14',
-      bucket: 'cash',
+      date: TODAY,
+      accountId: MAIN,
       note: '',
     });
     // It came after all: the skipped month is confirmed rather than doubled.
     expect(late.id).toBe('salary-2026-10');
     expect(store.getState().data.tables.income).toHaveLength(1);
-  });
-});
-
-describe('deleting a card a subscription pays with', () => {
-  async function withSubscriptions() {
-    const t = await setup();
-    const put = t.store.getState().put;
-    await put('debt', makeDebt({ id: 'card-x', name: 'Visa', openingBalance: 0 }));
-    await put(
-      'subscription',
-      makeSubscription({ id: 'sub-gym', paymentMethod: 'credit_card', cardId: 'card-x' }),
-    );
-    await put(
-      'subscription',
-      makeSubscription({
-        id: 'sub-old',
-        paymentMethod: 'credit_card',
-        cardId: 'card-x',
-        status: 'cancelled',
-      }),
-    );
-    await put('subscription', makeSubscription({ id: 'sub-cash', paymentMethod: 'cash' }));
-    return t;
-  }
-
-  const paidWith = (data: DataSnapshot) =>
-    data.tables.subscription.map((s) => [s.id, s.paymentMethod, s.cardId]);
-
-  it('moves them to debit and deletes the card, in one write', async () => {
-    const { store, actions } = await withSubscriptions();
-    const putMany = vi.spyOn(store.getState(), 'putMany');
-    await actions.deleteDebt('card-x');
-    const data = store.getState().data;
-    expect(data.tables.debt).toEqual([]);
-    expect(paidWith(data)).toEqual([
-      ['sub-gym', 'debit', null],
-      ['sub-old', 'debit', null],
-      ['sub-cash', 'cash', null],
-    ]);
-    // Every moved one still holds together: a card exactly when paying by credit card.
-    for (const s of data.tables.subscription)
-      expect(SubscriptionSchema.safeParse(s).success).toBe(true);
-    expect(putMany).toHaveBeenCalledTimes(1);
-    expect(putMany.mock.calls[0]![1]).toEqual([{ table: 'debt', id: 'card-x' }]);
-  });
-
-  it('moves them to debit when the card is archived too, so no renewal lands on it', async () => {
-    const { store, actions } = await withSubscriptions();
-    await store
-      .getState()
-      .put('expense', makeExpense({ paymentMethod: 'credit_card', cardId: 'card-x' }));
-    await actions.deleteDebt('card-x');
-    const data = store.getState().data;
-    expect(data.tables.debt.map((d) => d.archivedOn)).toEqual(['2026-10-14']);
-    expect(paidWith(data)).toEqual([
-      ['sub-gym', 'debit', null],
-      ['sub-old', 'debit', null],
-      ['sub-cash', 'cash', null],
-    ]);
   });
 });

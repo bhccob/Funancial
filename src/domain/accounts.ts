@@ -26,6 +26,19 @@ export const defaultsFor = (kind: AccountKind): { skin: string; inAvailable: boo
 });
 
 /**
+ * The account a new expense starts on and an expected salary lands on: the settings' default while
+ * it is in use and not a credit card, else the first debit or cash account in use by order, else
+ * none. So a default that was archived or deleted never leaves money landing on it.
+ */
+export function defaultAccount(data: DataSnapshot, today: LocalDate): Account | null {
+  const active = activeAccounts(data.tables.account, today);
+  const id = data.tables.settings[0]?.defaultAccountId ?? null;
+  const named = id === null ? undefined : active.find((a) => a.id === id);
+  if (named && named.kind !== 'credit') return named;
+  return active.find((a) => a.kind === 'debit' || a.kind === 'cash') ?? null;
+}
+
+/**
  * What deleting an account does. The subscriptions paid with it have to move to another account,
  * so no renewal lands on one that is gone. One with history (an expense, an income, a transfer or
  * payment in or out, a dividend or a sale that names it) is archived rather than deleted, so that

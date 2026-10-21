@@ -1,3 +1,4 @@
+import { defaultAccount } from './accounts';
 import type { LocalDate } from './dates';
 import type { Expense, Income, Subscription } from './entities';
 import { monthKey, monthsBetween } from './periods';
@@ -12,8 +13,10 @@ const stamp = (d: LocalDate) => ({
 
 /**
  * Records that should exist by `today` but don't yet: one expense per subscription renewal
- * that has come due (with the subscription moved past today), and an *expected* salary for each
- * pay day reached. Deterministic ids make it safe to run on every open.
+ * that has come due, on the subscription's account (with the subscription moved past today), and
+ * an *expected* salary for each pay day reached, on the default account (`defaultAccount`); with
+ * no account for it to land on, no salary is expected. Deterministic ids make it safe to run on
+ * every open.
  */
 export function dueGenerated(data: DataSnapshot, today: LocalDate): TableRecord[] {
   const out: TableRecord[] = [];
@@ -32,8 +35,7 @@ export function dueGenerated(data: DataSnapshot, today: LocalDate): TableRecord[
           category: sub.category,
           date: d,
           note: sub.name,
-          paymentMethod: sub.paymentMethod,
-          cardId: sub.cardId,
+          accountId: sub.accountId,
           recurrence: null,
           subscriptionId: sub.id,
         };
@@ -47,7 +49,8 @@ export function dueGenerated(data: DataSnapshot, today: LocalDate): TableRecord[
 
   const profile = data.tables.profile[0];
   const salary = profile?.salary;
-  if (profile && salary && salary.monthlyAmount > 0) {
+  const payInto = defaultAccount(data, today);
+  if (profile && salary && salary.monthlyAmount > 0 && payInto) {
     const paid = new Set(
       data.tables.income.filter((i) => i.source === 'salary' && i.period).map((i) => i.period),
     );
@@ -67,7 +70,7 @@ export function dueGenerated(data: DataSnapshot, today: LocalDate): TableRecord[
         label: 'Salary',
         date,
         status: 'expected',
-        bucket: 'cash',
+        accountId: payInto.id,
         recurrence: null,
         period: month,
         note: '',

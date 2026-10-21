@@ -6,6 +6,7 @@ import type { SafeStorage } from '@/lib/safeStorage';
 import { buildDemoSnapshot } from '@/data/demoSeed';
 import { CURRENT_SCHEMA_VERSION } from '@/domain/snapshot';
 import {
+  makeAccount,
   makeDebt,
   makeExpense,
   makeGoal,
@@ -84,17 +85,17 @@ describe('first run', () => {
           dailyLog: true,
           dailyTime: '20:00',
           bills: true,
-          freeze: true,
           reviews: true,
           backup: true,
           dividends: true,
-          buyIt: true,
           prompted: false,
         },
         cosmetics: { theme: 'theme-violet', avatar: 'avatar-sprout', frame: 'frame-none' },
         investCurrency: null,
         investFx: null,
         inbox: { readBefore: null, read: [] },
+        // Setup names the default account; there is none before it.
+        defaultAccountId: null,
       },
     ]);
   });
@@ -311,19 +312,43 @@ describe('starting over', () => {
         name: 'Robin',
         currency: 'EUR',
         openingDate: '2026-09-01',
-        openingCash: 900_00,
-        openingSavings: 4_000_00,
         salary: { monthlyAmount: 3_000_00, payDay: 25 },
       }),
     );
-    await put('expense', makeExpense({ id: 'e1' }));
-    await put('subscription', makeSubscription({ id: 's1' }));
+    await put('account', makeAccount({ openingDate: '2026-09-01', openingBalance: 900_00 }));
+    await put(
+      'account',
+      makeAccount({
+        id: 'card-1',
+        name: 'Visa',
+        kind: 'credit',
+        skin: 'violet',
+        inAvailable: false,
+        order: 1,
+        openingDate: '2026-09-01',
+        credit: {
+          limit: null,
+          statementDay: null,
+          dueDay: 21,
+          payInFull: true,
+          minimumPayment: 0,
+          interestRate: 0,
+        },
+      }),
+    );
+    await put('expense', makeExpense({ id: 'e1', accountId: 'card-1', date: '2026-10-02' }));
+    await put('subscription', makeSubscription({ id: 's1', nextRenewal: '2026-11-02' }));
     await put('debt', makeDebt({ id: 'd1' }));
     await put('goal', makeGoal({ id: 'g1' }));
     await put('holding', makeHolding({ id: 'h1' }));
     await put('ledger', makeLedgerEntry({ id: 'quest:x#0', key: 'quest:x', xp: 80 }));
     const settings = t.store.getState().data.tables.settings[0]!;
-    await put('settings', { ...settings, weekStartsOn: 0, warningTone: 'strict' });
+    await put('settings', {
+      ...settings,
+      weekStartsOn: 0,
+      warningTone: 'strict',
+      defaultAccountId: 'acct-main',
+    });
     return t;
   }
 
@@ -335,18 +360,28 @@ describe('starting over', () => {
     for (const data of [store.getState().data, (await reboot(deps)).getState().data]) {
       const { profile, settings: kept, ...rest } = data.tables;
       for (const [table, rows] of Object.entries(rest)) expect(rows, table).toEqual([]);
-      expect(kept).toEqual([settings]);
+      expect(kept).toEqual([
+        { ...settings, defaultAccountId: null, updatedAt: '2026-10-14T10:00:00.000Z' },
+      ]);
       expect(profile).toEqual([
         expect.objectContaining({
           name: 'Robin',
           currency: 'EUR',
           openingDate: '2026-10-14',
-          openingCash: 0,
-          openingSavings: 0,
           salary: null,
           onboardedAt: null,
         }),
       ]);
+    }
+  });
+
+  it('freshStart leaves no accounts, and no default account naming one', async () => {
+    const { deps, store } = await filled();
+    expect(store.getState().data.tables.account).toHaveLength(2);
+    await store.getState().startOver();
+    for (const data of [store.getState().data, (await reboot(deps)).getState().data]) {
+      expect(data.tables.account).toEqual([]);
+      expect(data.tables.settings[0]?.defaultAccountId).toBeNull();
     }
   });
 

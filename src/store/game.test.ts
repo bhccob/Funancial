@@ -54,8 +54,7 @@ const lunch = {
   category: 'food' as const,
   date: TODAY,
   note: 'Lunch',
-  paymentMethod: 'cash' as const,
-  cardId: null,
+  accountId: 'acct-main',
   repeat: null,
 };
 
