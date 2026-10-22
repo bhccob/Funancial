@@ -355,8 +355,9 @@ break-even after dividends, or the dividend withholding.
 
 - **Available to spend:**
   - Start from the balances of accounts with `inAvailable` (debit and cash by default).
-  - Take off this month's unpaid bills charged to those accounts, this month's credit-card payments
-    due, and what limits with `reserve` keep back.
+  - Take off this month's unpaid bills charged to those accounts, each card's next payment (even
+    one due next month: that money is already spent on the card), and what limits with `reserve`
+    keep back.
   - A subscription charged to a credit card is not taken off: it lands on the card and comes back
     as that card's payment. Today's rule takes off both, which counts it twice.
   - *Cash in pocket* view: what the cash accounts hold, with nothing taken off.
