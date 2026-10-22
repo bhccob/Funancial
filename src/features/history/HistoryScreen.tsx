@@ -1,5 +1,5 @@
 import { Trash2 } from 'lucide-react';
-import { useMemo, useState, type ReactNode } from 'react';
+import { useMemo, useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Dialog } from '@/components/ui/Dialog';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -7,14 +7,14 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { RadioGroup } from '@/components/ui/RadioGroup';
 import { SectionLink } from '@/components/ui/Section';
 import { Select } from '@/components/ui/Select';
-import { categoryLabel } from '@/domain/budget';
 import { type Category, type Expense } from '@/domain/entities';
 import { entryDate, historyEntries, type Entry } from '@/domain/history';
 import { monthKey } from '@/domain/periods';
 import { ExpenseForm } from '@/features/add/ExpenseForm';
-import { accountName } from '@/features/shared/AccountField';
 import { CATEGORY_OPTIONS } from '@/features/shared/categories';
-import { formatDate, formatMonthYear, formatShares } from '@/lib/format';
+import { EntryChip, EntryDetail } from '@/features/shared/EntryParts';
+import { entryLine, type EntryLine } from '@/features/shared/entryLine';
+import { formatDate, formatMonthYear } from '@/lib/format';
 import { useAction } from '@/lib/useAction';
 import { useApp } from '@/store/AppStoreProvider';
 import { useFinanceActions, useMoney, useToday } from '@/store/useFinance';
@@ -32,46 +32,36 @@ const SHOWS: Record<Show, Array<Entry['kind']> | null> = {
   transfers: ['transaction'],
 };
 
-function Amount({ children, tone }: { children: string; tone?: 'in' | 'out' }) {
+/** An entry's amount, with its sign; money in reads in the success color. */
+function Amount({ line }: { line: EntryLine }) {
+  const money = useMoney();
   return (
     <span
-      className={`shrink-0 text-sm font-bold tabular-nums ${tone === 'in' ? 'text-success' : ''}`}
+      className={`shrink-0 text-sm font-bold tabular-nums ${line.tone === 'in' ? 'text-success' : ''}`}
     >
-      {children}
+      {`${line.sign}${money(line.amount)}`}
     </span>
   );
 }
 
-function Row({
-  title,
-  detail,
-  amount,
-  chip,
-  onDelete,
-}: {
-  title: string;
-  detail: ReactNode;
-  amount: ReactNode;
-  chip?: string;
-  onDelete(): void;
-}) {
+function Row({ line, onDelete }: { line: EntryLine; onDelete(): void }) {
   return (
     <li className="flex items-center gap-3 py-2.5">
       <div className="min-w-0 flex-1">
         <p className="flex items-center gap-2">
-          <span className="truncate text-sm font-semibold">{title}</span>
-          {chip && (
-            <span className="bg-surface-2 text-muted shrink-0 rounded-full px-2 py-0.5 text-xs font-bold">
-              {chip}
-            </span>
-          )}
+          <span className="truncate text-sm font-semibold">{line.title}</span>
+          <EntryChip line={line} />
         </p>
-        {detail && <p className="text-muted truncate text-[12.5px]">{detail}</p>}
+        {(line.detail || line.profit !== undefined) && (
+          <p className="text-muted truncate text-[12.5px]">
+            <EntryDetail line={line} />
+          </p>
+        )}
       </div>
-      {amount}
+      <Amount line={line} />
       <button
         type="button"
-        aria-label={`Delete ${title}`}
+        aria-label={`Delete ${line.title}`}
         onClick={onDelete}
         className="text-muted hover:text-danger hover:bg-surface-2 -mr-2 grid size-11 shrink-0 place-items-center rounded-full"
       >
@@ -84,7 +74,6 @@ function Row({
 export function HistoryScreen() {
   const data = useApp((s) => s.data);
   const today = useToday();
-  const money = useMoney();
   const { deleteIncome, deleteTransaction } = useFinanceActions();
   const { deleteDividend, undoSale } = useInvestActions();
   const run = useAction();
@@ -127,14 +116,11 @@ export function HistoryScreen() {
     return [...grouped];
   }, [everything, month, show, category]);
 
-  const loanName = (id: string | null) => debt.find((d) => d.id === id)?.name ?? 'a loan';
-  // Archived accounts are in the table too, so old rows keep their names.
-  const nameOf = (id: string | null) => accountName(account, id);
-
   function renderEntry(entry: Entry) {
+    // Archived accounts are in the table too, so old rows keep their names.
+    const line = entryLine(entry, { accounts: account, debts: debt });
     if (entry.kind === 'expense') {
       const e = entry.item;
-      const title = e.note || categoryLabel(e.category);
       return (
         <li key={e.id}>
           <button
@@ -143,126 +129,29 @@ export function HistoryScreen() {
             className="hover:bg-surface-2 -mx-2 flex w-[calc(100%+1rem)] items-center gap-3 rounded-md px-2 py-2.5 text-left"
           >
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm font-semibold">{title}</span>
-              <span className="text-muted block truncate text-[12.5px]">
-                {`${categoryLabel(e.category)} · ${nameOf(e.accountId)}${e.subscriptionId ? ' · Subscription' : ''}`}
-              </span>
+              <span className="block truncate text-sm font-semibold">{line.title}</span>
+              <span className="text-muted block truncate text-[12.5px]">{line.detail}</span>
             </span>
-            <Amount>{`−${money(e.amount)}`}</Amount>
+            <Amount line={line} />
           </button>
         </li>
       );
     }
-    if (entry.kind === 'income') {
-      const i = entry.item;
-      return (
-        <Row
-          key={i.id}
-          title={i.label}
-          detail={`${i.source === 'salary' ? 'Salary' : 'Extra income'} · to ${nameOf(i.accountId)}`}
-          chip={
-            i.status === 'expected'
-              ? 'Expected'
-              : i.status === 'skipped'
-                ? "Didn't arrive"
-                : undefined
-          }
-          amount={
-            i.status === 'skipped' ? (
-              <Amount>{money(0)}</Amount>
-            ) : (
-              <Amount tone="in">{`+${money(i.amount)}`}</Amount>
-            )
-          }
-          onDelete={() => setDeleting({ title: i.label, remove: () => deleteIncome(i.id) })}
-        />
-      );
-    }
-    if (entry.kind === 'dividend') {
-      const d = entry.item;
-      const title = `${d.status === 'skipped' ? 'Skipped dividend' : 'Dividend'} · ${d.symbol}`;
-      return (
-        <Row
-          key={d.id}
-          title={title}
-          detail={
-            d.reinvested ? 'Reinvested' : d.accountId === null ? '' : `To ${nameOf(d.accountId)}`
-          }
-          amount={
-            d.status === 'skipped' ? (
-              <Amount>{money(0)}</Amount>
-            ) : (
-              <Amount tone="in">{`+${money(d.amount)}`}</Amount>
-            )
-          }
-          onDelete={() => setDeleting({ title, remove: () => deleteDividend(d.id) })}
-        />
-      );
-    }
-    if (entry.kind === 'sale') {
-      const s = entry.item;
-      const title = `Sold ${formatShares(s.shares)} ${s.symbol}`;
-      const profit = s.proceeds - s.cost;
-      return (
-        <Row
-          key={s.id}
-          title={title}
-          detail={
-            <>
-              {`To ${nameOf(s.toAccountId)} · profit `}
-              <span className={profit < 0 ? 'text-danger' : 'text-success'}>
-                {`${profit < 0 ? '▼' : '▲'} ${money(Math.abs(profit))}`}
-              </span>
-            </>
-          }
-          amount={<Amount tone="in">{`+${money(s.proceeds)}`}</Amount>}
-          onDelete={() =>
-            setDeleting({
-              title,
-              description: `${title} will be removed from your history, and its shares go back to your ${s.symbol} holding.`,
-              remove: () => undoSale(s.id),
-            })
-          }
-        />
-      );
-    }
-    const t = entry.item;
-    let title: string;
-    let detail = t.note;
-    let amount: string;
-    if (t.type === 'transfer') {
-      title = `${nameOf(t.fromAccountId)} → ${nameOf(t.toAccountId)}`;
-      amount = money(t.amount);
-    } else if (t.type === 'adjustment') {
-      title = 'Balance correction';
-      // On a card the correction changes what is owed: owing more reads as a card expense does.
-      const onCard = account.find((a) => a.id === t.toAccountId)?.kind === 'credit';
-      const change = onCard ? (t.amount > 0 ? 'owed more' : 'owed less') : '';
-      detail = [nameOf(t.toAccountId), change, t.note === title ? '' : t.note]
-        .filter(Boolean)
-        .join(' · ');
-      const out = onCard ? t.amount > 0 : t.amount < 0;
-      amount = `${out ? '−' : '+'}${money(Math.abs(t.amount))}`;
-    } else if (t.type === 'card_payment') {
-      // Money moved from an account onto the card, so it reads like a transfer.
-      title = `${nameOf(t.fromAccountId)} → ${nameOf(t.toAccountId)}`;
-      detail = 'Card payment';
-      amount = `−${money(t.amount)}`;
-    } else {
-      // A purchase's note names what was bought ("Bought KO"); a loan payment names the loan.
-      title = t.type === 'investment' ? t.note || 'Investment' : `Paid ${loanName(t.debtId)}`;
-      detail = t.fromAccountId === null ? '' : `From ${nameOf(t.fromAccountId)}`;
-      amount = `−${money(t.amount)}`;
-    }
-    return (
-      <Row
-        key={t.id}
-        title={title}
-        detail={detail}
-        amount={<Amount>{amount}</Amount>}
-        onDelete={() => setDeleting({ title, remove: () => deleteTransaction(t.id) })}
-      />
-    );
+    const { title } = line;
+    const remove =
+      entry.kind === 'income'
+        ? () => setDeleting({ title, remove: () => deleteIncome(entry.item.id) })
+        : entry.kind === 'dividend'
+          ? () => setDeleting({ title, remove: () => deleteDividend(entry.item.id) })
+          : entry.kind === 'sale'
+            ? () =>
+                setDeleting({
+                  title,
+                  description: `${title} will be removed from your history, and its shares go back to your ${entry.item.symbol} holding.`,
+                  remove: () => undoSale(entry.item.id),
+                })
+            : () => setDeleting({ title, remove: () => deleteTransaction(entry.item.id) });
+    return <Row key={entry.item.id} line={line} onDelete={remove} />;
   }
 
   return (

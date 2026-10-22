@@ -1,16 +1,17 @@
-import { useId, useMemo, useState } from 'react';
+import { useId, useMemo, useState, type ReactNode } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Sheet } from '@/components/ui/Sheet';
 import { archivedBy } from '@/domain/accounts';
 import { accountBalance } from '@/domain/balances';
-import { categoryLabel } from '@/domain/budget';
-import type { Account, Cycle } from '@/domain/entities';
+import type { Cycle } from '@/domain/entities';
 import { entryDate, historyEntries, type Entry } from '@/domain/history';
 import { CardFacts } from '@/features/goals/CardSheet';
 import { PayDialog, type PayTarget } from '@/features/goals/PayDialog';
 import { ActualBalanceDialog } from '@/features/history/ActualBalanceDialog';
-import { accountName } from '@/features/shared/AccountField';
-import { formatDate, formatDay, formatShares } from '@/lib/format';
+import { EntryChip, EntryDetail } from '@/features/shared/EntryParts';
+import { entryLine } from '@/features/shared/entryLine';
+import { cn } from '@/lib/cn';
+import { formatDate, formatDay } from '@/lib/format';
 import { useApp } from '@/store/AppStoreProvider';
 import { useMoney, useToday } from '@/store/useFinance';
 import { KIND_LABEL } from './cardText';
@@ -42,96 +43,6 @@ function names(entry: Entry, id: string): boolean {
   }
 }
 
-type Line = { title: string; detail: string; amount: number; sign: '+' | '−' | '' };
-
-/**
- * One entry as the account sees it: what it was, and the money in (+) or out (−) of the account.
- * On a credit card spending is out and a payment to it is in, as on a bank account.
- */
-function lineOf(
-  entry: Entry,
-  account: Account,
-  nameOf: (id: string | null) => string,
-  loanName: (id: string | null) => string,
-): Line {
-  const day = formatDay(entryDate(entry));
-  switch (entry.kind) {
-    case 'expense': {
-      const e = entry.item;
-      const category = categoryLabel(e.category);
-      return {
-        title: e.note || category,
-        detail: `${category} · ${day}`,
-        amount: e.amount,
-        sign: '−',
-      };
-    }
-    case 'income': {
-      const i = entry.item;
-      const counted = i.status === 'confirmed';
-      const status = i.status === 'expected' ? 'Expected' : "Didn't arrive";
-      return {
-        title: i.label,
-        detail: `${counted ? 'Income' : status} · ${day}`,
-        amount: counted ? i.amount : 0,
-        sign: counted ? '+' : '',
-      };
-    }
-    case 'dividend': {
-      const d = entry.item;
-      const counted = d.status === 'confirmed';
-      return {
-        title: `Dividend · ${d.symbol}`,
-        detail: day,
-        amount: counted ? d.amount : 0,
-        sign: counted ? '+' : '',
-      };
-    }
-    case 'sale': {
-      const s = entry.item;
-      return {
-        title: `Sold ${formatShares(s.shares)} ${s.symbol}`,
-        detail: day,
-        amount: s.proceeds,
-        sign: '+',
-      };
-    }
-    case 'transaction': {
-      const t = entry.item;
-      const out = t.fromAccountId === account.id;
-      if (t.type === 'adjustment') {
-        // On a card a correction up means owing more, which reads as money out.
-        const up = t.amount > 0;
-        const sign = account.kind === 'credit' ? (up ? '−' : '+') : up ? '+' : '−';
-        return { title: 'Balance correction', detail: day, amount: Math.abs(t.amount), sign };
-      }
-      if (t.type === 'transfer') {
-        return {
-          title: out ? `To ${nameOf(t.toAccountId)}` : `From ${nameOf(t.fromAccountId)}`,
-          detail: `Transfer · ${day}`,
-          amount: t.amount,
-          sign: out ? '−' : '+',
-        };
-      }
-      if (t.type === 'card_payment') {
-        return {
-          title: out ? `Paid ${nameOf(t.toAccountId)}` : `Payment from ${nameOf(t.fromAccountId)}`,
-          detail: `Card payment · ${day}`,
-          amount: t.amount,
-          sign: out ? '−' : '+',
-        };
-      }
-      return {
-        // A purchase's note names what was bought ("Bought KO"); a loan payment names the loan.
-        title: t.type === 'investment' ? t.note || 'Investment' : `Paid ${loanName(t.debtId)}`,
-        detail: day,
-        amount: t.amount,
-        sign: '−',
-      };
-    }
-  }
-}
-
 function Fact({ label, value }: { label: string; value: string }) {
   return (
     <div>
@@ -141,15 +52,40 @@ function Fact({ label, value }: { label: string; value: string }) {
   );
 }
 
-/** A plain row of the sheet: what it is, a line under it, and an amount. */
-function Row({ title, detail, amount }: { title: string; detail: string; amount: string }) {
+/**
+ * A plain row of the sheet: what it is (with a chip beside it, for income not counted yet), a line
+ * under it, and an amount, money in in the success color as History writes it.
+ */
+function Row({
+  title,
+  chip,
+  detail,
+  amount,
+  moneyIn = false,
+}: {
+  title: string;
+  chip?: ReactNode;
+  detail: ReactNode;
+  amount: string;
+  moneyIn?: boolean;
+}) {
   return (
     <li className="flex min-h-[54px] items-center gap-3 py-2">
       <span className="min-w-0 flex-1">
-        <b className="block truncate text-[14.5px] font-extrabold">{title}</b>
+        <span className="flex min-w-0 items-center gap-2">
+          <b className="truncate text-[14.5px] font-extrabold">{title}</b>
+          {chip}
+        </span>
         <span className="text-muted block truncate text-[12px] font-semibold">{detail}</span>
       </span>
-      <span className="shrink-0 text-[14.5px] font-extrabold tabular-nums">{amount}</span>
+      <span
+        className={cn(
+          'shrink-0 text-[14.5px] font-extrabold tabular-nums',
+          moneyIn && 'text-success',
+        )}
+      >
+        {amount}
+      </span>
     </li>
   );
 }
@@ -157,7 +93,8 @@ function Row({ title, detail, amount }: { title: string; detail: string; amount:
 /**
  * One account in full, from View card on the Cards tab: what it is and holds (a credit card: what it
  * owes and when, as its own sheet says), then Pay the card for a credit card, or Correct the balance
- * for the others; its latest ten History entries, in History's order; and the subscriptions it pays.
+ * for the others; its latest ten History entries, in History's order and written as History writes
+ * them, seen from the account (`entryLine`); and the subscriptions it pays.
  * Open while `accountId` names an account in use. The dialogs stack over the sheet, which updates
  * behind them.
  */
@@ -183,10 +120,6 @@ export function AccountSheet({
     : [];
   const latestId = useId();
   const subscriptionsId = useId();
-  // Archived accounts are in the table too, so old rows keep their names.
-  const nameOf = (id: string | null) => accountName(data.tables.account, id);
-  const loanName = (id: string | null) =>
-    data.tables.debt.find((d) => d.id === id)?.name ?? 'a loan';
   const credit = account?.kind === 'credit';
 
   return (
@@ -234,13 +167,20 @@ export function AccountSheet({
             {entries.length > 0 ? (
               <ul aria-labelledby={latestId} className={ROWS}>
                 {entries.map((entry) => {
-                  const line = lineOf(entry, account, nameOf, loanName);
+                  // Seen from this account: a transfer or a card payment is money in or out of it.
+                  const line = entryLine(entry, {
+                    accounts: data.tables.account,
+                    debts: data.tables.debt,
+                    perspective: account.id,
+                  });
                   return (
                     <Row
                       key={entry.item.id}
                       title={line.title}
-                      detail={line.detail}
+                      chip={<EntryChip line={line} />}
+                      detail={<EntryDetail line={line} day={formatDay(entryDate(entry))} />}
                       amount={`${line.sign}${money(line.amount)}`}
+                      moneyIn={line.tone === 'in'}
                     />
                   );
                 })}

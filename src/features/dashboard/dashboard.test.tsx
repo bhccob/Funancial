@@ -706,12 +706,13 @@ describe('Home Recent transactions', () => {
     // The same five, in the same order.
     const newest = historyEntries(data).slice(0, 5);
     expect(newest.map((e) => e.item.id)).toEqual(rows.map((r) => r.dataset.entry));
+    // Written as History writes them, with the day after History's line.
     expect(rows.map((r) => r.textContent)).toEqual([
-      `FoodFood · Today−${usd(20_00)}`,
-      `FoodFood · Yesterday−${usd(50_00)}`,
-      `FoodFood · ${formatDay('2026-10-12')}−${usd(20_00)}`,
-      `FunFun · ${formatDay('2026-10-05')}−${usd(30_00)}`,
-      `SalaryIncome · ${formatDay('2026-10-02')}+${usd(2_000_00)}`,
+      `FoodFood · Main account · Today−${usd(20_00)}`,
+      `FoodFood · Main account · Yesterday−${usd(50_00)}`,
+      `FoodFood · Main account · ${formatDay('2026-10-12')}−${usd(20_00)}`,
+      `FunFun · Main account · ${formatDay('2026-10-05')}−${usd(30_00)}`,
+      `SalarySalary · to Main account · ${formatDay('2026-10-02')}+${usd(2_000_00)}`,
     ]);
     expect(within(rows[4]!).getByText(`+${usd(2_000_00)}`)).toHaveClass('text-success');
     expect(within(rows[0]!).getByText(`−${usd(20_00)}`)).toHaveClass('text-danger');
