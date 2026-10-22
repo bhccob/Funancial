@@ -35,7 +35,7 @@ export function SegmentedControl<T extends string>({
       role="group"
       aria-label={label}
       className={cn(
-        'inline-flex gap-0.5 rounded-full p-1',
+        'isolate inline-flex gap-0.5 rounded-full p-1',
         hero ? heroGlass : 'bg-surface-2',
         className,
       )}
@@ -63,7 +63,8 @@ export function SegmentedControl<T extends string>({
             )}
             <span
               className={cn(
-                'motion-safe:ease-glass relative motion-safe:transition-colors motion-safe:duration-(--duration-small)',
+                // z-10: the label stays above the pill however far the pill sweeps across it.
+                'motion-safe:ease-glass relative z-10 motion-safe:transition-colors motion-safe:duration-(--duration-small)',
                 on
                   ? hero
                     ? 'text-hero-to'

@@ -10,6 +10,22 @@ import { RoundAction } from './RoundAction';
 import { SegmentedControl } from './SegmentedControl';
 import { Tile } from './Tile';
 
+// jsdom draws no glide, so the pill's layoutId would never show: this puts it on the element.
+vi.mock('motion/react', async () => {
+  const { createElement } = await import('react');
+  return {
+    motion: {
+      span: ({ layoutId, className, style }: Record<string, unknown>) =>
+        createElement('span', {
+          'aria-hidden': true,
+          'data-layout-id': layoutId,
+          className,
+          style,
+        }),
+    },
+  };
+});
+
 const inRouter = (ui: ReactElement) => render(<MemoryRouter>{ui}</MemoryRouter>);
 
 describe('Tile', () => {
@@ -121,6 +137,27 @@ describe('SegmentedControl', () => {
         .map((b) => b.textContent);
     expect(pressed('Period')).toEqual(['Week']);
     expect(pressed('Range')).toEqual(['Year']);
+    // One sliding pill each, under its own id: a shared id would send the pill between controls.
+    const pills = (name: string) =>
+      screen.getByRole('group', { name }).querySelectorAll('[data-layout-id]');
+    expect(pills('Period')).toHaveLength(1);
+    expect(pills('Range')).toHaveLength(1);
+    expect(pills('Period')[0]?.getAttribute('data-layout-id')).toBeTruthy();
+    expect(pills('Period')[0]?.getAttribute('data-layout-id')).not.toBe(
+      pills('Range')[0]?.getAttribute('data-layout-id'),
+    );
+  });
+
+  it('keeps every label above the sliding pill, which sweeps across the labels it leaves behind', () => {
+    render(
+      <SegmentedControl label="Period" value="week" options={[...options]} onChange={vi.fn()} />,
+    );
+    const group = screen.getByRole('group', { name: 'Period' });
+    // The labels' z-index lives inside the control, not over whatever sits above it on the page.
+    expect(group).toHaveClass('isolate');
+    for (const label of ['Week', 'Month', 'Year']) {
+      expect(within(group).getByText(label)).toHaveClass('relative', 'z-10');
+    }
   });
 
   it('gives each option a 34px button with a 44px tap area, in either tone', () => {
