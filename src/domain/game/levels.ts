@@ -84,8 +84,10 @@ export function bordersAt(level: number): string[] {
   return BORDERS.filter((b) => b.level <= level).map((b) => b.id);
 }
 
-/** The border that reaching `level` unlocks, or `null` when that level unlocks none. */
-export function newBorderAt(level: number): { id: string; name: string } | null {
-  const border = BORDERS.find((b) => b.level === level);
-  return border ? { id: border.id, name: border.name } : null;
+/**
+ * The borders that going from level `before` to `after` unlocks, lowest first: every one passed on
+ * the way, as one gain can jump several levels.
+ */
+export function newBorders(before: number, after: number): Border[] {
+  return BORDERS.filter((b) => b.level > before && b.level <= after);
 }

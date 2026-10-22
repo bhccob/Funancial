@@ -1,23 +1,38 @@
 import { Button } from '@/components/ui/Button';
 import { Dialog } from '@/components/ui/Dialog';
-import { newBorderAt, tierOf } from '@/domain/game/levels';
+import { newBorders, tierOf } from '@/domain/game/levels';
 
 export interface LevelUpDialogProps {
   open: boolean;
   /** The level reached. */
   level: number;
+  /** The level before the gain, so every border passed on the way is named. */
+  levelBefore: number;
   /** Whether `level` starts a new tier. */
   tierChanged: boolean;
   onClose(): void;
 }
 
+/** "New border: Silver. Pick it on your Profile.", or the borders, when one gain opens several. */
+function bordersLine(names: string[]): string | null {
+  if (names.length === 0) return null;
+  if (names.length === 1) return `New border: ${names[0]}. Pick it on your Profile.`;
+  return `New borders: ${names.join(', ')}. Pick them on your Profile.`;
+}
+
 /**
- * The one dialog the game raises: the level just reached, the tier it belongs to, and, when the level
- * opens a profile border, which one and where to pick it.
+ * The one dialog the game raises: the level just reached, the tier it belongs to, and, when the gain
+ * opens profile borders, which ones and where to pick them.
  */
-export function LevelUpDialog({ open, level, tierChanged, onClose }: LevelUpDialogProps) {
+export function LevelUpDialog({
+  open,
+  level,
+  levelBefore,
+  tierChanged,
+  onClose,
+}: LevelUpDialogProps) {
   const tier = tierOf(level);
-  const border = newBorderAt(level);
+  const borders = bordersLine(newBorders(levelBefore, level).map((b) => b.name));
   return (
     <Dialog
       open={open}
@@ -33,9 +48,7 @@ export function LevelUpDialog({ open, level, tierChanged, onClose }: LevelUpDial
       >
         LV {level}
       </span>
-      {border && (
-        <p className="font-semibold">{`New border: ${border.name}. Pick it on your Profile.`}</p>
-      )}
+      {borders && <p className="font-semibold">{borders}</p>}
     </Dialog>
   );
 }

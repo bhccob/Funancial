@@ -9,7 +9,7 @@ type Reward = GameGain['rewards'][number];
 /** Badges are named one by one up to this many; more than that read as a count. */
 const MAX_NAMED_BADGES = 2;
 
-type LevelUp = { level: number; tierChanged: boolean; open: boolean };
+type LevelUp = { level: number; levelBefore: number; tierChanged: boolean; open: boolean };
 
 /** One quest, streak or challenge in a line; the coins are left out when it pays none. */
 function describeReward({ kind, title, xp, coins }: Reward): string {
@@ -54,7 +54,9 @@ export function Celebrations() {
   if (gameGain && gameGain.id !== levelUpGainId) {
     setLevelUpGainId(gameGain.id);
     const { levelBefore, levelAfter, tierChanged } = gameGain.gain;
-    if (levelAfter > levelBefore) setLevelUp({ level: levelAfter, tierChanged, open: true });
+    if (levelAfter > levelBefore) {
+      setLevelUp({ level: levelAfter, levelBefore, tierChanged, open: true });
+    }
   }
 
   useEffect(() => {

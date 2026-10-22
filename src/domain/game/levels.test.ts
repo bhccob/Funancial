@@ -1,13 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  BORDERS,
-  bordersAt,
-  levelInfo,
-  levelStart,
-  MAX_LEVEL,
-  newBorderAt,
-  tierOf,
-} from './levels';
+import { BORDERS, bordersAt, levelInfo, levelStart, MAX_LEVEL, newBorders, tierOf } from './levels';
 
 it('starts at level 1, Bronze Saver, 0 of 100', () =>
   expect(levelInfo(0)).toEqual({
@@ -78,21 +70,29 @@ describe('borders', () => {
 
   it('names the border a level unlocks', () => {
     // Silver to Diamond open with a tier (11/21/31/41); Bronze comes early, at 5, and Prism at the top.
-    expect(newBorderAt(5)).toEqual({ id: 'frame-bronze', name: 'Bronze' });
-    expect(newBorderAt(11)).toEqual({ id: 'frame-silver', name: 'Silver' });
-    expect(newBorderAt(21)).toEqual({ id: 'frame-gold', name: 'Gold' });
-    expect(newBorderAt(31)).toEqual({ id: 'frame-platinum', name: 'Platinum' });
-    expect(newBorderAt(41)).toEqual({ id: 'frame-diamond', name: 'Diamond' });
-    expect(newBorderAt(50)).toEqual({ id: 'frame-prism', name: 'Prism' });
+    expect(newBorders(4, 5)).toEqual([{ id: 'frame-bronze', name: 'Bronze', level: 5 }]);
+    expect(newBorders(10, 11).map((b) => b.name)).toEqual(['Silver']);
+    expect(newBorders(20, 21).map((b) => b.name)).toEqual(['Gold']);
+    expect(newBorders(30, 31).map((b) => b.name)).toEqual(['Platinum']);
+    expect(newBorders(40, 41).map((b) => b.name)).toEqual(['Diamond']);
+    expect(newBorders(49, 50).map((b) => b.name)).toEqual(['Prism']);
   });
 
   it('names no new border on any other level', () => {
-    expect(newBorderAt(12)).toBeNull();
-    expect(newBorderAt(1)).toBeNull();
-    expect(newBorderAt(4)).toBeNull();
-    expect(newBorderAt(6)).toBeNull();
-    expect(newBorderAt(49)).toBeNull();
+    expect(newBorders(11, 12)).toEqual([]);
+    expect(newBorders(0, 1)).toEqual([]);
+    expect(newBorders(3, 4)).toEqual([]);
+    expect(newBorders(5, 6)).toEqual([]);
+    expect(newBorders(48, 49)).toEqual([]);
     const levels = Array.from({ length: MAX_LEVEL }, (_, i) => i + 1);
-    expect(levels.filter((l) => newBorderAt(l) !== null)).toEqual([5, 11, 21, 31, 41, 50]);
+    expect(levels.filter((l) => newBorders(l - 1, l).length > 0)).toEqual([5, 11, 21, 31, 41, 50]);
+  });
+
+  it('names every border passed on the way when a gain jumps several levels, lowest first', () => {
+    expect(newBorders(10, 12).map((b) => b.name)).toEqual(['Silver']);
+    expect(newBorders(4, 12).map((b) => b.name)).toEqual(['Bronze', 'Silver']);
+    expect(newBorders(1, MAX_LEVEL).map((b) => b.name)).toEqual(BORDERS.map((b) => b.name));
+    // The level it started on was reached before, with its border.
+    expect(newBorders(5, 10).map((b) => b.name)).toEqual([]);
   });
 });

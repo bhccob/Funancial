@@ -203,6 +203,26 @@ describe('Celebrations: level-up', () => {
     expect(within(dialog).queryByText(/New border/)).not.toBeInTheDocument();
   });
 
+  it('names the border passed on the way when the gain jumps past its level', () => {
+    const { publish } = setup();
+    publish(gain({ levelBefore: 10, levelAfter: 12 }));
+    expect(
+      within(screen.getByRole('dialog', { name: 'Level 12' })).getByText(
+        'New border: Silver. Pick it on your Profile.',
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it('names every border passed on the way, lowest first', () => {
+    const { publish } = setup();
+    publish(gain({ levelBefore: 4, levelAfter: 12 }));
+    const dialog = screen.getByRole('dialog', { name: 'Level 12' });
+    expect(
+      within(dialog).getByText('New borders: Bronze, Silver. Pick them on your Profile.'),
+    ).toBeInTheDocument();
+    expect(within(dialog).queryByText(/New border:/)).not.toBeInTheDocument();
+  });
+
   it.each(BORDERS)('names $name at level $level', ({ name, level }) => {
     const { publish } = setup();
     publish(gain({ levelBefore: level - 1, levelAfter: level }));
