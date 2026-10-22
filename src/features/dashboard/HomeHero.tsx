@@ -67,7 +67,11 @@ export function HomeHero({ row, frozenNote, onPick, onPay, onMove, onCorrect }: 
   if (!row) {
     return (
       <div className="pt-[22px] pb-1 text-center">
-        <p className="text-[15px] font-semibold">No account yet.</p>
+        {/* The eye stays: hidden amounts stay hidden, and it is the one way to show them again. */}
+        <div className="flex items-center justify-center gap-0.5">
+          <p className="text-[15px] font-semibold">No account yet.</p>
+          <HideAmountsButton className="-my-[15px] -mr-[15px] -ml-2" />
+        </div>
         <Link
           to="/cards"
           className="mt-1 inline-flex min-h-11 items-center text-[14px] font-extrabold underline underline-offset-2"

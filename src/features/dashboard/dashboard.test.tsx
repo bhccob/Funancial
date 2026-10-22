@@ -359,6 +359,19 @@ describe('Home hero', () => {
     expect(screen.queryByRole('button', { name: 'Pay' })).not.toBeInTheDocument();
     expect(container.innerHTML).not.toMatch(/NaN|Infinity/);
   });
+
+  it('keeps the eye with no account, so amounts hidden can be shown again', async () => {
+    useAmountsHidden.setState({ hidden: true });
+    render0();
+    const eye = screen.getByRole('button', { name: 'Hide amounts' });
+    expect(eye).toHaveAttribute('aria-pressed', 'true');
+    expect(eye).toHaveClass('size-11');
+    // Beside the words, as it sits beside the label over an account.
+    expect(screen.getByText('No account yet.').parentElement).toContainElement(eye);
+    await userEvent.click(eye);
+    expect(useAmountsHidden.getState().hidden).toBe(false);
+    expect(eye).toHaveAttribute('aria-pressed', 'false');
+  });
 });
 
 /** Home with nothing set up. */
