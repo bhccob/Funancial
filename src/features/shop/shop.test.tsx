@@ -117,6 +117,23 @@ describe('Shop screen: the block', () => {
       'false',
     );
   });
+
+  it('opens on the part a link names, as Get freezes does, and on Themes for any other', () => {
+    const pressed = () =>
+      within(tabs())
+        .getAllByRole('button', { pressed: true })
+        .map((b) => b.textContent);
+    const { unmount } = renderWithStore(
+      shopIn(['/shop?tab=freezes']),
+      createStubStore({ today: TODAY }),
+    );
+    expect(pressed()).toEqual(['Freezes']);
+    expect(group('Streak freezes')).toBeInTheDocument();
+    unmount();
+
+    renderWithStore(shopIn(['/shop?tab=everything']), createStubStore({ today: TODAY }));
+    expect(pressed()).toEqual(['Themes']);
+  });
 });
 
 describe('Shop screen: themes', () => {

@@ -141,7 +141,7 @@ describe('Quests screen: streaks', () => {
     expect(within(logging).getByText('Freezes: 1')).toBeInTheDocument();
     expect(within(logging).getByRole('link', { name: 'Get freezes' })).toHaveAttribute(
       'href',
-      '/shop',
+      '/shop?tab=freezes',
     );
 
     expect(within(noOverspend).getByText('No overspending')).toBeInTheDocument();
@@ -154,7 +154,7 @@ describe('Quests screen: streaks', () => {
     expect(within(checkin).getByText('Freezes: 0')).toBeInTheDocument();
     expect(within(checkin).getByRole('link', { name: 'Get freezes' })).toHaveAttribute(
       'href',
-      '/shop',
+      '/shop?tab=freezes',
     );
 
     expect(within(dividend).getByText('Dividend streak')).toBeInTheDocument();

@@ -1,6 +1,6 @@
 import { Check, ChevronLeft, Coins, Snowflake } from 'lucide-react';
 import { useId, useState, type ReactNode } from 'react';
-import { useLocation, useNavigate } from 'react-router';
+import { useLocation, useNavigate, useSearchParams } from 'react-router';
 import { HeadBlock } from '@/components/ui/HeadBlock';
 import { Rise } from '@/components/ui/Rise';
 import { SegmentedControl } from '@/components/ui/SegmentedControl';
@@ -31,6 +31,11 @@ const TABS: { value: Tab; label: string }[] = [
   { value: 'avatars', label: 'Avatars' },
   { value: 'freezes', label: 'Freezes' },
 ];
+
+/** The part a link opens the Shop on (`/shop?tab=freezes`, from Get freezes), else Themes. */
+function tabFrom(param: string | null): Tab {
+  return TABS.find((t) => t.value === param)?.value ?? 'themes';
+}
 
 /** The kinds of theme, in the order the Shop lists them. */
 const KINDS: { kind: ThemeKind; label: string }[] = [
@@ -269,7 +274,8 @@ export function ShopScreen() {
   const { equip } = useGameActions();
   const navigate = useNavigate();
   const location = useLocation();
-  const [tab, setTab] = useState<Tab>('themes');
+  const [params] = useSearchParams();
+  const [tab, setTab] = useState(() => tabFrom(params.get('tab')));
   const [buying, setBuying] = useState<ShopItem | null>(null);
   const coins = Math.max(0, game.totals.coins);
 

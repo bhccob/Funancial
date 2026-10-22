@@ -48,7 +48,7 @@ function StreakRow({ streak }: { streak: StreakView }) {
         <p className="text-muted mt-1 flex items-center gap-3 text-[12.5px]">
           <span>{`Freezes: ${streak.tokens}`}</span>
           <Link
-            to="/shop"
+            to="/shop?tab=freezes"
             className="text-accent-text -my-3 inline-flex min-h-11 items-center font-semibold underline-offset-4 hover:underline"
           >
             Get freezes
