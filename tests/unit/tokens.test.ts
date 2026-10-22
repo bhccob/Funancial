@@ -647,25 +647,39 @@ function quietBarsFail(share: number, ratio: number): boolean {
 /** What the glass's saturate(180%), which this model leaves out, may take off the 3:1 of a bar. */
 const BAR_MARGIN = 0.2;
 
-it("draws a chart's quiet bars in a share of the muted ink that holds 3:1 on the glass, with room to spare", () => {
-  // A bar's length is the only mark of its month's amount until it is tapped, so the bars that are
-  // not picked are graphics (WCAG 1.4.11: 3:1). DayBars paints them `bg-muted/NN`. NN holds 3:1 plus
-  // a margin in every theme in both modes, over every shape behind the glass.
-  const match = /bg-muted\/(\d+)/.exec(readFileSync('src/components/charts/DayBars.tsx', 'utf8'));
-  expect(match, 'the quiet bars in DayBars').not.toBeNull();
-  const percent = Number(match![1]);
-  expect(quietBarsFail(percent / 100, 3 + BAR_MARGIN), `bg-muted/${percent}`).toBe(false);
-  // The model does bite: 70 is the least whole share that reaches 3:1 at all.
+/** The charts on page glass whose bars that are not picked are the only mark of their amounts. */
+const QUIET_BARS = ['src/components/charts/DayBars.tsx', 'src/features/cards/SpendChart.tsx'];
+
+it.each(QUIET_BARS)(
+  "draws a chart's quiet bars in a share of the muted ink that holds 3:1 on the glass, with room to spare (%s)",
+  (file) => {
+    // A bar's length is the only mark of its period's amount until it is tapped, so the bars that
+    // are not picked are graphics (WCAG 1.4.11: 3:1). DayBars and the Cards chart paint them
+    // `bg-muted/NN`. NN holds 3:1 plus a margin in every theme in both modes, over every shape behind
+    // the glass.
+    const match = /bg-muted\/(\d+)/.exec(readFileSync(file, 'utf8'));
+    expect(match, `the quiet bars in ${file}`).not.toBeNull();
+    const percent = Number(match![1]);
+    expect(quietBarsFail(percent / 100, 3 + BAR_MARGIN), `bg-muted/${percent}`).toBe(false);
+  },
+);
+
+it('measures the quiet bars in a model that bites', () => {
+  // 70 is the least whole share that reaches 3:1 at all.
   expect(quietBarsFail(0.7, 3), 'bg-muted/70').toBe(false);
   expect(quietBarsFail(0.69, 3), 'bg-muted/69').toBe(true);
-  // The track colour they had (about 1.1:1) never did.
+  // What the bars had never did: DayBars' track colour (about 1.1:1) and the Cards chart's
+  // `bg-text/10` (about 1.2:1).
   for (const { id, mode } of CASES) {
     const t = tokensFor(id, mode);
+    const [r, g, b] = parseColor(t('--color-text'));
     for (const glass of glassOnPage(t)) {
       expect(
         contrast(t('--color-track'), glass),
         `track on ${glass} (${id}, ${mode})`,
       ).toBeLessThan(3);
+      const tenth = composite(`rgb(${r} ${g} ${b} / 0.1)`, glass);
+      expect(contrast(tenth, glass), `text/10 on ${glass} (${id}, ${mode})`).toBeLessThan(3);
     }
   }
 });

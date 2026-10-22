@@ -121,7 +121,7 @@ export function SpendChart({ account }: { account: Account }) {
                 style={{ height: `max(${SHORTEST_PX}px, ${share}%)` }}
                 className={cn(
                   'relative block w-full rounded-md',
-                  i === top ? 'bg-accent' : 'bg-text/10',
+                  i === top ? 'bg-accent' : 'bg-muted/75',
                 )}
               >
                 {i === top && (
