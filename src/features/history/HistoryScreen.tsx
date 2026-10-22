@@ -8,7 +8,6 @@ import { RadioGroup } from '@/components/ui/RadioGroup';
 import { Select } from '@/components/ui/Select';
 import { categoryLabel } from '@/domain/budget';
 import {
-  type Bucket,
   type Category,
   type Dividend,
   type Expense,
@@ -18,8 +17,8 @@ import {
 } from '@/domain/entities';
 import { monthKey } from '@/domain/periods';
 import { ExpenseForm } from '@/features/add/ExpenseForm';
+import { accountName } from '@/features/shared/AccountField';
 import { CATEGORY_OPTIONS } from '@/features/shared/categories';
-import { paidWithLabel } from '@/features/shared/paidWith';
 import { formatDate, formatMonthYear, formatShares } from '@/lib/format';
 import { useAction } from '@/lib/useAction';
 import { useApp } from '@/store/AppStoreProvider';
@@ -38,12 +37,6 @@ type Entry =
 
 const dateOf = (e: Entry) =>
   e.kind === 'dividend' ? e.item.paidOn : e.kind === 'sale' ? e.item.soldOn : e.item.date;
-
-const BUCKET: Record<Bucket, string> = {
-  cash: 'Cash',
-  savings: 'Savings',
-  passive: 'Passive income',
-};
 
 const CATEGORY_FILTER = [{ value: 'all', label: 'All categories' }, ...CATEGORY_OPTIONS];
 
@@ -123,7 +116,7 @@ export function HistoryScreen() {
   } | null>(null);
   const [correcting, setCorrecting] = useState(false);
 
-  const { expense, income, transaction, dividend, sale, debt } = data.tables;
+  const { expense, income, transaction, dividend, sale, debt, account } = data.tables;
 
   const months = useMemo(() => {
     const keys = new Set([monthKey(today)]);
@@ -157,7 +150,9 @@ export function HistoryScreen() {
     return [...grouped];
   }, [expense, income, transaction, dividend, sale, month, show, category]);
 
-  const debtName = (id: string | null) => debt.find((d) => d.id === id)?.name ?? 'a card or loan';
+  const loanName = (id: string | null) => debt.find((d) => d.id === id)?.name ?? 'a loan';
+  // Archived accounts are in the table too, so old rows keep their names.
+  const nameOf = (id: string | null) => accountName(account, id);
 
   function renderEntry(entry: Entry) {
     if (entry.kind === 'expense') {
@@ -173,7 +168,7 @@ export function HistoryScreen() {
             <span className="min-w-0 flex-1">
               <span className="block truncate text-sm font-semibold">{title}</span>
               <span className="text-muted block truncate text-[12.5px]">
-                {`${categoryLabel(e.category)} · ${paidWithLabel(e.paymentMethod, e.cardId, debt)}${e.subscriptionId ? ' · Subscription' : ''}`}
+                {`${categoryLabel(e.category)} · ${nameOf(e.accountId)}${e.subscriptionId ? ' · Subscription' : ''}`}
               </span>
             </span>
             <Amount>{`−${money(e.amount)}`}</Amount>
@@ -187,7 +182,7 @@ export function HistoryScreen() {
         <Row
           key={i.id}
           title={i.label}
-          detail={`${i.source === 'salary' ? 'Salary' : 'Extra income'} · to ${BUCKET[i.bucket]}`}
+          detail={`${i.source === 'salary' ? 'Salary' : 'Extra income'} · to ${nameOf(i.accountId)}`}
           chip={
             i.status === 'expected'
               ? 'Expected'
@@ -214,11 +209,7 @@ export function HistoryScreen() {
           key={d.id}
           title={title}
           detail={
-            d.bucket === null
-              ? ''
-              : d.bucket === 'reinvest'
-                ? 'Reinvested'
-                : `To ${BUCKET[d.bucket].toLowerCase()}`
+            d.reinvested ? 'Reinvested' : d.accountId === null ? '' : `To ${nameOf(d.accountId)}`
           }
           amount={
             d.status === 'skipped' ? (
@@ -241,7 +232,7 @@ export function HistoryScreen() {
           title={title}
           detail={
             <>
-              {`To ${BUCKET[s.to].toLowerCase()} · profit `}
+              {`To ${nameOf(s.toAccountId)} · profit `}
               <span className={profit < 0 ? 'text-danger' : 'text-success'}>
                 {`${profit < 0 ? '▼' : '▲'} ${money(Math.abs(profit))}`}
               </span>
@@ -263,16 +254,21 @@ export function HistoryScreen() {
     let detail = t.note;
     let amount: string;
     if (t.type === 'transfer') {
-      title = `${BUCKET[t.from ?? 'cash']} → ${BUCKET[t.to ?? 'savings']}`;
+      title = `${nameOf(t.fromAccountId)} → ${nameOf(t.toAccountId)}`;
       amount = money(t.amount);
     } else if (t.type === 'adjustment') {
       title = 'Balance correction';
-      detail = [BUCKET[t.to ?? 'cash'], t.note === title ? '' : t.note].filter(Boolean).join(' · ');
+      detail = [nameOf(t.toAccountId), t.note === title ? '' : t.note].filter(Boolean).join(' · ');
       amount = t.amount < 0 ? `−${money(-t.amount)}` : `+${money(t.amount)}`;
+    } else if (t.type === 'card_payment') {
+      // Money moved from an account onto the card, so it reads like a transfer.
+      title = `${nameOf(t.fromAccountId)} → ${nameOf(t.toAccountId)}`;
+      detail = 'Card payment';
+      amount = `−${money(t.amount)}`;
     } else {
-      // A purchase's note names what was bought ("Bought KO"); a payment names the card or loan.
-      title = t.type === 'investment' ? t.note || 'Investment' : `Paid ${debtName(t.debtId)}`;
-      detail = t.from ? `From ${BUCKET[t.from].toLowerCase()}` : '';
+      // A purchase's note names what was bought ("Bought KO"); a loan payment names the loan.
+      title = t.type === 'investment' ? t.note || 'Investment' : `Paid ${loanName(t.debtId)}`;
+      detail = t.fromAccountId === null ? '' : `From ${nameOf(t.fromAccountId)}`;
       amount = `−${money(t.amount)}`;
     }
     return (

@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -10,7 +10,7 @@ import { formatShares, sharesText } from '@/lib/format';
 import { toastStore } from '@/lib/toast';
 import { market } from '@/services/market';
 import { renderWithStore } from '@/test/appStoreStub';
-import { makeHolding, makeProfile } from '@/test/fixtures';
+import { makeAccount, makeHolding, makeProfile } from '@/test/fixtures';
 import { freshRealStore } from '@/test/realStore';
 import { HoldingPage } from './HoldingPage';
 import { InvestScreen } from './InvestScreen';
@@ -48,10 +48,47 @@ const vusa = (overrides: Partial<Holding> = {}) =>
     ...overrides,
   });
 
-/** A real store, so a sale really changes the holding, and a full one really removes it. */
+/**
+ * A real store, so a sale really changes the holding, and a full one really removes it. Main
+ * account and Savings are where the money can go; the Visa never is.
+ */
 async function renderPage(holding: Holding = vusa()) {
   const { store } = await freshRealStore();
   await store.getState().put('profile', makeProfile({ currency: 'USD' }));
+  await store.getState().put('account', makeAccount({ openingDate: '2025-01-01' }));
+  await store.getState().put(
+    'account',
+    makeAccount({
+      id: 'acct-savings',
+      name: 'Savings',
+      kind: 'savings',
+      skin: 'mint',
+      inAvailable: false,
+      openingDate: '2025-01-01',
+      order: 1,
+    }),
+  );
+  await store.getState().put(
+    'account',
+    makeAccount({
+      id: 'visa',
+      name: 'Visa',
+      kind: 'credit',
+      skin: 'violet',
+      inAvailable: false,
+      openingBalance: 0,
+      openingDate: '2025-01-01',
+      order: 3,
+      credit: {
+        limit: null,
+        statementDay: null,
+        dueDay: null,
+        payInFull: true,
+        minimumPayment: 0,
+        interestRate: 0,
+      },
+    }),
+  );
   await store.getState().put('holding', holding);
   const router = createMemoryRouter(
     [
@@ -82,7 +119,7 @@ async function enter(dialog: HTMLElement, label: string, text: string) {
 }
 
 describe('Sell dialog', () => {
-  it('opens from Sell with a share to sell, the price now in the profile currency, today and cash', async () => {
+  it('opens from Sell with a share to sell, the price now in the profile currency, today and Main account', async () => {
     const { dialog } = await openSell();
     expect(dialog).toHaveAccessibleDescription('Vanguard S&P 500 UCITS ETF');
     // The stepper, labelled with how many are held.
@@ -93,11 +130,16 @@ describe('Sell dialog', () => {
     expect(within(dialog).getByLabelText(PRICE)).toHaveValue('240.00');
     expect(within(dialog).getByLabelText('Sale date')).toHaveValue(TODAY);
     expect(within(dialog).getByLabelText('Sale date')).toHaveAttribute('max', TODAY);
-    expect(within(dialog).getByRole('radio', { name: 'Cash' })).toBeChecked();
-    expect(within(dialog).getByRole('radio', { name: 'Savings' })).not.toBeChecked();
-    expect(within(dialog).getByRole('group', { name: 'Money goes to' })).toBeInTheDocument();
+    // The money goes to the default account unless another is picked; never to a credit card.
+    const to = within(dialog).getByLabelText('Money goes to');
+    expect(to).toHaveDisplayValue('Main account');
+    expect(
+      within(to)
+        .getAllByRole('option')
+        .map((o) => o.textContent),
+    ).toEqual(['Main account', 'Savings']);
     // In lighter fields, like Add.
-    for (const label of [PRICE, 'Sale date']) {
+    for (const label of [PRICE, 'Sale date', 'Money goes to']) {
       expect(within(dialog).getByLabelText(label), label).toHaveClass('border-b', 'font-extrabold');
     }
     expect(within(dialog).getByRole('button', { name: 'Sell 1 share' })).toBeInTheDocument();
@@ -269,7 +311,7 @@ describe('Sell dialog', () => {
       proceeds: 2_400_00,
       cost: 2_105_00,
       soldOn: TODAY,
-      to: 'cash',
+      toAccountId: 'acct-main',
       restore: null,
     });
     // 30 shares are left, with the cost the other ten did not carry.
@@ -286,15 +328,32 @@ describe('Sell dialog', () => {
     fireEvent.change(within(dialog).getByLabelText('Sale date'), {
       target: { value: '2026-10-10' },
     });
-    await userEvent.click(within(dialog).getByRole('radio', { name: 'Savings' }));
+    await userEvent.selectOptions(within(dialog).getByLabelText('Money goes to'), 'Savings');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Sell 1 share' }));
     await waitFor(() => expect(tables().sale).toHaveLength(1));
     expect(tables().sale[0]).toMatchObject({
       shares: 1,
       proceeds: 250_55,
       soldOn: '2026-10-10',
-      to: 'savings',
+      toAccountId: 'acct-savings',
     });
+  });
+
+  it('asks where the money goes when no account can take it, and sells nothing', async () => {
+    const { store, tables } = await renderPage();
+    // Main account and Savings are archived: only the Visa is left, and it can't take the money.
+    for (const account of store.getState().data.tables.account) {
+      if (account.kind !== 'credit') {
+        await act(() => store.getState().put('account', { ...account, archivedOn: TODAY }));
+      }
+    }
+    await userEvent.click(screen.getByRole('button', { name: 'Sell' }));
+    const dialog = screen.getByRole('dialog', { name: 'Sell VUSA.AS' });
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Sell 1 share' }));
+    expect(within(dialog).getByLabelText('Money goes to')).toHaveAccessibleDescription(
+      'Pick an account.',
+    );
+    expect(tables().sale).toEqual([]);
   });
 
   it('sells every share and goes back to Invest', async () => {

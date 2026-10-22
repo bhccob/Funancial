@@ -41,13 +41,18 @@ export function NetWorthSection({ data, view, today }: NetWorthSectionProps) {
     <span className="text-danger text-[13.5px] font-extrabold">{`▼ ${whole(-change)} this month`}</span>
   );
 
+  // Bank accounts and cash wallets, savings (passive income's account among them), investments, and
+  // what the cards and loans owe: the parts of the figure, from the accounts in use.
+  const bankAndCash = view.accounts
+    .filter((r) => r.account.kind === 'debit' || r.account.kind === 'cash')
+    .reduce((sum, r) => sum + r.balance, 0);
   const parts = [
-    { label: 'Cash', amount: view.buckets.cash, color: 'var(--color-chart-1)' },
-    { label: 'Savings', amount: view.buckets.savings, color: 'var(--color-chart-3)' },
+    { label: 'Bank & cash', amount: bankAndCash, color: 'var(--color-chart-1)' },
+    { label: 'Savings', amount: view.saved, color: 'var(--color-chart-3)' },
     ...(view.investments > 0
       ? [{ label: 'Investments', amount: view.investments, color: 'var(--color-chart-2)' }]
       : []),
-    { label: 'Debts', amount: view.debtTotal, color: 'var(--color-danger)' },
+    { label: 'Debts', amount: view.owed, color: 'var(--color-danger)' },
   ];
 
   return (

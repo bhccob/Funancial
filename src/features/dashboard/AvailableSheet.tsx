@@ -1,15 +1,18 @@
 import { useState } from 'react';
 import { Sheet } from '@/components/ui/Sheet';
+import { availableParts } from '@/domain/budget';
 import type { FinanceView } from '@/domain/view';
 import { useMoney } from '@/store/useFinance';
-import { ActualBalanceDialog, type Which } from '@/features/history/ActualBalanceDialog';
+import { ActualBalanceDialog } from '@/features/history/ActualBalanceDialog';
 import { Row, Total } from './BreakdownRows';
 
 /**
- * What "Available to spend" is made of, top to bottom: the cash and savings you have, less the
- * bills and card payments still to come and what the limits keep back. The parts are
- * `FinanceView`'s own, the numbers the hero adds up, so the rows reach its figure exactly. Cash
- * and savings can be corrected here; the dialog stacks over the sheet, which updates behind it.
+ * What "Available to spend" is made of, top to bottom: each account that counts in Available (a
+ * bank account or cash wallet by default, never savings or a credit card), less the bills still
+ * to come on those accounts, the card payments due and what the limits keep back. The parts are
+ * `availableParts` of `FinanceView`'s own numbers, the ones the hero's figure is the total of, so
+ * the rows reach it exactly. Each account can be corrected here; the dialog stacks over the sheet,
+ * which updates behind it.
  */
 export function AvailableSheet({
   open,
@@ -21,11 +24,8 @@ export function AvailableSheet({
   onClose(): void;
 }) {
   const money = useMoney();
-  const [correcting, setCorrecting] = useState<Which | null>(null);
-
-  const sum = (kind: 'subscription' | 'card') =>
-    view.bills.filter((b) => b.kind === kind).reduce((s, b) => s + b.amount, 0);
-  const correct = (which: Which) => ({ label: 'Correct', onClick: () => setCorrecting(which) });
+  const [correcting, setCorrecting] = useState<string | null>(null);
+  const parts = availableParts(view.accounts, view.bills, view.reserved);
 
   return (
     <>
@@ -40,16 +40,19 @@ export function AvailableSheet({
               Available to spend
             </p>
             <ul className="mt-3">
-              <Row label="Cash" value={money(view.buckets.cash)} action={correct('cash')} />
-              <Row
-                label="Savings"
-                value={money(view.buckets.savings)}
-                action={correct('savings')}
-              />
-              <Row label="Bills still to come this month" value={money(0 - sum('subscription'))} />
-              <Row label="Card payments due" value={money(0 - sum('card'))} />
-              {view.reserved !== 0 && (
-                <Row label="Reserved for limits" value={money(0 - view.reserved)} />
+              {parts.accounts.map(({ account, balance }) => (
+                <Row
+                  key={account.id}
+                  label={account.name}
+                  value={money(balance)}
+                  action={{ label: 'Correct', onClick: () => setCorrecting(account.id) }}
+                />
+              ))}
+              {/* Zero is 0 - x, never -x: that is -0, which prints as "-$0.00". */}
+              <Row label="Bills still to come this month" value={money(0 - parts.bills)} />
+              <Row label="Card payments due" value={money(0 - parts.cards)} />
+              {parts.reserved !== 0 && (
+                <Row label="Reserved for limits" value={money(0 - parts.reserved)} />
               )}
             </ul>
             <Total label="= Available to spend" value={money(view.available)} />
@@ -58,7 +61,7 @@ export function AvailableSheet({
       </Sheet>
       <ActualBalanceDialog
         open={correcting !== null}
-        initial={correcting ?? 'cash'}
+        accountId={correcting}
         onClose={() => setCorrecting(null)}
       />
     </>

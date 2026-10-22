@@ -2,7 +2,6 @@ import { useState, type FormEvent } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Dialog } from '@/components/ui/Dialog';
 import { MoneyField } from '@/components/ui/MoneyField';
-import { RadioGroup } from '@/components/ui/RadioGroup';
 import { Select } from '@/components/ui/Select';
 import { ShareStepper } from '@/components/ui/ShareStepper';
 import { TextField } from '@/components/ui/TextField';
@@ -11,6 +10,7 @@ import { formatDecimal, parseDecimal } from '@/domain/money';
 import { costForShares, costPerShare } from '@/domain/portfolio';
 import { firstSoldOn } from '@/domain/sales';
 import { DateField } from '@/features/add/DateField';
+import { NOT_CREDIT, useAccountOptions } from '@/features/shared/AccountField';
 import { formatShares } from '@/lib/format';
 import { marketConfigured } from '@/services/market';
 import { useAction } from '@/lib/useAction';
@@ -29,6 +29,8 @@ import { SymbolSearchField } from './SymbolSearchField';
 import { unreadable } from './unreadable';
 
 type PaidFrom = HoldingInput['paidFrom'];
+/** Bought before using the app: no money moves. Any other value is the id of the account that paid. */
+const OWNED = 'owned';
 
 const SYMBOL = /^[A-Za-z0-9.^=-]{1,15}$/;
 const CURRENCY = /^[A-Za-z]{3}$/;
@@ -91,7 +93,7 @@ function validate(
   }
   if (f.perShare === null) errors.perShare = 'Enter an amount like 12.50';
   // The purchase moves money, and a move of nothing is not one.
-  else if (ctx.cost === 0 && f.paidFrom !== 'owned' && !ctx.editing) {
+  else if (ctx.cost === 0 && f.paidFrom !== OWNED && !ctx.editing) {
     errors.perShare = 'Enter what you paid, or choose Already owned';
   }
   if (!/^\d{4}-\d{2}-\d{2}$/.test(f.date)) errors.date = 'Choose the day you bought it';
@@ -128,13 +130,15 @@ function HoldingForm({
   const run = useAction();
   const editing = holding !== null;
   const firstSale = useApp((s) => (holding ? firstSoldOn(s.data, holding.id) : undefined));
+  // A bank account, cash or savings in use can pay; a credit card never does.
+  const payers = useAccountOptions(NOT_CREDIT);
 
   const [form, setForm] = useState<Form>({
     symbol: holding?.symbol ?? '',
     shares: holding ? formatDecimal(holding.shares) : '',
     perShare: holding ? startingPrice(holding) : null,
     date: holding?.purchaseDate ?? today,
-    paidFrom: 'owned',
+    paidFrom: OWNED,
     withholding: formatDecimal(holding?.withholdingPct ?? 0),
     price: holding?.manualPrice != null ? formatDecimal(holding.manualPrice) : '',
     name: holding?.name ?? '',
@@ -291,16 +295,12 @@ function HoldingForm({
         onChange={(date) => set('date', date)}
       />
       {!editing && (
-        <RadioGroup<PaidFrom>
-          variant="underline"
-          legend="Paid from"
+        <Select
+          variant="line"
+          label="Paid from"
           value={form.paidFrom}
           onChange={(v) => set('paidFrom', v)}
-          options={[
-            { value: 'owned', label: 'Already owned' },
-            { value: 'cash', label: 'Cash' },
-            { value: 'savings', label: 'Savings' },
-          ]}
+          options={[{ value: OWNED, label: 'Already owned' }, ...payers]}
         />
       )}
       {holding && (

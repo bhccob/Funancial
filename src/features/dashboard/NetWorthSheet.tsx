@@ -1,19 +1,24 @@
 import { useState } from 'react';
 import { Sheet } from '@/components/ui/Sheet';
+import type { AccountKind } from '@/domain/entities';
 import type { FinanceView } from '@/domain/view';
 import { CardDialog, type CardTarget } from '@/features/goals/CardDialog';
 import { LoanDialog, type LoanTarget } from '@/features/goals/LoanDialog';
-import { ActualBalanceDialog, type Which } from '@/features/history/ActualBalanceDialog';
+import { ActualBalanceDialog } from '@/features/history/ActualBalanceDialog';
 import { useMoney } from '@/store/useFinance';
 import { Row, Total } from './BreakdownRows';
 
 const HEADING = 'text-muted mt-4 mb-1 text-[13px] font-bold';
 
+/** The order what you have is listed in: savings, then bank accounts and cash wallets. */
+const HAVE: AccountKind[][] = [['savings'], ['debit', 'cash']];
+
 /**
- * What "Net worth" is made of: what you have (cash and savings, which can be corrected here, the
- * passive income received and any investments), less what you owe on each card and loan, each of
- * which opens its editor. The rows are `FinanceView`'s own parts, so they add up to the figure on
- * Home exactly. The dialogs stack over the sheet, which updates behind them.
+ * What "Net worth" is made of: what you have (each savings account, then each bank account and
+ * cash wallet, any of which can be corrected here, and any investments), less what you owe on
+ * each credit card and loan, each of which opens its editor. The rows are `FinanceView`'s own
+ * parts, so they add up to the figure on Home exactly. The dialogs stack over the sheet, which
+ * updates behind them.
  */
 export function NetWorthSheet({
   open,
@@ -25,12 +30,12 @@ export function NetWorthSheet({
   onClose(): void;
 }) {
   const money = useMoney();
-  const [correcting, setCorrecting] = useState<Which | null>(null);
+  const [correcting, setCorrecting] = useState<string | null>(null);
   const [editingCard, setEditingCard] = useState<CardTarget | null>(null);
   const [editingLoan, setEditingLoan] = useState<LoanTarget | null>(null);
+  // Each group keeps the carousel order the view's accounts are in.
+  const held = HAVE.flatMap((kinds) => view.accounts.filter((r) => kinds.includes(r.account.kind)));
   const cards = view.accounts.filter((r) => r.account.kind === 'credit');
-
-  const correct = (which: Which) => ({ label: 'Correct', onClick: () => setCorrecting(which) });
 
   return (
     <>
@@ -46,13 +51,14 @@ export function NetWorthSheet({
             </p>
             <h3 className={HEADING}>What you have</h3>
             <ul>
-              <Row label="Cash" value={money(view.buckets.cash)} action={correct('cash')} />
-              <Row
-                label="Savings"
-                value={money(view.buckets.savings)}
-                action={correct('savings')}
-              />
-              <Row label="Passive income received" value={money(view.buckets.passive)} />
+              {held.map(({ account, balance }) => (
+                <Row
+                  key={account.id}
+                  label={account.name}
+                  value={money(balance)}
+                  action={{ label: 'Correct', onClick: () => setCorrecting(account.id) }}
+                />
+              ))}
               {view.investments !== 0 && (
                 <Row
                   label="Investments"
@@ -94,7 +100,7 @@ export function NetWorthSheet({
       </Sheet>
       <ActualBalanceDialog
         open={correcting !== null}
-        initial={correcting ?? 'cash'}
+        accountId={correcting}
         onClose={() => setCorrecting(null)}
       />
       <CardDialog target={editingCard} onClose={() => setEditingCard(null)} />

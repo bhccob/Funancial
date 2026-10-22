@@ -7,7 +7,7 @@ import { formatMoney } from '@/domain/money';
 import type { DataSnapshot } from '@/domain/snapshot';
 import { formatMonthYear, formatShares } from '@/lib/format';
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
-import { makeDividend, makeSale, makeTransaction } from '@/test/fixtures';
+import { makeDebt, makeDividend, makeSale, makeTransaction } from '@/test/fixtures';
 import { HistoryScreen } from './HistoryScreen';
 
 const actions = vi.hoisted(() => ({
@@ -49,17 +49,27 @@ function renderHistory(data = bal?.data) {
   );
 }
 
-/** BAL-1 with dividends of October (into cash, reinvested, skipped) and one of August. */
+/**
+ * BAL-1 with dividends of October (into Main account, reinvested, skipped) and one of August into
+ * Savings.
+ */
 function withDividends(): DataSnapshot {
   const data = structuredClone(bal!.data);
   data.tables.dividend = [
-    makeDividend({ id: 'd-ko', symbol: 'KO', paidOn: '2026-10-08', amount: 11_20, bucket: 'cash' }),
+    makeDividend({
+      id: 'd-ko',
+      symbol: 'KO',
+      paidOn: '2026-10-08',
+      amount: 11_20,
+      accountId: 'acct-main',
+    }),
     makeDividend({
       id: 'd-vwrl',
       symbol: 'VWRL',
       paidOn: '2026-10-06',
       amount: 8_50,
-      bucket: 'reinvest',
+      accountId: null,
+      reinvested: true,
       sharesAdded: 0.07,
     }),
     makeDividend({
@@ -68,14 +78,19 @@ function withDividends(): DataSnapshot {
       paidOn: '2026-10-05',
       status: 'skipped',
       amount: 0,
-      bucket: null,
+      accountId: null,
     }),
-    makeDividend({ id: 'd-aug', symbol: 'MSFT', paidOn: '2026-08-20', bucket: 'savings' }),
+    makeDividend({
+      id: 'd-aug',
+      symbol: 'MSFT',
+      paidOn: '2026-08-20',
+      accountId: 'acct-savings',
+    }),
   ];
   return data;
 }
 
-/** BAL-1 with a sale into savings at a profit, one into cash at a loss, and one of August. */
+/** BAL-1 with a sale into Savings at a profit, one into Main account at a loss, and one of August. */
 function withSales(): DataSnapshot {
   const data = structuredClone(bal!.data);
   data.tables.sale = [
@@ -86,7 +101,7 @@ function withSales(): DataSnapshot {
       proceeds: 1_100_00,
       cost: 1_000_00,
       soldOn: '2026-10-06',
-      to: 'savings',
+      toAccountId: 'acct-savings',
     }),
     makeSale({
       id: 's-ko',
@@ -95,7 +110,7 @@ function withSales(): DataSnapshot {
       proceeds: 80_00,
       cost: 100_00,
       soldOn: '2026-10-05',
-      to: 'cash',
+      toAccountId: 'acct-main',
     }),
     makeSale({ id: 's-aug', symbol: 'MSFT', soldOn: '2026-08-20' }),
   ];
@@ -112,13 +127,26 @@ describe('HistoryScreen', () => {
   it('lists every kind of entry for the month (BAL-1)', () => {
     renderHistory();
     expect(screen.getByRole('heading', { level: 1, name: 'History' })).toBeInTheDocument();
-    expect(row('Cash → Savings').getByText(usd(500_00))).toBeInTheDocument();
+    // A transfer and a card payment are named by the accounts the money moved between.
+    expect(row('Main account → Savings').getByText(usd(500_00))).toBeInTheDocument();
+    expect(row('Main account → Visa').getByText(`−${usd(30_00)}`)).toBeInTheDocument();
+    expect(row('Main account → Visa').getByText('Card payment')).toBeInTheDocument();
     expect(row('Balance correction').getByText(`−${usd(20_00)}`)).toBeInTheDocument();
+    expect(row('Balance correction').getByText('Main account · Bank fee I forgot')).toBeVisible();
     expect(row('Groceries').getByText(`−${usd(120_00)}`)).toBeInTheDocument();
     expect(row('Side gig').getByText('Expected')).toBeInTheDocument();
-    expect(row('Paid Visa').getByText(`−${usd(30_00)}`)).toBeInTheDocument();
+    expect(row('Side gig').getByText('Extra income · to Main account')).toBeInTheDocument();
+    expect(row('Salary').getByText('Salary · to Main account')).toBeInTheDocument();
     // Before the month shown: September's expense is not in October.
     expect(screen.queryByText('Before you started')).not.toBeInTheDocument();
+  });
+
+  it('names the account each expense was paid with', () => {
+    renderHistory();
+    expect(screen.getByRole('button', { name: /^Groceries/ })).toHaveTextContent(
+      'Food · Main account',
+    );
+    expect(screen.getByRole('button', { name: /^Jacket/ })).toHaveTextContent('Shopping · Visa');
   });
 
   it('shows only spending when asked', async () => {
@@ -126,7 +154,7 @@ describe('HistoryScreen', () => {
     await userEvent.click(screen.getByRole('radio', { name: 'Spending' }));
     expect(screen.getByText('Groceries')).toBeInTheDocument();
     expect(screen.queryByText('Side gig')).not.toBeInTheDocument();
-    expect(screen.queryByText('Cash → Savings')).not.toBeInTheDocument();
+    expect(screen.queryByText('Main account → Savings')).not.toBeInTheDocument();
     await userEvent.selectOptions(screen.getByLabelText('Category'), 'Shopping');
     expect(screen.queryByText('Groceries')).not.toBeInTheDocument();
     expect(screen.getByText('Jacket')).toBeInTheDocument();
@@ -151,14 +179,23 @@ describe('HistoryScreen', () => {
 
   it('keeps an archived card on the expenses it paid for, and in their edit form', async () => {
     const data = structuredClone(bal!.data);
-    const card = data.tables.debt.find((d) => d.id === 'card-1')!;
+    const card = data.tables.account.find((a) => a.id === 'card-1')!;
     card.archivedOn = bal!.today;
     renderHistory(data);
     const jacket = screen.getByRole('button', { name: /^Jacket/ });
-    expect(jacket).toHaveTextContent(card.name);
+    expect(jacket).toHaveTextContent(`Shopping · ${card.name}`);
     await userEvent.click(jacket);
     const dialog = screen.getByRole('dialog', { name: 'Edit expense' });
-    expect(within(dialog).getByRole('radio', { name: card.name })).toBeChecked();
+    expect(within(dialog).getByLabelText('Paid with')).toHaveValue('card-1');
+  });
+
+  it('names an account that no longer exists plainly', () => {
+    const data = structuredClone(bal!.data);
+    data.tables.account = data.tables.account.filter((a) => a.id !== 'card-1');
+    renderHistory(data);
+    expect(screen.getByRole('button', { name: /^Jacket/ })).toHaveTextContent(
+      'Shopping · Unknown account',
+    );
   });
 
   it('gives each delete button the 44px a touch target needs', () => {
@@ -178,13 +215,13 @@ describe('HistoryScreen', () => {
   it('lists confirmed and skipped dividends, with where the money went', async () => {
     renderHistory(withDividends());
     expect(row('Dividend · KO').getByText(`+${usd(11_20)}`)).toBeInTheDocument();
-    expect(row('Dividend · KO').getByText('To cash')).toBeInTheDocument();
+    expect(row('Dividend · KO').getByText('To Main account')).toBeInTheDocument();
     expect(row('Dividend · VWRL').getByText(`+${usd(8_50)}`)).toBeInTheDocument();
     expect(row('Dividend · VWRL').getByText('Reinvested')).toBeInTheDocument();
     expect(row('Skipped dividend · AAPL').getByText(usd(0))).toBeInTheDocument();
     // A month with only a dividend in it is one to choose.
     await userEvent.selectOptions(screen.getByLabelText('Month'), formatMonthYear('2026-08'));
-    expect(row('Dividend · MSFT').getByText('To savings')).toBeInTheDocument();
+    expect(row('Dividend · MSFT').getByText('To Savings')).toBeInTheDocument();
   });
 
   it('shows dividends with income, not with spending or transfers', async () => {
@@ -210,7 +247,7 @@ describe('HistoryScreen', () => {
     renderHistory(withSales());
     expect(row('Sold 5 AAPL').getByText(`+${usd(1_100_00)}`)).toBeInTheDocument();
     expect(screen.getByText('Sold 5 AAPL').closest('li')).toHaveTextContent(
-      `To savings · profit ▲ ${usd(100_00)}`,
+      `To Savings · profit ▲ ${usd(100_00)}`,
     );
   });
 
@@ -218,7 +255,7 @@ describe('HistoryScreen', () => {
     renderHistory(withSales());
     expect(row(`Sold ${formatShares(2.5)} KO`).getByText(`+${usd(80_00)}`)).toBeInTheDocument();
     const item = screen.getByText(`Sold ${formatShares(2.5)} KO`).closest('li')!;
-    expect(item).toHaveTextContent(`To cash · profit ▼ ${usd(20_00)}`);
+    expect(item).toHaveTextContent(`To Main account · profit ▼ ${usd(20_00)}`);
     expect(within(item).getByText(`▼ ${usd(20_00)}`)).toHaveClass('text-danger');
     const gain = within(screen.getByText('Sold 5 AAPL').closest('li')!).getByText(/^▲/);
     expect(gain).not.toHaveClass('text-danger');
@@ -255,57 +292,94 @@ describe('HistoryScreen', () => {
         type: 'investment',
         amount: 500_00,
         date: '2026-10-07',
-        from: 'savings',
-        to: null,
+        fromAccountId: 'acct-savings',
+        toAccountId: null,
         note: 'Bought KO',
       }),
     );
     renderHistory(data);
-    expect(row('Bought KO').getByText('From savings')).toBeInTheDocument();
+    expect(row('Bought KO').getByText('From Savings')).toBeInTheDocument();
     expect(row('Bought KO').getByText(`−${usd(500_00)}`)).toBeInTheDocument();
     expect(screen.queryByText('Paid a card or loan')).not.toBeInTheDocument();
   });
 
-  it('sets the actual cash balance', async () => {
+  it('names a loan payment by the loan, and the account it came from', () => {
+    const data = structuredClone(bal!.data);
+    data.tables.debt = [makeDebt({ id: 'car', name: 'Car loan', openingDate: '2026-10-01' })];
+    data.tables.transaction.push(
+      makeTransaction({
+        type: 'debt_payment',
+        amount: 100_00,
+        date: '2026-10-08',
+        fromAccountId: 'acct-main',
+        toAccountId: null,
+        debtId: 'car',
+      }),
+    );
+    renderHistory(data);
+    expect(row('Paid Car loan').getByText('From Main account')).toBeInTheDocument();
+    expect(row('Paid Car loan').getByText(`−${usd(100_00)}`)).toBeInTheDocument();
+  });
+
+  it('sets the actual balance of the account picked, starting on Main account', async () => {
     renderHistory();
     await userEvent.click(screen.getByRole('button', { name: 'Set actual balance' }));
     const dialog = screen.getByRole('dialog', { name: 'Set actual balance' });
+    expect(within(dialog).getByLabelText('Account')).toHaveValue('acct-main');
     // 1,000 + 3,000 − 120 − 500 − 30 − 20
     expect(within(dialog).getByText(`Funcial thinks: ${usd(3_330_00)}`)).toBeInTheDocument();
     await userEvent.type(within(dialog).getByLabelText('Actual balance'), '3,342.34');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
-    expect(actions.setActualBalance).toHaveBeenCalledWith('cash', 3_342_34, '2026-10-10');
+    expect(actions.setActualBalance).toHaveBeenCalledWith('acct-main', 3_342_34, '2026-10-10');
   });
 
-  it('starts on Cash when opened from History', async () => {
+  it('offers every account in use, and corrects Savings when it is picked', async () => {
     renderHistory();
     await userEvent.click(screen.getByRole('button', { name: 'Set actual balance' }));
     const dialog = screen.getByRole('dialog', { name: 'Set actual balance' });
-    expect(within(dialog).getByRole('radio', { name: 'Cash' })).toBeChecked();
-    expect(within(dialog).getByRole('radio', { name: 'Savings' })).not.toBeChecked();
+    const account = within(dialog).getByLabelText('Account');
+    expect(
+      within(account)
+        .getAllByRole('option')
+        .map((o) => o.textContent),
+    ).toEqual(['Main account', 'Savings', 'Passive income', 'Visa (credit card)']);
+    await userEvent.selectOptions(account, 'Savings');
+    expect(within(dialog).getByText(`Funcial thinks: ${usd(5_500_00)}`)).toBeInTheDocument();
+    await userEvent.type(within(dialog).getByLabelText('Actual balance'), '5,450');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+    expect(actions.setActualBalance).toHaveBeenCalledWith('acct-savings', 5_450_00, '2026-10-10');
+  });
+
+  it('corrects what a card owes, and says so', async () => {
+    renderHistory();
+    await userEvent.click(screen.getByRole('button', { name: 'Set actual balance' }));
+    const dialog = screen.getByRole('dialog', { name: 'Set actual balance' });
+    await userEvent.selectOptions(within(dialog).getByLabelText('Account'), 'Visa (credit card)');
+    // 80 spent on it, 30 paid off.
+    expect(within(dialog).getByText(`Funcial thinks: ${usd(50_00)}`)).toBeInTheDocument();
+    expect(within(dialog).getByLabelText('Actual balance')).toHaveAccessibleDescription(
+      /^What you owe on it right now\./,
+    );
   });
 
   it('says when the balance already matches', async () => {
     renderHistory();
     await userEvent.click(screen.getByRole('button', { name: 'Set actual balance' }));
     const dialog = screen.getByRole('dialog', { name: 'Set actual balance' });
-    await userEvent.click(within(dialog).getByRole('radio', { name: 'Savings' }));
+    await userEvent.selectOptions(within(dialog).getByLabelText('Account'), 'Savings');
     await userEvent.type(within(dialog).getByLabelText('Actual balance'), '5500');
     expect(within(dialog).getByText('Already matches.')).toBeInTheDocument();
   });
 });
 
 describe('the actual balance dialog in the line style', () => {
-  it('has a line amount and underline tabs for the balance', async () => {
+  it('has a line amount and a line account picker', async () => {
     renderHistory();
     await userEvent.click(screen.getByRole('button', { name: 'Set actual balance' }));
     const dialog = screen.getByRole('dialog', { name: 'Set actual balance' });
-    expect(within(dialog).getByLabelText('Actual balance')).toHaveClass(
-      'border-b',
-      'font-extrabold',
-    );
-    expect(within(dialog).getByLabelText('Actual balance')).not.toHaveClass('rounded-md');
-    expect(within(dialog).getByText('Cash')).toHaveClass('border-b-2', 'border-text');
-    expect(within(dialog).getByText('Savings')).toHaveClass('border-transparent');
+    for (const label of ['Actual balance', 'Account']) {
+      expect(within(dialog).getByLabelText(label), label).toHaveClass('border-b', 'font-extrabold');
+      expect(within(dialog).getByLabelText(label), label).not.toHaveClass('rounded-md');
+    }
   });
 });

@@ -8,6 +8,7 @@ import type { Cycle, Subscription } from '@/domain/entities';
 import { localDay } from '@/domain/game/activity';
 import { monthKey } from '@/domain/periods';
 import { CardSheet } from '@/features/goals/CardSheet';
+import { accountName } from '@/features/shared/AccountField';
 import { BillRow } from '@/features/shared/BillRow';
 import { cn } from '@/lib/cn';
 import { daysUntil, formatDay, relativeDays } from '@/lib/format';
@@ -108,7 +109,7 @@ export function SubscriptionsScreen() {
                     <div className="min-w-0">
                       <p className="truncate font-bold">{sub.name}</p>
                       <p className="text-muted text-sm font-semibold tabular-nums">
-                        {`${money(sub.amount)} / ${PER[sub.cycle]} · ${renewsText(today, sub.nextRenewal)} · ${accounts.find((a) => a.id === sub.accountId)?.name ?? 'Unknown account'}`}
+                        {`${money(sub.amount)} / ${PER[sub.cycle]} · ${renewsText(today, sub.nextRenewal)} · ${accountName(accounts, sub.accountId)}`}
                       </p>
                     </div>
                     <Menu

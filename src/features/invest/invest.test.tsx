@@ -25,7 +25,7 @@ import {
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
 import { expectHelpTip } from '@/test/helpTip';
 import { spoken } from '@/test/spoken';
-import { makeDividend, makeHolding, makeProfile, makeSale } from '@/test/fixtures';
+import { makeAccount, makeDividend, makeHolding, makeProfile, makeSale } from '@/test/fixtures';
 import { FUTURE } from '@/store/financeActions';
 import { SOLD_NO_REINVEST, UNKNOWN_SYMBOL } from '@/store/investActions';
 import { HoldingPage } from './HoldingPage';
@@ -74,6 +74,53 @@ const quote = (price: number, previousClose: number | null, fxRate: number | nul
   asOf: ASOF,
 });
 
+/** Main account (the default), Savings, Passive income and a Visa: where money can come and go. */
+const accounts = () => [
+  makeAccount({ openingDate: '2025-01-01' }),
+  makeAccount({
+    id: 'acct-savings',
+    name: 'Savings',
+    kind: 'savings',
+    skin: 'mint',
+    inAvailable: false,
+    openingDate: '2025-01-01',
+    order: 1,
+  }),
+  makeAccount({
+    id: 'acct-passive',
+    name: 'Passive income',
+    kind: 'savings',
+    skin: 'amber',
+    inAvailable: false,
+    openingDate: '2025-01-01',
+    order: 2,
+  }),
+  makeAccount({
+    id: 'visa',
+    name: 'Visa',
+    kind: 'credit',
+    skin: 'violet',
+    inAvailable: false,
+    openingBalance: 0,
+    openingDate: '2025-01-01',
+    order: 3,
+    credit: {
+      limit: null,
+      statementDay: null,
+      dueDay: null,
+      payInFull: true,
+      minimumPayment: 0,
+      interestRate: 0,
+    },
+  }),
+];
+
+/** The options of a select, as they read. */
+const optionsOf = (select: HTMLElement) =>
+  within(select)
+    .getAllByRole('option')
+    .map((o) => o.textContent);
+
 /**
  * Worth $1,950.00 for $1,900.00 paid (up 2.6%). Today KO is up $10, Apple down $25 and the ETF
  * unchanged, so the day is down $15. Best KO +20.0%, worst Apple -5.0%.
@@ -81,6 +128,7 @@ const quote = (price: number, previousClose: number | null, fxRate: number | nul
 function portfolioData(): DataSnapshot {
   const data = emptySnapshot();
   data.tables.profile = [makeProfile({ currency: 'USD' })];
+  data.tables.account = accounts();
   data.tables.holding = [
     held({
       id: 'ko',
@@ -117,6 +165,7 @@ function portfolioData(): DataSnapshot {
 function noHoldings(): DataSnapshot {
   const data = emptySnapshot();
   data.tables.profile = [makeProfile({ currency: 'USD' })];
+  data.tables.account = accounts();
   return data;
 }
 
@@ -453,7 +502,15 @@ describe('HoldingDialog adding', () => {
       within(dialog).queryByLabelText('Tax withheld on dividends (%)'),
     ).not.toBeInTheDocument();
     expect(within(dialog).getByLabelText('Purchase date')).toHaveValue(TODAY);
-    expect(within(dialog).getByRole('radio', { name: 'Already owned' })).toBeChecked();
+    // Bought before using the app unless an account is picked; never with a credit card.
+    const paidFrom = within(dialog).getByLabelText('Paid from');
+    expect(paidFrom).toHaveDisplayValue('Already owned');
+    expect(optionsOf(paidFrom)).toEqual([
+      'Already owned',
+      'Main account',
+      'Savings',
+      'Passive income',
+    ]);
     expect(within(dialog).queryByLabelText('Manual price')).not.toBeInTheDocument();
     expect(within(dialog).queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument();
 
@@ -464,7 +521,7 @@ describe('HoldingDialog adding', () => {
     expect(dialog).toHaveTextContent(
       `Total paid${formatShares(2.5)} × ${usd(160_00)} = ${usd(400_00)}`,
     );
-    await userEvent.click(within(dialog).getByRole('radio', { name: 'Cash' }));
+    await userEvent.selectOptions(paidFrom, 'Main account');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
 
     // The lookup failed: the friendly message, and the fields to fill in yourself.
@@ -497,7 +554,11 @@ describe('HoldingDialog adding', () => {
     });
     expect(items[1]).toEqual({
       table: 'transaction',
-      record: expect.objectContaining({ type: 'investment', amount: 400_00, from: 'cash' }),
+      record: expect.objectContaining({
+        type: 'investment',
+        amount: 400_00,
+        fromAccountId: 'acct-main',
+      }),
     });
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(toastStore.getState().toasts.at(-1)?.message).toBe('Holding added.');
@@ -530,8 +591,8 @@ describe('HoldingDialog adding', () => {
       expect(within(dialog).getByLabelText(label), label).toHaveClass('border-b', 'font-extrabold');
       expect(within(dialog).getByLabelText(label), label).not.toHaveClass('rounded-md');
     }
-    // Paid from is underline tabs, still radios.
-    expect(within(dialog).getByText('Already owned')).toHaveClass('border-b-2', 'border-text');
+    // Paid from is a line select, like the other pickers of an account.
+    expect(within(dialog).getByLabelText('Paid from')).toHaveClass('border-b', 'font-extrabold');
     expect(store.getState().putMany).not.toHaveBeenCalled();
   });
 
@@ -564,7 +625,7 @@ describe('HoldingDialog adding', () => {
     expect(within(dialog).getByLabelText('Shares')).toHaveValue('2.5');
     // 2.5 x 33.33 = 83.325: one rounding, to 83.33.
     await enter(dialog, 'Price per share (your average)', '33.33');
-    await userEvent.click(within(dialog).getByRole('radio', { name: 'Cash' }));
+    await userEvent.selectOptions(within(dialog).getByLabelText('Paid from'), 'Savings');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(store.getState().putMany).toHaveBeenCalledTimes(1));
     const items = vi.mocked(store.getState().putMany).mock.calls[0]![0];
@@ -572,10 +633,10 @@ describe('HoldingDialog adding', () => {
       table: 'holding',
       record: expect.objectContaining({ shares: 2.5, costBasis: 83_33 }),
     });
-    // What leaves cash is the same figure.
+    // What leaves Savings is the same figure.
     expect(items[1]).toEqual({
       table: 'transaction',
-      record: expect.objectContaining({ amount: 83_33, from: 'cash' }),
+      record: expect.objectContaining({ amount: 83_33, fromAccountId: 'acct-savings' }),
     });
   });
 
@@ -733,7 +794,7 @@ describe('HoldingDialog adding', () => {
     });
   });
 
-  it('refuses to take nothing from cash or savings, and a date the schema would not read', async () => {
+  it('refuses to take nothing from an account, and a date the schema would not read', async () => {
     const { store } = renderInvest(noHoldings());
     const dialog = await openNewHolding();
     await enter(dialog, 'Symbol', 'KO');
@@ -741,7 +802,7 @@ describe('HoldingDialog adding', () => {
     await enter(dialog, 'Currency', 'USD');
     await enter(dialog, 'Shares', '1');
     await enter(dialog, 'Price per share (your average)', '0');
-    await userEvent.click(within(dialog).getByRole('radio', { name: 'Savings' }));
+    await userEvent.selectOptions(within(dialog).getByLabelText('Paid from'), 'Savings');
     fireEvent.change(within(dialog).getByLabelText('Purchase date'), {
       target: { value: '19999-01-01' },
     });
@@ -850,7 +911,8 @@ describe('HoldingDialog symbol search', () => {
       results: [{ symbol: 'VUS.OLD', name: 'Old', exchange: null, type: 'stock' }],
     });
     await pastDebounce();
-    expect(within(dialog).getAllByRole('option')).toHaveLength(1);
+    // The list's own options, not the Paid from select's.
+    expect(within(within(dialog).getByRole('listbox')).getAllByRole('option')).toHaveLength(1);
     expect(within(dialog).queryByText('VUS.OLD')).not.toBeInTheDocument();
   });
 
@@ -858,8 +920,8 @@ describe('HoldingDialog symbol search', () => {
     fetchSearch.mockResolvedValue(VUSA);
     const { store, dialog, symbol } = await openSearch();
     await userEvent.type(symbol, 'vusa');
-    await within(dialog).findByRole('listbox');
-    const options = within(dialog).getAllByRole('option');
+    // The list's own options, not the Paid from select's.
+    const options = within(await within(dialog).findByRole('listbox')).getAllByRole('option');
     expect(symbol).not.toHaveAttribute('aria-activedescendant');
 
     await userEvent.keyboard('{ArrowDown}{ArrowDown}');
@@ -1026,7 +1088,7 @@ describe('HoldingDialog editing', () => {
     );
     expect(within(dialog).getByLabelText('Tax withheld on dividends (%)')).toHaveValue('15');
     expect(within(dialog).getByLabelText('Manual price')).toHaveValue('');
-    expect(within(dialog).queryByRole('radiogroup', { name: 'Paid from' })).not.toBeInTheDocument();
+    expect(within(dialog).queryByLabelText('Paid from')).not.toBeInTheDocument();
     expect(within(dialog).queryByText('Paid from')).not.toBeInTheDocument();
     // The service is not configured here, so the holding's name, type and currency can be fixed.
     expect(within(dialog).getByLabelText('Name')).toHaveValue('Coca-Cola');
@@ -1468,16 +1530,28 @@ describe('Dividends tab', () => {
     );
   });
 
-  it('asks for a due payout on line fields and underline tabs', async () => {
+  it('asks for a due payout on line fields', async () => {
     renderDividends(dividendData(), true);
     await userEvent.click(within(region('Due')).getByRole('button', { name: 'Confirm' }));
     const dialog = screen.getByRole('dialog', { name: 'Confirm VWRL dividend' });
-    for (const label of ['Amount received', 'Date']) {
+    for (const label of ['Amount received', 'Date', 'Where did it go?']) {
       expect(within(dialog).getByLabelText(label), label).toHaveClass('border-b', 'font-extrabold');
       expect(within(dialog).getByLabelText(label), label).not.toHaveClass('rounded-md');
     }
-    expect(within(dialog).getByText('Cash')).toHaveClass('border-b-2', 'border-text');
-    expect(within(dialog).getByText('Reinvest')).toHaveClass('border-transparent');
+  });
+
+  it('confirms a due payout into the account picked', async () => {
+    const store = renderDividends(dividendData(), true);
+    await userEvent.click(within(region('Due')).getByRole('button', { name: 'Confirm' }));
+    const dialog = screen.getByRole('dialog', { name: 'Confirm VWRL dividend' });
+    await userEvent.selectOptions(within(dialog).getByLabelText('Where did it go?'), 'Savings');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Confirm' }));
+    await waitFor(() =>
+      expect(screen.queryByRole('region', { name: 'Due' })).not.toBeInTheDocument(),
+    );
+    expect(store.getState().data.tables.dividend.find((d) => d.holdingId === 'vwrl')).toMatchObject(
+      { status: 'confirmed', accountId: 'acct-savings', reinvested: false },
+    );
   });
 
   it('confirms a due payout into reinvest and it leaves the list', async () => {
@@ -1494,15 +1568,13 @@ describe('Dividends tab', () => {
       formatMoneyPlain(8_50, 'USD'),
     );
     expect(within(dialog).getByLabelText('Date')).toHaveValue('2026-10-12');
-    const where = within(dialog).getByRole('group', { name: 'Where did it go?' });
-    expect(
-      within(where)
-        .getAllByRole('radio')
-        .map((r) => r.closest('label')?.textContent),
-    ).toEqual(['Cash', 'Savings', 'Passive', 'Reinvest']);
-    expect(within(where).getByRole('radio', { name: 'Cash' })).toBeChecked();
+    // The accounts money can arrive on (never a credit card), then Reinvest; it starts on the
+    // default account.
+    const where = within(dialog).getByLabelText('Where did it go?');
+    expect(optionsOf(where)).toEqual(['Main account', 'Savings', 'Passive income', 'Reinvest']);
+    expect(where).toHaveDisplayValue('Main account');
 
-    await userEvent.click(within(where).getByRole('radio', { name: 'Reinvest' }));
+    await userEvent.selectOptions(where, 'Reinvest');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Confirm' }));
 
     await waitFor(() =>
@@ -1514,7 +1586,8 @@ describe('Dividends tab', () => {
       status: 'confirmed',
       amount: 8_50,
       paidOn: '2026-10-12',
-      bucket: 'reinvest',
+      accountId: null,
+      reinvested: true,
     });
     // $8.50 buys 0.085 of a share at $100.
     expect(data.holding.find((h) => h.id === 'vwrl')?.shares).toBeCloseTo(4.085, 6);
@@ -1560,7 +1633,7 @@ describe('Dividends tab', () => {
     const store = renderDividends(data);
     await userEvent.click(within(region('Due')).getByRole('button', { name: 'Confirm' }));
     const dialog = screen.getByRole('dialog', { name: 'Confirm VWRL dividend' });
-    await userEvent.click(within(dialog).getByRole('radio', { name: 'Reinvest' }));
+    await userEvent.selectOptions(within(dialog).getByLabelText('Where did it go?'), 'Reinvest');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Confirm' }));
     await waitFor(() =>
       expect(toastStore.getState().toasts.at(-1)?.message).toBe(
@@ -1588,21 +1661,26 @@ describe('Dividends tab', () => {
     const store = renderDividends(data);
     await userEvent.click(within(region('Due')).getByRole('button', { name: 'Confirm' }));
     const dialog = screen.getByRole('dialog', { name: 'Confirm VWRL dividend' });
-    const where = within(dialog).getByRole('group', { name: 'Where did it go?' });
+    const where = within(dialog).getByLabelText('Where did it go?');
 
-    await userEvent.click(within(where).getByRole('radio', { name: 'Reinvest' }));
+    await userEvent.selectOptions(where, 'Reinvest');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Confirm' }));
     expect(where).toHaveAccessibleDescription(SOLD_NO_REINVEST);
     expect(store.getState().putMany).not.toHaveBeenCalled();
 
-    await userEvent.click(within(where).getByRole('radio', { name: 'Cash' }));
+    await userEvent.selectOptions(where, 'Main account');
     expect(within(dialog).queryByText(SOLD_NO_REINVEST)).not.toBeInTheDocument();
     await userEvent.click(within(dialog).getByRole('button', { name: 'Confirm' }));
     await waitFor(() => expect(store.getState().putMany).toHaveBeenCalledOnce());
     expect(store.getState().putMany).toHaveBeenCalledWith([
       {
         table: 'dividend',
-        record: expect.objectContaining({ holdingId: 'vwrl', amount: 8_50, bucket: 'cash' }),
+        record: expect.objectContaining({
+          holdingId: 'vwrl',
+          amount: 8_50,
+          accountId: 'acct-main',
+          reinvested: false,
+        }),
       },
     ]);
   });

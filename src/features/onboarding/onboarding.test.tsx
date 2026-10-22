@@ -7,13 +7,17 @@ import { emptySnapshot, type DataSnapshot } from '@/domain/snapshot';
 import { toastStore } from '@/lib/toast';
 import { KeyDerivationError } from '@/data/accountCrypto';
 import { AccountError } from '@/store/accountActions';
+import { createFinanceActions, type OnboardingInput } from '@/store/financeActions';
 import { useAmountsHidden } from '@/store/useAmountsHidden';
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
 import { fakeAccount, linkedAccount, withAccount } from '@/test/fakeAccount';
 import { makeProfile } from '@/test/fixtures';
+import { freshRealStore } from '@/test/realStore';
 import { OnboardingWizard } from './OnboardingWizard';
 
-const actions = vi.hoisted(() => ({ completeOnboarding: vi.fn(async () => {}) }));
+const actions = vi.hoisted(() => ({
+  completeOnboarding: vi.fn<(input: OnboardingInput) => Promise<void>>(async () => {}),
+}));
 vi.mock('@/store/useFinance', () => ({ useFinanceActions: () => actions }));
 
 const realResolvedOptions = Intl.DateTimeFormat.prototype.resolvedOptions;
@@ -81,8 +85,8 @@ async function skipAccount() {
 }
 
 async function fillBalances(cash = '1,000', savings = '5000') {
-  await userEvent.type(screen.getByLabelText('Cash & checking'), cash);
-  await userEvent.type(screen.getByLabelText('Savings'), savings);
+  await userEvent.type(screen.getByLabelText('In your bank account'), cash);
+  await userEvent.type(screen.getByLabelText('In savings'), savings);
   await next();
 }
 
@@ -502,12 +506,12 @@ describe('OnboardingWizard', () => {
     await userEvent.selectOptions(screen.getByLabelText('Currency'), 'GBP');
     await userEvent.type(screen.getByLabelText('What should we call you?'), 'Sam');
     await next();
-    await userEvent.type(screen.getByLabelText('Cash & checking'), '250');
-    await userEvent.type(screen.getByLabelText('Savings'), '900');
+    await userEvent.type(screen.getByLabelText('In your bank account'), '250');
+    await userEvent.type(screen.getByLabelText('In savings'), '900');
     await next();
     await userEvent.click(screen.getByRole('button', { name: 'Back' }));
-    expect(screen.getByLabelText('Cash & checking')).toHaveValue('250.00');
-    expect(screen.getByLabelText('Savings')).toHaveValue('900.00');
+    expect(screen.getByLabelText('In your bank account')).toHaveValue('250.00');
+    expect(screen.getByLabelText('In savings')).toHaveValue('900.00');
     await userEvent.click(screen.getByRole('button', { name: 'Back' }));
     expect(screen.getByLabelText('Currency')).toHaveValue('GBP');
     expect(screen.getByLabelText('What should we call you?')).toHaveValue('Sam');
@@ -666,6 +670,32 @@ describe('OnboardingWizard', () => {
       expect.objectContaining({ salary: null, cards: [], openingCash: 0, openingSavings: 0 }),
     );
     expect(store.getState().setSecret).not.toHaveBeenCalled();
+  });
+
+  it('creates Main account and Savings from what is in the bank and in savings', async () => {
+    const { store } = await freshRealStore();
+    // The real setup, on a real store.
+    actions.completeOnboarding.mockImplementationOnce((input) =>
+      createFinanceActions(store).completeOnboarding(input),
+    );
+    renderWizard({ store });
+    await skipAccount();
+    await next();
+    await fillBalances('1,250', '800');
+    await userEvent.click(screen.getByRole('switch', { name: "I don't have a regular salary" }));
+    await next();
+    await next();
+    await userEvent.click(screen.getByRole('button', { name: 'Start my adventure' }));
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: "You're all set" }),
+    ).toBeInTheDocument();
+    const { account, settings } = store.getState().data.tables;
+    expect(account.map((a) => [a.id, a.name, a.kind, a.openingBalance, a.inAvailable])).toEqual([
+      ['acct-main', 'Main account', 'debit', 1_250_00, true],
+      ['acct-savings', 'Savings', 'savings', 800_00, false],
+    ]);
+    expect(settings[0]?.defaultAccountId).toBe('acct-main');
   });
 
   it('turns on biometric unlock after setting the PIN', async () => {
@@ -862,7 +892,7 @@ describe('OnboardingWizard in the line style', () => {
       isLine(screen.getByLabelText(label), label);
     }
     await next();
-    for (const label of ['Cash & checking', 'Savings']) {
+    for (const label of ['In your bank account', 'In savings']) {
       isLine(screen.getByLabelText(label), label);
     }
     await fillBalances('0', '0');

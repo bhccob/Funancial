@@ -154,8 +154,8 @@ describe('at the end of setup', () => {
     const next = () => userEvent.click(screen.getByRole('button', { name: 'Next' }));
     await userEvent.type(screen.getByLabelText('What should we call you?'), 'Sam');
     await next();
-    await userEvent.type(screen.getByLabelText('Cash & checking'), '0');
-    await userEvent.type(screen.getByLabelText('Savings'), '0');
+    await userEvent.type(screen.getByLabelText('In your bank account'), '0');
+    await userEvent.type(screen.getByLabelText('In savings'), '0');
     await next();
     await userEvent.click(screen.getByRole('switch', { name: "I don't have a regular salary" }));
     await next();

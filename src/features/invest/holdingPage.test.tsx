@@ -61,7 +61,7 @@ function dataOf(holding: Holding = vusa()): DataSnapshot {
     makeDividend({ holdingId: 'vusa', amount: 50_00 }),
     makeDividend({ holdingId: 'vusa', amount: 46_20 }),
     // Not received: skipped, or another holding's.
-    makeDividend({ holdingId: 'vusa', status: 'skipped', amount: 0, bucket: null }),
+    makeDividend({ holdingId: 'vusa', status: 'skipped', amount: 0, accountId: null }),
     makeDividend({ holdingId: 'other', amount: 99_00 }),
   ];
   return data;
@@ -282,7 +282,7 @@ describe('Holding page break-even', () => {
   it('leaves the dividends out of the sentence when the holding has had none', () => {
     const data = dataOf();
     data.tables.dividend = [
-      makeDividend({ holdingId: 'vusa', status: 'skipped', amount: 0, bucket: null }),
+      makeDividend({ holdingId: 'vusa', status: 'skipped', amount: 0, accountId: null }),
     ];
     renderPage(data);
     expect(screen.getByText(`${usd(29_50)} per share above break-even.`)).toBeInTheDocument();

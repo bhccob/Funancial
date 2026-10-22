@@ -2,8 +2,9 @@ import { useState, type FormEvent } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Dialog } from '@/components/ui/Dialog';
 import { MoneyField } from '@/components/ui/MoneyField';
-import { RadioGroup } from '@/components/ui/RadioGroup';
+import { AccountField, accountName, useStartAccountId } from '@/features/shared/AccountField';
 import { useAction } from '@/lib/useAction';
+import { useApp } from '@/store/AppStoreProvider';
 import {
   useCurrency,
   useFinanceActions,
@@ -12,32 +13,52 @@ import {
   useToday,
 } from '@/store/useFinance';
 
-export type Which = 'cash' | 'savings';
-const NAMES: Record<Which, string> = { cash: 'Cash', savings: 'Savings' };
+interface Errors {
+  account?: string;
+  actual?: string;
+}
 
-function ActualBalanceForm({ initial, onDone }: { initial: Which; onDone(): void }) {
+/**
+ * `accountId` is the account it corrects; with none, the person picks it, starting on the default
+ * account. A credit card's balance is what is owed on it.
+ */
+function ActualBalanceForm({
+  accountId: fixed,
+  onDone,
+}: {
+  accountId: string | null;
+  onDone(): void;
+}) {
   const { setActualBalance } = useFinanceActions();
-  const { buckets } = useFinanceView();
+  const { accounts } = useFinanceView();
   const money = useMoney();
   const currency = useCurrency();
   const today = useToday();
   const run = useAction();
-  const [which, setWhich] = useState<Which>(initial);
+  const start = useStartAccountId();
+  const [accountId, setAccountId] = useState(fixed ?? start);
   const [actual, setActual] = useState<number | null>(null);
-  const [error, setError] = useState<string>();
+  const [errors, setErrors] = useState<Errors>({});
   const [busy, setBusy] = useState(false);
 
-  const computed = buckets[which];
-  const matches = actual !== null && actual === computed;
+  const picking = fixed === null;
+  const row = accounts.find((r) => r.account.id === accountId);
+  const computed = row?.balance ?? 0;
+  const matches = row !== undefined && actual !== null && actual === computed;
 
   async function submit(e: FormEvent) {
     e.preventDefault();
-    if (actual === null) return setError('Enter what you actually have, like 1,234.56');
-    if (matches) return;
+    const found: Errors = {
+      account: picking && !row ? 'Pick an account.' : undefined,
+      actual: actual === null ? 'Enter what you actually have, like 1,234.56' : undefined,
+    };
+    setErrors(found);
+    if (found.account || actual === null || matches) return;
     const delta = actual - computed;
     setBusy(true);
-    const saved = await run(() => setActualBalance(which, actual, today), {
-      success: `${NAMES[which]} corrected by ${money(delta, { signDisplay: 'always' })}.`,
+    // An account gone since the dialog opened is refused by the store, with its own message.
+    const saved = await run(() => setActualBalance(accountId, actual, today), {
+      success: `${row?.account.name ?? 'Balance'} corrected by ${money(delta, { signDisplay: 'always' })}.`,
     });
     setBusy(false);
     if (saved) onDone();
@@ -45,17 +66,20 @@ function ActualBalanceForm({ initial, onDone }: { initial: Which; onDone(): void
 
   return (
     <form className="flex flex-col gap-5" onSubmit={submit} noValidate>
-      <RadioGroup<Which>
-        variant="underline"
-        legend="Which balance"
-        value={which}
-        onChange={setWhich}
-        options={[
-          { value: 'cash', label: 'Cash' },
-          { value: 'savings', label: 'Savings' },
-        ]}
-      />
-      <p className="text-sm font-semibold tabular-nums">{`Funcial thinks: ${money(computed)}`}</p>
+      {picking && (
+        <AccountField
+          label="Account"
+          value={accountId}
+          onChange={(id) => {
+            setAccountId(id);
+            setErrors((f) => ({ ...f, account: undefined }));
+          }}
+          error={errors.account}
+        />
+      )}
+      {row && (
+        <p className="text-sm font-semibold tabular-nums">{`Funcial thinks: ${money(computed)}`}</p>
+      )}
       <MoneyField
         variant="line"
         label="Actual balance"
@@ -63,10 +87,14 @@ function ActualBalanceForm({ initial, onDone }: { initial: Which; onDone(): void
         value={actual}
         onChange={(v) => {
           setActual(v);
-          setError(undefined);
+          setErrors((f) => ({ ...f, actual: undefined }));
         }}
-        error={error}
-        hint="What your bank or wallet shows right now. The difference is saved as a correction."
+        error={errors.actual}
+        hint={
+          row?.account.kind === 'credit'
+            ? 'What you owe on it right now. The difference is saved as a correction.'
+            : 'What your bank or wallet shows right now. The difference is saved as a correction.'
+        }
       />
       {matches && <p className="text-success text-sm font-semibold">Already matches.</p>}
       <div className="flex justify-end gap-2">
@@ -81,19 +109,29 @@ function ActualBalanceForm({ initial, onDone }: { initial: Which; onDone(): void
   );
 }
 
-/** `initial` is the balance chosen when it opens: cash unless the caller knows better. */
+/**
+ * Corrects what an account holds (for a credit card, what is owed on it) to what the bank shows.
+ * Opened for one account (`accountId`), it says which in its description; opened without one, the
+ * person picks it.
+ */
 export function ActualBalanceDialog({
   open,
-  initial = 'cash',
+  accountId = null,
   onClose,
 }: {
   open: boolean;
-  initial?: Which;
+  accountId?: string | null;
   onClose(): void;
 }) {
+  const all = useApp((s) => s.data.tables.account);
   return (
-    <Dialog open={open} title="Set actual balance" onClose={onClose}>
-      {open && <ActualBalanceForm initial={initial} onDone={onClose} />}
+    <Dialog
+      open={open}
+      title="Set actual balance"
+      description={accountId === null ? undefined : accountName(all, accountId)}
+      onClose={onClose}
+    >
+      {open && <ActualBalanceForm key={accountId ?? ''} accountId={accountId} onDone={onClose} />}
     </Dialog>
   );
 }

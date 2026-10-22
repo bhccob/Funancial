@@ -2,10 +2,12 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it } from 'vitest';
+import type { Account } from '@/domain/entities';
 import { formatMoney } from '@/domain/money';
 import { useAmountsHidden } from '@/store/useAmountsHidden';
 import { renderWithStore } from '@/test/appStoreStub';
 import {
+  makeAccount,
   makeDebt,
   makeDividend,
   makeExpense,
@@ -35,6 +37,49 @@ const pair = (el: Element | null) => [
   el?.lastElementChild?.textContent,
 ];
 
+const OPENED = '2026-09-01';
+
+const main = (openingBalance: number) => makeAccount({ openingBalance, openingDate: OPENED });
+const savings = makeAccount({
+  id: 'acct-savings',
+  name: 'Savings',
+  kind: 'savings',
+  skin: 'mint',
+  inAvailable: false,
+  openingBalance: 3_000_00,
+  openingDate: OPENED,
+  order: 1,
+});
+const passive = makeAccount({
+  id: 'acct-passive',
+  name: 'Passive income',
+  kind: 'savings',
+  skin: 'amber',
+  inAvailable: false,
+  openingBalance: 0,
+  openingDate: OPENED,
+  order: 2,
+});
+/** Owes 230.00, paid in full, with no due day: its payment is due today. */
+const visa: Account = makeAccount({
+  id: 'visa',
+  name: 'Visa',
+  kind: 'credit',
+  skin: 'violet',
+  inAvailable: false,
+  openingBalance: 230_00,
+  openingDate: OPENED,
+  order: 3,
+  credit: {
+    limit: null,
+    statementDay: null,
+    dueDay: null,
+    payInFull: true,
+    minimumPayment: 0,
+    interestRate: 0,
+  },
+});
+
 type Seed = {
   cash?: number;
   /** Without it there is no Visa and no subscription: no bill of any kind. */
@@ -45,47 +90,29 @@ type Seed = {
 };
 
 /**
- * October 14th on a real store, so a correction really changes Home. Cash 3,680 (5,000 less 1,320
- * spent), savings 3,000, bills of 54.99, the Visa at 230 and a car loan at 1,000. With `reserve`
- * 70 of the Fun limit is held back; `invested` holds 1,000 in shares and `passive` pays 25 into
- * the passive bucket.
+ * October 14th on a real store, so a correction really changes Home. Main account holds 3,680
+ * (5,000 less 1,320 spent), Savings 3,000. Streamflix (15.99) and the gym (39.00) renew on Main
+ * account this month and Tunely (10.99) on the Visa, which owes 230; a car loan is at 1,000. With
+ * `reserve` 70 of the Fun limit is held back; `invested` holds 1,000 in shares and `passive` pays
+ * 25 into a Passive income account.
  */
 async function renderHome({
   cash = 5_000_00,
   bills = true,
   reserve = false,
   invested = false,
-  passive = false,
+  passive: withPassive = false,
 }: Seed = {}) {
   const { store } = await freshRealStore();
   const { put } = store.getState();
-  await put(
-    'profile',
-    makeProfile({
-      openingDate: '2026-09-01',
-      openingCash: cash,
-      openingSavings: 3_000_00,
-      salary: null,
-    }),
-  );
-  if (bills) {
-    await put(
-      'debt',
-      makeDebt({ id: 'visa', name: 'Visa', openingBalance: 230_00, openingDate: '2026-09-01' }),
-    );
-  }
+  await put('profile', makeProfile({ openingDate: OPENED, salary: null }));
+  await put('account', main(cash));
+  await put('account', savings);
+  if (withPassive) await put('account', passive);
+  if (bills) await put('account', visa);
   await put(
     'debt',
-    makeDebt({
-      id: 'car',
-      name: 'Car loan',
-      kind: 'loan',
-      openingBalance: 1_000_00,
-      openingDate: '2026-09-01',
-      creditLimit: null,
-      dueDay: null,
-      payInFull: false,
-    }),
+    makeDebt({ id: 'car', name: 'Car loan', openingBalance: 1_000_00, openingDate: OPENED }),
   );
   for (const [date, category, amount] of [
     ['2026-10-01', 'rent', 1_200_00],
@@ -105,6 +132,15 @@ async function renderHome({
       'subscription',
       makeSubscription({ name: 'FitHub Gym', amount: 39_00, nextRenewal: '2026-10-28' }),
     );
+    await put(
+      'subscription',
+      makeSubscription({
+        name: 'Tunely',
+        amount: 10_99,
+        nextRenewal: '2026-10-25',
+        accountId: 'visa',
+      }),
+    );
   }
   await put(
     'budgetLimit',
@@ -119,10 +155,10 @@ async function renderHome({
       }),
     );
   }
-  if (passive) {
+  if (withPassive) {
     await put(
       'dividend',
-      makeDividend({ paidOn: '2026-10-08', amount: 25_00, bucket: 'passive', status: 'confirmed' }),
+      makeDividend({ paidOn: '2026-10-08', amount: 25_00, accountId: 'acct-passive' }),
     );
   }
   renderWithStore(
@@ -154,6 +190,7 @@ const row = (sheet: HTMLElement, label: string) =>
   within(sheet).getByText(label).closest('li') as HTMLElement;
 const total = (sheet: HTMLElement, label: string) =>
   pair(within(sheet).getByText(label).parentElement);
+const correction = () => screen.getByRole('dialog', { name: 'Set actual balance' });
 
 describe('the Available to spend sheet', () => {
   it('opens from the number', async () => {
@@ -161,9 +198,9 @@ describe('the Available to spend sheet', () => {
     const button = trigger('Available to spend');
     // Its name is the amount you see, then what it does.
     expect(button).toHaveAccessibleName(
-      named(usd(6_395_01), 'Available to spend: see and correct'),
+      named(usd(3_395_01), 'Available to spend: see and correct'),
     );
-    expect(button).toHaveTextContent(usd(6_395_01));
+    expect(button).toHaveTextContent(usd(3_395_01));
     // The "?" and the eye are buttons of their own, never inside it.
     for (const other of ['What is available to spend?', 'Hide amounts']) {
       const el = screen.getByRole('button', { name: other });
@@ -177,34 +214,58 @@ describe('the Available to spend sheet', () => {
   it('shows what the number is made of, top to bottom', async () => {
     await renderHome({ reserve: true });
     const sheet = await openSheet('Available to spend');
+    // Savings are shown apart, as Saved: not a row here. Tunely is on the Visa, so it is not among
+    // the bills: it comes back in the card's payment.
     expect(rows(sheet)).toEqual([
-      ['Cash', usd(3_680_00)],
-      ['Savings', usd(3_000_00)],
+      ['Main account', usd(3_680_00)],
       ['Bills still to come this month', usd(-54_99)],
       ['Card payments due', usd(-230_00)],
       ['Reserved for limits', usd(-70_00)],
     ]);
-    expect(total(sheet, '= Available to spend')).toEqual(['= Available to spend', usd(6_325_01)]);
+    expect(total(sheet, '= Available to spend')).toEqual(['= Available to spend', usd(3_325_01)]);
+    expect(within(sheet).queryByText('Savings')).not.toBeInTheDocument();
+  });
+
+  it('lists every account that counts in Available, in carousel order', async () => {
+    const store = await renderHome();
+    await store.getState().put(
+      'account',
+      makeAccount({
+        id: 'wallet',
+        name: 'Wallet',
+        kind: 'cash',
+        skin: 'amber',
+        openingBalance: 40_00,
+        openingDate: OPENED,
+        order: 4,
+      }),
+    );
+    const sheet = await openSheet('Available to spend');
+    expect(rows(sheet).map(([label]) => label)).toEqual([
+      'Main account',
+      'Wallet',
+      'Bills still to come this month',
+      'Card payments due',
+    ]);
+    expect(total(sheet, '= Available to spend')[1]).toBe(usd(3_435_01));
   });
 
   it('shows a bill row of nothing as a plain zero, never a minus zero', async () => {
     await renderHome({ bills: false });
     const sheet = await openSheet('Available to spend');
     expect(rows(sheet)).toEqual([
-      ['Cash', usd(3_680_00)],
-      ['Savings', usd(3_000_00)],
+      ['Main account', usd(3_680_00)],
       ['Bills still to come this month', usd(0)],
       ['Card payments due', usd(0)],
     ]);
-    expect(total(sheet, '= Available to spend')[1]).toBe(usd(6_680_00));
+    expect(total(sheet, '= Available to spend')[1]).toBe(usd(3_680_00));
   });
 
   it('leaves out Reserved for limits when nothing is reserved', async () => {
     await renderHome();
     const sheet = await openSheet('Available to spend');
     expect(rows(sheet).map(([label]) => label)).toEqual([
-      'Cash',
-      'Savings',
+      'Main account',
       'Bills still to come this month',
       'Card payments due',
     ]);
@@ -215,6 +276,7 @@ describe('the Available to spend sheet', () => {
     ['with a reserve', { reserve: true }],
     ['without one', {}],
     ['with cash overspent below zero', { cash: 1_000_00, reserve: true }],
+    ['with savings, passive income and investments', { passive: true, invested: true }],
   ])('adds up to the number on Home, to the cent, %s', async (_name, seed) => {
     await renderHome(seed);
     const shown = minor(trigger('Available to spend').textContent);
@@ -225,48 +287,48 @@ describe('the Available to spend sheet', () => {
     expect(sum).toBe(shown);
   });
 
-  it('opens the correction on the balance of the row it was tapped on', async () => {
+  it('opens the correction on the account of the row it was tapped on', async () => {
     await renderHome();
     const sheet = await openSheet('Available to spend');
-
-    // The buttons are told apart by name: "Correct Savings", not two of "Correct".
-    const correctSavings = within(row(sheet, 'Savings')).getByRole('button', {
-      name: 'Correct Savings',
-    });
-    await userEvent.click(correctSavings);
-    let dialog = screen.getByRole('dialog', { name: 'Set actual balance' });
-    expect(within(dialog).getByRole('radio', { name: 'Savings' })).toBeChecked();
-    expect(within(dialog).getByText(`Funcial thinks: ${usd(3_000_00)}`)).toBeInTheDocument();
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
-
-    await userEvent.click(within(row(sheet, 'Cash')).getByRole('button', { name: 'Correct Cash' }));
-    dialog = screen.getByRole('dialog', { name: 'Set actual balance' });
-    expect(within(dialog).getByRole('radio', { name: 'Cash' })).toBeChecked();
+    // The button is named by its row: "Correct Main account".
+    await userEvent.click(
+      within(row(sheet, 'Main account')).getByRole('button', { name: 'Correct Main account' }),
+    );
+    const dialog = correction();
+    expect(dialog).toHaveAccessibleDescription('Main account');
+    // It corrects that account: there is no other to pick.
+    expect(within(dialog).queryByLabelText('Account')).not.toBeInTheDocument();
     expect(within(dialog).getByText(`Funcial thinks: ${usd(3_680_00)}`)).toBeInTheDocument();
   });
 
   it('puts a correction into the rows, the total and Home', async () => {
-    await renderHome();
+    const store = await renderHome();
     const sheet = await openSheet('Available to spend');
-    await userEvent.click(within(row(sheet, 'Cash')).getByRole('button', { name: 'Correct Cash' }));
-    const dialog = screen.getByRole('dialog', { name: 'Set actual balance' });
-    await userEvent.type(within(dialog).getByLabelText('Actual balance'), '3,700');
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+    await userEvent.click(
+      within(row(sheet, 'Main account')).getByRole('button', { name: 'Correct Main account' }),
+    );
+    await userEvent.type(within(correction()).getByLabelText('Actual balance'), '3,700');
+    await userEvent.click(within(correction()).getByRole('button', { name: 'Save' }));
 
     await waitFor(() =>
       expect(screen.queryByRole('dialog', { name: 'Set actual balance' })).not.toBeInTheDocument(),
     );
-    // Back on the sheet, which is still open and already shows the new cash.
+    expect(store.getState().data.tables.transaction).toEqual([
+      expect.objectContaining({ type: 'adjustment', amount: 20_00, toAccountId: 'acct-main' }),
+    ]);
+    // Back on the sheet, which is still open and already shows the new balance.
     expect(sheet).toBeVisible();
-    expect(pair(row(sheet, 'Cash'))).toEqual(['Cash', usd(3_700_00)]);
-    expect(total(sheet, '= Available to spend')[1]).toBe(usd(6_415_01));
-    expect(trigger('Available to spend')).toHaveTextContent(usd(6_415_01));
+    expect(pair(row(sheet, 'Main account'))).toEqual(['Main account', usd(3_700_00)]);
+    expect(total(sheet, '= Available to spend')[1]).toBe(usd(3_415_01));
+    expect(trigger('Available to spend')).toHaveTextContent(usd(3_415_01));
     // Net worth rose by the same 20.00: 3,700 + 3,000 − 230 − 1,000.
     expect(
       within(screen.getByRole('region', { name: 'Net worth' })).getByText(usd(5_470_00)),
     ).toBeInTheDocument();
     // The correction is focused back on the button that asked for it.
-    expect(within(row(sheet, 'Cash')).getByRole('button', { name: 'Correct Cash' })).toHaveFocus();
+    expect(
+      within(row(sheet, 'Main account')).getByRole('button', { name: 'Correct Main account' }),
+    ).toHaveFocus();
   });
 
   it('shows no amount while amounts are hidden', async () => {
@@ -274,7 +336,7 @@ describe('the Available to spend sheet', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Hide amounts' }));
     const sheet = await openSheet('Available to spend');
     expect(sheet.textContent).not.toMatch(/\d/);
-    expect(rows(sheet).map(([, value]) => value)).toEqual(['••••', '••••', '••••', '••••', '••••']);
+    expect(rows(sheet).map(([, value]) => value)).toEqual(['••••', '••••', '••••', '••••']);
     expect(total(sheet, '= Available to spend')[1]).toBe('••••');
   });
 });
@@ -289,7 +351,7 @@ describe('the Net worth sheet', () => {
     await openSheet('Net worth');
   });
 
-  it('lists what you have, then what you owe', async () => {
+  it('lists what you have, savings then bank and cash, then what you owe', async () => {
     await renderHome();
     const sheet = await openSheet('Net worth');
     expect(
@@ -298,9 +360,8 @@ describe('the Net worth sheet', () => {
         .map((h) => h.textContent),
     ).toEqual(['What you have', 'What you owe']);
     expect(rows(sheet)).toEqual([
-      ['Cash', usd(3_680_00)],
       ['Savings', usd(3_000_00)],
-      ['Passive income received', usd(0)],
+      ['Main account', usd(3_680_00)],
       ['Visa', usd(-230_00)],
       ['Car loan', usd(-1_000_00)],
     ]);
@@ -314,9 +375,9 @@ describe('the Net worth sheet', () => {
     await renderHome({ invested: true, passive: true });
     const sheet = await openSheet('Net worth');
     expect(rows(sheet).slice(0, 4)).toEqual([
-      ['Cash', usd(3_680_00)],
       ['Savings', usd(3_000_00)],
-      ['Passive income received', usd(25_00)],
+      ['Passive income', usd(25_00)],
+      ['Main account', usd(3_680_00)],
       ['Investments', usd(1_000_00)],
     ]);
     expect(
@@ -325,7 +386,7 @@ describe('the Net worth sheet', () => {
     expect(total(sheet, '= Net worth')[1]).toBe(usd(6_475_00));
   });
 
-  it('gives Correct to cash and savings only, and Edit to each card and loan', async () => {
+  it('gives Correct to each account that holds money, and Edit to each card and loan', async () => {
     await renderHome({ invested: true, passive: true });
     const sheet = await openSheet('Net worth');
     const buttons = Object.fromEntries(
@@ -337,13 +398,21 @@ describe('the Net worth sheet', () => {
       ]),
     );
     expect(buttons).toEqual({
-      Cash: ['Correct'],
       Savings: ['Correct'],
-      'Passive income received': [],
+      'Passive income': ['Correct'],
+      'Main account': ['Correct'],
       Investments: [],
       Visa: ['Edit'],
       'Car loan': ['Edit'],
     });
+  });
+
+  it('leaves an archived account out', async () => {
+    const store = await renderHome({ passive: true });
+    await store.getState().put('account', { ...passive, archivedOn: '2026-10-14' });
+    const sheet = await openSheet('Net worth');
+    expect(within(sheet).queryByText('Passive income')).not.toBeInTheDocument();
+    expect(total(sheet, '= Net worth')[1]).toBe(usd(5_450_00));
   });
 
   it.each([
@@ -359,42 +428,80 @@ describe('the Net worth sheet', () => {
     expect(sum).toBe(shown);
   });
 
-  it('opens the correction on the balance of the row it was tapped on', async () => {
+  it('opens the correction on the account of the row it was tapped on', async () => {
     await renderHome();
     const sheet = await openSheet('Net worth');
     await userEvent.click(
       within(row(sheet, 'Savings')).getByRole('button', { name: 'Correct Savings' }),
     );
-    const dialog = screen.getByRole('dialog', { name: 'Set actual balance' });
-    expect(within(dialog).getByRole('radio', { name: 'Savings' })).toBeChecked();
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    expect(correction()).toHaveAccessibleDescription('Savings');
+    expect(within(correction()).getByText(`Funcial thinks: ${usd(3_000_00)}`)).toBeInTheDocument();
+    await userEvent.click(within(correction()).getByRole('button', { name: 'Cancel' }));
 
-    await userEvent.click(within(row(sheet, 'Cash')).getByRole('button', { name: 'Correct Cash' }));
-    expect(
-      within(screen.getByRole('dialog', { name: 'Set actual balance' })).getByRole('radio', {
-        name: 'Cash',
+    await userEvent.click(
+      within(row(sheet, 'Main account')).getByRole('button', { name: 'Correct Main account' }),
+    );
+    expect(correction()).toHaveAccessibleDescription('Main account');
+    expect(within(correction()).getByText(`Funcial thinks: ${usd(3_680_00)}`)).toBeInTheDocument();
+  });
+
+  it('writes a correction of Savings to the savings account', async () => {
+    const store = await renderHome();
+    const sheet = await openSheet('Net worth');
+    await userEvent.click(
+      within(row(sheet, 'Savings')).getByRole('button', { name: 'Correct Savings' }),
+    );
+    await userEvent.type(within(correction()).getByLabelText('Actual balance'), '3,050');
+    await userEvent.click(within(correction()).getByRole('button', { name: 'Save' }));
+
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'Set actual balance' })).not.toBeInTheDocument(),
+    );
+    expect(store.getState().data.tables.transaction).toEqual([
+      expect.objectContaining({
+        type: 'adjustment',
+        amount: 50_00,
+        fromAccountId: null,
+        toAccountId: 'acct-savings',
+        date: '2026-10-14',
       }),
-    ).toBeChecked();
+    ]);
+    expect(pair(row(sheet, 'Savings'))).toEqual(['Savings', usd(3_050_00)]);
+    expect(total(sheet, '= Net worth')[1]).toBe(usd(5_500_00));
+    // Savings are not part of Available, which stays where it was.
+    expect(trigger('Available to spend')).toHaveTextContent(usd(3_395_01));
   });
 
   it('adds a card paid past its balance, and shows a settled loan as a plain zero', async () => {
     const store = await renderHome();
     // 280 against the Visa's 230 leaves a 50 credit; 1,000 settles the car loan. Net worth is
-    // unchanged by paying a debt: the money moved from cash to what is owed.
-    const paid = (debtId: string, type: 'card_payment' | 'debt_payment', amount: number) =>
-      store
-        .getState()
-        .put(
-          'transaction',
-          makeTransaction({ type, amount, date: '2026-10-10', from: 'cash', to: null, debtId }),
-        );
-    await paid('visa', 'card_payment', 280_00);
-    await paid('car', 'debt_payment', 1_000_00);
+    // unchanged by paying a debt: the money moved from Main account to what is owed.
+    const { put } = store.getState();
+    await put(
+      'transaction',
+      makeTransaction({
+        type: 'card_payment',
+        amount: 280_00,
+        date: '2026-10-10',
+        fromAccountId: 'acct-main',
+        toAccountId: 'visa',
+      }),
+    );
+    await put(
+      'transaction',
+      makeTransaction({
+        type: 'debt_payment',
+        amount: 1_000_00,
+        date: '2026-10-10',
+        fromAccountId: 'acct-main',
+        toAccountId: null,
+        debtId: 'car',
+      }),
+    );
     const sheet = await openSheet('Net worth');
     expect(rows(sheet)).toEqual([
-      ['Cash', usd(2_400_00)],
       ['Savings', usd(3_000_00)],
-      ['Passive income received', usd(0)],
+      ['Main account', usd(2_400_00)],
       ['Visa', usd(50_00)],
       ['Car loan', usd(0)],
     ]);
@@ -440,9 +547,9 @@ describe('the Net worth sheet', () => {
   });
 
   it('says so when there is nothing owed', async () => {
-    const store = await renderHome();
+    const store = await renderHome({ bills: false });
     // The same Home with no card and no loan.
-    for (const id of ['visa', 'car']) await store.getState().remove('debt', id);
+    await store.getState().remove('debt', 'car');
     const sheet = await openSheet('Net worth');
     expect(within(sheet).getByText('No cards or loans.')).toBeInTheDocument();
     expect(total(sheet, '= Net worth')[1]).toBe(usd(6_680_00));

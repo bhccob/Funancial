@@ -453,14 +453,14 @@ export function OnboardingWizard({ onFinishing }: { onFinishing?(finishing: bool
             />
             <MoneyField
               variant="line"
-              label="Cash & checking"
+              label="In your bank account"
               currency={currency}
               value={cash}
               onChange={setCash}
             />
             <MoneyField
               variant="line"
-              label="Savings"
+              label="In savings"
               currency={currency}
               value={savings}
               onChange={setSavings}
@@ -508,7 +508,7 @@ export function OnboardingWizard({ onFinishing }: { onFinishing?(finishing: bool
             <ScreenHeader
               eyebrow="Your cards"
               title="Credit cards"
-              lead="Card spending counts toward your limits right away and is paid from cash later. Skip this if you don't use one."
+              lead="Card spending counts toward your limits right away and is paid from your bank account later. Skip this if you don't use one."
             />
             {cards.length > 0 && (
               <ul className="divide-border border-border divide-y border-y">

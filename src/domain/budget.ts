@@ -201,19 +201,50 @@ export function reservedTotal(data: DataSnapshot, today: LocalDate, weekStartsOn
 
 const sumBalances = (rows: AccountRow[]) => rows.reduce((s, r) => s + r.balance, 0);
 
+/** What Available to spend is made of, each part as it is taken off (bills and cards positive). */
+export type AvailableParts = {
+  /** The accounts that count, in the order they came in. */
+  accounts: AccountRow[];
+  /** The subscription bills charged to those accounts. */
+  bills: number;
+  /** Every card bill. */
+  cards: number;
+  reserved: number;
+  /** `accounts` less `bills`, `cards` and `reserved`: Available to spend. */
+  total: number;
+};
+
 /**
- * Available to spend: what the accounts that count in Available hold, less the subscription bills
- * charged to those accounts, every card bill, and what reserved limits hold back. A subscription
- * on a credit card is not taken off: it lands on the card and comes back as the card's bill. A
- * credit card never counts, whatever its `inAvailable` says: what it shows is owed, not held.
+ * Available to spend, part by part: what the accounts that count in Available hold, less the
+ * subscription bills charged to those accounts, every card bill, and what reserved limits hold
+ * back. A subscription on a credit card is not taken off: it lands on the card and comes back as
+ * the card's bill. A credit card never counts, whatever its `inAvailable` says: what it shows is
+ * owed, not held.
  */
+export function availableParts(
+  rows: AccountRow[],
+  bills: Bill[],
+  reserved: number,
+): AvailableParts {
+  const accounts = rows.filter((r) => r.account.inAvailable && r.account.kind !== 'credit');
+  const counted = new Set(accounts.map((r) => r.account.id));
+  const sum = (list: Bill[]) => list.reduce((s, b) => s + b.amount, 0);
+  const subscriptions = sum(
+    bills.filter((b) => b.kind === 'subscription' && counted.has(b.accountId)),
+  );
+  const cards = sum(bills.filter((b) => b.kind === 'card'));
+  return {
+    accounts,
+    bills: subscriptions,
+    cards,
+    reserved,
+    total: sumBalances(accounts) - subscriptions - cards - reserved,
+  };
+}
+
+/** Available to spend: the total of `availableParts`. */
 export function availableBalance(rows: AccountRow[], bills: Bill[], reserved: number): number {
-  const counted = rows.filter((r) => r.account.inAvailable && r.account.kind !== 'credit');
-  const inAvailable = new Set(counted.map((r) => r.account.id));
-  const billed = bills
-    .filter((b) => b.kind === 'card' || inAvailable.has(b.accountId))
-    .reduce((s, b) => s + b.amount, 0);
-  return sumBalances(counted) - billed - reserved;
+  return availableParts(rows, bills, reserved).total;
 }
 
 /** Cash in pocket: what the cash accounts hold, with nothing taken off. */

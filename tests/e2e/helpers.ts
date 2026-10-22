@@ -55,8 +55,8 @@ export async function onboard(page: Page, opts: OnboardOptions = {}) {
   else await skipAccount(page);
   await page.getByLabel('Currency').selectOption(opts.currency ?? 'USD');
   await next(page);
-  await page.getByLabel('Cash & checking', { exact: true }).fill(opts.cash ?? '0');
-  await page.getByLabel('Savings', { exact: true }).fill(opts.savings ?? '0');
+  await page.getByLabel('In your bank account', { exact: true }).fill(opts.cash ?? '0');
+  await page.getByLabel('In savings', { exact: true }).fill(opts.savings ?? '0');
   await next(page);
   if (opts.salary) {
     await page.getByLabel('Monthly take-home pay').fill(opts.salary.amount);

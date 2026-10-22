@@ -2,14 +2,14 @@ import { useState, type FormEvent } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Dialog } from '@/components/ui/Dialog';
 import { MoneyField } from '@/components/ui/MoneyField';
-import { RadioGroup } from '@/components/ui/RadioGroup';
 import { ShareStepper } from '@/components/ui/ShareStepper';
 import { underlineTab } from '@/components/ui/underlineTab';
-import type { Holding, Sale } from '@/domain/entities';
+import type { Holding } from '@/domain/entities';
 import { formatDecimal, parseDecimal } from '@/domain/money';
 import { holdingPrice, holdingRate, toMinor } from '@/domain/portfolio';
 import { NO_PROCEEDS, planSale, type SalePlan } from '@/domain/sales';
 import { DateField } from '@/features/add/DateField';
+import { AccountField, NOT_CREDIT, useStartAccountId } from '@/features/shared/AccountField';
 import { formatShares, sharesText } from '@/lib/format';
 import { useAction } from '@/lib/useAction';
 import { FUTURE } from '@/store/financeActions';
@@ -20,12 +20,11 @@ import { arrow, tone } from './gain';
 import { SummaryLine } from './SummaryLine';
 import { unreadable } from './unreadable';
 
-type To = Sale['to'];
-
 interface Errors {
   shares?: string;
   price?: string;
   date?: string;
+  to?: string;
 }
 
 function SellForm({ holding, onDone }: { holding: Holding; onDone(): void }) {
@@ -44,7 +43,9 @@ function SellForm({ holding, onDone }: { holding: Holding; onDone(): void }) {
     price !== null && rate !== null ? toMinor(price, rate, currency) : null,
   );
   const [date, setDate] = useState(today);
-  const [to, setTo] = useState<To>('cash');
+  // The account the money goes into: the default one unless another is picked, never a card.
+  const startAccount = useStartAccountId(NOT_CREDIT);
+  const [to, setTo] = useState(startAccount);
   const [errors, setErrors] = useState<Errors>({});
   const [busy, setBusy] = useState(false);
 
@@ -83,13 +84,19 @@ function SellForm({ holding, onDone }: { holding: Holding; onDone(): void }) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) found.date = 'Choose the day you sold it';
     else if (date > today) found.date = FUTURE;
     else if (date < holding.purchaseDate) found.date = saleBeforePurchase(holding.purchaseDate);
+    if (!to) found.to = 'Pick an account.';
     setErrors(found);
     if (Object.keys(found).length > 0) return;
 
     setBusy(true);
     const ok = await run(
       () =>
-        sellHolding(holding.id, { shares: n!, pricePerShareMinor: perShare!, soldOn: date, to }),
+        sellHolding(holding.id, {
+          shares: n!,
+          pricePerShareMinor: perShare!,
+          soldOn: date,
+          toAccountId: to,
+        }),
       { success: `Sold ${formatShares(n!)} ${holding.symbol}.` },
     );
     setBusy(false);
@@ -149,15 +156,15 @@ function SellForm({ holding, onDone }: { holding: Holding; onDone(): void }) {
           clear('date');
         }}
       />
-      <RadioGroup<To>
-        variant="underline"
-        legend="Money goes to"
+      <AccountField
+        label="Money goes to"
         value={to}
-        onChange={setTo}
-        options={[
-          { value: 'cash', label: 'Cash' },
-          { value: 'savings', label: 'Savings' },
-        ]}
+        onChange={(id) => {
+          setTo(id);
+          clear('to');
+        }}
+        filter={NOT_CREDIT}
+        error={errors.to}
       />
       <div className="flex flex-col gap-1">
         <SummaryLine label="You get">{plan ? money(plan.proceeds) : '—'}</SummaryLine>

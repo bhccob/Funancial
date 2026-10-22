@@ -1381,4 +1381,32 @@ describe('money only lands on accounts in use', () => {
       amount: 420_000,
     });
   });
+
+  it('confirmIncome lands an income left on an archived account on the account picked', async () => {
+    const { store, actions } = await withArchived();
+    await store.getState().put(
+      'income',
+      makeIncome({
+        id: 'on-old',
+        period: '2026-10',
+        date: '2026-10-10',
+        status: 'expected',
+        accountId: OLD,
+      }),
+    );
+    await refuses(store, [
+      [ARCHIVED, () => actions.confirmIncome('on-old', 4_200_00)],
+      [NOT_CREDIT, () => actions.confirmIncome('on-old', 4_200_00, 'card-1')],
+      [UNKNOWN, () => actions.confirmIncome('on-old', 4_200_00, GONE)],
+    ]);
+    const before = balanceOf(store.getState().data, SAVINGS);
+    await actions.confirmIncome('on-old', 4_100_00, SAVINGS);
+    const data = store.getState().data;
+    expect(data.tables.income.find((i) => i.id === 'on-old')).toMatchObject({
+      status: 'confirmed',
+      amount: 4_100_00,
+      accountId: SAVINGS,
+    });
+    expect(balanceOf(data, SAVINGS)).toBe(before + 4_100_00);
+  });
 });

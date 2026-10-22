@@ -2,7 +2,6 @@ import { cleanup, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it } from 'vitest';
-import type { Dividend } from '@/domain/entities';
 import { formatMoney } from '@/domain/money';
 import { emptySnapshot, type DataSnapshot } from '@/domain/snapshot';
 import { useAmountsHidden } from '@/store/useAmountsHidden';
@@ -20,12 +19,16 @@ const salary = (date: string, amount: number) =>
   makeIncome({ source: 'salary', label: 'Salary', date, amount });
 const extra = (date: string, amount: number, label: string) =>
   makeIncome({ source: 'extra', label, date, amount });
-const paid = (
-  paidOn: string,
-  amount: number,
-  symbol: string,
-  bucket: Dividend['bucket'] = 'cash',
-) => makeDividend({ paidOn, expectedPayDate: paidOn, amount, symbol, bucket });
+/** A confirmed payout, into an account (Main account unless named) or reinvested. */
+const paid = (paidOn: string, amount: number, symbol: string, to = 'acct-main') =>
+  makeDividend({
+    paidOn,
+    expectedPayDate: paidOn,
+    amount,
+    symbol,
+    accountId: to === 'reinvest' ? null : to,
+    reinvested: to === 'reinvest',
+  });
 
 /**
  * Twelve months, November 2025 to October 2026, adding up to 12,000.00 (an average of 1,000.00).
@@ -47,7 +50,7 @@ function filled(): DataSnapshot {
     makeIncome({ source: 'salary', date: '2026-09-25', amount: 9_999_00, status: 'skipped' }),
   );
   data.tables.dividend.push(
-    paid('2026-05-20', 1_487_00, 'VWRL', 'passive'),
+    paid('2026-05-20', 1_487_00, 'VWRL', 'acct-passive'),
     paid('2026-10-03', 13_00, 'KO', 'reinvest'),
   );
   return data;
@@ -245,7 +248,7 @@ describe('Income page with nothing yet', () => {
       makeIncome({ source: 'salary', date: '2026-09-25', status: 'skipped' }),
     );
     data.tables.dividend.push(
-      makeDividend({ status: 'skipped', amount: 0, bucket: null, paidOn: '2026-10-01' }),
+      makeDividend({ status: 'skipped', amount: 0, accountId: null, paidOn: '2026-10-01' }),
     );
     renderIncome(data);
     expect(screen.getByText('No income yet')).toBeInTheDocument();

@@ -267,13 +267,19 @@ export function createFinanceActions(store: StoreApi<AppState>) {
       return income;
     },
 
-    /** Confirms an expected income into the account it names, which must be one income counts in. */
-    async confirmIncome(id: string, amount: number) {
+    /**
+     * Confirms an expected income into `accountId` (the account it names unless another is picked),
+     * which must be one income counts in. Picking another is how a salary expected on an account
+     * archived since can still be confirmed.
+     */
+    async confirmIncome(id: string, amount: number, accountId?: string) {
       const income = find('income', id);
-      incomeAccount(state().data, income.accountId, today());
+      const to = accountId ?? income.accountId;
+      incomeAccount(state().data, to, today());
       await state().put('income', {
         ...income,
         amount,
+        accountId: to,
         status: 'confirmed',
         updatedAt: nowIso(),
       });

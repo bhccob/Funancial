@@ -2,7 +2,7 @@ import { act, cleanup, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ReminderSettings } from '@/domain/entities';
+import type { Account, CreditTerms, ReminderSettings } from '@/domain/entities';
 import { EXAMPLES } from '@/domain/examples';
 import { computeGameView } from '@/domain/game/engine';
 import { levelStart } from '@/domain/game/levels';
@@ -17,8 +17,8 @@ import { expectHelpTip } from '@/test/helpTip';
 import { fakeNotifier, onPhone, type FakeNotifier } from '@/test/fakeNotifier';
 import {
   localIso,
+  makeAccount,
   makeCheckIn,
-  makeDebt,
   makeExpense,
   makeGoal,
   makeHolding,
@@ -78,29 +78,55 @@ const SEGMENT = /^(Spent so far|Bills still to come|Left in your monthly limit):
 /** A Wednesday: with weeks starting Monday the week runs 10-12 to 10-18. */
 const TODAY = '2026-10-14';
 
+const OPENED = '2026-09-01';
+
+const mainAccount = (openingBalance = 5_000_00): Account =>
+  makeAccount({ openingBalance, openingDate: OPENED });
+
+/** The Visa: owes 230.00 and is paid in full on the 21st, unless its terms say otherwise. */
+const visaCard = (terms: Partial<CreditTerms> = {}): Account =>
+  makeAccount({
+    id: 'visa',
+    name: 'Visa',
+    kind: 'credit',
+    skin: 'violet',
+    inAvailable: false,
+    openingBalance: 230_00,
+    openingDate: OPENED,
+    order: 3,
+    credit: {
+      limit: null,
+      statementDay: null,
+      dueDay: 21,
+      payInFull: true,
+      minimumPayment: 0,
+      interestRate: 0,
+      ...terms,
+    },
+  });
+
 /**
- * A month in progress. Spent in October: rent 1,200, food 90 (all of it this week), fun 30.
+ * A month in progress. Main account opened with 5,000 and Savings with 3,000 on Sep 1. Spent in
+ * October from Main account: rent 1,200, food 90 (all of it this week), fun 30.
  * Bills to come: Streamflix 15.99 (10-20), the Visa 230 (10-21), FitHub 39 (10-28).
  * Limits: food weekly 60 (150%), overall monthly 1,500 (88%), fun monthly 100 (30%).
  */
 function monthData({ income = 0 }: { income?: number } = {}): DataSnapshot {
   const data = emptySnapshot();
-  data.tables.profile = [
-    makeProfile({
-      name: 'Test Player',
-      openingDate: '2026-09-01',
-      openingCash: 5_000_00,
-      openingSavings: 3_000_00,
+  data.tables.profile = [makeProfile({ name: 'Test Player', openingDate: OPENED })];
+  data.tables.account = [
+    mainAccount(),
+    makeAccount({
+      id: 'acct-savings',
+      name: 'Savings',
+      kind: 'savings',
+      skin: 'mint',
+      inAvailable: false,
+      openingBalance: 3_000_00,
+      openingDate: OPENED,
+      order: 1,
     }),
-  ];
-  data.tables.debt = [
-    makeDebt({
-      id: 'visa',
-      name: 'Visa',
-      openingBalance: 230_00,
-      openingDate: '2026-09-01',
-      dueDay: 21,
-    }),
+    visaCard(),
   ];
   data.tables.expense = [
     ['2026-10-01', 'rent', 1_200_00],
@@ -138,7 +164,7 @@ function monthData({ income = 0 }: { income?: number } = {}): DataSnapshot {
   ];
   data.tables.ledger = [makeLedgerEntry({ key: 'seed', xp: 250, coins: 40 })];
   if (income > 0) {
-    data.tables.income = [makeIncome({ amount: income, date: '2026-10-02', bucket: 'cash' })];
+    data.tables.income = [makeIncome({ amount: income, date: '2026-10-02' })];
   }
   return data;
 }
@@ -249,7 +275,8 @@ describe('DashboardScreen hero', () => {
 
   it('shrinks the amount to 40px when it is longer than 11 characters', () => {
     const data = emptySnapshot();
-    data.tables.profile = [makeProfile({ openingCash: 123_456_789, openingSavings: 0 })];
+    data.tables.profile = [makeProfile({ openingDate: OPENED })];
+    data.tables.account = [mainAccount(123_456_789)];
     renderDashboard(data, TODAY);
     const amount = within(region('Available to spend')).getByText(usd(123_456_789));
     expect(usd(123_456_789).length).toBeGreaterThan(11);
@@ -619,17 +646,9 @@ describe('DashboardScreen coming up', () => {
 
   it('says "Minimum payment" for a card that is not paid in full', () => {
     const data = monthData();
-    data.tables.debt = [
-      makeDebt({
-        id: 'visa',
-        name: 'Visa',
-        openingBalance: 230_00,
-        openingDate: '2026-09-01',
-        dueDay: 21,
-        payInFull: false,
-        minimumPayment: 25_00,
-      }),
-    ];
+    data.tables.account = data.tables.account.map((a) =>
+      a.id === 'visa' ? visaCard({ payInFull: false, minimumPayment: 25_00 }) : a,
+    );
     renderDashboard(data, TODAY);
     const row = within(region('Coming up')).getByRole('button', { name: /Visa card payment/ });
     expect(row).toHaveTextContent(`Minimum payment · in 7 days${usd(25_00)}`);
@@ -674,7 +693,7 @@ describe('DashboardScreen net worth', () => {
   it('shows net worth with its monthly change and trend', () => {
     renderDashboard(monthData({ income: 2_000_00 }), TODAY);
     const worth = region('Net worth');
-    // 3,680 + 2,000 cash + 3,000 savings − 230 card; 7,770 at the end of September.
+    // 3,680 + 2,000 on Main account + 3,000 savings − 230 card; 7,770 at the end of September.
     expect(within(worth).getByText(usd(8_450_00))).toBeInTheDocument();
     const rise = screen.getByText(`▲ ${usdWhole(680_00)} this month`);
     expect(rise).toHaveClass('text-accent-text');
@@ -683,9 +702,56 @@ describe('DashboardScreen net worth', () => {
         name: `Net worth over the last 30 days, now ${usd(8_450_00)}`,
       }),
     ).toBeInTheDocument();
-    expect(within(worth).getByText(`Cash ${usdWhole(5_680_00)}`)).toBeInTheDocument();
+    // Bank accounts and cash wallets together, savings, and what the cards and loans owe.
+    expect(within(worth).getByText(`Bank & cash ${usdWhole(5_680_00)}`)).toBeInTheDocument();
     expect(within(worth).getByText(`Savings ${usdWhole(3_000_00)}`)).toBeInTheDocument();
     expect(within(worth).getByText(`Debts ${usdWhole(230_00)}`)).toBeInTheDocument();
+  });
+
+  it('counts every savings account in Savings, and leaves archived accounts out', () => {
+    const data = monthData();
+    data.tables.account.push(
+      makeAccount({
+        id: 'acct-passive',
+        name: 'Passive income',
+        kind: 'savings',
+        skin: 'amber',
+        inAvailable: false,
+        openingBalance: 25_00,
+        openingDate: OPENED,
+        order: 2,
+      }),
+      makeAccount({
+        id: 'wallet',
+        name: 'Wallet',
+        kind: 'cash',
+        skin: 'amber',
+        openingBalance: 40_00,
+        openingDate: OPENED,
+        order: 4,
+      }),
+      makeAccount({
+        id: 'old',
+        name: 'Old bank',
+        openingBalance: 999_00,
+        openingDate: OPENED,
+        order: 5,
+        archivedOn: '2026-10-01',
+      }),
+    );
+    renderDashboard(data, TODAY);
+    const worth = region('Net worth');
+    expect(
+      within(worth)
+        .getAllByRole('listitem')
+        .map((li) => li.textContent),
+    ).toEqual([
+      `Bank & cash ${usdWhole(3_720_00)}`,
+      `Savings ${usdWhole(3_025_00)}`,
+      `Debts ${usdWhole(230_00)}`,
+    ]);
+    // 3,720 + 3,025 − 230.
+    expect(within(worth).getByText(usd(6_515_00))).toBeInTheDocument();
   });
 
   it('shows a fall with a down arrow in the danger colour', () => {
@@ -729,7 +795,7 @@ describe('DashboardScreen net worth', () => {
         .getAllByRole('listitem')
         .map((li) => li.textContent),
     ).toEqual([
-      `Cash ${usdWhole(3_680_00)}`,
+      `Bank & cash ${usdWhole(3_680_00)}`,
       `Savings ${usdWhole(3_000_00)}`,
       `Investments ${usdWhole(1_000_00)}`,
       `Debts ${usdWhole(230_00)}`,
@@ -809,15 +875,29 @@ describe('DashboardScreen with nothing set up', () => {
 });
 
 describe('DashboardScreen salary', () => {
-  /** A $3,000.00 salary paid on the 25th, set up on 2026-09-01. */
+  /** A $3,000.00 salary paid on the 25th into Main account, set up on 2026-09-01. */
   const sal = (() => {
     const data = emptySnapshot();
     data.tables.profile = [
       makeProfile({
-        openingDate: '2026-09-01',
+        openingDate: OPENED,
         salary: { monthlyAmount: 3_000_00, payDay: 25 },
       }),
     ];
+    data.tables.account = [
+      mainAccount(),
+      makeAccount({
+        id: 'acct-savings',
+        name: 'Savings',
+        kind: 'savings',
+        skin: 'mint',
+        inAvailable: false,
+        openingDate: OPENED,
+        order: 1,
+      }),
+      visaCard(),
+    ];
+    data.tables.settings = [makeSettings({ defaultAccountId: 'acct-main' })];
     return { data };
   })();
 
@@ -831,7 +911,62 @@ describe('DashboardScreen salary', () => {
     const dialog = screen.getByRole('dialog', { name: 'Confirm salary' });
     expect(within(dialog).getByLabelText('Amount received')).toHaveValue('3,000.00');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Confirm' }));
-    expect(actions.confirmIncome).toHaveBeenCalledWith('salary-2026-10', 300000);
+    expect(actions.confirmIncome).toHaveBeenCalledWith('salary-2026-10', 300000, 'acct-main');
+  });
+
+  it('asks which account the salary went to, starting on its own, and never a card', async () => {
+    const today = '2026-10-25';
+    renderDashboard(applyRecords(sal.data, dueGenerated(sal.data, today)), today);
+    await userEvent.click(screen.getByRole('button', { name: `Confirm ${october} salary` }));
+    const dialog = screen.getByRole('dialog', { name: 'Confirm salary' });
+    const to = within(dialog).getByLabelText('Goes to');
+    expect(to).toHaveValue('acct-main');
+    expect(
+      within(to)
+        .getAllByRole('option')
+        .map((o) => o.textContent),
+    ).toEqual(['Main account', 'Savings']);
+    await userEvent.selectOptions(to, 'Savings');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Confirm' }));
+    expect(actions.confirmIncome).toHaveBeenCalledWith('salary-2026-10', 300000, 'acct-savings');
+  });
+
+  it('confirms a salary left on an archived account into one still in use', async () => {
+    const today = '2026-10-25';
+    const data = applyRecords(sal.data, dueGenerated(sal.data, today));
+    // Main account was archived after the salary was expected on it; Savings is the one left.
+    data.tables.account = data.tables.account.map((a) =>
+      a.id === 'acct-main' ? { ...a, archivedOn: '2026-10-25' } : a,
+    );
+    expect(data.tables.income[0]).toMatchObject({ status: 'expected', accountId: 'acct-main' });
+    renderDashboard(data, today);
+    await userEvent.click(screen.getByRole('button', { name: `Confirm ${october} salary` }));
+    const dialog = screen.getByRole('dialog', { name: 'Confirm salary' });
+    const to = within(dialog).getByLabelText('Goes to');
+    expect(to).toHaveValue('acct-savings');
+    expect(
+      within(to)
+        .getAllByRole('option')
+        .map((o) => o.textContent),
+    ).toEqual(['Savings']);
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Confirm' }));
+    expect(actions.confirmIncome).toHaveBeenCalledWith('salary-2026-10', 300000, 'acct-savings');
+  });
+
+  it('asks for an account when none is left to take the salary', async () => {
+    const today = '2026-10-25';
+    const data = applyRecords(sal.data, dueGenerated(sal.data, today));
+    data.tables.account = data.tables.account.map((a) =>
+      a.kind === 'credit' ? a : { ...a, archivedOn: '2026-10-25' },
+    );
+    renderDashboard(data, today);
+    await userEvent.click(screen.getByRole('button', { name: `Confirm ${october} salary` }));
+    const dialog = screen.getByRole('dialog', { name: 'Confirm salary' });
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Confirm' }));
+    expect(within(dialog).getByLabelText('Goes to')).toHaveAccessibleDescription(
+      'Pick an account.',
+    );
+    expect(actions.confirmIncome).not.toHaveBeenCalled();
   });
 
   it('confirms the salary on a line field', async () => {
@@ -1131,10 +1266,10 @@ describe('DashboardScreen with amounts hidden', () => {
     renderDashboard(monthData(), TODAY);
     // Available, spent so far, bills to come, what is left, the Visa, a subscription, net worth, goals.
     const known = [
-      6_395_01, 1_320_00, 284_99, 180_00, 230_00, 15_99, 39_00, 6_450_00, 3_000_00, 10_000_00,
+      3_395_01, 1_320_00, 284_99, 180_00, 230_00, 15_99, 39_00, 6_450_00, 3_000_00, 10_000_00,
     ];
     expect(digitRuns()).toEqual(
-      expect.arrayContaining(['6,395.01', '1,320', '284.99', '6,450.00']),
+      expect.arrayContaining(['3,395.01', '1,320', '284.99', '6,450.00']),
     );
 
     await userEvent.click(screen.getByRole('button', { name: 'Hide amounts' }));
@@ -1181,8 +1316,9 @@ describe('DashboardScreen with amounts hidden', () => {
   it('calls a move under the smallest whole unit no change, hidden or shown', async () => {
     const withIncome = (cents: number) => {
       const data = emptySnapshot();
-      data.tables.profile = [makeProfile({ openingDate: '2026-09-01' })];
-      data.tables.income = [makeIncome({ amount: cents, date: '2026-10-02', bucket: 'cash' })];
+      data.tables.profile = [makeProfile({ openingDate: OPENED })];
+      data.tables.account = [mainAccount()];
+      data.tables.income = [makeIncome({ amount: cents, date: '2026-10-02' })];
       return data;
     };
     // 49 cents rounds to $0 and 50 to $1, as the whole-dollar text would have said.

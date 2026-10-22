@@ -13,6 +13,14 @@ import { useToday } from '@/store/useFinance';
  */
 export const NOT_CREDIT = (a: Account): boolean => a.kind !== 'credit';
 
+/**
+ * The name of the account a row names, archived ones included (history keeps their names), or
+ * "Unknown account" when it is gone.
+ */
+export function accountName(accounts: readonly Account[], id: string | null): string {
+  return accounts.find((a) => a.id === id)?.name ?? 'Unknown account';
+}
+
 /** What a credit account is called in a picker, so a card isn't taken for a bank account. */
 function labelOf(account: Account): string {
   return account.kind === 'credit' ? `${account.name} (credit card)` : account.name;

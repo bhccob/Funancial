@@ -10,6 +10,7 @@ import { accountRows } from './balances';
 import { addDays } from './dates';
 import {
   availableBalance,
+  availableParts,
   cardPayment,
   cashInPocket,
   categoryBreakdown,
@@ -200,6 +201,32 @@ describe('available to spend', () => {
     );
     expect(upcomingBills(d, TODAY).filter((b) => b.kind === 'card')).toEqual([]);
     expect(available(world())).toBe(available(d) - 230_00);
+  });
+
+  it('is made of parts that add up to it, a card subscription in none of them', () => {
+    const d = world();
+    d.tables.subscription.push(
+      makeSubscription({
+        name: 'Cloud',
+        amount: 9_99,
+        nextRenewal: '2026-10-18',
+        accountId: 'card-1',
+      }),
+    );
+    const rows = accountRows(d, TODAY);
+    const bills = upcomingBills(d, TODAY);
+    const reserved = reservedTotal(d, TODAY, 1);
+    const parts = availableParts(rows, bills, reserved);
+    // Main account and the wallet count, in carousel order; savings and the card do not.
+    expect(parts.accounts.map((r) => [r.account.id, r.balance])).toEqual([
+      ['acct-main', 2_400_00],
+      ['acct-cash', 50_00],
+    ]);
+    // Streamflix only: Cloud lands on the Visa and comes back in its payment.
+    expect(parts).toMatchObject({ bills: 15_99, cards: 230_00, reserved: 1_200_00 });
+    const held = parts.accounts.reduce((sum, r) => sum + r.balance, 0);
+    expect(held - parts.bills - parts.cards - parts.reserved).toBe(parts.total);
+    expect(parts.total).toBe(availableBalance(rows, bills, reserved));
   });
 
   it('cash in pocket sums cash accounts only', () => {
