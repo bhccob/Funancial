@@ -1,6 +1,6 @@
 import { Coins } from 'lucide-react';
 import { MenuGroups } from '@/app/MenuGroups';
-import { GlassHeader } from '@/components/ui/GlassHeader';
+import { HeadBlock } from '@/components/ui/HeadBlock';
 import { Pill } from '@/components/ui/Pill';
 import { Rise } from '@/components/ui/Rise';
 import { Avatar } from '@/features/game/Avatar';
@@ -9,8 +9,8 @@ import { useApp } from '@/store/AppStoreProvider';
 import { useGameView } from '@/store/useGame';
 
 /**
- * The person: who they are in the game on the dark header, then the rest of the app's pages in two
- * tiles. It is opened from the avatar on Home, and holds what the phone's Menu sheet used to.
+ * The person: who they are in the game on the theme's block, then the rest of the app's pages in two
+ * tiles. It is the last tab, and the avatar on Home opens it too.
  */
 export function ProfileScreen() {
   const { level, totals, cosmetics } = useGameView();
@@ -19,9 +19,9 @@ export function ProfileScreen() {
 
   return (
     <>
-      {/* The header must be the first thing on the page, so it can run up behind the status bar. */}
+      {/* The block must be the first thing on the page, so it can run up behind the status bar. */}
       <Rise index={0}>
-        <GlassHeader>
+        <HeadBlock>
           <div className="max-w-3xl">
             <h1 className="text-page">Profile</h1>
             <div className="mt-5 flex items-center gap-3.5">
@@ -45,7 +45,7 @@ export function ProfileScreen() {
               </Pill>
             </div>
           </div>
-        </GlassHeader>
+        </HeadBlock>
       </Rise>
       <div className="max-w-3xl">
         <MenuGroups riseFrom={1} />

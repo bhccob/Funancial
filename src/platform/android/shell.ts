@@ -19,8 +19,9 @@ function setBarStyle(bar: SystemBarType, dark: boolean) {
 /**
  * Makes the web app behave like a phone app: the back gesture closes a dialog, then goes back a
  * screen, then backgrounds the app; and the system bars' icons follow what is behind them. The
- * status bar's are light on the dark theme or under the dark glass header, dark on the light theme
- * otherwise; the navigation bar's follow the theme alone, as the header never reaches the bottom.
+ * status bar's follow the theme's block while it covers the top of the screen (light on a dark
+ * block, dark on a light one, in either theme), and the theme otherwise; the navigation bar's follow
+ * the theme alone, as the block never reaches the bottom.
  *
  * Nothing here is worth stopping the app for: a failure is logged and the app starts without it.
  */

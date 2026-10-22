@@ -134,12 +134,12 @@ describe('installShell: system bars', () => {
     expect([styleOf('StatusBar'), styleOf('NavigationBar')]).toEqual(['LIGHT', 'LIGHT']);
   });
 
-  it('sets light status-bar icons while a dark header holds the top of the screen, and leaves the navigation bar to the theme', async () => {
-    const { installShell, initTheme, claimDarkTop } = await load();
+  it('sets light status-bar icons while a dark block holds the top of the screen, and leaves the navigation bar to the theme', async () => {
+    const { installShell, initTheme, claimTop } = await load();
     initTheme();
     await installShell();
 
-    const release = claimDarkTop();
+    const release = claimTop('dark');
     expect(styleOf('StatusBar')).toBe('DARK');
     // The bottom of the page is still light: its buttons keep their dark icons.
     expect(styleOf('NavigationBar')).toBe('LIGHT');
@@ -149,6 +149,21 @@ describe('installShell: system bars', () => {
     // Each style names its bar: one without a bar would land on both.
     for (const [options] of native.setStyle.mock.calls) expect(options.bar).toBeDefined();
     expect(native.setStyle).not.toHaveBeenCalledWith({ style: 'DARK', bar: 'NavigationBar' });
+  });
+
+  it('sets dark status-bar icons while a light block holds the top of the dark theme, and leaves the navigation bar to the theme', async () => {
+    stubMatchMedia(true);
+    const { installShell, initTheme, claimTop } = await load();
+    initTheme();
+    await installShell();
+
+    const release = claimTop('light');
+    expect(styleOf('StatusBar')).toBe('LIGHT');
+    // The dark page still runs to the bottom edge: its buttons keep their light icons.
+    expect(styleOf('NavigationBar')).toBe('DARK');
+    release();
+    expect(styleOf('StatusBar')).toBe('DARK');
+    expect(native.setStyle).not.toHaveBeenCalledWith({ style: 'LIGHT', bar: 'NavigationBar' });
   });
 
   it('starts with light icons on both bars when the app opens in the dark theme', async () => {
@@ -166,11 +181,11 @@ describe('installShell: system bars', () => {
 
   it('does not ask the system again for a style a bar already has', async () => {
     stubMatchMedia(true);
-    const { installShell, initTheme, claimDarkTop, setThemePreference } = await load();
+    const { installShell, initTheme, claimTop, setThemePreference } = await load();
     initTheme();
     await installShell();
 
-    claimDarkTop()();
+    claimTop('dark')();
     setThemePreference('dark');
 
     expect(native.setStyle).toHaveBeenCalledTimes(2);

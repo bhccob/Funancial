@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { AddScreen } from '@/features/add/AddScreen';
 import { BudgetScreen } from '@/features/budget/BudgetScreen';
+import { CardsScreen } from '@/features/cards/CardsScreen';
 import { DashboardScreen } from '@/features/dashboard/DashboardScreen';
 import { DebtsScreen } from '@/features/goals/DebtsScreen';
 import { GoalsScreen } from '@/features/goals/GoalsScreen';
@@ -28,6 +29,7 @@ export interface AppRoute {
 
 export const APP_ROUTES: AppRoute[] = [
   { path: '/', element: <DashboardScreen /> },
+  { path: '/cards', element: <CardsScreen /> },
   { path: '/budget', element: <BudgetScreen /> },
   { path: '/invest', element: <InvestScreen /> },
   { path: '/invest/holding/:id', element: <HoldingPage /> },

@@ -197,7 +197,6 @@ it('defines the radii, shadows, easing, type scale and font', () => {
     '--radius-hero': '36px',
     '--shadow-tile': '0 1px 2px rgb(10 10 20 / 0.04)',
     '--shadow-glass': '0 12px 28px -18px var(--shadow-tint)',
-    '--shadow-plus': '0 10px 20px -10px var(--accent)',
     '--ease-glass': 'cubic-bezier(0.2, 0.8, 0.2, 1)',
     '--font-sans': "'Inter Tight Variable', system-ui, sans-serif",
   });
@@ -225,7 +224,6 @@ it('holds src/lib/motion.ts to the motion variables: the :root timings in second
     '--duration-small': inMs(MOTION.small),
     '--duration-standard': inMs(MOTION.standard),
     '--stagger-rise': inMs(MOTION.stagger),
-    '--stagger-fan': inMs(MOTION.fanStagger),
     '--duration-count': inMs(MOTION.countUp),
     '--press-scale': String(MOTION.pressScale),
   });
@@ -243,6 +241,9 @@ it('no longer ships the pixel look, the violet accent or the 0.11 game themes', 
   }
   expect(tokensCss).not.toContain('--color-hero-from');
   expect(tokensCss).not.toContain('--color-hero-glow');
+  // The ＋ and its fan are gone, and their glow and stagger with them.
+  expect(tokensCss).not.toContain('--shadow-plus');
+  expect(tokensCss).not.toContain('--stagger-fan');
 });
 
 /*
@@ -422,6 +423,9 @@ it('defines the glass recipes of the wireframe', () => {
   // Glass strong is glass with its background swapped, so it keeps the blur and the edges.
   expect(utility('glass-strong')).toContain('@apply glass');
   expect(utility('glass-strong')).toContain('background: var(--color-glass-strong)');
+  // What hangs over the block's edge has its ring round it, mostly on the page: the accent again (held
+  // on the page below), not the block's ink, which can be as light as the page.
+  expect(utility('glass-strong')).toContain('--color-focus: var(--accent)');
   for (const name of ['glass-head', 'glass']) {
     expect(utility(name), name).toContain('blur(22px) saturate(180%)');
   }
@@ -442,6 +446,8 @@ it('defines the block, the two main buttons and the shapes behind the page', () 
   expect(utility('page-blobs')).toContain('var(--page-blobs-strength)');
   // 0.11's name for the block, kept until the header is rebuilt.
   expect(utility('bg-hero')).toContain('bg-head');
+  // The tab bar: 56px of tabs over the bottom edge's safe area, at least 30px of it: 86px on most phones.
+  expect(indexCss).toContain('--tab-bar: calc(56px + max(30px, env(safe-area-inset-bottom)));');
 });
 
 /*

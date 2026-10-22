@@ -1,13 +1,10 @@
 import { expect, test, type Page } from '@playwright/test';
-import { openProfile, startDemo, startFresh } from './helpers';
+import { openProfile, startFresh } from './helpers';
 
 const bar = (page: Page) => page.getByRole('navigation', { name: 'Primary' });
-/** The ＋ in the tab bar: named Add while the fan is shut, Close while it is open. */
-const plus = (page: Page) => bar(page).getByRole('button', { name: /^(Add|Close)$/ });
-/** The fan of Expense and Income; exact, as the add sheets are named "Add expense" and "Add income". */
-const fan = (page: Page) => page.getByRole('dialog', { name: 'Add', exact: true });
+const TABS = ['Home', 'Cards', 'Spending', 'Invest', 'Profile'];
 
-test('mobile: the tab bar navigates, and Profile opens from the avatar on Home', async ({
+test('mobile: the tab bar navigates, Profile last, and Profile opens from the avatar on Home too', async ({
   page,
 }, testInfo) => {
   test.skip(testInfo.project.name !== 'mobile-chromium', 'mobile layout only');
@@ -16,9 +13,15 @@ test('mobile: the tab bar navigates, and Profile opens from the avatar on Home',
   await expect(page.getByRole('navigation', { name: 'All sections' })).toBeHidden();
   const slots = bar(page).locator('a, button');
   await expect(slots).toHaveCount(5);
-  for (const [i, name] of ['Home', 'Cards', 'Add', 'Spending', 'Invest'].entries()) {
+  for (const [i, name] of TABS.entries()) {
     await expect(slots.nth(i)).toHaveAccessibleName(name);
   }
+  // No ＋ in the bar.
+  await expect(bar(page).getByRole('button')).toHaveCount(0);
+  await expect(bar(page).getByRole('link', { name: 'Home' })).toHaveAttribute(
+    'aria-current',
+    'page',
+  );
 
   await bar(page).getByRole('link', { name: 'Spending' }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Budget' })).toBeVisible();
@@ -26,8 +29,17 @@ test('mobile: the tab bar navigates, and Profile opens from the avatar on Home',
     'aria-current',
     'page',
   );
+  await expect(bar(page).locator('[aria-current]')).toHaveCount(1);
+
   await bar(page).getByRole('link', { name: 'Cards' }).click();
-  await expect(page.getByRole('heading', { level: 1, name: 'Bills & cards' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'Cards' })).toBeVisible();
+
+  await bar(page).getByRole('link', { name: 'Profile' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Profile' })).toBeVisible();
+  await expect(bar(page).getByRole('link', { name: 'Profile' })).toHaveAttribute(
+    'aria-current',
+    'page',
+  );
 
   const profile = await openProfile(page);
   await profile.getByRole('link', { name: /^Settings/ }).click();
@@ -35,188 +47,84 @@ test('mobile: the tab bar navigates, and Profile opens from the avatar on Home',
   await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeFocused();
 });
 
-test('mobile: at 360×640 the current tab shows all of "Spending"', async ({ page }, testInfo) => {
+test('mobile: the tab bar runs edge to edge along the bottom, 86px tall, the current tab in the accent', async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== 'mobile-chromium', 'mobile layout only');
+  await startFresh(page, '/budget');
+  const box = (await bar(page).boundingBox())!;
+  const viewport = page.viewportSize()!;
+  // No safe area in the browser: the bar is its 56px row of tabs over the least of 30px.
+  expect(box).toEqual({ x: 0, y: viewport.height - 86, width: viewport.width, height: 86 });
+  await expect(bar(page)).toHaveCSS('border-top-width', '1px');
+
+  const current = bar(page).getByRole('link', { name: 'Spending' });
+  const other = bar(page).getByRole('link', { name: 'Home' });
+  await expect(current).toHaveCSS('font-weight', '800');
+  await expect(other).toHaveCSS('font-weight', '700');
+  const [accent, muted] = await page.evaluate(() => {
+    const read = (name: string) =>
+      getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    const probe = document.createElement('span');
+    document.body.append(probe);
+    const resolve = (value: string) => {
+      probe.style.color = value;
+      return getComputedStyle(probe).color;
+    };
+    const colors = [resolve(read('--color-accent')), resolve(read('--color-text-muted'))];
+    probe.remove();
+    return colors;
+  });
+  await expect(current).toHaveCSS('color', accent!);
+  await expect(other).toHaveCSS('color', muted!);
+  // Every tab is a tap target well over 44px.
+  for (const name of TABS) {
+    const tab = (await bar(page).getByRole('link', { name }).boundingBox())!;
+    expect(tab.height, name).toBeGreaterThanOrEqual(44);
+    expect(tab.width, name).toBeGreaterThanOrEqual(44);
+  }
+});
+
+test('mobile: at 360×640 every tab shows its whole name under its icon', async ({
+  page,
+}, testInfo) => {
   test.skip(testInfo.project.name !== 'mobile-chromium', 'mobile layout only');
   await page.setViewportSize({ width: 360, height: 640 });
   await startFresh(page, '/budget');
-  const tab = bar(page).getByRole('link', { name: 'Spending' });
-  const label = tab.getByText('Spending', { exact: true });
-  await expect(label).toBeVisible();
-  const fits = await tab.evaluate((link) => {
-    const text = [...link.querySelectorAll('span')].find((s) => s.textContent === 'Spending')!;
-    const inner = text.getBoundingClientRect();
-    const outer = link.getBoundingClientRect();
-    const nav = link.closest('nav')!.getBoundingClientRect();
-    return {
-      label: text.scrollWidth <= text.clientWidth,
-      link: link.scrollWidth <= link.clientWidth,
-      inside: inner.left >= outer.left && inner.right <= outer.right && outer.right <= nav.right,
-    };
-  });
-  expect(fits).toEqual({ label: true, link: true, inside: true });
+  for (const name of TABS) {
+    const tab = bar(page).getByRole('link', { name });
+    await expect(tab.getByText(name, { exact: true })).toBeVisible();
+    const fits = await tab.evaluate((link) => {
+      const text = link.querySelector('span')!;
+      const icon = link.querySelector('svg')!.getBoundingClientRect();
+      const inner = text.getBoundingClientRect();
+      const outer = link.getBoundingClientRect();
+      return {
+        whole: text.scrollWidth <= text.clientWidth,
+        inside: inner.left >= outer.left && inner.right <= outer.right,
+        under: inner.top >= icon.bottom,
+      };
+    });
+    expect(fits, name).toEqual({ whole: true, inside: true, under: true });
+  }
 });
 
-/**
- * Taps the tab named `name` low on a long page and returns where the ink pill was, frame by frame
- * for about 45 frames from the tap: its top against the bar's, and its left edge.
- */
-async function pillAfterTap(page: Page, name: string) {
-  // Settled first: motion leaves no transform on the pill once it has come to rest.
-  await expect(bar(page).locator('a > span.absolute')).toHaveCSS('transform', 'none');
-  // Low on the page: the old pill is measured scrolled, the new one once the new screen opens at its top.
-  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
-  const height = (await bar(page).boundingBox())!.height;
-  expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(height);
-  await page.evaluate(() => {
-    const nav = document.querySelector('nav[aria-label="Primary"]')!;
-    (window as unknown as { pill: Promise<{ tops: number[]; lefts: number[] }> }).pill =
-      new Promise((resolve) => {
-        const tops: number[] = [];
-        const lefts: number[] = [];
-        let frames = 0;
-        const sample = () => {
-          const pill = nav.querySelector('a > span.absolute');
-          if (pill) {
-            const box = pill.getBoundingClientRect();
-            tops.push(box.top - nav.getBoundingClientRect().top);
-            lefts.push(box.left);
-          }
-          if (++frames < 45) requestAnimationFrame(sample);
-          else resolve({ tops, lefts });
-        };
-        document.addEventListener('click', () => requestAnimationFrame(sample), {
-          capture: true,
-          once: true,
-        });
-      });
-  });
-  await bar(page).getByRole('link', { name }).click();
-  const seen = await page.evaluate(
-    () => (window as unknown as { pill: Promise<{ tops: number[]; lefts: number[] }> }).pill,
-  );
-  expect(seen.tops.length).toBeGreaterThan(30);
-  return { ...seen, height, furthest: Math.max(...seen.tops.map(Math.abs)) };
-}
-
-test('mobile: tapped low on a long page, the tab pill glides along the bar, never in from off it', async ({
-  page,
-}, testInfo) => {
+test('mobile: a toast from a save sits above the tab bar', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'mobile-chromium', 'mobile layout only');
-  // The demo money fills Budget well past the screen.
-  await startDemo(page);
-  await bar(page).getByRole('link', { name: 'Spending' }).click();
-  await expect(page.getByRole('heading', { level: 1, name: 'Budget' })).toBeVisible();
-
-  const pill = await pillAfterTap(page, 'Cards');
-
-  await expect(page.getByRole('heading', { level: 1, name: 'Bills & cards' })).toBeVisible();
-  expect(pill.furthest, 'the pill stays within the bar').toBeLessThan(pill.height);
-  // It glides sideways, through places between the two tabs, rather than jumping.
-  expect(new Set(pill.lefts.map(Math.round)).size).toBeGreaterThan(5);
-});
-
-test('mobile: reduced motion: tapped low on a long page, the tab pill jumps, in the bar', async ({
-  page,
-}, testInfo) => {
-  test.skip(testInfo.project.name !== 'mobile-chromium', 'mobile layout only');
-  await page.emulateMedia({ reducedMotion: 'reduce' });
-  await startDemo(page);
-  await bar(page).getByRole('link', { name: 'Spending' }).click();
-  await expect(page.getByRole('heading', { level: 1, name: 'Budget' })).toBeVisible();
-
-  const pill = await pillAfterTap(page, 'Cards');
-
-  expect(pill.furthest, 'the pill stays within the bar').toBeLessThan(pill.height);
-  // No glide: a few frames after the tap it is at rest on Cards.
-  expect(new Set(pill.lefts.slice(3).map(Math.round)).size).toBe(1);
-});
-
-test('mobile: the ＋ opens the fan, and Escape closes it with focus back on the ＋', async ({
-  page,
-}, testInfo) => {
-  test.skip(testInfo.project.name !== 'mobile-chromium', 'mobile layout only');
-  await startFresh(page);
-  await plus(page).click();
-  await expect(fan(page)).toBeVisible();
-  await expect(plus(page)).toHaveAccessibleName('Close');
-  await expect(plus(page)).toHaveAttribute('aria-expanded', 'true');
-  await expect(fan(page).getByRole('button', { name: 'Expense' })).toBeFocused();
-  await expect(fan(page).getByRole('button', { name: 'Income' })).toBeVisible();
-
-  await page.keyboard.press('Escape');
-  await expect(fan(page)).toBeHidden();
-  await expect(plus(page)).toHaveAccessibleName('Add');
-  await expect(plus(page)).toBeFocused();
-});
-
-test('mobile: ＋, then Expense, adds an expense that shows in History', async ({
-  page,
-}, testInfo) => {
-  test.skip(testInfo.project.name !== 'mobile-chromium', 'mobile layout only');
-  await startFresh(page);
-  await plus(page).click();
-  await fan(page).getByRole('button', { name: 'Expense' }).click();
-  const sheet = page.getByRole('dialog', { name: 'Add expense' });
-  await expect(sheet).toBeVisible();
-  await expect(sheet.getByRole('heading', { level: 2, name: 'Add expense' })).toBeVisible();
-  await expect(fan(page)).toBeHidden();
-  const amount = sheet.getByLabel('Amount', { exact: true });
-  await expect(amount).toBeFocused();
-  await amount.fill('4.20');
-  await sheet.getByRole('button', { name: 'Save', exact: true }).click();
-
+  await startFresh(page, '/add');
+  await page.getByLabel('Amount', { exact: true }).fill('4.20');
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(page.getByText('Expense saved.')).toBeVisible();
-  await expect(sheet).toBeHidden();
-  // Still on Home, with focus back on the ＋ that started it.
-  await expect(page.getByRole('heading', { level: 1, name: 'Home' })).toBeVisible();
-  await expect(plus(page)).toBeFocused();
 
-  const profile = await openProfile(page);
-  await profile.getByRole('link', { name: /^History/ }).click();
-  await expect(page.getByRole('heading', { level: 1, name: 'History' })).toBeVisible();
-  await expect(page.getByText('−$4.20')).toBeVisible();
-});
-
-test('mobile: toasts from a save stay clear of the fan opened again, and its bubbles work', async ({
-  page,
-}, testInfo) => {
-  test.skip(testInfo.project.name !== 'mobile-chromium', 'mobile layout only');
-  await startFresh(page);
-  await plus(page).click();
-  await fan(page).getByRole('button', { name: 'Expense' }).click();
-  const sheet = page.getByRole('dialog', { name: 'Add expense' });
-  await sheet.getByLabel('Amount', { exact: true }).fill('4.20');
-  await sheet.getByRole('button', { name: 'Save', exact: true }).click();
-  await expect(sheet).toBeHidden();
-  // The first expense also completes a quest and earns a badge: three toasts, stacked.
-  const saved = page.getByText('Expense saved.');
-  await expect(saved).toBeVisible();
-
-  await plus(page).click();
-  const bubbles = [
-    fan(page).getByRole('button', { name: 'Expense' }),
-    fan(page).getByRole('button', { name: 'Income' }),
-  ];
-  // Measured where they come to rest.
-  for (const bubble of bubbles) await expect(bubble).toHaveCSS('opacity', '1');
-  await expect(saved).toBeVisible();
+  const top = (await bar(page).boundingBox())!.y;
   const toasts = await page.locator('[aria-live] > [role]').all();
   expect(toasts.length).toBeGreaterThan(0);
   for (const shown of toasts) {
     const t = (await shown.boundingBox())!;
-    for (const bubble of bubbles) {
-      const b = (await bubble.boundingBox())!;
-      const apart =
-        t.x + t.width <= b.x ||
-        b.x + b.width <= t.x ||
-        t.y + t.height <= b.y ||
-        b.y + b.height <= t.y;
-      expect(apart, `"${await shown.textContent()}" is clear of a bubble`).toBe(true);
-    }
+    expect(t.y + t.height, `"${await shown.textContent()}" ends above the bar`).toBeLessThanOrEqual(
+      top,
+    );
   }
-
-  await bubbles[1]!.click();
-  await expect(page.getByRole('dialog', { name: 'Add income' })).toBeVisible();
 });
 
 test('mobile: the bottom of Settings clears the tab bar', async ({ page }, testInfo) => {
@@ -241,22 +149,6 @@ test('mobile: the bottom of Settings clears the tab bar', async ({ page }, testI
   }
 });
 
-test('mobile: reduced motion: the fan only fades', async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== 'mobile-chromium', 'mobile layout only');
-  await page.emulateMedia({ reducedMotion: 'reduce' });
-  await startFresh(page);
-  await plus(page).click();
-  const expense = fan(page).getByRole('button', { name: 'Expense' });
-  await expect(expense).toBeVisible();
-  // Read at once, while a rise would still be on its way: nothing moves or grows, it only fades in.
-  const moving = await expense.evaluate((el) => {
-    const s = getComputedStyle(el);
-    return { transform: s.transform, translate: s.translate, scale: s.scale };
-  });
-  expect(moving).toEqual({ transform: 'none', translate: 'none', scale: 'none' });
-  await expect.poll(() => expense.evaluate((el) => getComputedStyle(el).opacity)).toBe('1');
-});
-
 test('desktop: the sidebar navigates and the tab bar is hidden', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop-chromium', 'desktop layout only');
   await startFresh(page);
@@ -270,6 +162,30 @@ test('desktop: the sidebar navigates and the tab bar is hidden', async ({ page }
     'aria-selected',
     'true',
   );
+});
+
+test('desktop: the sidebar lists the tabs, marks the one open, and opens Net worth as a sheet', async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop-chromium', 'desktop layout only');
+  await startFresh(page);
+  const sidebar = page.getByRole('navigation', { name: 'All sections' });
+  for (const name of TABS) await expect(sidebar.getByRole('link', { name })).toBeVisible();
+
+  await sidebar.getByRole('link', { name: 'Cards' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Cards' })).toBeVisible();
+  await expect(sidebar.getByRole('link', { name: 'Cards' })).toHaveAttribute(
+    'aria-current',
+    'page',
+  );
+
+  await expect(sidebar.getByRole('button', { name: /^My numbers/ })).toBeDisabled();
+  await sidebar.getByRole('button', { name: 'Net worth' }).click();
+  const sheet = page.getByRole('dialog', { name: 'Net worth' });
+  await expect(sheet).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(sheet).toBeHidden();
+  await expect(sidebar.getByRole('button', { name: 'Net worth' })).toBeFocused();
 });
 
 test('unknown route shows not found with a way home', async ({ page }) => {
@@ -312,16 +228,29 @@ test('mobile: Home has three actions, and History stays one tap away in Last 7 d
   await expect(page.getByRole('link', { name: 'History' })).toHaveCount(1);
 });
 
-test('mobile: Profile has no Buy it?, no About you and no Salary freeze', async ({
+test("mobile: Profile's menu is History, Net worth and My numbers, then Quests to Settings", async ({
   page,
 }, testInfo) => {
   test.skip(testInfo.project.name !== 'mobile-chromium', 'mobile layout only');
   await startFresh(page);
   const menu = await openProfile(page);
   await expect(menu.getByRole('heading', { level: 2 })).toHaveText(['Your money', 'You']);
-  await expect(menu.getByRole('link', { name: /^Buy it\?/ })).toHaveCount(0);
-  await expect(menu.getByRole('link', { name: /^About you/ })).toHaveCount(0);
-  await expect(menu.getByRole('link', { name: /^Salary freeze/ })).toHaveCount(0);
+  for (const gone of [/^Bills & cards/, /^Goals/, /^Debts/, /^Income/, /^Buy it\?/, /^About you/]) {
+    await expect(menu.getByRole('link', { name: gone })).toHaveCount(0);
+  }
+  await expect(menu.getByRole('link', { name: /^History/ })).toHaveAttribute('href', '/history');
+  const myNumbers = menu.getByRole('button', { name: /^My numbers/ });
+  await expect(myNumbers).toBeDisabled();
+  await expect(myNumbers).toContainText('Soon');
+
+  // Net worth opens its sheet over Profile.
+  await menu.getByRole('button', { name: /^Net worth/ }).click();
+  const sheet = page.getByRole('dialog', { name: 'Net worth' });
+  await expect(sheet).toBeVisible();
+  await expect(sheet.getByText('What you have')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(sheet).toBeHidden();
+  await expect(page.getByRole('heading', { level: 1, name: 'Profile' })).toBeVisible();
 });
 
 test('desktop: the sidebar has no Buy it?, no About you and no Salary freeze', async ({
@@ -366,30 +295,29 @@ test('mobile: a new screen opens at its top, and Back returns to where the last 
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(left);
 });
 
-test('mobile: Profile opens Goals and Debts as two pages', async ({ page }, testInfo) => {
+test('mobile: Goals and Debts are two pages', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'mobile-chromium', 'mobile layout only');
-  await startFresh(page);
-
-  await (await openProfile(page)).getByRole('link', { name: /^Goals/ }).click();
+  await startFresh(page, '/goals');
   await expect(page.getByRole('heading', { level: 1, name: 'Goals' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Add goal' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Add card' })).toHaveCount(0);
 
-  await (await openProfile(page)).getByRole('link', { name: /^Debts/ }).click();
+  await page.goto('/debts');
   await expect(page.getByRole('heading', { level: 1, name: 'Debts' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Add card' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Add loan' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Add goal' })).toHaveCount(0);
 });
 
-test('mobile: Profile opens Income, and an income added there shows in its bars', async ({
+test('mobile: Home opens Income, and an income added there shows in its bars', async ({
   page,
 }, testInfo) => {
   test.skip(testInfo.project.name !== 'mobile-chromium', 'mobile layout only');
   await startFresh(page);
-  const row = (await openProfile(page)).getByRole('link', { name: /^Income/ });
-  await expect(row).toContainText('$0.00 this month');
-  await row.click();
+  await page
+    .getByRole('region', { name: 'Net worth' })
+    .getByRole('link', { name: 'Income stats' })
+    .click();
   await expect(page.getByRole('heading', { level: 1, name: 'Income' })).toBeVisible();
   await expect(page.getByText('No income yet')).toBeVisible();
 
@@ -410,19 +338,4 @@ test('mobile: Profile opens Income, and an income added there shows in its bars'
   );
   // Twelve bars and their captions fit a 375px phone without a sideways scroll.
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(375);
-});
-
-test('desktop: Home links to Income stats, and the sidebar marks Income as current', async ({
-  page,
-}, testInfo) => {
-  test.skip(testInfo.project.name !== 'desktop-chromium', 'desktop layout only');
-  await startFresh(page);
-  await page
-    .getByRole('region', { name: 'Net worth' })
-    .getByRole('link', { name: 'Income stats' })
-    .click();
-  await expect(page.getByRole('heading', { level: 1, name: 'Income' })).toBeVisible();
-  await expect(
-    page.getByRole('navigation', { name: 'All sections' }).getByRole('link', { name: /^Income/ }),
-  ).toHaveAttribute('aria-current', 'page');
 });

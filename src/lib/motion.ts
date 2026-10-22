@@ -16,11 +16,7 @@ export const MOTION = {
   rise: 12,
   /** The gap between one rising block and the next. */
   stagger: 0.06,
-  /** The gap between one bubble of the fan and the next. */
-  fanStagger: 0.05,
   countUp: 0.9,
-  /** How far the + turns to become the ×, in degrees. */
-  plusTurn: 135,
 } as const;
 
 const REDUCED_QUERY = '(prefers-reduced-motion: reduce)';

@@ -41,41 +41,60 @@ describe('onBarsBackground', () => {
     expect(heard).toHaveBeenCalledExactlyOnceWith('light');
   });
 
-  it('is dark while a claim is held, and light again once it is released', async () => {
-    const { claimDarkTop, heard } = await listen('light');
+  it('is the theme with no claim: dark on the dark theme', async () => {
+    const { heard } = await listen('dark');
+    expect(heard).toHaveBeenCalledExactlyOnceWith('dark');
+  });
 
-    const release = claimDarkTop();
+  it('is dark while a dark claim is held, and the theme again once it is released', async () => {
+    const { claimTop, heard } = await listen('light');
+
+    const release = claimTop('dark');
     expect(heard).toHaveBeenLastCalledWith('dark');
     release();
     expect(heard).toHaveBeenLastCalledWith('light');
   });
 
-  it('stays dark while any one of two claims is held', async () => {
-    const { claimDarkTop, heard } = await listen('light');
-    const first = claimDarkTop();
-    const second = claimDarkTop();
+  it('is light under a light claim on the dark theme: a light block asks for dark icons', async () => {
+    const { claimTop, heard } = await listen('dark');
 
-    first();
-    expect(heard).toHaveBeenLastCalledWith('dark');
-    second();
+    const release = claimTop('light');
     expect(heard).toHaveBeenLastCalledWith('light');
-  });
-
-  it('is dark on the dark theme, with or without a claim', async () => {
-    const { claimDarkTop, heard } = await listen('dark');
-    expect(heard).toHaveBeenLastCalledWith('dark');
-
-    const release = claimDarkTop();
-    expect(heard).toHaveBeenLastCalledWith('dark');
     release();
     expect(heard).toHaveBeenLastCalledWith('dark');
   });
 
-  it('follows the theme as it changes, a claim held across the change', async () => {
-    const { claimDarkTop, setThemePreference, heard } = await listen('light');
-    const release = claimDarkTop();
+  it('follows the most recent claim still held', async () => {
+    const { claimTop, heard } = await listen('light');
+    const dark = claimTop('dark');
+    const light = claimTop('light');
+    expect(heard).toHaveBeenLastCalledWith('light');
+
+    // The newer claim goes: the older one says what is there again.
+    light();
+    expect(heard).toHaveBeenLastCalledWith('dark');
+    dark();
+    expect(heard).toHaveBeenLastCalledWith('light');
+  });
+
+  it('keeps to the newer claim when an older one is released first', async () => {
+    const { claimTop, heard } = await listen('dark');
+    const older = claimTop('dark');
+    const newer = claimTop('light');
+
+    older();
+    expect(heard).toHaveBeenLastCalledWith('light');
+    newer();
+    expect(heard).toHaveBeenLastCalledWith('dark');
+  });
+
+  it('follows the theme as it changes once no claim is held, a claim held across the change', async () => {
+    const { claimTop, setThemePreference, heard } = await listen('light');
+    const release = claimTop('light');
 
     setThemePreference('dark');
+    // The claim still says what is behind the bar.
+    expect(heard).toHaveBeenLastCalledWith('light');
     release();
     expect(heard).toHaveBeenLastCalledWith('dark');
     setThemePreference('light');
@@ -83,42 +102,43 @@ describe('onBarsBackground', () => {
   });
 
   it('calls back only when the background changes', async () => {
-    const { claimDarkTop, setThemePreference, heard } = await listen('light');
+    const { claimTop, setThemePreference, heard } = await listen('light');
     setThemePreference('light');
+    claimTop('light');
     expect(heard.mock.calls).toEqual([['light']]);
 
     setThemePreference('dark');
-    claimDarkTop();
+    claimTop('dark');
     expect(heard.mock.calls).toEqual([['light'], ['dark']]);
   });
 
   it('tells a late listener the background as it stands', async () => {
-    const { claimDarkTop, onBarsBackground } = await listen('light');
-    claimDarkTop();
+    const { claimTop, onBarsBackground } = await listen('dark');
+    claimTop('light');
     const late = vi.fn();
 
     onBarsBackground(late);
 
-    expect(late).toHaveBeenCalledExactlyOnceWith('dark');
+    expect(late).toHaveBeenCalledExactlyOnceWith('light');
   });
 
   it('stops calling back once unsubscribed', async () => {
-    const { claimDarkTop, onBarsBackground } = await load();
+    const { claimTop, onBarsBackground } = await load();
     const heard = vi.fn();
     const stop = onBarsBackground(heard);
 
     stop();
-    claimDarkTop();
+    claimTop('dark');
 
     expect(heard).not.toHaveBeenCalled();
   });
 });
 
-describe('claimDarkTop', () => {
-  it('releases once: a second call takes back no other claim and does not go below zero', async () => {
-    const { claimDarkTop, heard } = await listen('light');
-    const first = claimDarkTop();
-    const second = claimDarkTop();
+describe('claimTop', () => {
+  it('releases once: a second call takes back no other claim', async () => {
+    const { claimTop, heard } = await listen('light');
+    const first = claimTop('dark');
+    const second = claimTop('dark');
 
     first();
     first();
@@ -126,15 +146,27 @@ describe('claimDarkTop', () => {
 
     second();
     expect(heard).toHaveBeenLastCalledWith('light');
-    // The count is back at zero, not under it: one claim is enough to turn the bars dark again.
-    const third = claimDarkTop();
+    // Nothing is left over: one claim is enough to turn the bars dark again, and its release undoes it.
+    const third = claimTop('dark');
     expect(heard).toHaveBeenLastCalledWith('dark');
     third();
     expect(heard).toHaveBeenLastCalledWith('light');
   });
 
+  it('a second release of an older claim leaves the newer claims alone', async () => {
+    const { claimTop, heard } = await listen('light');
+    const older = claimTop('dark');
+    const newer = claimTop('dark');
+
+    older();
+    older();
+    expect(heard).toHaveBeenLastCalledWith('dark');
+    newer();
+    expect(heard).toHaveBeenLastCalledWith('light');
+  });
+
   it('counts the claim and tells the other listeners when one listener throws, and logs it', async () => {
-    const { claimDarkTop, onBarsBackground, heard } = await listen('light');
+    const { claimTop, onBarsBackground, heard } = await listen('light');
     const failure = new Error('bridge down');
     let throwing = false;
     onBarsBackground(() => {
@@ -145,7 +177,7 @@ describe('claimDarkTop', () => {
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
     throwing = true;
 
-    const release = claimDarkTop();
+    const release = claimTop('dark');
     expect(heard).toHaveBeenLastCalledWith('dark');
     expect(after).toHaveBeenLastCalledWith('dark');
     release();

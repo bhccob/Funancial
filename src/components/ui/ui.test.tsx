@@ -287,11 +287,11 @@ describe('nested dialogs', () => {
 });
 
 describe('Toaster', () => {
-  it('floats toasts just above the floating tab bar on phones, and low on desktop', () => {
+  it('floats toasts just above the tab bar on phones, and low on desktop', () => {
     toastStore.setState({ toasts: [] });
     const { container } = render(<Toaster />);
     expect(container.firstElementChild).toHaveClass(
-      'bottom-[calc(100px+env(safe-area-inset-bottom))]',
+      'bottom-[calc(var(--tab-bar)+12px)]',
       'md:bottom-8',
     );
   });

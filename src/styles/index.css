@@ -75,6 +75,8 @@
 @utility glass-strong {
   @apply glass;
   background: var(--color-glass-strong);
+  /* Its ring is round it, mostly on the page: the accent again, not the ink of the block it hangs from. */
+  --color-focus: var(--accent);
 }
 @utility glass-bar {
   background: var(--color-glass-bar);
@@ -166,12 +168,21 @@
 }
 
 /*
- * The glass header goes up over main's top padding, which holds the status bar's height, so it
- * reaches the top edge. Not when a banner is above it: the header then follows the banner, in the
+ * The theme's block goes up over main's top padding, which holds the status bar's height, so it
+ * reaches the top edge. Not when a banner is above it: the block then follows the banner, in the
  * flow, and the padding stays.
  */
-main:has(> [data-shell-banners]:empty) [data-glass-header] {
+main:has(> [data-shell-banners]:empty) [data-head-block] {
   margin-top: calc(-1 * max(1rem, env(safe-area-inset-top)));
+}
+
+/*
+ * The tab bar's height: a 56px row of tabs over the bottom edge's safe area, taking at least 30px of
+ * it, so the bar is 86px on a phone with a gesture line and grows over a taller one (three buttons).
+ * The end of the page and the toasts are set above it from this.
+ */
+:root {
+  --tab-bar: calc(56px + max(30px, env(safe-area-inset-bottom)));
 }
 
 /*

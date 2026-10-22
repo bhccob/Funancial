@@ -1,10 +1,17 @@
-import { act, screen, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createMemoryRouter, Link, RouterProvider } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { Toaster } from '@/components/ui/Toaster';
+import { topDialog } from '@/lib/dialogStack';
+import { toast, toastStore } from '@/lib/toast';
+import { handleBack } from '@/platform/back';
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
+import { makeAccount, makeExpense, makeLimit, makeProfile, makeSettings } from '@/test/fixtures';
+import { freshRealStore } from '@/test/realStore';
 import { AppShell } from './AppShell';
 import { appRouteObjects } from './router';
+import { useAddSheet } from './useAddSheet';
 
 function renderAt(path: string) {
   const router = createMemoryRouter(appRouteObjects, { initialEntries: [path] });
@@ -68,8 +75,8 @@ describe('AppShell', () => {
 
   it('moves focus to the heading of a screen chosen on Profile', async () => {
     renderAt('/profile');
-    await userEvent.click(within(screen.getByRole('main')).getByRole('link', { name: /^Goals/ }));
-    expect(screen.getByRole('heading', { level: 1, name: 'Goals' })).toHaveFocus();
+    await userEvent.click(within(screen.getByRole('main')).getByRole('link', { name: /^History/ }));
+    expect(screen.getByRole('heading', { level: 1, name: 'History' })).toHaveFocus();
   });
 
   it('puts the tab bar before the page, so Tab goes on into the page after a tab', () => {
@@ -85,17 +92,31 @@ describe('AppShell', () => {
     expect(screen.queryByRole('dialog', { name: 'Menu' })).not.toBeInTheDocument();
   });
 
-  it('leaves room under the page for the floating tab bar on phones', () => {
+  it('leaves room under the page for the tab bar on phones', () => {
     renderAt('/');
-    expect(screen.getByRole('main')).toHaveClass(
-      'pb-[calc(110px+env(safe-area-inset-bottom))]',
-      'md:pb-12',
+    expect(screen.getByRole('main')).toHaveClass('pb-[calc(var(--tab-bar)+24px)]', 'md:pb-12');
+  });
+
+  it('puts the soft shapes behind the page while it is up, and takes them away after', () => {
+    const { unmount } = renderWithStore(
+      <RouterProvider router={createMemoryRouter(appRouteObjects, { initialEntries: ['/'] })} />,
     );
+    expect(document.body).toHaveClass('page-blobs');
+    unmount();
+    expect(document.body).not.toHaveClass('page-blobs');
+  });
+
+  it('has no ＋ fan, and leaves the page usable', () => {
+    renderAt('/');
+    expect(screen.queryByRole('button', { name: 'Add' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Add' })).not.toBeInTheDocument();
+    expect(document.querySelector('[data-fan-scrim]')).toBeNull();
+    expect(screen.getByRole('main')).not.toHaveAttribute('inert');
   });
 
   it('keeps the banners in a box that is empty and out of the layout when none shows', () => {
     renderAt('/');
-    // The glass header reaches the top edge only while this is :empty (index.css).
+    // The top block reaches the top edge only while this is :empty (index.css).
     const banners = screen.getByRole('main').querySelector('[data-shell-banners]');
     expect(banners).toBeEmptyDOMElement();
     expect(banners).toHaveClass('empty:hidden');
@@ -149,5 +170,184 @@ describe('AppShell scroll', () => {
     await act(() => router.navigate(-1));
     expect(screen.getByRole('heading', { level: 1, name: 'Home' })).toBeInTheDocument();
     expect(scrollTo).toHaveBeenLastCalledWith(0, 640);
+  });
+});
+
+/** A screen inside the shell that opens the add sheets, as Home will. */
+function Opener() {
+  const openAdd = useAddSheet();
+  return (
+    <>
+      <h1>Somewhere</h1>
+      <button type="button" onClick={() => openAdd('expense')}>
+        New expense
+      </button>
+      <button type="button" onClick={() => openAdd('income')}>
+        New income
+      </button>
+    </>
+  );
+}
+
+describe('the add sheets', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    toastStore.setState({ toasts: [] });
+  });
+
+  function renderOpener(store = createStubStore()) {
+    const router = createMemoryRouter(
+      [{ element: <AppShell />, children: [{ path: '/', element: <Opener /> }] }],
+      { initialEntries: ['/'] },
+    );
+    renderWithStore(
+      <>
+        <RouterProvider router={router} />
+        <Toaster />
+      </>,
+      store,
+    );
+    return router;
+  }
+
+  const sheet = (name: string) => screen.queryByRole('dialog', { name });
+  /** What the Android back gesture is handed: the dialog stack, and spies for going back and out. */
+  const backEnv = () => ({ topDialog, back: vi.fn(), minimize: vi.fn() });
+  /** One press of the back gesture, as the shell makes it. */
+  function pressBack(env: ReturnType<typeof backEnv>) {
+    let result: ReturnType<typeof handleBack> | undefined;
+    act(() => {
+      result = handleBack(true, env);
+    });
+    return result;
+  }
+
+  it('opens Add expense over the screen, on the Amount; back closes the sheet only', async () => {
+    renderOpener();
+    await userEvent.click(screen.getByRole('button', { name: 'New expense' }));
+
+    const adding = sheet('Add expense')!;
+    expect(adding).toBeInTheDocument();
+    expect(within(adding).getByRole('heading', { level: 2, name: 'Add expense' })).toHaveClass(
+      'text-section',
+    );
+    expect(within(adding).getByLabelText('Amount')).toHaveFocus();
+    expect(topDialog()).toBe(adding);
+
+    const env = backEnv();
+    expect(pressBack(env)).toBe('dialog');
+    expect(sheet('Add expense')).not.toBeInTheDocument();
+    expect(env.back).not.toHaveBeenCalled();
+    expect(pressBack(env)).toBe('back');
+  });
+
+  it('does nothing for a screen drawn on its own, outside the shell', async () => {
+    renderWithStore(
+      <RouterProvider
+        router={createMemoryRouter([{ path: '/', element: <Opener /> }], {
+          initialEntries: ['/'],
+        })}
+      />,
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'New expense' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('opens Add income', async () => {
+    renderOpener();
+    await userEvent.click(screen.getByRole('button', { name: 'New income' }));
+    const adding = sheet('Add income')!;
+    expect(adding).toBeInTheDocument();
+    expect(within(adding).getByLabelText('Amount')).toHaveFocus();
+    expect(sheet('Add expense')).not.toBeInTheDocument();
+  });
+
+  it('closes with its Cancel', async () => {
+    renderOpener();
+    await userEvent.click(screen.getByRole('button', { name: 'New expense' }));
+    await userEvent.click(within(sheet('Add expense')!).getByRole('button', { name: 'Cancel' }));
+    expect(sheet('Add expense')).not.toBeInTheDocument();
+    expect(topDialog()).toBeNull();
+  });
+
+  it('takes a toast inside the sheet, where the page behind it is inert', async () => {
+    renderOpener();
+    await userEvent.click(screen.getByRole('button', { name: 'New income' }));
+    act(() => toast('success', 'Expense saved.'));
+    expect(sheet('Add income')).toContainElement(screen.getByText('Expense saved.'));
+  });
+
+  it('asks over the sheet when an expense crosses a limit, and stays on the screen', async () => {
+    // No price service: nothing asks the network for anything.
+    vi.stubEnv('VITE_FUNANCIAL_API_TOKEN', '');
+    const { store } = await freshRealStore();
+    // Strict asks before going over. Food is at 95.00 of its 100.00 for October.
+    await store.getState().putMany([
+      { table: 'profile', record: makeProfile({ openingDate: '2026-10-01' }) },
+      { table: 'settings', record: makeSettings({ warningTone: 'strict' }) },
+      { table: 'account', record: makeAccount({ openingDate: '2026-10-01' }) },
+      {
+        table: 'budgetLimit',
+        record: makeLimit({ category: 'food', period: 'monthly', amount: 100_00 }),
+      },
+      {
+        table: 'expense',
+        record: makeExpense({ category: 'food', amount: 95_00, date: '2026-10-10' }),
+      },
+    ]);
+    const router = renderOpener(store);
+
+    await userEvent.click(screen.getByRole('button', { name: 'New expense' }));
+    const adding = sheet('Add expense')!;
+    await userEvent.type(within(adding).getByLabelText('Amount'), '10');
+    await userEvent.click(within(adding).getByRole('button', { name: 'Save' }));
+
+    // The limit question opens over the sheet, which stays open under it.
+    const ask = await screen.findByRole('dialog', { name: 'Over your limit?' });
+    expect(sheet('Add expense')).toBeInTheDocument();
+    expect(topDialog()).toBe(ask);
+
+    await userEvent.click(within(ask).getByRole('button', { name: 'Save anyway' }));
+    await waitFor(() => expect(sheet('Add expense')).not.toBeInTheDocument());
+    expect(sheet('Over your limit?')).not.toBeInTheDocument();
+    expect(topDialog()).toBeNull();
+    expect(router.state.location.pathname).toBe('/');
+    expect(screen.getByRole('heading', { level: 1, name: 'Somewhere' })).toBeInTheDocument();
+    expect(
+      store
+        .getState()
+        .data.tables.expense.map((e) => e.amount)
+        .sort(),
+    ).toEqual([10_00, 95_00]);
+  });
+
+  it('back closes the limit question first, then the sheet, then leaves', async () => {
+    vi.stubEnv('VITE_FUNANCIAL_API_TOKEN', '');
+    const { store } = await freshRealStore();
+    await store.getState().putMany([
+      { table: 'profile', record: makeProfile({ openingDate: '2026-10-01' }) },
+      { table: 'settings', record: makeSettings({ warningTone: 'strict' }) },
+      { table: 'account', record: makeAccount({ openingDate: '2026-10-01' }) },
+      {
+        table: 'budgetLimit',
+        record: makeLimit({ category: 'food', period: 'monthly', amount: 100_00 }),
+      },
+    ]);
+    renderOpener(store);
+    await userEvent.click(screen.getByRole('button', { name: 'New expense' }));
+    const adding = sheet('Add expense')!;
+    await userEvent.type(within(adding).getByLabelText('Amount'), '150');
+    await userEvent.click(within(adding).getByRole('button', { name: 'Save' }));
+    await screen.findByRole('dialog', { name: 'Over your limit?' });
+
+    const env = backEnv();
+    expect(pressBack(env)).toBe('dialog');
+    expect(sheet('Over your limit?')).not.toBeInTheDocument();
+    expect(sheet('Add expense')).toBeInTheDocument();
+
+    expect(pressBack(env)).toBe('dialog');
+    expect(sheet('Add expense')).not.toBeInTheDocument();
+    expect(pressBack(env)).toBe('back');
+    expect(store.getState().data.tables.expense).toEqual([]);
   });
 });

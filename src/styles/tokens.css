@@ -149,8 +149,6 @@
   --shadow-tile: 0 1px 2px rgb(10 10 20 / 0.04);
   /* The glass on the page casts the theme's tint. */
   --shadow-glass: 0 12px 28px -18px var(--shadow-tint);
-  /* The glow under the plus button, in the accent. */
-  --shadow-plus: 0 10px 20px -10px var(--accent);
 
   /* The one easing curve of the glass look, for glides and rises. */
   --ease-glass: cubic-bezier(0.2, 0.8, 0.2, 1);
@@ -171,7 +169,6 @@
   --duration-small: 220ms;
   --duration-standard: 380ms;
   --stagger-rise: 60ms;
-  --stagger-fan: 50ms;
   --duration-count: 900ms;
   --press-scale: 0.96;
   --page-blobs-strength: 1;

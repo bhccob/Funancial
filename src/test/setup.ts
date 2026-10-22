@@ -9,8 +9,7 @@ if (typeof window !== 'undefined') {
   // jsdom may lack modal <dialog>; mimic the browser: open it and move focus inside, onto the first
   // control Tab could reach (as the browser's dialog focusing steps do), else the dialog itself.
   // A field's autoFocus can't do it: the field mounts while the dialog is still closed, out of
-  // sight, where neither jsdom nor the browser lets it take focus. show() opens it without moving
-  // focus (the ＋ fan moves focus itself).
+  // sight, where neither jsdom nor the browser lets it take focus.
   const proto = window.HTMLDialogElement?.prototype;
   if (proto && typeof proto.showModal !== 'function') {
     proto.showModal = function (this: HTMLDialogElement) {
@@ -27,9 +26,6 @@ if (typeof window !== 'undefined') {
           !el.closest('dialog:not([open])'),
       );
       (first ?? this).focus();
-    };
-    proto.show = function (this: HTMLDialogElement) {
-      this.open = true;
     };
     proto.close = function (this: HTMLDialogElement) {
       this.open = false;

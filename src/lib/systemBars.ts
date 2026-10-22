@@ -2,44 +2,47 @@ import { onThemeApplied } from './theme';
 
 export type BarsBackground = 'dark' | 'light';
 
-/** How many things are holding the top of the screen dark right now (see `claimDarkTop`). */
-let claims = 0;
+/** What the claims on the top of the screen say is there, oldest first (see `claimTop`). */
+const claims: { tone: BarsBackground }[] = [];
 
 const listeners = new Set<() => void>();
 
 /**
- * Says the top of the screen, under the status bar, is dark whatever the theme, until the returned
- * function is called. The glass header does this while it covers the top of the viewport, so the
- * status-bar icons stay light on it in the light theme. Each call is its own claim, and its
- * release counts once however many times it is called.
+ * Says the top of the screen, under the status bar, is `tone` whatever the theme, until the
+ * returned function is called. The theme's block does this while it covers the top of the viewport,
+ * with its own kind: a dark block keeps the status-bar icons light on it, a light block keeps them
+ * dark, in either theme. Each call is its own claim, and the most recent one held is what counts
+ * (the block of a screen coming in over the one going out); its release counts once however many
+ * times it is called.
  */
-export function claimDarkTop(): () => void {
-  claims += 1;
+export function claimTop(tone: BarsBackground): () => void {
+  const claim = { tone };
+  claims.push(claim);
   listeners.forEach((report) => report());
   let held = true;
   return () => {
     if (!held) return;
     held = false;
-    claims -= 1;
+    claims.splice(claims.indexOf(claim), 1);
     listeners.forEach((report) => report());
   };
 }
 
 /**
- * Runs `cb` with what is behind the status bar: `'dark'` when the theme is dark or any claim is
- * held, else `'light'`. It runs once for the background as it stands (when a theme is already
- * applied) and then each time that changes, not for a change that leaves it as it was. Returns an
- * unsubscribe.
+ * Runs `cb` with what is behind the status bar: what the most recent claim held says, else the
+ * theme (`'dark'` on the dark theme, `'light'` on the light one). It runs once for the background as
+ * it stands (when a theme is already applied) and then each time that changes, not for a change that
+ * leaves it as it was. Returns an unsubscribe.
  *
  * A `cb` that throws is logged and goes no further: it is called from inside a claim, its release
  * and the theme's own listeners, and none of those may be cut short by it (a claim cut short is
- * never released, and the bars would stay dark for the rest of the session).
+ * never released, and the bars would keep its icons for the rest of the session).
  */
 export function onBarsBackground(cb: (background: BarsBackground) => void): () => void {
   let themeIsDark = false;
   let last: BarsBackground | undefined;
   const report = () => {
-    const background = themeIsDark || claims > 0 ? 'dark' : 'light';
+    const background = claims.at(-1)?.tone ?? (themeIsDark ? 'dark' : 'light');
     if (background === last) return;
     last = background;
     try {

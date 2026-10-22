@@ -25,7 +25,7 @@ import {
 import { freshRealStore } from '@/test/realStore';
 import { Avatar } from './Avatar';
 import { QuestList } from './QuestList';
-import { useGameTheme } from './useGameTheme';
+import { useBlockTone, useGameTheme } from './useGameTheme';
 import { WeeklyCheckInDialog } from './WeeklyCheckInDialog';
 
 const TODAY = '2026-10-14'; // a Wednesday: with weeks starting Monday the week starts 2026-10-12
@@ -230,6 +230,50 @@ describe('useGameTheme', () => {
 
     view.unmount();
     expect(themeOf()).toBeUndefined();
+  });
+});
+
+describe('useBlockTone', () => {
+  /** The tone of the block with `theme` equipped and `ledger` holding what was bought. */
+  function toneWith(
+    theme: string,
+    ledger = [purchaseEntry(theme, 'p1', '2026-10-01T10:00:00.000Z')],
+  ) {
+    const store = createStubStore({
+      data: dataWith((d) => {
+        d.tables.settings = [
+          makeSettings({ cosmetics: { theme, avatar: 'avatar-sprout', frame: 'frame-none' } }),
+        ];
+        d.tables.ledger = ledger;
+      }),
+    });
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <AppStoreProvider store={store}>{children}</AppStoreProvider>
+    );
+    return renderHook(() => useBlockTone(), { wrapper }).result.current;
+  }
+
+  it('is dark for Black & White, the free theme and the default', () => {
+    const store = createStubStore();
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <AppStoreProvider store={store}>{children}</AppStoreProvider>
+    );
+    expect(renderHook(() => useBlockTone(), { wrapper }).result.current).toBe('dark');
+    expect(toneWith('theme-mono', [])).toBe('dark');
+  });
+
+  it('is light for a light theme and dark for a dark one', () => {
+    expect(toneWith('theme-sky')).toBe('light');
+    expect(toneWith('theme-seafoam')).toBe('light');
+    expect(toneWith('theme-navy')).toBe('dark');
+    expect(toneWith('theme-espresso')).toBe('dark');
+  });
+
+  it('reads a 0.11 theme as the one that replaced it, and one not owned as Black & White', () => {
+    // A bought Ocean is Powder Blue now: a light block.
+    expect(toneWith('theme-ocean', [makeLegacyPurchase('theme-ocean', 150)])).toBe('light');
+    // Sunny Sky equipped but never bought is not worn.
+    expect(toneWith('theme-sky', [])).toBe('dark');
   });
 });
 

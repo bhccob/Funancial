@@ -23,6 +23,7 @@ const THEMES = ['light', 'dark'] as const;
  */
 const SCREENS = [
   '/',
+  '/cards',
   '/budget',
   '/invest',
   '/profile',
@@ -66,8 +67,8 @@ test('every screen with no parameter is in the list above', () => {
 
 /**
  * Waits until the page holds still: the font is in, every CSS animation that ends has ended, and
- * nothing has moved for a few frames. The last part is for the motion library (the tab bar's pill
- * glides in after a page change), whose script-driven moves `getAnimations()` does not list. Gives
+ * nothing has moved for a few frames. The last part is for the motion library (an amount counting
+ * up as a screen opens), whose script-driven moves `getAnimations()` does not list. Gives
  * up after two seconds, so an animation that never ends cannot hold the scan up.
  */
 async function settle(page: Page) {
@@ -170,46 +171,27 @@ for (const theme of THEMES) {
       await expectReadable(page, 'the first holding');
     });
 
-    test('the open ＋ fan', async ({ page }) => {
-      await visit(page, '/');
+    test("the Net worth sheet from Profile's menu", async ({ page }) => {
+      await visit(page, '/profile');
       await page
-        .getByRole('navigation', { name: 'Primary' })
-        .getByRole('button', { name: 'Add' })
+        .getByRole('main')
+        .getByRole('button', { name: /^Net worth/ })
         .click();
-      const fan = page.getByRole('dialog', { name: 'Add', exact: true });
-      await expect(fan.getByRole('button', { name: 'Expense' })).toBeVisible();
-      await expect(fan.getByRole('button', { name: 'Income' })).toBeVisible();
-      // The bubbles rise and fade in over the standard duration; settle() waits for them.
-      await expectReadable(page, 'the fan');
+      await expect(page.getByRole('dialog', { name: 'Net worth' })).toBeVisible();
+      await expectReadable(page, 'the Net worth sheet');
     });
-
-    for (const kind of ['expense', 'income'] as const) {
-      test(`the Add ${kind} sheet`, async ({ page }) => {
-        await visit(page, '/');
-        await page
-          .getByRole('navigation', { name: 'Primary' })
-          .getByRole('button', { name: 'Add' })
-          .click();
-        await page
-          .getByRole('dialog', { name: 'Add', exact: true })
-          .getByRole('button', { name: kind === 'expense' ? 'Expense' : 'Income' })
-          .click();
-        await expect(page.getByRole('dialog', { name: `Add ${kind}` })).toBeVisible();
-        await expectReadable(page, `the Add ${kind} sheet`);
-      });
-    }
   });
 }
 
-test('Profile header sits below the demo banner', async ({ page }) => {
+test("Profile's block sits below the demo banner", async ({ page }) => {
   await startDemo(page);
   await page.goto('/profile');
   await expect(page.getByRole('heading', { level: 1, name: 'Profile' })).toBeVisible();
   const banner = page.getByRole('status').filter({ hasText: "You're exploring with demo money" });
-  const header = page.locator('[data-glass-header]');
+  const block = page.locator('[data-head-block]');
   const bannerBox = await banner.boundingBox();
-  const headerBox = await header.boundingBox();
+  const blockBox = await block.boundingBox();
   expect(bannerBox, 'the demo banner is drawn').not.toBeNull();
-  expect(headerBox, 'the header is drawn').not.toBeNull();
-  expect(headerBox!.y).toBeGreaterThanOrEqual(bannerBox!.y + bannerBox!.height);
+  expect(blockBox, 'the block is drawn').not.toBeNull();
+  expect(blockBox!.y).toBeGreaterThanOrEqual(bannerBox!.y + bannerBox!.height);
 });

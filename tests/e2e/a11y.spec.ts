@@ -198,7 +198,7 @@ for (const width of [360, 375]) {
     await demoByKeyboard(page);
     // Opened by keyboard like everything else here (the URL change is not a mouse action).
     await page.goto('/subscriptions');
-    // The page's own Add, not the tab bar's ＋ (also "Add"), which comes first.
+    // The page's first Add.
     await tabTo(
       page,
       page.getByRole('main').getByRole('button', { name: 'Add', exact: true }).first(),

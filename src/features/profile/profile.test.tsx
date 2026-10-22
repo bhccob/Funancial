@@ -25,12 +25,12 @@ function renderProfile(data: DataSnapshot = emptySnapshot()) {
 
 /** The page itself: the sidebar beside it also has headings and links. */
 const page = () => within(screen.getByRole('main'));
-/** The dark header: the menu rows below it say "Level 2" and "120 coins to spend" too. */
+/** The theme's block: the menu rows below it say "Level 2" and "120 coins to spend" too. */
 const header = () =>
   within(
     page()
       .getByRole('heading', { level: 1, name: 'Profile' })
-      .closest<HTMLElement>('[data-glass-header]')!,
+      .closest<HTMLElement>('[data-head-block]')!,
   );
 
 /** 250 XP is 150 into the 264 of level 2; 400 coins earned and 280 spent on an avatar and a frame. */
@@ -51,16 +51,16 @@ function levelTwo(): DataSnapshot {
 }
 
 describe('Profile screen', () => {
-  it('is the Profile page, with the dark header first and its title inside it', () => {
+  it("is the Profile page, with the theme's block first and its title inside it", () => {
     renderProfile();
     const title = page().getByRole('heading', { level: 1, name: 'Profile' });
-    const header = title.closest('[data-glass-header]');
+    const header = title.closest('[data-head-block]');
     expect(header).toBeInTheDocument();
-    // Nothing before it but the shell's banner box, so the header can reach the top edge.
+    // Nothing before it but the shell's banner box, so the block can reach the top edge.
     expect(header?.parentElement?.previousElementSibling).toHaveAttribute('data-shell-banners');
   });
 
-  it('lists both groups, and every menu row as a link to its page', () => {
+  it('lists both groups, each row a link to its page, a button for its sheet, or Soon', () => {
     renderProfile();
     expect(
       page()
@@ -70,10 +70,10 @@ describe('Profile screen', () => {
     for (const { title, items } of MENU_GROUPS) {
       const group = page().getByRole('heading', { level: 2, name: title }).parentElement!;
       expect(
-        within(group)
-          .getAllByRole('link')
-          .map((a) => a.getAttribute('href')),
-      ).toEqual(items.map((i) => i.path));
+        [...group.querySelectorAll<HTMLElement>('a, button')].map((el) =>
+          el.tagName === 'A' ? el.getAttribute('href') : el.matches(':disabled') ? 'soon' : 'sheet',
+        ),
+      ).toEqual(items.map((i) => i.path ?? (i.soon ? 'soon' : 'sheet')));
     }
   });
 
@@ -88,9 +88,7 @@ describe('Profile screen', () => {
     renderProfile(levelTwo());
     expect(header().getByText('Sam')).toBeInTheDocument();
     expect(header().getByText('Bronze Saver')).toBeInTheDocument();
-    const avatar = document.body.querySelector<HTMLElement>(
-      '[data-glass-header] svg.lucide-rocket',
-    );
+    const avatar = document.body.querySelector<HTMLElement>('[data-head-block] svg.lucide-rocket');
     expect(avatar).toBeInTheDocument();
     const chip = avatar!.parentElement!;
     expect(chip).toHaveClass('ring-[#d4a017]');
@@ -167,7 +165,7 @@ describe('Profile screen', () => {
     renderProfile();
     const top = page()
       .getByRole('heading', { level: 1, name: 'Profile' })
-      .closest('[data-glass-header]')!;
+      .closest('[data-head-block]')!;
     MENU_GROUPS.forEach(({ title }, i) => {
       const block = page().getByRole('heading', { level: 2, name: title }).parentElement!;
       expect(top.compareDocumentPosition(block) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();

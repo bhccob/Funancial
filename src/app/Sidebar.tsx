@@ -1,29 +1,49 @@
 import { Plus } from 'lucide-react';
+import { useState } from 'react';
 import { NavLink } from 'react-router';
 import { ButtonLink } from '@/components/ui/Button';
 import { cn } from '@/lib/cn';
-import { MENU_GROUPS, PRIMARY_LINKS, type NavTarget } from './menu';
+import { MENU_GROUPS, TABS, type MenuItem, type MenuSheet, type NavTarget } from './menu';
+import { MenuSheets } from './MenuGroups';
 
-function SidebarLink({ path, label, icon: Icon, soon }: NavTarget & { soon?: boolean }) {
+const ROW =
+  'flex min-h-11 w-full items-center gap-2.5 rounded-md px-2.5 text-left text-[14.5px] font-semibold';
+
+function SidebarLink({ path, label, icon: Icon }: NavTarget) {
   return (
     <NavLink
       to={path}
       end={path === '/'}
       className={({ isActive }) =>
-        cn(
-          'flex min-h-11 items-center gap-2.5 rounded-md px-2.5 text-[14.5px] font-semibold',
-          isActive ? 'bg-surface-2 text-text' : 'text-muted hover:text-text',
-        )
+        cn(ROW, isActive ? 'bg-surface-2 text-text' : 'text-muted hover:text-text')
       }
     >
       <Icon aria-hidden className="size-[18px]" />
       {label}
-      {soon && <span className="ml-auto text-xs font-bold">Soon</span>}
     </NavLink>
   );
 }
 
+/** A menu row: a link to its page, a button for its sheet, or, not built yet, disabled and "Soon". */
+function SidebarRow({ item, onOpen }: { item: MenuItem; onOpen(sheet: MenuSheet): void }) {
+  const { path, sheet, label, icon: Icon } = item;
+  if (path !== undefined) return <SidebarLink path={path} label={label} icon={Icon} />;
+  return (
+    <button
+      type="button"
+      disabled={sheet === undefined}
+      onClick={sheet === undefined ? undefined : () => onOpen(sheet)}
+      className={cn(ROW, 'text-muted', sheet !== undefined && 'hover:text-text')}
+    >
+      <Icon aria-hidden className="size-[18px]" />
+      {label}
+      {item.soon && <span className="ml-auto text-xs font-bold">Soon</span>}
+    </button>
+  );
+}
+
 export function Sidebar({ className }: { className?: string }) {
+  const [sheet, setSheet] = useState<MenuSheet | null>(null);
   return (
     <aside
       className={cn(
@@ -40,7 +60,7 @@ export function Sidebar({ className }: { className?: string }) {
           Add expense
         </ButtonLink>
         <div className="flex flex-col gap-0.5">
-          {PRIMARY_LINKS.map((link) => (
+          {TABS.map((link) => (
             <SidebarLink key={link.path} {...link} />
           ))}
         </div>
@@ -49,12 +69,13 @@ export function Sidebar({ className }: { className?: string }) {
             <h2 className="text-muted px-2.5 pb-1 text-xs font-bold tracking-wider uppercase">
               {group.title}
             </h2>
-            {group.items.map(({ path, label, icon, soon }) => (
-              <SidebarLink key={path} path={path} label={label} icon={icon} soon={soon} />
+            {group.items.map((item) => (
+              <SidebarRow key={item.label} item={item} onOpen={setSheet} />
             ))}
           </section>
         ))}
       </nav>
+      <MenuSheets open={sheet} onClose={() => setSheet(null)} />
     </aside>
   );
 }

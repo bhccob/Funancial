@@ -1,6 +1,7 @@
 import { isValidElement } from 'react';
 import { matchRoutes } from 'react-router';
 import { expect, it } from 'vitest';
+import { CardsScreen } from '@/features/cards/CardsScreen';
 import { HelpPage } from '@/features/help/HelpPage';
 import { HelpScreen } from '@/features/help/HelpScreen';
 import { DebtsScreen } from '@/features/goals/DebtsScreen';
@@ -10,7 +11,7 @@ import { IncomeScreen } from '@/features/income/IncomeScreen';
 import { HoldingPage } from '@/features/invest/HoldingPage';
 import { InvestScreen } from '@/features/invest/InvestScreen';
 import { ShopScreen } from '@/features/shop/ShopScreen';
-import { MENU_GROUPS, PRIMARY_LINKS, PROFILE, TABS } from './menu';
+import { MENU_GROUPS, PROFILE, TABS } from './menu';
 import { APP_ROUTES } from './routes';
 
 it('has unique paths', () => {
@@ -23,6 +24,7 @@ it('routes every spec screen', () => {
       '/',
       '/add',
       '/budget',
+      '/cards',
       '/debts',
       '/goals',
       '/help',
@@ -43,12 +45,19 @@ it('routes every spec screen', () => {
 
 it('routes every screen the tab bar, Profile and sidebar link to', () => {
   const routed = new Set(APP_ROUTES.map((r) => r.path));
-  // The sidebar's list, which names each screen once.
-  const linked = [...PRIMARY_LINKS, ...MENU_GROUPS.flatMap((g) => g.items)].map((l) => l.path);
+  // The sidebar's list, which names each screen once: the tabs, then the menu's rows that are pages.
+  const linked = [...TABS, ...MENU_GROUPS.flatMap((g) => g.items)].flatMap((l) =>
+    l.path === undefined ? [] : [l.path],
+  );
   expect(linked.filter((path) => !routed.has(path))).toEqual([]);
   expect(new Set(linked).size).toBe(linked.length);
-  // The tabs open some of those same screens, and the avatar opens Profile.
-  expect([...TABS, PROFILE].map((l) => l.path).filter((path) => !routed.has(path))).toEqual([]);
+  // The avatar on Home opens Profile, one of the tabs.
+  expect(TABS).toContain(PROFILE);
+});
+
+it('serves Cards from its own route', () => {
+  const cards = APP_ROUTES.find((r) => r.path === '/cards');
+  expect(isValidElement(cards?.element) && cards.element.type).toBe(CardsScreen);
 });
 
 it('says only where each screen is; names and icons live in menu.ts', () => {
