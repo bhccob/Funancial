@@ -1,7 +1,9 @@
-import { act, render } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { createElement, Fragment, useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { Dialog } from '@/components/ui/Dialog';
+import { Menu } from '@/components/ui/Menu';
 import { Sheet } from '@/components/ui/Sheet';
 import { pushDialog, removeDialog, topDialog } from '@/lib/dialogStack';
 import { handleBack } from './back';
@@ -104,6 +106,51 @@ describe('handleBack', () => {
 
     expect(e.minimize).toHaveBeenCalledTimes(1);
     expect(e.back).not.toHaveBeenCalled();
+  });
+});
+
+describe('handleBack with a menu open', () => {
+  const menu = (onSelect = vi.fn()) =>
+    createElement(Menu, { label: 'More', items: [{ label: 'Move money', onSelect }] });
+
+  it('closes the menu, back on its button, before leaving the screen', async () => {
+    const onSelect = vi.fn();
+    render(menu(onSelect));
+    await userEvent.click(screen.getByRole('button', { name: 'More' }));
+    expect(screen.getByRole('menu', { name: 'More' })).toBeInTheDocument();
+    const e = env();
+
+    let result: string | undefined;
+    act(() => void (result = handleBack(true, e)));
+    expect(result).toBe('dialog');
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'More' })).toHaveFocus();
+    expect(onSelect).not.toHaveBeenCalled();
+    expect(e.back).not.toHaveBeenCalled();
+    expect(e.minimize).not.toHaveBeenCalled();
+
+    // The menu is off the stack once it is closed, however it closed.
+    expect(topDialog()).toBeNull();
+    expect(handleBack(false, e)).toBe('minimize');
+  });
+
+  it('leaves the stack when the menu closes by a pick', async () => {
+    render(menu());
+    await userEvent.click(screen.getByRole('button', { name: 'More' }));
+    expect(topDialog()).not.toBeNull();
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Move money' }));
+    expect(topDialog()).toBeNull();
+  });
+
+  it('closes a menu open in a dialog before the dialog', async () => {
+    const onClose = vi.fn();
+    render(createElement(Dialog, { open: true, title: 'Bills', onClose }, menu()));
+    await userEvent.click(screen.getByRole('button', { name: 'More' }));
+
+    act(() => void handleBack(true, env()));
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(topDialog()?.querySelector('h2')).toHaveTextContent('Bills');
   });
 });
 

@@ -1,6 +1,7 @@
 import { MoreHorizontal } from 'lucide-react';
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
 import { cn } from '@/lib/cn';
+import { pushDialog, removeDialog } from '@/lib/dialogStack';
 
 export interface MenuItem {
   label: string;
@@ -9,7 +10,8 @@ export interface MenuItem {
 }
 
 /**
- * A "more actions" button with a small menu: arrow keys move, Escape closes, a click outside closes.
+ * A "more actions" button with a small menu: arrow keys move, Escape closes, a click outside closes,
+ * and so does Android's back gesture (an open menu is on the dialog stack).
  * `triggerClassName` draws the button for where it sits (a glass circle on the top block) in place of
  * the plain muted one. The menu is the page's surface wherever it opens, in the page's ink.
  */
@@ -26,19 +28,33 @@ export function Menu({
   const menuId = useId();
   const wrapper = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
+  const menu = useRef<HTMLDivElement>(null);
 
   const entries = () => [
     ...(wrapper.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') ?? []),
   ];
 
   useEffect(() => {
-    if (!open) return;
+    const list = menu.current;
+    if (!open || !list) return;
     entries()[0]?.focus();
     const outside = (e: PointerEvent) => {
       if (!wrapper.current?.contains(e.target as Node)) setOpen(false);
     };
+    // The back gesture closes the menu before anything under it, as it closes a dialog: by a
+    // `cancel` event on what is on top of the dialog stack.
+    const cancel = () => {
+      setOpen(false);
+      trigger.current?.focus();
+    };
     document.addEventListener('pointerdown', outside);
-    return () => document.removeEventListener('pointerdown', outside);
+    list.addEventListener('cancel', cancel);
+    pushDialog(list, { modal: false });
+    return () => {
+      document.removeEventListener('pointerdown', outside);
+      list.removeEventListener('cancel', cancel);
+      removeDialog(list);
+    };
   }, [open]);
 
   function close() {
@@ -85,6 +101,7 @@ export function Menu({
       </button>
       {open && (
         <div
+          ref={menu}
           id={menuId}
           role="menu"
           aria-label={label}
