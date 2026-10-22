@@ -1,7 +1,7 @@
 import { Sparkles, X } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { cn } from '@/lib/cn';
-import { useTopDialog } from '@/lib/dialogStack';
+import { useModelessDialogOpen, useTopModalDialog } from '@/lib/dialogStack';
 import { dismiss, useToasts, type ToastTone } from '@/lib/toast';
 
 const bars: Record<ToastTone, string> = {
@@ -14,16 +14,24 @@ const bars: Record<ToastTone, string> = {
 
 /**
  * Toasts float just above the tab bar on phones (its top is 88px up: 22px below it and 66px of bar;
- * plus a 12px gap and the safe area) and at the bottom center on desktop. While a dialog is open
- * they render inside it, since the page behind a modal one is inert.
+ * plus a 12px gap and the safe area) and at the bottom center on desktop. While the ＋ fan is open
+ * they rise above its bubbles instead (those reach 196px up: 104px to their foot, 92px tall), so
+ * they never cover one. While a modal dialog is open they render inside it, since the page behind
+ * it is inert; the fan is not modal, and leaves the toasts where they are.
  */
 export function Toaster() {
   const toasts = useToasts();
-  const dialog = useTopDialog();
+  const modal = useTopModalDialog();
+  const overFan = useModelessDialogOpen();
   const region = (
     <div
       aria-live="polite"
-      className="pointer-events-none fixed inset-x-3 bottom-[calc(100px+env(safe-area-inset-bottom))] z-40 flex flex-col items-center gap-2 md:bottom-8"
+      className={cn(
+        'pointer-events-none fixed inset-x-3 z-40 flex flex-col items-center gap-2 md:bottom-8',
+        overFan
+          ? 'bottom-[calc(208px+env(safe-area-inset-bottom))]'
+          : 'bottom-[calc(100px+env(safe-area-inset-bottom))]',
+      )}
     >
       {toasts.map((t) => (
         <div
@@ -50,5 +58,5 @@ export function Toaster() {
       ))}
     </div>
   );
-  return dialog ? createPortal(region, dialog) : region;
+  return modal ? createPortal(region, modal) : region;
 }

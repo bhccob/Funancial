@@ -26,7 +26,8 @@ const BUBBLES: { kind: AddKind; label: string; icon: LucideIcon }[] = [
  * bar, but here the bar stays crisp above the scrim, with the ＋ turned into the × that closes the
  * fan. So nothing is inert by the browser's doing (AppShell makes the page inert itself), Escape
  * fires no `cancel` (it is listened for on the document), and the dialog goes on the dialog stack
- * by hand, where the Android back gesture finds it. A tap on the scrim closes it too.
+ * by hand, as a modeless one, where the Android back gesture finds it. The Toaster keeps its toasts
+ * out of it and lifts them above the bubbles while it is open. A tap on the scrim closes it too.
  */
 export function AddFan({ open, onClose, onPick, plusRef }: AddFanProps) {
   const ref = useRef<HTMLDialogElement>(null);
@@ -46,7 +47,7 @@ export function AddFan({ open, onClose, onPick, plusRef }: AddFanProps) {
       if (hadFocus) plusRef.current?.focus();
     }
     if (!open) return;
-    pushDialog(el);
+    pushDialog(el, { modal: false });
     return () => removeDialog(el);
   }, [open, plusRef]);
 
@@ -81,8 +82,8 @@ export function AddFan({ open, onClose, onPick, plusRef }: AddFanProps) {
         }}
         // `open:flex`, not `flex`: a display of its own would show the dialog while it is closed.
         // While it closes it stays drawn for as long as the bubbles take to leave (the discrete
-        // transition of `display`). Taps between the bubbles go through it to the scrim.
-        // No transform on it: a toast shown while it is open renders inside it, fixed to the screen.
+        // transition of `display`). Taps between the bubbles go through it to the scrim. Its foot
+        // (104px up) and the bubbles' height (92px) set where the Toaster lifts toasts to.
         className="group/fan pointer-events-none fixed inset-x-0 bottom-[calc(104px+env(safe-area-inset-bottom))] z-40 m-0 w-full max-w-none justify-center gap-[18px] border-0 bg-transparent p-0 transition-[display] transition-discrete duration-(--duration-standard) open:flex"
       >
         {BUBBLES.map(({ kind, label, icon: Icon }, i) => (

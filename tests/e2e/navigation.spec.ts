@@ -102,6 +102,48 @@ test('mobile: ＋, then Expense, adds an expense that shows in History', async (
   await expect(page.getByText('−$4.20')).toBeVisible();
 });
 
+test('mobile: toasts from a save stay clear of the fan opened again, and its bubbles work', async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== 'mobile-chromium', 'mobile layout only');
+  await startFresh(page);
+  await plus(page).click();
+  await fan(page).getByRole('button', { name: 'Expense' }).click();
+  const sheet = page.getByRole('dialog', { name: 'Add expense' });
+  await sheet.getByLabel('Amount', { exact: true }).fill('4.20');
+  await sheet.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(sheet).toBeHidden();
+  // The first expense also completes a quest and earns a badge: three toasts, stacked.
+  const saved = page.getByText('Expense saved.');
+  await expect(saved).toBeVisible();
+
+  await plus(page).click();
+  const bubbles = [
+    fan(page).getByRole('button', { name: 'Expense' }),
+    fan(page).getByRole('button', { name: 'Income' }),
+  ];
+  // Measured where they come to rest.
+  for (const bubble of bubbles) await expect(bubble).toHaveCSS('opacity', '1');
+  await expect(saved).toBeVisible();
+  const toasts = await page.locator('[aria-live] > [role]').all();
+  expect(toasts.length).toBeGreaterThan(0);
+  for (const shown of toasts) {
+    const t = (await shown.boundingBox())!;
+    for (const bubble of bubbles) {
+      const b = (await bubble.boundingBox())!;
+      const apart =
+        t.x + t.width <= b.x ||
+        b.x + b.width <= t.x ||
+        t.y + t.height <= b.y ||
+        b.y + b.height <= t.y;
+      expect(apart, `"${await shown.textContent()}" is clear of a bubble`).toBe(true);
+    }
+  }
+
+  await bubbles[1]!.click();
+  await expect(page.getByRole('dialog', { name: 'Add income' })).toBeVisible();
+});
+
 test('mobile: the bottom of Settings clears the tab bar', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'mobile-chromium', 'mobile layout only');
   await startFresh(page, '/settings');

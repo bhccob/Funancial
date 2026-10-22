@@ -2,17 +2,25 @@ import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { Toaster } from '@/components/ui/Toaster';
 import { topDialog } from '@/lib/dialogStack';
-import { toastStore } from '@/lib/toast';
+import { toast, toastStore } from '@/lib/toast';
 import { handleBack } from '@/platform/back';
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
 import { makeAccount, makeExpense, makeLimit, makeProfile, makeSettings } from '@/test/fixtures';
 import { freshRealStore } from '@/test/realStore';
 import { appRouteObjects } from './router';
 
+/** The app at `path`, with the Toaster beside it as Root has it. */
 function renderAt(path: string, store = createStubStore()) {
   const router = createMemoryRouter(appRouteObjects, { initialEntries: [path] });
-  renderWithStore(<RouterProvider router={router} />, store);
+  renderWithStore(
+    <>
+      <RouterProvider router={router} />
+      <Toaster />
+    </>,
+    store,
+  );
   return router;
 }
 
@@ -41,6 +49,7 @@ async function openFan() {
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllEnvs();
+  toastStore.setState({ toasts: [] });
 });
 
 describe('tab bar', () => {
@@ -150,6 +159,43 @@ describe('the ＋ fan', () => {
     expect(router.state.location.pathname).toBe('/invest');
     expect(fan()).not.toBeInTheDocument();
     expect(screen.getByRole('main')).not.toHaveAttribute('inert');
+  });
+
+  it('keeps a toast out of the fan and above its bubbles, which stay tappable', async () => {
+    toastStore.setState({ toasts: [] });
+    renderAt('/');
+    act(() => toast('success', 'Expense saved.'));
+    const region = screen.getByText('Expense saved.').closest('[aria-live]')!;
+    // Just above the tab bar while the fan is shut.
+    expect(region).toHaveClass('bottom-[calc(100px+env(safe-area-inset-bottom))]');
+
+    const open = await openFan();
+    const saved = screen.getByText('Expense saved.');
+    // Not inside the fan (only a modal dialog takes the toasts in), and lifted clear of the
+    // bubbles, which reach 196px up from the bottom edge.
+    expect(open).not.toContainElement(saved);
+    expect(saved.closest('[aria-live]')).toHaveClass(
+      'bottom-[calc(208px+env(safe-area-inset-bottom))]',
+      'md:bottom-8',
+    );
+    expect(open).toHaveClass('bottom-[calc(104px+env(safe-area-inset-bottom))]');
+
+    await userEvent.click(within(open).getByRole('button', { name: 'Income' }));
+    const adding = sheet('Add income')!;
+    expect(adding).toBeInTheDocument();
+    // Over a modal sheet the toast goes inside it, as before, where the page is inert.
+    expect(adding).toContainElement(screen.getByText('Expense saved.'));
+  });
+
+  it('puts the toasts back just above the tab bar once the fan closes', async () => {
+    toastStore.setState({ toasts: [] });
+    renderAt('/');
+    await openFan();
+    await userEvent.keyboard('{Escape}');
+    act(() => toast('success', 'Expense saved.'));
+    expect(screen.getByText('Expense saved.').closest('[aria-live]')).toHaveClass(
+      'bottom-[calc(100px+env(safe-area-inset-bottom))]',
+    );
   });
 
   it('back closes the fan before leaving the screen', async () => {
