@@ -231,6 +231,32 @@ describe('Paid with on the expense form', () => {
     expect(optionsOf('Paid with')).toEqual(['Main account', 'Savings', 'Visa (credit card)']);
   });
 
+  it('lists no frozen account, and does not start on one, the default included', () => {
+    renderAdd(
+      '/add',
+      'motivational',
+      [{ ...MAIN, frozen: true }, SAVINGS, { ...VISA, frozen: true }],
+      {
+        defaultAccountId: 'acct-main',
+      },
+    );
+    expect(optionsOf('Paid with')).toEqual(['Savings']);
+    expect(screen.getByLabelText('Paid with')).toHaveValue('acct-savings');
+  });
+
+  it('offers a frozen account again once it is unfrozen', () => {
+    const view = renderAdd('/add', 'motivational', [MAIN, SAVINGS, { ...VISA, frozen: true }]);
+    expect(optionsOf('Paid with')).toEqual(['Main account', 'Savings']);
+    act(() =>
+      view.store.setState((s) => {
+        const tables = { ...s.data.tables };
+        tables.account = tables.account.map((a) => ({ ...a, frozen: false }));
+        return { data: { ...s.data, tables } };
+      }),
+    );
+    expect(optionsOf('Paid with')).toEqual(['Main account', 'Savings', 'Visa (credit card)']);
+  });
+
   it('starts on the default account from the settings', async () => {
     renderAdd('/add', 'motivational', [MAIN, SAVINGS, VISA], { defaultAccountId: 'acct-savings' });
     expect(screen.getByLabelText('Paid with')).toHaveValue('acct-savings');
@@ -304,6 +330,23 @@ describe('Edit expense', () => {
     expect(actions.updateExpense).toHaveBeenCalledWith(
       'exp-1',
       expect.objectContaining({ accountId: 'acct-old' }),
+    );
+  });
+
+  it('still offers the frozen account the expense was paid with, and keeps it', async () => {
+    renderWithStore(
+      <ExpenseForm
+        expense={makeExpense({ id: 'exp-2', amount: 8_00, date: TODAY, accountId: 'card-1' })}
+        onDone={() => {}}
+      />,
+      createStubStore({ data: dataWith([MAIN, SAVINGS, { ...VISA, frozen: true }]), today: TODAY }),
+    );
+    expect(screen.getByLabelText('Paid with')).toHaveValue('card-1');
+    expect(optionsOf('Paid with')).toEqual(['Main account', 'Savings', 'Visa (credit card)']);
+    await save();
+    expect(actions.updateExpense).toHaveBeenCalledWith(
+      'exp-2',
+      expect.objectContaining({ accountId: 'card-1' }),
     );
   });
 

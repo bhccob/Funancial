@@ -8,7 +8,14 @@ import {
   makeSale,
   makeTransaction,
 } from '@/test/fixtures';
-import { accountBalance, accountRows, debtBalance, netWorth, type AccountRow } from './balances';
+import {
+  accountBalance,
+  accountRows,
+  debtBalance,
+  heroFigure,
+  netWorth,
+  type AccountRow,
+} from './balances';
 import type { Account } from './entities';
 import { emptySnapshot } from './snapshot';
 
@@ -407,5 +414,64 @@ describe('netWorth', () => {
     expect(netWorth(rows, 40, 1000)).toBe(100 + 200 - 30 - 40 + 1000);
     expect(netWorth([row(main, 100)], 0, 0)).toBe(100);
     expect(netWorth([], 0, 0)).toBe(0);
+  });
+});
+
+describe('heroFigure', () => {
+  const row = (account: Account, balance: number): AccountRow => ({ account, balance });
+  const withLimit = (limit: number | null) => ({
+    ...card().credit!,
+    limit,
+  });
+
+  it('is the balance of a bank account, cash or savings, as Available balance', () => {
+    const cash = makeAccount({ id: 'acct-cash', kind: 'cash' });
+    expect(heroFigure(row(main, 1_000_00))).toEqual({
+      label: 'Available balance',
+      amount: 1_000_00,
+    });
+    expect(heroFigure(row(cash, 40_00))).toEqual({ label: 'Available balance', amount: 40_00 });
+    expect(heroFigure(row(savings, 5_000_00))).toEqual({
+      label: 'Available balance',
+      amount: 5_000_00,
+    });
+  });
+
+  it('keeps an overdrawn balance as it is', () => {
+    expect(heroFigure(row(main, -25_00))).toEqual({ label: 'Available balance', amount: -25_00 });
+  });
+
+  it('is what is left of the limit on a credit card with one, as Available credit', () => {
+    const visa = card({ credit: withLimit(3_000_00) });
+    expect(heroFigure(row(visa, 0))).toEqual({ label: 'Available credit', amount: 3_000_00 });
+    expect(heroFigure(row(visa, 1_250_50))).toEqual({
+      label: 'Available credit',
+      amount: 1_749_50,
+    });
+    expect(heroFigure(row(visa, 3_000_00))).toEqual({ label: 'Available credit', amount: 0 });
+  });
+
+  it('is never below 0 when the card owes more than its limit', () => {
+    const visa = card({ credit: withLimit(3_000_00) });
+    expect(heroFigure(row(visa, 3_200_00))).toEqual({ label: 'Available credit', amount: 0 });
+  });
+
+  it('counts an overpaid card as credit on top of the limit', () => {
+    const visa = card({ credit: withLimit(3_000_00) });
+    expect(heroFigure(row(visa, -50_00))).toEqual({
+      label: 'Available credit',
+      amount: 3_050_00,
+    });
+  });
+
+  it('is what is owed on a credit card with no limit, as Owed', () => {
+    const visa = card({ credit: withLimit(null) });
+    expect(heroFigure(row(visa, 230_00))).toEqual({ label: 'Owed', amount: 230_00 });
+    expect(heroFigure(row(visa, 0))).toEqual({ label: 'Owed', amount: 0 });
+  });
+
+  it('reads a limit of 0 as no limit, as the card screens do', () => {
+    const visa = card({ credit: withLimit(0) });
+    expect(heroFigure(row(visa, 75_00))).toEqual({ label: 'Owed', amount: 75_00 });
   });
 });

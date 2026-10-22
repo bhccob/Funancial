@@ -14,6 +14,14 @@ import { useToday } from '@/store/useFinance';
 export const NOT_CREDIT = (a: Account): boolean => a.kind !== 'credit';
 
 /**
+ * Narrows an account picker to the accounts that can take a new charge: not a frozen one. For the
+ * pickers of an expense or a subscription; income, transfers and payments are not stopped by a
+ * freeze. Module-level, as `useAccountOptions` wants a filter that keeps its identity. A row being
+ * edited keeps the account it is already on through `keepId`.
+ */
+export const NOT_FROZEN = (a: Account): boolean => !a.frozen;
+
+/**
  * The name of the account a row names, archived ones included (history keeps their names), or
  * "Unknown account" when it is gone.
  */
@@ -29,8 +37,9 @@ function labelOf(account: Account): string {
 /**
  * Options for an account select: the accounts in use, in carousel order, a credit card's name
  * followed by "(credit card)". `filter` narrows them (pass one that keeps its identity between
- * renders, as the options are only worked out again when it changes). An archived account is
- * offered only as `keepId`, the one a row being edited was already on.
+ * renders, as the options are only worked out again when it changes). An archived account, or one
+ * the filter leaves out (a frozen one for `NOT_FROZEN`), is offered only as `keepId`, the one a row
+ * being edited was already on.
  */
 export function useAccountOptions(
   filter?: (a: Account) => boolean,
@@ -76,7 +85,7 @@ export function AccountField({
   filter?: (a: Account) => boolean;
   error?: string;
   hint?: string;
-  /** An archived account to offer still: the one a row being edited was already on. */
+  /** An account to offer still, archived or filtered out: the one a row being edited was already on. */
   keepId?: string | null;
 }) {
   const options = useAccountOptions(filter, keepId);

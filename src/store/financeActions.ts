@@ -7,6 +7,7 @@ import {
   defaultsFor,
   incomeAccount,
   payingAccount,
+  spendingAccount,
 } from '@/domain/accounts';
 import { crossesOver, limitAlerts } from '@/domain/alerts';
 import { accountBalance } from '@/domain/balances';
@@ -174,9 +175,10 @@ export function createFinanceActions(store: StoreApi<AppState>) {
   }
 
   return {
+    /** Adds an expense. A frozen account refuses it (`ACCOUNT_FROZEN`): an unfrozen one takes it. */
     async addExpense(input: ExpenseInput): Promise<{ expense: Expense; alerts: LimitStatus[] }> {
       notFuture(input.date);
-      accountInUse(state().data, input.accountId, today());
+      spendingAccount(state().data, input.accountId, today());
       const expense: Expense = {
         id: newId(),
         ...stamp(),
@@ -234,15 +236,15 @@ export function createFinanceActions(store: StoreApi<AppState>) {
     },
 
     /**
-     * Edits an expense. Moving it to another account needs one in use; an expense left on an
-     * archived account (its history) can still be edited.
+     * Edits an expense. Moving it to another account needs one in use that is not frozen; an expense
+     * left on an archived or frozen account (its history) can still be edited.
      */
     async updateExpense(id: string, patch: Partial<Omit<ExpenseInput, 'repeat'>>) {
       const current = find('expense', id);
       const next: Expense = { ...current, ...patch, updatedAt: nowIso() };
       notFuture(next.date);
       if (patch.accountId !== undefined && patch.accountId !== current.accountId) {
-        accountInUse(state().data, patch.accountId, today());
+        spendingAccount(state().data, patch.accountId, today());
       }
       await state().put('expense', next);
     },
@@ -305,10 +307,11 @@ export function createFinanceActions(store: StoreApi<AppState>) {
 
     async saveSubscription(input: SubscriptionInput) {
       const existing = input.id ? find('subscription', input.id) : null;
-      // Only an account the subscription moves to has to be in use: one kept on an archived
-      // account, as its history, can still be edited (as `updateExpense` does).
+      // Only an account the subscription moves to has to be in use and not frozen: one kept on an
+      // archived or frozen account, as its history, can still be edited (as `updateExpense` does).
+      // Its renewals are not checked at all: a frozen account's subscriptions still renew.
       if (!existing || input.accountId !== existing.accountId) {
-        accountInUse(state().data, input.accountId, today());
+        spendingAccount(state().data, input.accountId, today());
       }
       const sub: Subscription = {
         ...(existing ?? {
@@ -463,6 +466,21 @@ export function createFinanceActions(store: StoreApi<AppState>) {
       };
       await state().put('account', account);
       return account;
+    },
+
+    /**
+     * Freezes an account, or unfreezes it, for the Freeze button on the Cards tab. A frozen account
+     * takes no new expense (`addExpense`, an expense or a subscription moved onto it) and is left out
+     * of the pickers for one. Everything else goes on: money still arrives on it and leaves it, what
+     * is already on it can be edited, and its subscriptions still renew. One already as asked is not
+     * written again. Only an account in use can be frozen.
+     */
+    async setAccountFrozen(id: string, frozen: boolean): Promise<Account> {
+      const account = accountInUse(state().data, id, today());
+      if (account.frozen === frozen) return account;
+      const next: Account = { ...account, frozen, updatedAt: nowIso() };
+      await state().put('account', next);
+      return next;
     },
 
     /**

@@ -14,7 +14,7 @@ import { useApp } from '@/store/AppStoreProvider';
 import type { ExpenseInput } from '@/store/financeActions';
 import { useCurrency, useFinanceActions, useToday } from '@/store/useFinance';
 import { CATEGORY_OPTIONS } from '@/features/shared/categories';
-import { AccountField, useStartAccountId } from '@/features/shared/AccountField';
+import { AccountField, NOT_FROZEN, useStartAccountId } from '@/features/shared/AccountField';
 import { DateField } from './DateField';
 import { pastDateProblem } from './pastDate';
 
@@ -37,7 +37,7 @@ export function ExpenseForm({ onDone, expense }: { onDone(): void; expense?: Exp
   const [amount, setAmount] = useState<number | null>(expense?.amount ?? null);
   const [category, setCategory] = useState<Category>(expense?.category ?? 'food');
   const [date, setDate] = useState(expense?.date ?? today);
-  const startAccountId = useStartAccountId();
+  const startAccountId = useStartAccountId(NOT_FROZEN);
   const [accountId, setAccountId] = useState(expense?.accountId ?? startAccountId);
   const paidOnCard = useApp(
     (s) => s.data.tables.account.find((a) => a.id === accountId)?.kind === 'credit',
@@ -151,6 +151,7 @@ export function ExpenseForm({ onDone, expense }: { onDone(): void; expense?: Exp
           setAccountId(id);
           setErrors((x) => ({ ...x, account: undefined }));
         }}
+        filter={NOT_FROZEN}
         keepId={expense?.accountId}
         error={errors.account}
         hint={

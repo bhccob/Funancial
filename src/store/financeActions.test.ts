@@ -1410,3 +1410,146 @@ describe('money only lands on accounts in use', () => {
     expect(balanceOf(data, SAVINGS)).toBe(before + 4_100_00);
   });
 });
+
+describe('freezing an account', () => {
+  const FROZEN = 'That card is frozen. Unfreeze it to use it.';
+  const GONE = "That account doesn't exist.";
+  const ARCHIVED = 'That account is no longer in use.';
+  const gym = {
+    name: 'Gym',
+    amount: 30_00,
+    cycle: 'monthly' as const,
+    nextRenewal: '2026-11-05',
+    category: 'health' as const,
+    accountId: 'card-1',
+  };
+
+  /** Main account and Savings as `setup` makes them, and a Visa owing 230.00, frozen. */
+  async function withFrozenCard() {
+    const t = await setup();
+    await t.store.getState().put('account', makeCard({ openingBalance: 230_00, frozen: true }));
+    return t;
+  }
+
+  /** Each call is refused with its message, and nothing is written. */
+  async function refuses(store: Store, calls: Array<[string, () => Promise<unknown>]>) {
+    const before = store.getState().data;
+    for (const [message, call] of calls) await expect(call(), message).rejects.toThrow(message);
+    expect(store.getState().data).toBe(before);
+  }
+
+  it('setAccountFrozen freezes an account and unfreezes it, changing nothing else about it', async () => {
+    const { store, actions } = await setup();
+    await store.getState().put('account', makeCard({ openingBalance: 230_00 }));
+    const before = store.getState().data.tables.account.find((a) => a.id === 'card-1')!;
+    const frozen = await actions.setAccountFrozen('card-1', true);
+    expect(frozen).toEqual({ ...before, frozen: true, updatedAt: frozen.updatedAt });
+    expect(store.getState().data.tables.account.find((a) => a.id === 'card-1')).toEqual(frozen);
+    const thawed = await actions.setAccountFrozen('card-1', false);
+    expect(thawed).toEqual({ ...before, frozen: false, updatedAt: thawed.updatedAt });
+    expect(store.getState().data.tables.account.find((a) => a.id === 'card-1')?.frozen).toBe(false);
+  });
+
+  it('setAccountFrozen writes nothing when the account already is as asked', async () => {
+    const { store, actions } = await withFrozenCard();
+    const before = store.getState().data;
+    await actions.setAccountFrozen('card-1', true);
+    await actions.setAccountFrozen(MAIN, false);
+    expect(store.getState().data).toBe(before);
+  });
+
+  it('setAccountFrozen refuses an account that is gone or archived', async () => {
+    const { store, actions } = await setup();
+    await store.getState().put('account', makeCard({ archivedOn: '2026-10-02' }));
+    await refuses(store, [
+      [GONE, () => actions.setAccountFrozen('acct-gone', true)],
+      [ARCHIVED, () => actions.setAccountFrozen('card-1', true)],
+    ]);
+  });
+
+  it('a frozen account takes no expense, a repeating one included, and nothing is written', async () => {
+    const { store, actions } = await withFrozenCard();
+    await refuses(store, [
+      [FROZEN, () => actions.addExpense({ ...lunch, accountId: 'card-1' })],
+      [FROZEN, () => actions.addExpense({ ...lunch, accountId: 'card-1', repeat: 'monthly' })],
+    ]);
+    expect(store.getState().data.tables.expense).toEqual([]);
+    expect(store.getState().data.tables.subscription).toEqual([]);
+  });
+
+  it('takes expenses again once it is unfrozen, and what it owes goes up', async () => {
+    const { store, actions } = await withFrozenCard();
+    await actions.setAccountFrozen('card-1', false);
+    await actions.addExpense({ ...lunch, accountId: 'card-1' });
+    expect(balanceOf(store.getState().data, 'card-1')).toBe(230_00 + 12_50);
+  });
+
+  it('freezing a bank account stops expenses from it too, and not the money coming in or going out', async () => {
+    const { store, actions } = await setup();
+    await actions.setAccountFrozen(MAIN, true);
+    await refuses(store, [[FROZEN, () => actions.addExpense(lunch)]]);
+    await actions.addIncome({
+      amount: 50_00,
+      source: 'extra',
+      label: 'Gift',
+      date: TODAY,
+      accountId: MAIN,
+      note: '',
+    });
+    await actions.transfer(MAIN, SAVINGS, 10_00, TODAY, '');
+    expect(balanceOf(store.getState().data, MAIN)).toBe(1_000_00 + 50_00 - 10_00);
+  });
+
+  it('updateExpense will not move an expense onto a frozen account, but edits one already there', async () => {
+    const { store, actions } = await withFrozenCard();
+    const { expense } = await actions.addExpense(lunch);
+    await refuses(store, [
+      [FROZEN, () => actions.updateExpense(expense.id, { accountId: 'card-1' })],
+    ]);
+    // An expense on an account frozen since can still be edited, and moved off it.
+    const old = makeExpense({ id: 'old', accountId: 'card-1', date: '2026-10-01' });
+    await store.getState().put('expense', old);
+    await actions.updateExpense('old', { note: 'Groceries', amount: 20_00, accountId: 'card-1' });
+    expect(store.getState().data.tables.expense.find((e) => e.id === 'old')).toMatchObject({
+      note: 'Groceries',
+      amount: 20_00,
+      accountId: 'card-1',
+    });
+    await actions.updateExpense('old', { accountId: SAVINGS });
+    expect(store.getState().data.tables.expense.find((e) => e.id === 'old')?.accountId).toBe(
+      SAVINGS,
+    );
+  });
+
+  it('saveSubscription will not put a new or moved subscription on a frozen account, but edits one already there', async () => {
+    const { store, actions } = await withFrozenCard();
+    const saved = await actions.saveSubscription({ ...gym, accountId: MAIN });
+    await refuses(store, [
+      [FROZEN, () => actions.saveSubscription(gym)],
+      [FROZEN, () => actions.saveSubscription({ ...gym, id: saved.id })],
+    ]);
+    await store
+      .getState()
+      .put('subscription', makeSubscription({ id: 'sub-old', ...gym, anchorDay: 5 }));
+    await actions.saveSubscription({ ...gym, id: 'sub-old', amount: 35_00 });
+    expect(store.getState().data.tables.subscription.find((s) => s.id === 'sub-old')).toMatchObject(
+      { amount: 35_00, accountId: 'card-1' },
+    );
+  });
+
+  it('a subscription on a frozen account still renews on it', async () => {
+    const { store } = await withFrozenCard();
+    await store
+      .getState()
+      .put(
+        'subscription',
+        makeSubscription({ id: 'sub-gym', accountId: 'card-1', amount: 30_00, nextRenewal: TODAY }),
+      );
+    await store.getState().sync();
+    const data = store.getState().data;
+    expect(data.tables.expense.map((e) => [e.subscriptionId, e.accountId, e.amount])).toEqual([
+      ['sub-gym', 'card-1', 30_00],
+    ]);
+    expect(balanceOf(data, 'card-1')).toBe(230_00 + 30_00);
+  });
+});

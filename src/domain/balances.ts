@@ -72,6 +72,26 @@ export function accountRows(data: DataSnapshot, asOf: LocalDate): AccountRow[] {
   }));
 }
 
+/** The figure Home leads with for an account, and what it is called. */
+export type HeroFigure = {
+  label: 'Available balance' | 'Available credit' | 'Owed';
+  amount: number;
+};
+
+/**
+ * What an account shows as its big number. A bank account, cash or savings: what it holds,
+ * "Available balance". A credit card with a limit: what is left to spend on it, the limit less
+ * what is owed and never below 0 ("Available credit"), counting an overpaid card's credit on top.
+ * A card with no limit (none set, or 0, as the card screens read it): what is owed, "Owed", which
+ * is negative when it is overpaid.
+ */
+export function heroFigure({ account, balance }: AccountRow): HeroFigure {
+  if (account.kind !== 'credit') return { label: 'Available balance', amount: balance };
+  const limit = account.credit?.limit ?? null;
+  if (!limit) return { label: 'Owed', amount: balance };
+  return { label: 'Available credit', amount: Math.max(0, limit - balance) };
+}
+
 /** What is owed on a loan as of a day: its opening balance less the payments made to it. */
 export function debtBalance(debt: Debt, data: DataSnapshot, asOf: LocalDate): number {
   const counts = (d: LocalDate) => d >= debt.openingDate && d <= asOf;

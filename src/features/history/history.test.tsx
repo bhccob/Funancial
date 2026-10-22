@@ -3,11 +3,19 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { EXAMPLES } from '@/domain/examples';
+import { historyEntries } from '@/domain/history';
 import { formatMoney } from '@/domain/money';
-import type { DataSnapshot } from '@/domain/snapshot';
+import { emptySnapshot, type DataSnapshot } from '@/domain/snapshot';
 import { formatMonthYear, formatShares } from '@/lib/format';
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
-import { makeDebt, makeDividend, makeSale, makeTransaction } from '@/test/fixtures';
+import {
+  makeDebt,
+  makeDividend,
+  makeExpense,
+  makeIncome,
+  makeSale,
+  makeTransaction,
+} from '@/test/fixtures';
 import { HistoryScreen } from './HistoryScreen';
 
 const actions = vi.hoisted(() => ({
@@ -139,6 +147,35 @@ describe('HistoryScreen', () => {
     expect(row('Salary').getByText('Salary · to Main account')).toBeInTheDocument();
     // Before the month shown: September's expense is not in October.
     expect(screen.queryByText('Before you started')).not.toBeInTheDocument();
+  });
+
+  it('lists a month in the order historyEntries gives, newest day first and the latest made first within a day', () => {
+    const at = (minute: number) => `2026-10-01T10:0${minute}:00.000Z`;
+    const data = emptySnapshot();
+    data.tables.expense = [
+      makeExpense({ id: 'a', note: 'Alpha', date: '2026-10-10', createdAt: at(1) }),
+      makeExpense({ id: 'b', note: 'Bravo', date: '2026-10-10', createdAt: at(3) }),
+      makeExpense({ id: 'd', note: 'Delta', date: '2026-10-12', createdAt: at(0) }),
+    ];
+    data.tables.income = [
+      makeIncome({ id: 'c', label: 'Charlie', date: '2026-10-10', createdAt: at(2) }),
+    ];
+    data.tables.dividend = [
+      makeDividend({ id: 'e', symbol: 'KO', paidOn: '2026-10-12', createdAt: at(5) }),
+    ];
+    renderHistory(data);
+    const titles: Record<string, string> = {
+      a: 'Alpha',
+      b: 'Bravo',
+      c: 'Charlie',
+      d: 'Delta',
+      e: 'Dividend · KO',
+    };
+    const shown = screen
+      .getAllByRole('listitem')
+      .map((li) => Object.values(titles).find((t) => li.textContent?.includes(t)));
+    expect(shown).toEqual(historyEntries(data).map((e) => titles[e.item.id]));
+    expect(shown).toEqual(['Dividend · KO', 'Delta', 'Bravo', 'Charlie', 'Alpha']);
   });
 
   it('reads a correction on a card as a change in what is owed, signed as a card expense is', () => {

@@ -7,7 +7,7 @@ import { Select } from '@/components/ui/Select';
 import { TextField } from '@/components/ui/TextField';
 import type { Category, Cycle, Subscription } from '@/domain/entities';
 import { CATEGORY_OPTIONS } from '@/features/shared/categories';
-import { AccountField, useStartAccountId } from '@/features/shared/AccountField';
+import { AccountField, NOT_FROZEN, useStartAccountId } from '@/features/shared/AccountField';
 import { useAction } from '@/lib/useAction';
 import { useCurrency, useFinanceActions, useToday } from '@/store/useFinance';
 
@@ -31,7 +31,7 @@ function SubscriptionForm({ sub, onDone }: { sub: Subscription | null; onDone():
   const [cycle, setCycle] = useState<Cycle>(sub?.cycle ?? 'monthly');
   const [nextRenewal, setNextRenewal] = useState(sub?.nextRenewal ?? '');
   const [category, setCategory] = useState<Category>(sub?.category ?? 'entertainment');
-  const startAccountId = useStartAccountId();
+  const startAccountId = useStartAccountId(NOT_FROZEN);
   const [accountId, setAccountId] = useState(sub?.accountId ?? startAccountId);
   const [errors, setErrors] = useState<Errors>({});
   const [busy, setBusy] = useState(false);
@@ -128,6 +128,7 @@ function SubscriptionForm({ sub, onDone }: { sub: Subscription | null; onDone():
           setAccountId(id);
           setErrors((x) => ({ ...x, account: undefined }));
         }}
+        filter={NOT_FROZEN}
         keepId={sub?.accountId}
         error={errors.account}
       />

@@ -3,9 +3,9 @@ import type { ReactNode } from 'react';
 import { afterEach, expect, it } from 'vitest';
 import { emptySnapshot } from '@/domain/snapshot';
 import { createStubStore } from '@/test/appStoreStub';
-import { makeProfile } from '@/test/fixtures';
+import { makeAccount, makeProfile } from '@/test/fixtures';
 import { AppStoreProvider } from './AppStoreProvider';
-import { useCurrency, useMoney } from './useFinance';
+import { useCurrency, useMoney, usePaymentService } from './useFinance';
 import { useAmountsHidden } from './useAmountsHidden';
 
 afterEach(() => useAmountsHidden.setState({ hidden: false }));
@@ -49,4 +49,26 @@ it('writes every amount as four bullets while amounts are hidden, and the number
   expect(result.current(0)).toBe('••••');
   act(() => useAmountsHidden.setState({ hidden: false }));
   expect(result.current(1250)).toContain('12.50');
+});
+
+it('hands out a payment service that records an expense through the store', async () => {
+  const data = emptySnapshot();
+  data.tables.account = [makeAccount({ id: 'acct-main' })];
+  const store = createStubStore({ data });
+  const wrapper = ({ children }: { children: ReactNode }) => (
+    <AppStoreProvider store={store}>{children}</AppStoreProvider>
+  );
+  const { result, rerender } = renderHook(() => usePaymentService(), { wrapper });
+  const first = result.current;
+  rerender();
+  expect(result.current).toBe(first);
+  const expense = await first.pay({
+    accountId: 'acct-main',
+    amount: 12_50,
+    category: 'food',
+    note: 'Lunch',
+    date: store.getState().today,
+  });
+  expect(expense).toMatchObject({ accountId: 'acct-main', amount: 12_50, note: 'Lunch' });
+  expect(store.getState().putMany).toHaveBeenCalledWith([{ table: 'expense', record: expense }]);
 });

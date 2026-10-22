@@ -339,6 +339,45 @@ describe('Paid with in the subscription dialog', () => {
     expect(optionsOf(dialog)).toEqual(['Main account', 'Savings', 'Visa (credit card)']);
   });
 
+  it('lists no frozen account, and does not start on one', async () => {
+    const data = monthData();
+    data.tables.account = data.tables.account.map((a) =>
+      a.id === 'acct-main' || a.id === 'card-1' ? { ...a, frozen: true } : a,
+    );
+    renderWithStore(
+      <MemoryRouter>
+        <SubscriptionsScreen />
+      </MemoryRouter>,
+      createStubStore({ data, today: TODAY }),
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Add' }));
+    const dialog = screen.getByRole('dialog', { name: 'Add a subscription' });
+    expect(optionsOf(dialog)).toEqual(['Savings']);
+    expect(within(dialog).getByLabelText('Paid with')).toHaveValue('acct-savings');
+  });
+
+  it('still offers the frozen account a subscription is paid with when it is edited, and keeps it', async () => {
+    const data = monthData();
+    data.tables.account = data.tables.account.map((a) =>
+      a.id === 'card-1' ? { ...a, frozen: true } : a,
+    );
+    renderWithStore(
+      <MemoryRouter>
+        <SubscriptionsScreen />
+      </MemoryRouter>,
+      createStubStore({ data, today: TODAY }),
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Actions for Cloud Drive' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Edit' }));
+    const dialog = screen.getByRole('dialog', { name: 'Edit subscription' });
+    expect(within(dialog).getByLabelText('Paid with')).toHaveValue('card-1');
+    expect(optionsOf(dialog)).toEqual(['Main account', 'Savings', 'Visa (credit card)']);
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+    expect(actions.saveSubscription).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'sub-cloud', accountId: 'card-1' }),
+    );
+  });
+
   it('saves the account that was picked', async () => {
     const dialog = await openNew();
     await fillIn(dialog);

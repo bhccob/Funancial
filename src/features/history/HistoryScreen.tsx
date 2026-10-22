@@ -7,14 +7,8 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { RadioGroup } from '@/components/ui/RadioGroup';
 import { Select } from '@/components/ui/Select';
 import { categoryLabel } from '@/domain/budget';
-import {
-  type Category,
-  type Dividend,
-  type Expense,
-  type Income,
-  type Sale,
-  type Transaction,
-} from '@/domain/entities';
+import { type Category, type Expense } from '@/domain/entities';
+import { entryDate, historyEntries, type Entry } from '@/domain/history';
 import { monthKey } from '@/domain/periods';
 import { ExpenseForm } from '@/features/add/ExpenseForm';
 import { accountName } from '@/features/shared/AccountField';
@@ -27,16 +21,6 @@ import { useInvestActions } from '@/store/useInvest';
 import { ActualBalanceDialog } from './ActualBalanceDialog';
 
 type Show = 'all' | 'spending' | 'income' | 'transfers';
-
-type Entry =
-  | { kind: 'expense'; item: Expense }
-  | { kind: 'income'; item: Income }
-  | { kind: 'transaction'; item: Transaction }
-  | { kind: 'dividend'; item: Dividend }
-  | { kind: 'sale'; item: Sale };
-
-const dateOf = (e: Entry) =>
-  e.kind === 'dividend' ? e.item.paidOn : e.kind === 'sale' ? e.item.soldOn : e.item.date;
 
 const CATEGORY_FILTER = [{ value: 'all', label: 'All categories' }, ...CATEGORY_OPTIONS];
 
@@ -126,29 +110,21 @@ export function HistoryScreen() {
     return [...keys].sort().reverse();
   }, [expense, income, transaction, dividend, sale, today]);
 
+  const everything = useMemo(() => historyEntries(data), [data]);
+
   const days = useMemo(() => {
-    const entries: Entry[] = [
-      ...expense.map((item) => ({ kind: 'expense' as const, item })),
-      ...income.map((item) => ({ kind: 'income' as const, item })),
-      ...transaction.map((item) => ({ kind: 'transaction' as const, item })),
-      ...dividend.map((item) => ({ kind: 'dividend' as const, item })),
-      ...sale.map((item) => ({ kind: 'sale' as const, item })),
-    ].filter(
+    const entries = everything.filter(
       (e) =>
-        monthKey(dateOf(e)) === month &&
+        monthKey(entryDate(e)) === month &&
         (SHOWS[show]?.includes(e.kind) ?? true) &&
         (show !== 'spending' ||
           category === 'all' ||
           (e.kind === 'expense' && e.item.category === category)),
     );
-    entries.sort(
-      (a, b) =>
-        dateOf(b).localeCompare(dateOf(a)) || b.item.createdAt.localeCompare(a.item.createdAt),
-    );
     const grouped = new Map<string, Entry[]>();
-    for (const e of entries) grouped.set(dateOf(e), [...(grouped.get(dateOf(e)) ?? []), e]);
+    for (const e of entries) grouped.set(entryDate(e), [...(grouped.get(entryDate(e)) ?? []), e]);
     return [...grouped];
-  }, [expense, income, transaction, dividend, sale, month, show, category]);
+  }, [everything, month, show, category]);
 
   const loanName = (id: string | null) => debt.find((d) => d.id === id)?.name ?? 'a loan';
   // Archived accounts are in the table too, so old rows keep their names.

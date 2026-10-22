@@ -1,6 +1,7 @@
 import { useCallback, useMemo } from 'react';
 import { formatMoney, type MoneyFormatOptions } from '@/domain/money';
 import { computeFinanceView, type FinanceView } from '@/domain/view';
+import { createLocalPaymentService, type PaymentService } from '@/services/payment';
 import { useApp, useAppStore } from './AppStoreProvider';
 import { createFinanceActions, type FinanceActions } from './financeActions';
 import { HIDDEN_AMOUNT, useAmountsHidden } from './useAmountsHidden';
@@ -33,4 +34,10 @@ export function useFinanceView(): FinanceView {
 export function useFinanceActions(): FinanceActions {
   const store = useAppStore();
   return useMemo(() => createFinanceActions(store), [store]);
+}
+
+/** What Pay goes through: the local service, which records the payment as an expense. */
+export function usePaymentService(): PaymentService {
+  const actions = useFinanceActions();
+  return useMemo(() => createLocalPaymentService(actions), [actions]);
 }
