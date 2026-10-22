@@ -14,7 +14,7 @@
   --color-surface-2: #ebebf0;
   --color-overlay: #ffffff;
   --color-text: #0b0b12;
-  --color-text-muted: #66667a;
+  --color-text-muted: #5a5a6c;
   --color-border: #e6e6ec;
   --color-border-strong: #d2d2db;
   --color-track: #ececf1;
@@ -31,10 +31,13 @@
   --color-xp: var(--accent);
   --color-xp-text: var(--accent);
   --color-xp-contrast: var(--accent-ink);
-  /* The three status colors are held at 4.5:1 on surface-2 too, not only on white. */
-  --color-success: #147a3a;
-  --color-warning: #9a5900;
-  --color-danger: #ca2a31;
+  /*
+   * The three status colors, like the muted line above, are held at 4.5:1 on surface-2 and on the
+   * darkest shape behind the page of every theme (plain rows sit there), not only on white.
+   */
+  --color-success: #116a33;
+  --color-warning: #874e00;
+  --color-danger: #af242b;
   /* The label of a danger button: white on the dark red, ink on the light red of the dark theme. */
   --color-danger-contrast: #ffffff;
   /* Soft tints for the two sides of a bar (below / above break-even). Fills only, never text. */

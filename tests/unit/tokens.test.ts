@@ -68,9 +68,10 @@ function parseColor(value: string): [number, number, number, number] {
   return [Number(match[1]), Number(match[2]), Number(match[3]), Number(match[4] ?? 1)];
 }
 
-/** `top` painted over the opaque `bottom`, as the #rrggbb the eye sees. */
-function composite(top: string, bottom: string): string {
-  const [tr, tg, tb, alpha] = parseColor(top);
+/** `top` (its alpha scaled by `strength`) painted over the opaque `bottom`, as the #rrggbb the eye sees. */
+function composite(top: string, bottom: string, strength = 1): string {
+  const [tr, tg, tb, topAlpha] = parseColor(top);
+  const alpha = topAlpha * strength;
   const [br, bg, bb] = parseColor(bottom);
   const mix = (t: number, b: number) =>
     Math.round(t * alpha + b * (1 - alpha))
@@ -80,24 +81,25 @@ function composite(top: string, bottom: string): string {
 }
 
 /**
- * The text, surface, status and chart colors that stay as they were in 0.11, as [light, dark]. The one
- * change: the light grey of "Other" is a step darker than 0.11's #868b96, which was 2.95:1 on the
- * Black & White page.
+ * The text, surface, status and chart colors, as [light, dark]. In dark mode they are 0.11's. In light
+ * mode four text colors are darker than 0.11's so they hold 4.5:1 on a shape behind the page (muted
+ * #66667a, success #147a3a, warning #9a5900, danger #ca2a31), and the grey of "Other" is a step darker
+ * than 0.11's #868b96, which was 2.95:1 on the Black & White page.
  */
 const BASE_COLORS = {
   surface: ['#ffffff', '#15151d'],
   overlay: ['#ffffff', '#15151d'],
   'surface-2': ['#ebebf0', '#1c1c26'],
   text: ['#0b0b12', '#f4f4f8'],
-  'text-muted': ['#66667a', '#a0a0b2'],
+  'text-muted': ['#5a5a6c', '#a0a0b2'],
   border: ['#e6e6ec', '#24242e'],
   'border-strong': ['#d2d2db', '#30303c'],
   track: ['#ececf1', '#24242e'],
   primary: ['#0b0b12', '#f4f4f8'],
   'primary-contrast': ['#ffffff', '#0b0b10'],
-  success: ['#147a3a', '#4ade80'],
-  warning: ['#9a5900', '#f2a93b'],
-  danger: ['#ca2a31', '#ff6b6f'],
+  success: ['#116a33', '#4ade80'],
+  warning: ['#874e00', '#f2a93b'],
+  danger: ['#af242b', '#ff6b6f'],
   'danger-contrast': ['#ffffff', '#0b0b10'],
   'chart-1': ['#7c5cff', '#7c5cff'],
   'chart-2': ['#22c55e', '#16a34a'],
@@ -108,7 +110,7 @@ const BASE_COLORS = {
   'chart-other': ['#838893', '#6b7080'],
 } as const;
 
-it('keeps the surface, text, status and chart tokens as they were', () => {
+it('keeps the surface, text, status and chart tokens', () => {
   const light = declarations('@theme static');
   const dark = declarations(":root[data-theme='dark']");
   for (const [name, [lightValue, darkValue]] of Object.entries(BASE_COLORS)) {
@@ -325,18 +327,26 @@ describe.each(THEMES)('the %s theme', (id) => {
 
 /**
  * Where a value in design/redesign-v3/glass-themes.html failed a check below, the one token was
- * darkened (the light themes) to the value here: [wireframe, built]. Every other value is the wireframe's.
+ * darkened to the value here: [wireframe, built]. Every other value is the wireframe's. The accents
+ * are darkened until they hold 4.5:1 on the page and on the darkest shape behind it (plain rows sit
+ * there), and on the tab bar and surface-2; the block's own colors only where their label or mark failed.
  */
 const FROM_THE_WIREFRAME = {
-  lemon: { '--hmain': ['#1f8a5a', '#198657'], '--accent': ['#1f8a5a', '#00794b'] },
+  sky: { '--accent': ['#2f5fe0', '#2b56cc'] },
+  lemon: { '--hmain': ['#1f8a5a', '#198657'], '--accent': ['#1f8a5a', '#007448'] },
+  pastel: { '--accent': ['#7c4ddb', '#7346cc'] },
+  daisy: { '--accent': ['#56703f', '#4f673a'] },
   peach: {
     '--hmain': ['#d2602a', '#c4531a'],
-    '--accent': ['#d2602a', '#b64601'],
+    '--accent': ['#d2602a', '#af4301'],
     '--xp': ['#d2602a', '#cd5c25'],
   },
-  seafoam: { '--hmain': ['#13897a', '#068476'], '--accent': ['#13897a', '#00776a'] },
-  pastel: { '--accent': ['#7c4ddb', '#7b4bd9'] },
-  forest: { '--accent': ['#0f7f57', '#007952'] },
+  powder: { '--accent': ['#4a5fd6', '#4457c5'] },
+  seafoam: { '--hmain': ['#13897a', '#068476'], '--accent': ['#13897a', '#007367'] },
+  navy: { '--accent': ['#2557d6', '#2352cb'] },
+  forest: { '--accent': ['#0f7f57', '#006f4b'] },
+  plum: { '--accent': ['#8a2fd6', '#812cc8'] },
+  espresso: { '--accent': ['#a65308', '#994c07'] },
 } as const;
 
 it('changes only the listed values from the wireframe', () => {
@@ -421,6 +431,8 @@ it('defines the glass recipes of the wireframe', () => {
 
 it('defines the block, the two main buttons and the shapes behind the page', () => {
   expect(utility('bg-head')).toContain('var(--head-blobs), var(--head)');
+  // The focus ring on the block is the block's ink: the accent can be as dark as the block itself.
+  expect(utility('bg-head')).toContain('--color-focus: var(--head-ink)');
   expect(utility('btn-head')).toContain('var(--hmain)');
   expect(utility('btn-head')).toContain('color: var(--hmain-ink)');
   expect(utility('btn-accent')).toContain('var(--accent)');
@@ -437,6 +449,35 @@ it('defines the block, the two main buttons and the shapes behind the page', () 
  * twice; the page, the glass over it and the accent are what change with the mode.
  */
 const CASES = THEMES.flatMap((id) => MODES.map((mode) => ({ id, mode })));
+
+/**
+ * Where, as a share of a button's height, its label's glyphs begin: a 44px pill with 14px text has its
+ * capitals from about 38% to 62%. Under the shine the label can only be lighter-backed at the top.
+ */
+const GLYPH_TOP = 0.38;
+
+/** The share of white a main button's shine lays over its fill `position` of the way down (0 top, 1 bottom). */
+function shineAt(name: 'btn-head' | 'btn-accent', position: number): number {
+  const match =
+    /linear-gradient\(180deg, rgb\(255 255 255 \/ ([\d.]+)\), rgb\(255 255 255 \/ 0\) (\d+)%\)/.exec(
+      utility(name),
+    );
+  if (!match) throw new Error(`No shine in ${name}`);
+  return Number(match[1]) * Math.max(0, 1 - position / (Number(match[2]) / 100));
+}
+
+/** What text on a plain row can be: the ink, the muted line, the accent and the three status colors. */
+const ROW_TEXT = [
+  '--color-text',
+  '--color-text-muted',
+  '--color-accent',
+  '--color-success',
+  '--color-warning',
+  '--color-danger',
+] as const;
+
+/** The themes whose brightest glow, under the block's glass, is too light for the 88% muted ink. */
+const MUTED_LOW_ON_GLASS = new Set<string>(['forest', 'espresso']);
 
 /** The colors the block's text can sit on: each end of its gradient, and each glow at full strength over each end. */
 function blockBackdrops(t: (name: string) => string): string[] {
@@ -476,9 +517,55 @@ describe.each(CASES)('the $id theme in $mode mode', ({ id, mode }) => {
     }
   });
 
-  it('keeps the main button label at 4.5:1 or better on the button', () => {
+  it('keeps the focus ring, the block ink, at 3:1 or better on the block, its glow and its glass', () => {
+    for (const backdrop of blockBackdrops(t)) {
+      expect(contrast(t('--head-ink'), backdrop), backdrop).toBeGreaterThanOrEqual(3);
+      const glass = composite(t('--hg-bg'), backdrop);
+      expect(contrast(t('--head-ink'), glass), backdrop).toBeGreaterThanOrEqual(3);
+    }
+  });
+
+  it('keeps the muted header line readable on the block glass, but for the themes that use the ink there', () => {
+    const lowest = Math.min(
+      ...blockBackdrops(t).map((backdrop) => {
+        const glass = composite(t('--hg-bg'), backdrop);
+        return contrast(composite(mutedInk(t), glass), glass);
+      }),
+    );
+    if (MUTED_LOW_ON_GLASS.has(id)) {
+      // The brightest glow under glass takes the 88% ink under 4.5:1; screens put the full ink there.
+      expect(lowest).toBeLessThan(4.5);
+      expect(lowest).toBeGreaterThanOrEqual(3.9);
+    } else {
+      expect(lowest).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  it('keeps the main button label at 4.5:1 or better on the button, under its shine', () => {
     expect(contrast(t('--hmain-ink'), t('--hmain'))).toBeGreaterThanOrEqual(4.5);
     expect(contrast(t('--accent-ink'), t('--accent'))).toBeGreaterThanOrEqual(4.5);
+    // The label's glyphs begin GLYPH_TOP of the way down the button; the shine is white over the fill there.
+    for (const [name, fill, ink] of [
+      ['btn-head', '--hmain', '--hmain-ink'],
+      ['btn-accent', '--accent', '--accent-ink'],
+    ] as const) {
+      const shined = composite(`rgb(255 255 255 / ${shineAt(name, GLYPH_TOP)})`, t(fill));
+      expect(contrast(t(ink), shined), `${name} label under its shine`).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  it('keeps the text on plain rows at 4.5:1 or better on the page and on every shape behind it', () => {
+    // Recent, Categories, Bills, Loans and the Profile menus have no glass: their text sits on the page
+    // and on the peak of whichever page shape is behind it, at the strength the mode gives the shapes.
+    const page = t('--color-bg');
+    const strength = Number(t('--page-blobs-strength'));
+    const peaks = t('--page-blobs').match(/rgba?\([^)]*\)/g)!;
+    expect(peaks.length, 'the shapes behind the page').toBeGreaterThanOrEqual(2);
+    for (const fg of ROW_TEXT) {
+      for (const backdrop of [page, ...peaks.map((peak) => composite(peak, page, strength))]) {
+        expect(contrast(t(fg), backdrop), `${fg} on ${backdrop}`).toBeGreaterThanOrEqual(4.5);
+      }
+    }
   });
 
   it('keeps the current tab label at 4.5:1 or better on the page and on the tab bar over it', () => {
@@ -607,9 +694,13 @@ it('keeps every banner tone readable on both ends of its gradient, light and dar
   }
 });
 
-it('leaves the danger colour off the danger banner: it is under 4.5:1 on the light gradient', () => {
-  const t = tokensFor('mono', 'light');
-  expect(contrast(t('--color-danger'), t('--color-danger-from'))).toBeLessThan(4.5);
+it('holds the danger colour at 4.5:1 on the danger banner, now that it is darker', () => {
+  for (const mode of MODES) {
+    const t = tokensFor('mono', mode);
+    for (const end of [t('--color-danger-from'), t('--color-danger-to')]) {
+      expect(contrast(t('--color-danger'), end), mode).toBeGreaterThanOrEqual(4.5);
+    }
+  }
 });
 
 it('keeps the white icon on each Menu row colour at 3:1 or better, in both themes', async () => {

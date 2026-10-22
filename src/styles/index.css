@@ -34,11 +34,14 @@
 
 /*
  * The top block's backdrop, painted top first: the theme's glowing shapes, and under them its color.
- * The block's text on the brightest point of it is checked for every theme in tests/unit/tokens.test.ts.
+ * The block's text and focus ring on the brightest point of it are checked for every theme in
+ * tests/unit/tokens.test.ts.
  * bg-hero is 0.11's name for it, kept until the header is rebuilt.
  */
 @utility bg-head {
   background-image: var(--head-blobs), var(--head);
+  /* The focus ring on the block is the block's ink: the accent can be as dark as the block. */
+  --color-focus: var(--head-ink);
 }
 @utility bg-hero {
   @apply bg-head;
@@ -81,12 +84,14 @@
 
 /*
  * The two main buttons: btn-head sits on the top block, in the theme's block button; btn-accent sits
- * on the page, in its accent. Each has a light sheen over its top edge. Their labels are checked
- * against the fill for every theme in tests/unit/tokens.test.ts.
+ * on the page, in its accent. Each has a light sheen over its top edge, which ends at 35% of the
+ * height (the wireframe's runs to 60%) so it stops above the label: the label's capitals begin at
+ * about 38%. Their labels are checked against the fill and the sheen for every theme in
+ * tests/unit/tokens.test.ts.
  */
 @utility btn-head {
   background:
-    linear-gradient(180deg, rgb(255 255 255 / 0.35), rgb(255 255 255 / 0) 60%), var(--hmain);
+    linear-gradient(180deg, rgb(255 255 255 / 0.35), rgb(255 255 255 / 0) 35%), var(--hmain);
   color: var(--hmain-ink);
   border: 1px solid rgb(255 255 255 / 0.4);
   box-shadow:
@@ -95,7 +100,7 @@
 }
 @utility btn-accent {
   background:
-    linear-gradient(180deg, rgb(255 255 255 / 0.3), rgb(255 255 255 / 0) 60%), var(--accent);
+    linear-gradient(180deg, rgb(255 255 255 / 0.3), rgb(255 255 255 / 0) 35%), var(--accent);
   color: var(--accent-ink);
   border: 1px solid rgb(255 255 255 / 0.35);
   box-shadow:

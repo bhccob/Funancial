@@ -6,8 +6,8 @@
 
 :root {
   /*
-   * Body copy. A step darker than the app's muted grey: the blurred backdrop is as dark as
-   * #d4e1fe in places, and this still reads at 4.5:1 or better on all of it (site e2e checks).
+   * Body copy, close to the app's muted grey: the blurred backdrop is as dark as #d4e1fe in
+   * places, and this still reads at 4.5:1 or better on all of it (site e2e checks).
    */
   --page-muted: #5d5d69;
 }
