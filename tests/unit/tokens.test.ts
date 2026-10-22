@@ -357,6 +357,15 @@ it('keeps header text readable on the brightest point of the header', () => {
   expect(contrast(muted, brightest)).toBeGreaterThanOrEqual(4.5);
 });
 
+it('keeps the XP fill on the header at 3:1 against its glass track, whatever the theme', () => {
+  const t = declarations('@theme static');
+  const brightest = composite(t['--color-hero-glow']!, t['--color-hero-from']!);
+  // LevelProgress's hero track, `bg-white/15`, over the lightest point of the header.
+  const track = composite('rgb(255 255 255 / 0.15)', brightest);
+  // The fill there is the header's white, the same in every theme and game theme.
+  expect(contrast(t['--color-hero-text']!, track)).toBeGreaterThanOrEqual(3);
+});
+
 /*
  * The chart series, held to the same four gates as the data-viz palette validator: each color's
  * lightness (OKLCH L) inside the theme's band, its chroma above the floor where a hue reads as grey,

@@ -3,7 +3,10 @@ import { cn } from '@/lib/cn';
 
 export interface LevelProgressProps {
   level: LevelInfo;
-  /** `hero` draws the track in glass, for the dark header. */
+  /**
+   * `hero` draws the track in glass and the fill in the header's white, for the dark header: the XP
+   * color of a light theme (violet, or a game theme's) is too faint on the glass there.
+   */
   tone?: 'page' | 'hero';
 }
 
@@ -29,7 +32,10 @@ export function LevelProgress({ level, tone = 'page' }: LevelProgressProps) {
         )}
       >
         <div
-          className="bg-xp h-full rounded-full motion-safe:transition-[width]"
+          className={cn(
+            'h-full rounded-full motion-safe:transition-[width]',
+            tone === 'hero' ? 'bg-hero-text' : 'bg-xp',
+          )}
           style={{ width: `${level.progress * 100}%` }}
         />
       </div>

@@ -123,12 +123,14 @@ describe('Profile screen', () => {
     expect(bar).toHaveAttribute('aria-valuetext', '150 of 264 XP');
     expect(bar).toHaveAttribute('aria-valuenow', '150');
     expect(bar).toHaveAttribute('aria-valuemax', '264');
-    expect(bar.firstElementChild).toHaveClass('bg-xp');
     expect(bar.firstElementChild).toHaveStyle({ width: `${(150 / 264) * 100}%` });
     expect(header().getByText('150 / 264 XP')).toBeInTheDocument();
     // Over the dark header the track is glass, not the page's.
     expect(bar).toHaveClass('bg-white/15');
     expect(bar).not.toHaveClass('bg-track');
+    // And the fill is the header's white: the XP color of a light theme is too faint on the glass.
+    expect(bar.firstElementChild).toHaveClass('bg-hero-text');
+    expect(bar.firstElementChild).not.toHaveClass('bg-xp');
   });
 
   it('level progress at level 1 and at the top level', () => {
