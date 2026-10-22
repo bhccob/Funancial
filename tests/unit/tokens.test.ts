@@ -600,6 +600,62 @@ describe.each(CASES)('the $id theme in $mode mode', ({ id, mode }) => {
   });
 });
 
+/** The cards' veil and sheen on a light block, then on a dark one, as glass-card sets them. */
+function cardGlass(): Record<'light' | 'dark', { veil: string; sheen: string }> {
+  const body = utility('glass-card');
+  const read = (text: string) => {
+    const veil = /--card-veil: (rgb\([^)]*\));/.exec(text)?.[1];
+    const sheen = /--card-sheen: (rgb\([^)]*\));/.exec(text)?.[1];
+    if (!veil || !sheen) throw new Error(`No veil or sheen in ${text}`);
+    return { veil, sheen };
+  };
+  const dark = /\[data-block-tone='dark'\] & \{([^}]*)\}/.exec(body)?.[1];
+  if (!dark) throw new Error('No dark-block rule in glass-card');
+  return { light: read(body.replace(dark, '')), dark: read(dark) };
+}
+
+/** The four tints the carousel's cards take in turn: the theme's three, then AccountCard's white. */
+const CARD_TINTS = ['--card-tint', '--card-tint-2', '--card-tint-3', 'rgb(255 255 255 / 0.2)'];
+
+describe.each(THEMES)('the cards on the %s block', (id) => {
+  // The block is the theme's in both modes, so one mode stands for both.
+  const t = tokensFor(id, 'light');
+  const { veil, sheen } = cardGlass()[DARK_BLOCK.has(id) ? 'dark' : 'light'];
+
+  it('keeps the card text, and the kind label on its glass, at 4.5:1 or better under the sheen', () => {
+    // Over every point of the block (its ends and its glows at full strength), under each tint at
+    // full strength, the veil and the sheen where it is brightest: the most the text can be lit.
+    for (const tint of CARD_TINTS) {
+      for (const backdrop of blockBackdrops(t)) {
+        const card = composite(veil, composite(tint.startsWith('--') ? t(tint) : tint, backdrop));
+        const lit = composite(sheen, card);
+        expect(contrast(t('--head-ink'), lit), `${tint} over ${backdrop}`).toBeGreaterThanOrEqual(
+          4.5,
+        );
+        const label = composite(t('--hg-bg'), lit);
+        expect(contrast(t('--head-ink'), label), `kind on ${tint}`).toBeGreaterThanOrEqual(4.5);
+      }
+    }
+  });
+});
+
+describe.each(CASES)('the edge ring in the $id theme in $mode mode', ({ id, mode }) => {
+  const t = tokensFor(id, mode);
+
+  it('shows at 3:1 or better on the block, its glows and the page, by its ink or its page-colored ring', () => {
+    expect(utility('focus-edge')).toContain('outline: 2px solid var(--color-text)');
+    expect(utility('focus-edge')).toContain('0 0 0 2px var(--color-bg)');
+    for (const backdrop of blockBackdrops(t)) {
+      const best = Math.max(
+        contrast(t('--color-text'), backdrop),
+        contrast(t('--color-bg'), backdrop),
+      );
+      expect(best, `on ${backdrop}`).toBeGreaterThanOrEqual(3);
+    }
+    expect(contrast(t('--color-text'), t('--color-bg'))).toBeGreaterThanOrEqual(3);
+  });
+});
+
 /** Every background text sits on: the page, a section, a chip or card well, a dialog or toast. */
 const SURFACES = ['--color-bg', '--color-surface', '--color-surface-2', '--color-overlay'] as const;
 

@@ -4,9 +4,9 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { ProgressBar } from '@/components/ui/ProgressBar';
 import { Section } from '@/components/ui/Section';
+import { AccountDialog, type AccountTarget } from '@/features/cards/AccountDialog';
 import { ordinal } from '@/lib/format';
 import { useFinanceView, useMoney } from '@/store/useFinance';
-import { CardDialog, type CardTarget } from './CardDialog';
 import { LoanDialog, type LoanTarget } from './LoanDialog';
 import { PayDialog, type PayTarget } from './PayDialog';
 
@@ -56,7 +56,7 @@ function DebtRow({
 export function DebtsScreen() {
   const { accounts, loans } = useFinanceView();
   const money = useMoney();
-  const [cardEdit, setCardEdit] = useState<CardTarget | null>(null);
+  const [cardEdit, setCardEdit] = useState<AccountTarget | null>(null);
   const [loanEdit, setLoanEdit] = useState<LoanTarget | null>(null);
   const [pay, setPay] = useState<PayTarget | null>(null);
 
@@ -72,7 +72,11 @@ export function DebtsScreen() {
         title="Debts"
         action={
           <div className="flex gap-2">
-            <Button size="sm" variant="secondary" onClick={() => setCardEdit({ card: null })}>
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => setCardEdit({ account: null, kind: 'credit' })}
+            >
               Add card
             </Button>
             <Button size="sm" variant="secondary" onClick={() => setLoanEdit({ loan: null })}>
@@ -98,7 +102,7 @@ export function DebtsScreen() {
                   balance={balance}
                   payLabel="Pay card"
                   onPay={() => setPay({ kind: 'card', card, balance })}
-                  onEdit={() => setCardEdit({ card })}
+                  onEdit={() => setCardEdit({ account: card })}
                 />
               );
             })}
@@ -143,7 +147,7 @@ export function DebtsScreen() {
         )}
       </Section>
 
-      <CardDialog target={cardEdit} onClose={() => setCardEdit(null)} />
+      <AccountDialog target={cardEdit} onClose={() => setCardEdit(null)} />
       <LoanDialog target={loanEdit} onClose={() => setLoanEdit(null)} />
       <PayDialog target={pay} onClose={() => setPay(null)} />
     </div>

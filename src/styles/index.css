@@ -85,6 +85,56 @@
 }
 
 /*
+ * A card in the Cards carousel: the block's glass in the theme's card tint (--tint picks the second
+ * or third one), lit along a corner by a sheen. On a dark block a veil darkens it and the sheen is
+ * fainter, so its white text holds 4.5:1 over the brightest glow of the block; a light block needs
+ * neither. Both are checked for every theme in tests/unit/tokens.test.ts. The sheen is ::after, so
+ * the card is `relative` and clips it to its corners.
+ */
+@utility glass-card {
+  --card-veil: rgb(0 0 0 / 0);
+  --card-sheen: rgb(255 255 255 / 0.28);
+  [data-block-tone='dark'] & {
+    --card-veil: rgb(0 0 0 / 0.4);
+    --card-sheen: rgb(255 255 255 / 0.12);
+  }
+  position: relative;
+  overflow: hidden;
+  background:
+    linear-gradient(var(--card-veil), var(--card-veil)),
+    linear-gradient(135deg, var(--tint, var(--card-tint)), rgb(255 255 255 / 0.06));
+  border: 1px solid var(--hg-line);
+  backdrop-filter: blur(24px) saturate(180%);
+  box-shadow:
+    inset 0 1px 0 var(--hg-hi),
+    0 16px 30px -18px rgb(0 0 0 / 0.55);
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: linear-gradient(125deg, var(--card-sheen), transparent 42%);
+  }
+}
+
+/*
+ * The focus ring of a piece that hangs over the block's edge (the Available pill): the ink, with a
+ * ring of the page's own color inside it. No one color holds 3:1 on a dark block, its glows and the
+ * page; the ink and the page are the two ends of the mode, so one of them always does
+ * (tests/unit/tokens.test.ts). The glass's own shadows stay.
+ */
+@utility focus-edge {
+  &:focus-visible {
+    outline: 2px solid var(--color-text);
+    outline-offset: 2px;
+    box-shadow:
+      0 0 0 2px var(--color-bg),
+      inset 0 1px 0 var(--color-glass-hi),
+      0 12px 28px -18px var(--shadow-tint);
+  }
+}
+
+/*
  * The two main buttons: btn-head sits on the top block, in the theme's block button; btn-accent sits
  * on the page, in its accent. Each has a light sheen over its top edge, which ends at 35% of the
  * height (the wireframe's runs to 60%) so it stops above the label: the label's capitals begin at

@@ -13,7 +13,8 @@ export interface HeadBlockProps {
  * shapes in it, running out to the screen's side edges and 36px round at the bottom, with room under
  * what is inside for a piece to hang over its edge. What is inside it reads the block's ink where it
  * asks for `text` and `text-muted`, so the app's own components work on it as they are; the muted
- * line is the full ink too, as the 88% mix is too faint on the glass of some blocks. While it covers
+ * line is the full ink too, as the 88% mix is too faint on the glass of some blocks. It names its
+ * kind in `data-block-tone`, for what inside it is drawn by kind (the cards' veil). While it covers
  * the top of the viewport it claims the status bar for its kind (see `claimTop`), so the bar's icons
  * are light on a dark block and dark on a light one, whatever the mode.
  */
@@ -57,6 +58,7 @@ export function HeadBlock({ children, className }: HeadBlockProps) {
     <div
       ref={block}
       data-head-block
+      data-block-tone={tone}
       className={cn(
         'bg-head text-head-ink rounded-b-hero',
         '[--color-text-muted:var(--color-head-ink)] [--color-text:var(--color-head-ink)]',

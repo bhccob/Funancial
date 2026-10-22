@@ -4,7 +4,7 @@ import { accountBalance } from '@/domain/balances';
 import type { DataSnapshot } from '@/domain/snapshot';
 import { createFinanceActions } from '@/store/financeActions';
 import { freshRealStore } from '@/test/realStore';
-import { makeAccount, makeProfile } from '@/test/fixtures';
+import { makeAccount, makeLimit, makeProfile } from '@/test/fixtures';
 import { createLocalPaymentService } from './payment';
 
 const MAIN = 'acct-main';
@@ -56,7 +56,8 @@ const lunch = { amount: 12_50, category: 'food' as const, note: 'Lunch', date: T
 describe('the local payment service', () => {
   it('pays 12.50 from Main account: its balance drops by exactly that, and the expense is returned', async () => {
     const { store, payments } = await setup();
-    const expense = await payments.pay({ ...lunch, accountId: MAIN });
+    const { expense, alerts } = await payments.pay({ ...lunch, accountId: MAIN });
+    expect(alerts).toEqual([]);
     expect(expense).toMatchObject({
       amount: 12_50,
       category: 'food',
@@ -80,6 +81,16 @@ describe('the local payment service', () => {
     const data = store.getState().data;
     expect(balanceOf(data, VISA)).toBe(100_00 + 12_50);
     expect(balanceOf(data, MAIN)).toBe(1_000_00);
+  });
+
+  it('hands back the limits the payment crossed, as an expense does', async () => {
+    const { store, payments } = await setup();
+    await store.getState().put('budgetLimit', makeLimit({ category: 'food', amount: 20_00 }));
+    const first = await payments.pay({ ...lunch, accountId: MAIN });
+    expect(first.alerts).toEqual([]);
+    // 12.50 is 63% of a 20.00 food limit; 12.50 more is 125%, past all three marks.
+    const second = await payments.pay({ ...lunch, accountId: MAIN });
+    expect(second.alerts.map((a) => [a.limit.category, a.level])).toEqual([['food', 'way-over']]);
   });
 
   it('refuses a frozen card, and writes nothing', async () => {

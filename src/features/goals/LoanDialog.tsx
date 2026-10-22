@@ -193,7 +193,7 @@ function DeleteLoanDialog({
   );
 }
 
-/** Add or edit a loan. A credit card is `CardDialog`'s. */
+/** Add or edit a loan. A credit card is an account, `AccountDialog`'s. */
 export function LoanDialog({ target, onClose }: { target: LoanTarget | null; onClose(): void }) {
   // Beside the form's dialog, not in it: Escape on the ask must not close both.
   const [deleting, setDeleting] = useState<Debt | null>(null);

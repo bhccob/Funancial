@@ -5,10 +5,10 @@ import { archivedBy } from '@/domain/accounts';
 import { accountBalance } from '@/domain/balances';
 import { cardPayment, nextDueDate } from '@/domain/budget';
 import type { Account } from '@/domain/entities';
+import { AccountDialog, type AccountTarget } from '@/features/cards/AccountDialog';
 import { formatDay } from '@/lib/format';
 import { useApp } from '@/store/AppStoreProvider';
 import { useMoney, useToday } from '@/store/useFinance';
-import { CardDialog, type CardTarget } from './CardDialog';
 import { PayDialog, type PayTarget } from './PayDialog';
 
 function Fact({ label, value }: { label: string; value: string }) {
@@ -29,7 +29,7 @@ export function CardSheet({ accountId, onClose }: { accountId: string | null; on
   const today = useToday();
   const data = useApp((s) => s.data);
   const [pay, setPay] = useState<PayTarget | null>(null);
-  const [edit, setEdit] = useState<CardTarget | null>(null);
+  const [edit, setEdit] = useState<AccountTarget | null>(null);
   const editButton = useRef<HTMLButtonElement>(null);
 
   // Deleting it from inside closes the sheet, archived or gone.
@@ -71,7 +71,11 @@ export function CardSheet({ accountId, onClose }: { accountId: string | null; on
               >
                 Pay card
               </Button>
-              <Button ref={editButton} variant="secondary" onClick={() => setEdit({ card })}>
+              <Button
+                ref={editButton}
+                variant="secondary"
+                onClick={() => setEdit({ account: card })}
+              >
                 Edit card
               </Button>
             </div>
@@ -79,12 +83,16 @@ export function CardSheet({ accountId, onClose }: { accountId: string | null; on
         )}
       </Sheet>
       <PayDialog target={pay} onClose={() => setPay(null)} />
-      <CardDialog target={edit} onClose={() => setEdit(null)} />
+      <AccountDialog target={edit} onClose={() => setEdit(null)} />
     </>
   );
 }
 
-function CardFacts({ card, balance }: { card: Account; balance: number }) {
+/**
+ * A credit card's facts (what it owes, when it is due, what you pay, how much of the limit is used)
+ * and why your cash stays put. The card sheet on the Cards tab shows them too.
+ */
+export function CardFacts({ card, balance }: { card: Account; balance: number }) {
   const money = useMoney();
   const today = useToday();
   const data = useApp((s) => s.data);

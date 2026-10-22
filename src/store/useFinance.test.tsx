@@ -62,7 +62,7 @@ it('hands out a payment service that records an expense through the store', asyn
   const first = result.current;
   rerender();
   expect(result.current).toBe(first);
-  const expense = await first.pay({
+  const { expense, alerts } = await first.pay({
     accountId: 'acct-main',
     amount: 12_50,
     category: 'food',
@@ -70,5 +70,6 @@ it('hands out a payment service that records an expense through the store', asyn
     date: store.getState().today,
   });
   expect(expense).toMatchObject({ accountId: 'acct-main', amount: 12_50, note: 'Lunch' });
+  expect(alerts).toEqual([]);
   expect(store.getState().putMany).toHaveBeenCalledWith([{ table: 'expense', record: expense }]);
 });

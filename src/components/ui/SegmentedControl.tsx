@@ -10,14 +10,15 @@ export interface SegmentedControlProps<T extends string> {
   value: T;
   options: { value: T; label: string }[];
   onChange(value: T): void;
-  tone?: 'light' | 'hero';
+  tone?: 'light' | 'hero' | 'glass';
   className?: string;
 }
 
 /**
  * A row of options of which one is chosen: an ink pill on the light page, a white one on the dark
- * header's glass. The chosen pill glides to the tapped option (it jumps for reduced motion).
- * Each option is a 34px button with a 44px tap area.
+ * header's glass, and the surface's own on page glass (`glass`, in a glass box such as the Cards
+ * chart), with the ink on it. The chosen pill glides to the tapped option (it jumps for reduced
+ * motion). Each option is a 34px button with a 44px tap area.
  */
 export function SegmentedControl<T extends string>({
   label,
@@ -30,13 +31,14 @@ export function SegmentedControl<T extends string>({
   // One id per control: a shared id would make the pill fly between controls.
   const pillId = useId();
   const hero = tone === 'hero';
+  const glass = tone === 'glass';
   return (
     <div
       role="group"
       aria-label={label}
       className={cn(
         'isolate inline-flex gap-0.5 rounded-full p-1',
-        hero ? heroGlass : 'bg-surface-2',
+        hero ? heroGlass : glass ? 'glass' : 'bg-surface-2',
         className,
       )}
     >
@@ -58,7 +60,14 @@ export function SegmentedControl<T extends string>({
                 // In `style`, not a class: only that radius stays round while motion stretches the pill.
                 style={{ borderRadius: 9999 }}
                 // The header is dark in both themes, so its pill is white; the light one is ink.
-                className={cn('absolute inset-0', hero ? 'bg-hero-text' : 'bg-primary')}
+                className={cn(
+                  'absolute inset-0',
+                  hero
+                    ? 'bg-hero-text'
+                    : glass
+                      ? 'bg-surface shadow-[0_2px_8px_-4px_rgb(0_0_0/0.3)]'
+                      : 'bg-primary',
+                )}
               />
             )}
             <span
@@ -68,7 +77,9 @@ export function SegmentedControl<T extends string>({
                 on
                   ? hero
                     ? 'text-hero-to'
-                    : 'text-primary-contrast'
+                    : glass
+                      ? 'text-text'
+                      : 'text-primary-contrast'
                   : hero
                     ? 'text-hero-muted'
                     : 'text-muted',
