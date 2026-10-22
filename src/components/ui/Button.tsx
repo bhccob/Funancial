@@ -13,8 +13,8 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const base =
-  'inline-flex items-center justify-center gap-1.5 rounded-full font-bold whitespace-nowrap select-none ' +
-  'motion-safe:transition-[transform,background-color,opacity] motion-safe:duration-100 motion-safe:active:scale-[0.98] ' +
+  'inline-flex items-center justify-center gap-1.5 rounded-full font-bold whitespace-nowrap select-none press ' +
+  'motion-safe:transition-[transform,background-color,opacity] motion-safe:duration-(--duration-press) motion-safe:ease-glass ' +
   'disabled:pointer-events-none disabled:opacity-45';
 
 const variants: Record<ButtonVariant, string> = {

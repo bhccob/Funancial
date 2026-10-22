@@ -68,7 +68,7 @@ describe('Button', () => {
     render(<Button>Save</Button>);
     const button = screen.getByRole('button', { name: 'Save' });
     expect(button).toHaveClass('motion-safe:transition-[transform,background-color,opacity]');
-    expect(button).toHaveClass('motion-safe:active:scale-[0.98]');
+    expect(button).toHaveClass('press');
     expect(button.className).not.toMatch(/(^|\s)(transition|duration-|active:scale|motion-reduce)/);
   });
 

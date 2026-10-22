@@ -103,6 +103,23 @@ it('defines the radii, shadows, easing, type scale and font', () => {
   }
 });
 
+it('holds src/lib/motion.ts to the motion variables: the :root timings in seconds, and the easing', async () => {
+  const { MOTION } = await import('../../src/lib/motion');
+  const inMs = (seconds: number) => `${Math.round(seconds * 1000)}ms`;
+  expect(declarations(':root')).toMatchObject({
+    '--duration-press': inMs(MOTION.press),
+    '--duration-small': inMs(MOTION.small),
+    '--duration-standard': inMs(MOTION.standard),
+    '--stagger-rise': inMs(MOTION.stagger),
+    '--stagger-fan': inMs(MOTION.fanStagger),
+    '--duration-count': inMs(MOTION.countUp),
+    '--press-scale': String(MOTION.pressScale),
+  });
+  expect(declarations('@theme static')['--ease-glass']).toBe(
+    `cubic-bezier(${MOTION.ease.join(', ')})`,
+  );
+});
+
 it('no longer ships the pixel look', () => {
   expect(css).not.toMatch(/pixelify/i);
   expect(css).not.toContain('--color-texture');

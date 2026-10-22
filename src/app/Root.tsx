@@ -1,3 +1,4 @@
+import { MotionConfig } from 'motion/react';
 import { useEffect, useState } from 'react';
 import { RouterProvider } from 'react-router/dom';
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
@@ -72,7 +73,10 @@ export function Root() {
   useGameTheme();
   return (
     <ErrorBoundary>
-      <Phase />
+      {/* `motion` components follow the person's reduced-motion setting: they drop movement and keep fades. */}
+      <MotionConfig reducedMotion="user">
+        <Phase />
+      </MotionConfig>
       <Toaster />
     </ErrorBoundary>
   );
