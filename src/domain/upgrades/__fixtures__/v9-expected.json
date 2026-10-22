@@ -8,7 +8,8 @@
       "demo-card": 57294
     },
     "loans": {},
-    "netWorth": 2680437
+    "netWorth": 2680437,
+    "available": 1186810
   },
   "edge": {
     "asOf": "2026-10-20",
@@ -22,6 +23,22 @@
     "loans": {
       "loan-1": 110000
     },
-    "netWorth": 913578
+    "netWorth": 913578,
+    "available": 950392
+  },
+  "edge-cardsub": {
+    "asOf": "2026-10-20",
+    "cash": 506392,
+    "savings": 462000,
+    "passive": 31120,
+    "cards": {
+      "card-a": 18000,
+      "card-b": 4500
+    },
+    "loans": {
+      "loan-1": 110000
+    },
+    "netWorth": 913578,
+    "available": 949093
   }
 }

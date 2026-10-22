@@ -169,6 +169,9 @@ describe('the account step', () => {
       await screen.findByRole('heading', { level: 1, name: 'Your currency and name' }),
     ).toBeInTheDocument();
     expect(screen.getByText('Step 2 of 6')).toBeInTheDocument();
+    // The step is headed You: About you is gone from the app.
+    expect(screen.getByText('You', { selector: 'header > p' })).toBeInTheDocument();
+    expect(screen.queryByText('About you')).not.toBeInTheDocument();
   });
 
   it('can show what was typed in the password', async () => {

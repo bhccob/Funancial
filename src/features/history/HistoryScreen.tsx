@@ -258,8 +258,14 @@ export function HistoryScreen() {
       amount = money(t.amount);
     } else if (t.type === 'adjustment') {
       title = 'Balance correction';
-      detail = [nameOf(t.toAccountId), t.note === title ? '' : t.note].filter(Boolean).join(' · ');
-      amount = t.amount < 0 ? `−${money(-t.amount)}` : `+${money(t.amount)}`;
+      // On a card the correction changes what is owed: owing more reads as a card expense does.
+      const onCard = account.find((a) => a.id === t.toAccountId)?.kind === 'credit';
+      const change = onCard ? (t.amount > 0 ? 'owed more' : 'owed less') : '';
+      detail = [nameOf(t.toAccountId), change, t.note === title ? '' : t.note]
+        .filter(Boolean)
+        .join(' · ');
+      const out = onCard ? t.amount > 0 : t.amount < 0;
+      amount = `${out ? '−' : '+'}${money(Math.abs(t.amount))}`;
     } else if (t.type === 'card_payment') {
       // Money moved from an account onto the card, so it reads like a transfer.
       title = `${nameOf(t.fromAccountId)} → ${nameOf(t.toAccountId)}`;

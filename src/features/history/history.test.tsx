@@ -141,6 +141,39 @@ describe('HistoryScreen', () => {
     expect(screen.queryByText('Before you started')).not.toBeInTheDocument();
   });
 
+  it('reads a correction on a card as a change in what is owed, signed as a card expense is', () => {
+    const data = structuredClone(bal!.data);
+    data.tables.transaction = [
+      makeTransaction({
+        id: 't-owe-more',
+        type: 'adjustment',
+        amount: 45_00,
+        date: '2026-10-08',
+        fromAccountId: null,
+        toAccountId: 'card-1',
+        note: 'Interest',
+      }),
+      makeTransaction({
+        id: 't-owe-less',
+        type: 'adjustment',
+        amount: -12_00,
+        date: '2026-10-04',
+        fromAccountId: null,
+        toAccountId: 'card-1',
+        note: '',
+      }),
+    ];
+    renderHistory(data);
+    // Owing more is spending on the card: it shows as a card expense does, with a minus.
+    const more = row('Visa · owed more · Interest');
+    expect(more.getByText('Balance correction')).toBeInTheDocument();
+    expect(more.getByText(`−${usd(45_00)}`)).toBeInTheDocument();
+    expect(more.queryByText(`+${usd(45_00)}`)).not.toBeInTheDocument();
+    const less = row('Visa · owed less');
+    expect(less.getByText('Balance correction')).toBeInTheDocument();
+    expect(less.getByText(`+${usd(12_00)}`)).toBeInTheDocument();
+  });
+
   it('names the account each expense was paid with', () => {
     renderHistory();
     expect(screen.getByRole('button', { name: /^Groceries/ })).toHaveTextContent(

@@ -422,7 +422,7 @@ export function OnboardingWizard({ onFinishing }: { onFinishing?(finishing: bool
         return (
           <>
             <ScreenHeader
-              eyebrow="About you"
+              eyebrow="You"
               title="Your currency and name"
               lead="Pick the money you use. Your name is optional."
             />

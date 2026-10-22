@@ -9,7 +9,14 @@ import { toastStore } from '@/lib/toast';
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
 import { fakeAccount, linkedAccount, withAccount } from '@/test/fakeAccount';
 import { fakeNotifier, onPhone, type FakeNotifier } from '@/test/fakeNotifier';
-import { makeExpense, makeGoal, makeProfile, makeSettings } from '@/test/fixtures';
+import {
+  makeAccount,
+  makeDebt,
+  makeExpense,
+  makeGoal,
+  makeProfile,
+  makeSettings,
+} from '@/test/fixtures';
 import { SettingsScreen } from './SettingsScreen';
 
 const finance = vi.hoisted(() => ({
@@ -159,6 +166,21 @@ describe('Data', () => {
     data.tables.goal = [makeGoal()];
     renderWithStore(<SettingsScreen />, createStubStore({ data }));
     expect(screen.getByText('2 expenses · 1 goal')).toBeInTheDocument();
+  });
+
+  it('counts accounts, and calls the debts loans', () => {
+    const many = snapshotWith();
+    many.tables.account = [makeAccount(), makeAccount(), makeAccount()];
+    many.tables.debt = [makeDebt()];
+    const view = renderWithStore(<SettingsScreen />, createStubStore({ data: many }));
+    expect(screen.getByText('3 accounts · 1 loan')).toBeInTheDocument();
+    view.unmount();
+
+    const one = snapshotWith();
+    one.tables.account = [makeAccount()];
+    one.tables.debt = [makeDebt(), makeDebt()];
+    renderWithStore(<SettingsScreen />, createStubStore({ data: one }));
+    expect(screen.getByText('1 account · 2 loans')).toBeInTheDocument();
   });
 
   it('offers no backup, restore or export, with or without an old backup date', () => {

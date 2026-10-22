@@ -40,7 +40,8 @@ export const GLOSSARY: Array<{ term: string; meaning: string }> = [
   { term: 'Net worth', meaning: 'Everything you have, minus everything you owe.' },
   {
     term: 'Passive income',
-    meaning: 'Money that comes in without work, like dividends. Funcial keeps it in its own place.',
+    meaning:
+      'Money that comes in without work, like dividends. Dividends go to whichever account you pick when you confirm them; an older setup may have a Passive income account for them.',
   },
   {
     term: 'Portfolio value',

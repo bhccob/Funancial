@@ -16,7 +16,8 @@ const SUMMARY: Array<[TableName, string, string]> = [
   ['income', 'income entry', 'income entries'],
   ['transaction', 'transaction', 'transactions'],
   ['goal', 'goal', 'goals'],
-  ['debt', 'debt or card', 'debts and cards'],
+  ['account', 'account', 'accounts'],
+  ['debt', 'loan', 'loans'],
 ];
 
 function summarize(data: DataSnapshot): string {

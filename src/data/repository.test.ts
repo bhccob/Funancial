@@ -508,9 +508,10 @@ describe.each([
     expect(await storedRow(backend, 'buyDecision', 'buy-1')).toBeUndefined();
     expect(await storedRow(backend, 'debt', 'card-a')).toBeUndefined();
 
-    // They are reported again on the next load, and still kept.
+    // They are still kept on the next load, and the app's own are reported again: at v10 a
+    // retired table is no longer read, so its row is not.
     const again = await repo.loadAll();
-    expect(bySlot(again.skipped)).toEqual(bySlot(broken));
+    expect(bySlot(again.skipped)).toEqual(bySlot(broken.filter((r) => !isDropped(r.table))));
     expect(await Promise.all(broken.map((r) => storedRow(backend, r.table, r.id)))).toStrictEqual(
       before,
     );
@@ -557,6 +558,41 @@ describe.each([
     expect(await storedRow(backend, 'account', 'card-b')).toBeUndefined();
     expect(await storedRow(backend, 'debt', 'card-a')).toBeUndefined();
     expect(await storedRow(backend, 'account', 'card-a')).toBeDefined();
+  });
+
+  it('removes a retired row whose id a record of another table that does not load shares', async () => {
+    // Only the slot that did not load is kept: the expense freeze-1 fails validation and stays as
+    // it was, while the retired salaryFreeze freeze-1 goes like every other retired row.
+    const backend = await open();
+    const key = await generateDataKey();
+    const v9 = structuredClone(v9edge);
+    v9.tables.expense.push({ ...v9.tables.expense[0]!, id: 'freeze-1', amount: -5 });
+    await seedRows(backend, key, v9);
+    const kept = await storedRow(backend, 'expense', 'freeze-1');
+    expect(await storedRow(backend, 'salaryFreeze', 'freeze-1')).toBeDefined();
+
+    const { skipped } = await createRepository(backend, key).loadAll();
+    expect(skipped).toEqual([{ table: 'expense', id: 'freeze-1', reason: 'invalid' }]);
+    expect(await storedRow(backend, 'salaryFreeze', 'freeze-1')).toBeUndefined();
+    expect(await storedRow(backend, 'expense', 'freeze-1')).toStrictEqual(kept);
+  });
+
+  it('at v10, does not read a retired table: a leftover row is not reported, and stays', async () => {
+    const backend = await open();
+    const key = await generateDataKey();
+    await seedRows(backend, key, v9edge);
+    await createRepository(backend, key).loadAll();
+    expect(await backend.meta.get(DATA_VERSION_KEY)).toBe(10);
+    // A row of a retired table left over at v10, that no key opens.
+    await backend.records.write([unreadable('salaryFreeze', 'freeze-old', 4)], {
+      replace: false,
+    });
+    const before = await storedRow(backend, 'salaryFreeze', 'freeze-old');
+    expect(before).toBeDefined();
+
+    const { skipped } = await createRepository(backend, key).loadAll();
+    expect(skipped).toEqual([]);
+    expect(await storedRow(backend, 'salaryFreeze', 'freeze-old')).toStrictEqual(before);
   });
 });
 

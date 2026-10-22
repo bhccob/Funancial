@@ -296,6 +296,13 @@ describe('help copy says what the code does', () => {
     expect(page('subscriptions')).toContain("shows up in the card's next payment");
   });
 
+  it('says passive income goes to the account picked for each dividend, not a place of its own', () => {
+    const passive = GLOSSARY.find((g) => g.term === 'Passive income')!.meaning;
+    expect(passive).toContain('Dividends go to whichever account you pick when you confirm them');
+    expect(passive).toContain('an older setup may have a Passive income account');
+    expect(passive).not.toMatch(/its own place/);
+  });
+
   it('names the glossary in the summary of Words, so a search for it finds the page', () => {
     expect(helpPage('glossary')!.summary.toLowerCase()).toContain('glossary');
   });

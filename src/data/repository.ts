@@ -46,7 +46,18 @@ export interface Repository {
   replaceAll(snapshot: DataSnapshot): Promise<void>;
 }
 
+/** The version whose upgrade retires `V10_DROPPED_TABLES`. */
+const V10_VERSION = 10;
+
 const slot = (table: string, id: string) => `${table}:${id}`;
+
+/**
+ * The stored rows a record that does not load leaves untouched: its own slot, and for an account
+ * the card debt of the same id it may have been upgraded from (v10 makes a card an account).
+ */
+const keptFor = ({ table, id }: SkippedRecord): string[] =>
+  table === 'account' ? [slot(table, id), slot('debt', id)] : [slot(table, id)];
+
 const isTable = (t: string): t is TableName => (TABLES as readonly string[]).includes(t);
 const isDropped = (t: string): t is DroppedTable =>
   (V10_DROPPED_TABLES as readonly string[]).includes(t);
@@ -107,12 +118,15 @@ export function createRepository(backend: StorageBackend, key: CryptoKey): Repos
     if (fromVersion > CURRENT_SCHEMA_VERSION) throw new SchemaVersionError(fromVersion);
     const skipped: SkippedRecord[] = [];
 
-    // 1. Decrypt, keeping the app's tables and the ones an upgrade retires. A row that fails
-    // never reaches the upgrade, so it is never among the rows removed below.
+    // 1. Decrypt, keeping the app's tables and, below v10, the ones the v10 upgrade retires (at
+    // v10 a leftover row of one is not read). A row that fails never reaches the upgrade, so it
+    // is never among the rows removed below.
+    const readsDropped = fromVersion < V10_VERSION;
     const raw: RawTables = {};
     const read: StoredKey[] = [];
     for (const row of await records.all()) {
-      if (!isTable(row.table) && !isDropped(row.table)) continue; // from a newer app version
+      // From a newer app version, or retired.
+      if (!isTable(row.table) && !(readsDropped && isDropped(row.table))) continue;
       let value: unknown;
       try {
         value = await decryptRecord(key, slot(row.table, row.id), row);
@@ -153,11 +167,15 @@ export function createRepository(backend: StorageBackend, key: CryptoKey): Repos
     // 4. Persist the upgrade once, in one write: every valid record, and the removal of the rows
     // read that are gone (a retired table's, a card debt that is an account now). A row that
     // did not load stays untouched for later recovery, and so does one whose record the upgrade
-    // made into something that does not load (same id): nothing replaces it.
+    // made into something that does not load (its own slot, or a card debt's whose account does
+    // not load): nothing replaces it. Another table's row of the same id is not held back.
     if (fromVersion < CURRENT_SCHEMA_VERSION) {
       const written = new Set(valid.map((v) => slot(v.table, v.record.id)));
-      const leftOut = new Set(invalid.map((s) => s.id));
-      const remove = read.filter((k) => !written.has(slot(k.table, k.id)) && !leftOut.has(k.id));
+      const leftOut = new Set(invalid.flatMap(keptFor));
+      const remove = read.filter((k) => {
+        const at = slot(k.table, k.id);
+        return !written.has(at) && !leftOut.has(at);
+      });
       const rows = await Promise.all(valid.map((v) => toRow(key, v.table, v.record)));
       try {
         // Only onto the version the rows were read at: another connection (another tab) may
