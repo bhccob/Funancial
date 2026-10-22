@@ -17,10 +17,8 @@ import {
 } from 'lucide-react';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { levelStart } from '@/domain/game/levels';
 import { formatMoney } from '@/domain/money';
 import { emptySnapshot, type DataSnapshot } from '@/domain/snapshot';
-import { useAmountsHidden } from '@/store/useAmountsHidden';
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
 import { INBOX_NOW, inboxData } from '@/test/inboxData';
 import { makeAccount, makeLedgerEntry, makeProfile } from '@/test/fixtures';
@@ -78,7 +76,8 @@ describe('Profile menu rows', () => {
       within(menu)
         .getAllByRole('heading', { level: 2 })
         .map((h) => h.textContent),
-    ).toEqual(['Your money', 'You']);
+      // The badges row comes first, then the two groups of rows.
+    ).toEqual(['Badges', 'Your money', 'You']);
 
     const money = rowsOf(menu, 'Your money');
     expect(money.map((el) => [el.tagName, el.getAttribute('href')])).toEqual([
@@ -99,15 +98,14 @@ describe('Profile menu rows', () => {
     ]);
   });
 
-  it('says what is inside each row', () => {
+  it('shows each row as just its name, with nothing under it: the balance and the level are elsewhere', () => {
     const menu = openMenu(liveData());
-    expect(row(menu, 'History')).toHaveTextContent('Every entry, searchable');
-    expect(row(menu, 'Net worth')).toHaveTextContent(usd(1_500_00));
-    expect(row(menu, 'Quests')).toHaveTextContent('Level 1');
-    expect(row(menu, 'Shop')).toHaveTextContent('130 coins to spend');
-    expect(row(menu, 'Inbox')).toHaveTextContent(/^Inbox$/);
-    expect(row(menu, 'Help')).toHaveTextContent('How everything works');
-    expect(row(menu, 'Settings')).toHaveTextContent('Lock, account, reminders');
+    for (const { label, soon } of MENU_GROUPS.flatMap((g) => g.items)) {
+      expect(row(menu, label), label).toHaveTextContent(
+        new RegExp('^' + label + (soon ? 'Soon' : '') + '$'),
+      );
+    }
+    expect(menu).not.toHaveTextContent(usd(1_500_00));
   });
 
   it('no longer lists the pages that moved: Bills & cards, Goals, Debts and Income', () => {
@@ -121,8 +119,6 @@ describe('Profile menu rows', () => {
   });
 
   describe('Net worth row', () => {
-    afterEach(() => useAmountsHidden.setState({ hidden: false }));
-
     it('opens the Net worth sheet over Profile, and closing it puts focus back on the row', async () => {
       const router = renderAt('/profile', liveData());
       const menu = within(screen.getByRole('main'));
@@ -138,11 +134,6 @@ describe('Profile menu rows', () => {
       await userEvent.keyboard('{Escape}');
       expect(screen.queryByRole('dialog', { name: 'Net worth' })).not.toBeInTheDocument();
       expect(netWorth).toHaveFocus();
-    });
-
-    it('hides the amount with the eye', () => {
-      useAmountsHidden.setState({ hidden: true });
-      expect(row(openMenu(liveData()), 'Net worth')).toHaveTextContent(/^Net worth••••/);
     });
   });
 
@@ -164,35 +155,11 @@ describe('Profile menu rows', () => {
     expect(row(menu, 'My numbers')).toHaveTextContent('Soon');
   });
 
-  it('puts Quests first in the You group, with the level', () => {
+  it('puts Quests first in the You group', () => {
     const menu = openMenu();
     const [first] = rowsOf(menu, 'You');
     expect(first).toHaveAttribute('href', '/quests');
-    expect(first).toHaveTextContent('Level 1');
-  });
-
-  it('shows the level the player has reached on the Quests row', () => {
-    const data = emptySnapshot();
-    data.tables.ledger.push(makeLedgerEntry({ coins: 0, xp: levelStart(3) }));
-    expect(row(openMenu(data), 'Quests')).toHaveTextContent('Level 3');
-  });
-
-  it('says 0 coins when there are none, and the singular for one', () => {
-    expect(row(openMenu(), 'Shop')).toHaveTextContent('0 coins to spend');
-    cleanup();
-
-    const data = emptySnapshot();
-    data.tables.ledger.push(makeLedgerEntry({ coins: 1, xp: 0 }));
-    expect(row(openMenu(data), 'Shop')).toHaveTextContent('1 coin to spend');
-  });
-
-  it('never shows a negative coin balance', () => {
-    const data = emptySnapshot();
-    data.tables.ledger.push(
-      makeLedgerEntry({ key: 'bought', kind: 'purchase', coins: -40, xp: 0 }),
-      makeLedgerEntry({ key: 'earned', coins: 15, xp: 0 }),
-    );
-    expect(row(openMenu(data), 'Shop')).toHaveTextContent('0 coins to spend');
+    expect(first).toHaveTextContent(/^Quests$/);
   });
 
   describe('Inbox row', () => {
@@ -327,18 +294,5 @@ describe('menu items', () => {
         ],
       ],
     ]);
-  });
-
-  it('gives each row a fixed chip colour that holds 3:1 against a white icon', () => {
-    const luminance = (hex: string) => {
-      const [r, g, b] = [1, 3, 5].map((i) => {
-        const v = parseInt(hex.slice(i, i + 2), 16) / 255;
-        return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
-      }) as [number, number, number];
-      return 0.2126 * r + 0.7152 * g + 0.0722 * b;
-    };
-    for (const { label, color } of MENU_GROUPS.flatMap((g) => g.items)) {
-      expect(1.05 / (luminance(color) + 0.05), label).toBeGreaterThanOrEqual(3);
-    }
   });
 });

@@ -42,9 +42,20 @@ test('mobile: the tab bar navigates, Profile last, and Profile opens from the av
   );
 
   const profile = await openProfile(page);
-  await profile.getByRole('link', { name: /^Settings/ }).click();
+  // Settings is the gear in the block and the last row of the menu: take the row.
+  await profile
+    .getByRole('heading', { level: 2, name: 'You' })
+    .locator('..')
+    .getByRole('link', { name: /^Settings/ })
+    .click();
   // The screen chosen takes focus on its name.
   await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeFocused();
+  // The Profile tab stays marked: it is where Settings was opened from, and has no tab of its own.
+  await expect(bar(page).getByRole('link', { name: 'Profile' })).toHaveAttribute(
+    'aria-current',
+    'true',
+  );
+  await expect(bar(page).getByRole('link', { name: 'Profile' })).toHaveClass(/text-accent/);
 });
 
 test('mobile: the tab bar runs edge to edge along the bottom, 86px tall, the current tab in the accent', async ({
@@ -252,7 +263,7 @@ test("mobile: Profile's menu is History, Net worth and My numbers, then Quests t
   test.skip(testInfo.project.name !== 'mobile-chromium', 'mobile layout only');
   await startFresh(page);
   const menu = await openProfile(page);
-  await expect(menu.getByRole('heading', { level: 2 })).toHaveText(['Your money', 'You']);
+  await expect(menu.getByRole('heading', { level: 2 })).toHaveText(['Badges', 'Your money', 'You']);
   for (const gone of [/^Bills & cards/, /^Goals/, /^Debts/, /^Income/, /^Buy it\?/, /^About you/]) {
     await expect(menu.getByRole('link', { name: gone })).toHaveCount(0);
   }

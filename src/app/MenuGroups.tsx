@@ -2,11 +2,10 @@ import { ChevronRight } from 'lucide-react';
 import { useState } from 'react';
 import { NavLink } from 'react-router';
 import { Rise } from '@/components/ui/Rise';
-import { Tile } from '@/components/ui/Tile';
 import { NetWorthSheet } from '@/features/dashboard/NetWorthSheet';
 import { useFinanceView } from '@/store/useFinance';
+import { useInboxItems } from '@/store/useInbox';
 import { MENU_GROUPS, type MenuGroup, type MenuItem, type MenuSheet } from './menu';
-import { useMenuSubtitles } from './useMenuSubtitles';
 
 export interface MenuGroupsProps {
   /** Brings each group in as a `Rise`, the first at this index and each next one a beat later. */
@@ -30,39 +29,37 @@ export function MenuSheets({ open, onClose }: { open: MenuSheet | null; onClose(
   return used ? <NetWorthMenuSheet open={open === 'net-worth'} onClose={onClose} /> : null;
 }
 
-const ROW = 'text-text flex min-h-14 w-full items-center gap-3.5 px-4 py-3 text-left';
+const ROW = 'press flex min-h-[54px] w-full items-center gap-3 py-[9px] text-left';
+/** A small note on a row: "Soon", or how many are new. */
+const NOTE =
+  'text-muted shrink-0 rounded-full bg-black/6 px-2 py-0.5 text-[11px] font-extrabold dark:bg-white/8';
 
 /**
- * One row: the colored icon chip, the name over what is inside, and a chevron. A page's row is a
- * link, a sheet's a button; a row not built yet is a disabled button marked "Soon".
+ * One row, plain on the page: a glass icon chip, the name, and a chevron. A page's row is a link, a
+ * sheet's a button; a row not built yet is a disabled button marked "Soon" in place of the chevron.
+ * `note` is a small line in the same pill as Soon (how many reminders are new, on Inbox).
  */
 function Row({
   item,
-  subtitle,
+  note,
   onOpen,
 }: {
   item: MenuItem;
-  subtitle: string | undefined;
+  note: string | undefined;
   onOpen(sheet: MenuSheet): void;
 }) {
-  const { path, sheet, label, icon: Icon, color } = item;
+  const { path, sheet, label, icon: Icon } = item;
   const face = (
     <>
-      <span
-        aria-hidden
-        className="grid size-[42px] shrink-0 place-items-center rounded-full text-white"
-        style={{ backgroundColor: color }}
-      >
-        <Icon className="size-5" />
+      <span aria-hidden className="glass grid size-[38px] shrink-0 place-items-center rounded-full">
+        <Icon className="size-[17px]" />
       </span>
-      <span className="flex min-w-0 flex-1 flex-col">
-        <span className="text-[15.5px] font-extrabold">{label}</span>
-        <span className="text-muted text-[13px] font-semibold">{subtitle}</span>
-      </span>
+      <span className="min-w-0 flex-1 text-[14.5px] font-extrabold">{label}</span>
+      {note !== undefined && <span className={NOTE}>{note}</span>}
       {item.soon ? (
-        <span className="text-muted text-xs font-extrabold">Soon</span>
+        <span className={NOTE}>Soon</span>
       ) : (
-        <ChevronRight aria-hidden className="text-muted size-[18px] shrink-0" />
+        <ChevronRight aria-hidden className="text-muted size-4 shrink-0" />
       )}
     </>
   );
@@ -87,39 +84,41 @@ function Row({
   );
 }
 
-/** A group's title over one tile of rows. */
+/** A group's title over its rows, with a hairline between them and no box. */
 function Group({
   group,
-  subtitles,
+  notes,
   onOpen,
 }: {
   group: MenuGroup;
-  subtitles: Record<string, string>;
+  notes: Record<string, string>;
   onOpen(sheet: MenuSheet): void;
 }) {
   return (
     <>
-      <h2 className="text-section mt-[22px] mb-2.5">{group.title}</h2>
-      <Tile as="ul" padded={false}>
+      <h2 className="text-section mt-[22px] mb-2">{group.title}</h2>
+      <ul className="divide-y divide-black/7 dark:divide-white/8">
         {group.items.map((item) => (
-          <li key={item.label} className="border-border border-t first:border-t-0">
-            <Row item={item} subtitle={subtitles[item.label]} onOpen={onOpen} />
+          <li key={item.label}>
+            <Row item={item} note={notes[item.label]} onOpen={onOpen} />
           </li>
         ))}
-      </Tile>
+      </ul>
     </>
   );
 }
 
-/** Everything the tab bar has no room for, grouped, with what is inside each: Profile's menu. */
+/** Everything the tab bar has no room for, grouped, as plain rows: Profile's menu. */
 export function MenuGroups({ riseFrom }: MenuGroupsProps) {
-  const subtitles = useMenuSubtitles();
+  const unread = useInboxItems().filter((i) => !i.read).length;
   const [sheet, setSheet] = useState<MenuSheet | null>(null);
+  // Nothing beside Inbox when there is nothing new.
+  const notes: Record<string, string> = unread > 0 ? { Inbox: `${unread} new` } : {};
   return (
     <>
       {MENU_GROUPS.map((group, i) => (
         <Rise key={group.title} as="section" index={riseFrom + i}>
-          <Group group={group} subtitles={subtitles} onOpen={setSheet} />
+          <Group group={group} notes={notes} onOpen={setSheet} />
         </Rise>
       ))}
       <MenuSheets open={sheet} onClose={() => setSheet(null)} />

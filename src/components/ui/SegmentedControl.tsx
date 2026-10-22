@@ -11,6 +11,8 @@ export interface SegmentedControlProps<T extends string> {
   options: { value: T; label: string }[];
   onChange(value: T): void;
   tone?: 'light' | 'hero' | 'glass';
+  /** Runs the width of its box, each option an equal share, rather than as wide as its labels. */
+  stretch?: boolean;
   className?: string;
 }
 
@@ -26,6 +28,7 @@ export function SegmentedControl<T extends string>({
   options,
   onChange,
   tone = 'light',
+  stretch = false,
   className,
 }: SegmentedControlProps<T>) {
   // One id per control: a shared id would make the pill fly between controls.
@@ -37,7 +40,8 @@ export function SegmentedControl<T extends string>({
       role="group"
       aria-label={label}
       className={cn(
-        'isolate inline-flex gap-0.5 rounded-full p-1',
+        stretch ? 'isolate flex w-full' : 'isolate inline-flex',
+        'gap-0.5 rounded-full p-1',
         hero ? heroGlass : glass ? 'glass' : 'bg-surface-2',
         className,
       )}
@@ -50,7 +54,10 @@ export function SegmentedControl<T extends string>({
             type="button"
             aria-pressed={on}
             onClick={() => onChange(option.value)}
-            className="text-small press hit-44 relative h-8.5 rounded-full px-3.5 whitespace-nowrap select-none"
+            className={cn(
+              'text-small press hit-44 relative h-8.5 rounded-full px-3.5 whitespace-nowrap select-none',
+              stretch && 'flex-1',
+            )}
           >
             {on && (
               <motion.span

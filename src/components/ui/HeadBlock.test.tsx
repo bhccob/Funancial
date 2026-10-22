@@ -83,6 +83,12 @@ describe('HeadBlock', () => {
     );
   });
 
+  it('has less room under it with compact, for a block with nothing hanging over its edge', () => {
+    const { container } = renderWithStore(<HeadBlock compact>Hi</HeadBlock>);
+    expect(block(container)).toHaveClass('pb-[22px]');
+    expect(block(container)).not.toHaveClass('pb-[60px]');
+  });
+
   it('is told apart from the dark body by a hairline, and only there', () => {
     const { container } = renderWithStore(<HeadBlock>Hi</HeadBlock>);
     expect(block(container)).toHaveClass('dark:border-b', 'dark:border-border');

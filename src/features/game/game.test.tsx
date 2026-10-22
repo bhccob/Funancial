@@ -126,6 +126,23 @@ describe('Avatar', () => {
     expect(classes).not.toMatch(/\bring-/);
   });
 
+  it("is the theme's avatar chip on the block, and the page's light chip on the page", () => {
+    const chip = (tone?: 'page' | 'hero') => {
+      const { container, unmount } = renderIn(
+        <Avatar item="avatar-cat" frame="frame-none" size={40} tone={tone} />,
+      );
+      const classes = (container.firstElementChild as HTMLElement).className;
+      unmount();
+      return classes;
+    };
+    // The raw variables, so a preview's own theme shows too; --av-ink is the ink that holds on --av.
+    expect(chip('hero')).toMatch(/\bbg-\(--av\)/);
+    expect(chip('hero')).toMatch(/\btext-\(--av-ink\)/);
+    expect(chip('hero')).not.toMatch(/\bbg-surface-2\b/);
+    expect(chip('page')).toMatch(/\bbg-surface-2\b.*\btext-text\b|\btext-text\b.*\bbg-surface-2\b/);
+    expect(chip()).toBe(chip('page'));
+  });
+
   it('is as big as asked and is not read out on its own', () => {
     const { container } = renderIn(<Avatar item="avatar-cat" frame="frame-none" size={40} />);
     const avatar = container.firstElementChild as HTMLElement;

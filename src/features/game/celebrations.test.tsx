@@ -4,6 +4,7 @@ import { StrictMode, type ReactElement } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { Toaster } from '@/components/ui/Toaster';
 import type { GameGain } from '@/domain/game/engine';
+import { BORDERS } from '@/domain/game/levels';
 import { toastStore } from '@/lib/toast';
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
 import { freshRealStore } from '@/test/realStore';
@@ -182,6 +183,42 @@ describe('Celebrations: level-up', () => {
     expect(screen.getByRole('dialog', { name: 'Level 11' })).toHaveAccessibleDescription(
       "You're now a Silver Budgeter.",
     );
+  });
+
+  it('names the border that level unlocks, and where to pick it', () => {
+    const { publish } = setup();
+    publish(gain({ levelBefore: 10, levelAfter: 11, tierChanged: true }));
+    const dialog = screen.getByRole('dialog', { name: 'Level 11' });
+    expect(
+      within(dialog).getByText('New border: Silver. Pick it on your Profile.'),
+    ).toBeInTheDocument();
+    // The tier line is still there beside it.
+    expect(dialog).toHaveAccessibleDescription("You're now a Silver Budgeter.");
+  });
+
+  it('names no border at a level that unlocks none', () => {
+    const { publish } = setup();
+    publish(gain({ levelBefore: 11, levelAfter: 12 }));
+    const dialog = screen.getByRole('dialog', { name: 'Level 12' });
+    expect(within(dialog).queryByText(/New border/)).not.toBeInTheDocument();
+  });
+
+  it.each(BORDERS)('names $name at level $level', ({ name, level }) => {
+    const { publish } = setup();
+    publish(gain({ levelBefore: level - 1, levelAfter: level }));
+    expect(
+      within(screen.getByRole('dialog', { name: `Level ${level}` })).getByText(
+        `New border: ${name}. Pick it on your Profile.`,
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it('shows the newest level, and the border it unlocks, when another level-up arrives', () => {
+    const { publish } = setup();
+    publish(gain({ levelBefore: 10, levelAfter: 11 }));
+    publish(gain({ levelBefore: 11, levelAfter: 12 }));
+    const dialog = screen.getByRole('dialog', { name: 'Level 12' });
+    expect(within(dialog).queryByText(/New border/)).not.toBeInTheDocument();
   });
 
   it('pops the level chip, only where motion is allowed', () => {

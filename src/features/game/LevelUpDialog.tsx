@@ -1,6 +1,6 @@
 import { Button } from '@/components/ui/Button';
 import { Dialog } from '@/components/ui/Dialog';
-import { tierOf } from '@/domain/game/levels';
+import { newBorderAt, tierOf } from '@/domain/game/levels';
 
 export interface LevelUpDialogProps {
   open: boolean;
@@ -11,9 +11,13 @@ export interface LevelUpDialogProps {
   onClose(): void;
 }
 
-/** The one dialog the game raises: the level just reached, and the tier it belongs to. */
+/**
+ * The one dialog the game raises: the level just reached, the tier it belongs to, and, when the level
+ * opens a profile border, which one and where to pick it.
+ */
 export function LevelUpDialog({ open, level, tierChanged, onClose }: LevelUpDialogProps) {
   const tier = tierOf(level);
+  const border = newBorderAt(level);
   return (
     <Dialog
       open={open}
@@ -29,6 +33,9 @@ export function LevelUpDialog({ open, level, tierChanged, onClose }: LevelUpDial
       >
         LV {level}
       </span>
+      {border && (
+        <p className="font-semibold">{`New border: ${border.name}. Pick it on your Profile.`}</p>
+      )}
     </Dialog>
   );
 }

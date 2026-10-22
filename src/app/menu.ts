@@ -31,8 +31,6 @@ export type MenuSheet = 'net-worth';
 export type MenuItem = {
   label: string;
   icon: LucideIcon;
-  /** Fixed in both themes: each holds at least 3:1 against the white icon on it. */
-  color: string;
 } & (
   | { path: string; sheet?: undefined; soon?: undefined }
   | { sheet: MenuSheet; path?: undefined; soon?: undefined }
@@ -63,19 +61,27 @@ export const MENU_GROUPS: MenuGroup[] = [
   {
     title: 'Your money',
     items: [
-      { path: '/history', label: 'History', icon: Clock, color: '#d9541e' },
-      { sheet: 'net-worth', label: 'Net worth', icon: ChartColumn, color: '#2a78d6' },
-      { soon: true, label: 'My numbers', icon: List, color: '#0f7a8a' },
+      { path: '/history', label: 'History', icon: Clock },
+      { sheet: 'net-worth', label: 'Net worth', icon: ChartColumn },
+      { soon: true, label: 'My numbers', icon: List },
     ],
   },
   {
     title: 'You',
     items: [
-      { path: '/quests', label: 'Quests', icon: Trophy, color: '#b86e00' },
-      { path: '/shop', label: 'Shop', icon: ShoppingBag, color: '#6b46f5' },
-      { path: '/inbox', label: 'Inbox', icon: Inbox, color: '#3b82c4' },
-      { path: '/help', label: 'Help', icon: CircleQuestionMark, color: '#128a60' },
-      { path: '/settings', label: 'Settings', icon: Settings, color: '#5b6270' },
+      { path: '/quests', label: 'Quests', icon: Trophy },
+      { path: '/shop', label: 'Shop', icon: ShoppingBag },
+      { path: '/inbox', label: 'Inbox', icon: Inbox },
+      { path: '/help', label: 'Help', icon: CircleQuestionMark },
+      { path: '/settings', label: 'Settings', icon: Settings },
     ],
   },
 ];
+
+/**
+ * The pages Profile's menu opens. The Profile tab stays marked on them: it is where they were opened
+ * from, and the tab bar has no tab of their own.
+ */
+export const PROFILE_PAGES: readonly string[] = MENU_GROUPS.flatMap((g) =>
+  g.items.flatMap((item) => (item.path === undefined ? [] : [item.path])),
+);

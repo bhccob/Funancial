@@ -207,6 +207,24 @@ for (const theme of THEMES) {
       await expect(page.getByRole('dialog', { name: 'Net worth' })).toBeVisible();
       await expectReadable(page, 'the Net worth sheet');
     });
+
+    test("the border sheet from Profile's Lv badge", async ({ page }) => {
+      await visit(page, '/profile');
+      await page.getByRole('button', { name: /^Level \d+, choose your border$/ }).click();
+      await expect(page.getByRole('dialog', { name: 'Your border' })).toBeVisible();
+      await expectReadable(page, 'the border sheet');
+    });
+
+    test("the Shop's Avatars and Freezes", async ({ page }) => {
+      await visit(page, '/shop');
+      const tabs = page.getByRole('group', { name: 'Shop sections' });
+      await tabs.getByRole('button', { name: 'Avatars' }).click();
+      await expect(page.getByRole('heading', { level: 2, name: 'Avatars' })).toBeVisible();
+      await expectReadable(page, "the Shop's avatars");
+      await tabs.getByRole('button', { name: 'Freezes' }).click();
+      await expect(page.getByRole('heading', { level: 2, name: 'Streak freezes' })).toBeVisible();
+      await expectReadable(page, "the Shop's freezes");
+    });
   });
 }
 

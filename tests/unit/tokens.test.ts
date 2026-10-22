@@ -837,15 +837,6 @@ it('holds the danger colour at 4.5:1 on the danger banner, now that it is darker
   }
 });
 
-it('keeps the white icon on each Menu row colour at 3:1 or better, in both themes', async () => {
-  const { MENU_GROUPS } = await import('../../src/app/menu');
-  for (const { title, items } of MENU_GROUPS) {
-    for (const { label, color } of items) {
-      expect(contrast('#ffffff', color), `${title} / ${label}`).toBeGreaterThanOrEqual(3);
-    }
-  }
-});
-
 it('gives the danger button a label colour of its own, white on light and ink on dark', () => {
   expect(declarations('@theme static')['--color-danger-contrast']).toBe('#ffffff');
   expect(declarations(":root[data-theme='dark']")['--color-danger-contrast']).toBe('#0b0b10');

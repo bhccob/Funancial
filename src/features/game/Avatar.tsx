@@ -19,7 +19,10 @@ export interface AvatarProps {
   frame: string;
   /** Width and height in pixels. */
   size?: number;
-  /** `hero` is a glass chip, for the dark header; the page's light chip would wash out there. */
+  /**
+   * `hero` is the theme's avatar chip (`--av`, with `--av-ink` on it), for the top block, where the
+   * page's light chip would wash out. It reads the raw variables, so a preview's own theme shows.
+   */
   tone?: 'page' | 'hero';
 }
 
@@ -31,7 +34,7 @@ export function Avatar({ item, frame, size = 32, tone = 'page' }: AvatarProps) {
       aria-hidden="true"
       className={cn(
         'grid shrink-0 place-items-center rounded-full',
-        tone === 'hero' ? 'text-hero-text bg-white/15' : 'bg-surface-2 text-text',
+        tone === 'hero' ? 'bg-(--av) text-(--av-ink)' : 'bg-surface-2 text-text',
         frameRing(frame),
       )}
       style={{ width: size, height: size }}

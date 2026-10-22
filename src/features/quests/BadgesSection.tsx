@@ -18,7 +18,8 @@ import { cn } from '@/lib/cn';
 import { formatDate } from '@/lib/format';
 import { frameRing } from '@/features/game/frameRing';
 
-const ICONS: Record<BadgeId, LucideIcon> = {
+/** Each badge's icon: on this page, and on Profile's row of them. */
+export const BADGE_ICONS: Record<BadgeId, LucideIcon> = {
   'first-expense': Receipt,
   'subscription-slayer': Scissors,
   'limit-keeper': Target,
@@ -30,7 +31,7 @@ const ICONS: Record<BadgeId, LucideIcon> = {
 };
 
 function BadgeTile({ badge, frame }: { badge: BadgeView; frame: string }) {
-  const Icon = ICONS[badge.id];
+  const Icon = BADGE_ICONS[badge.id];
   const earnedAt = badge.earnedAt;
 
   return (

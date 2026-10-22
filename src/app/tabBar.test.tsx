@@ -1,4 +1,4 @@
-import { act, screen, within } from '@testing-library/react';
+import { act, cleanup, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -93,6 +93,30 @@ describe('tab bar', () => {
     expect(router.state.location.pathname).toBe('/profile');
     expect(screen.getByRole('heading', { level: 1, name: 'Profile' })).toBeInTheDocument();
     expect(tab('Profile')).toHaveAttribute('aria-current', 'page');
+  });
+
+  it.each(['/quests', '/history', '/shop', '/inbox', '/help', '/settings'])(
+    'keeps Profile marked on %s, a page its menu opens, and no other tab',
+    (path) => {
+      renderAt(path);
+      // Not the page itself, so not "page": the tab is where it was opened from.
+      expect(tab('Profile')).toHaveAttribute('aria-current', 'true');
+      expect(tab('Profile')).toHaveClass('text-accent', 'font-extrabold');
+      expect(tab('Profile')).not.toHaveClass('text-muted');
+      for (const name of ['Home', 'Cards', 'Spending', 'Invest']) {
+        expect(tab(name), name).not.toHaveAttribute('aria-current');
+        expect(tab(name), name).toHaveClass('text-muted');
+      }
+    },
+  );
+
+  it('marks Profile on its own page as the page, and leaves it muted on a tab page', () => {
+    renderAt('/profile');
+    expect(tab('Profile')).toHaveAttribute('aria-current', 'page');
+    cleanup();
+    renderAt('/cards');
+    expect(tab('Profile')).not.toHaveAttribute('aria-current');
+    expect(tab('Profile')).toHaveClass('text-muted');
   });
 
   it('runs edge to edge along the bottom, in the bar glass, its height taking in the safe area', () => {

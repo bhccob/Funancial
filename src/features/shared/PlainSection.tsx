@@ -16,6 +16,24 @@ export function SectionPillButton({ children, onClick }: { children: ReactNode; 
   );
 }
 
+/** A pill that opens a page, for a section's `action` when "View all" is not what it says. */
+export function SectionPillLink({
+  to,
+  children,
+  'aria-label': ariaLabel,
+}: {
+  to: LinkProps['to'];
+  children: ReactNode;
+  'aria-label'?: string;
+}) {
+  return (
+    <Link to={to} aria-label={ariaLabel} className={PILL}>
+      {children}
+      <ChevronRight aria-hidden="true" className="size-3.5" />
+    </Link>
+  );
+}
+
 /**
  * A section below the theme's block, as the glass wireframe draws them: a title, a "View all" pill
  * when it leads to a page (`to`) or another pill (`action`), then its content, which is plain rows or
@@ -39,13 +57,7 @@ export function PlainSection({
         <h2 id={headingId} className="text-section">
           {title}
         </h2>
-        {action ??
-          (to !== undefined && (
-            <Link to={to} className={PILL}>
-              View all
-              <ChevronRight aria-hidden="true" className="size-3.5" />
-            </Link>
-          ))}
+        {action ?? (to !== undefined && <SectionPillLink to={to}>View all</SectionPillLink>)}
       </div>
       {children}
     </section>

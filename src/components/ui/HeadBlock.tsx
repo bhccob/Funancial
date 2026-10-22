@@ -5,6 +5,8 @@ import { claimTop } from '@/lib/systemBars';
 
 export interface HeadBlockProps {
   children: ReactNode;
+  /** Less room under what is inside it (22px, not 60px): for a block no piece hangs over. */
+  compact?: boolean;
   className?: string;
 }
 
@@ -18,7 +20,7 @@ export interface HeadBlockProps {
  * the top of the viewport it claims the status bar for its kind (see `claimTop`), so the bar's icons
  * are light on a dark block and dark on a light one, whatever the mode.
  */
-export function HeadBlock({ children, className }: HeadBlockProps) {
+export function HeadBlock({ children, compact = false, className }: HeadBlockProps) {
   const block = useRef<HTMLDivElement>(null);
   const tone = useBlockTone();
   // With nothing to watch the viewport with, it covers the top for as long as it is on the screen.
@@ -63,7 +65,8 @@ export function HeadBlock({ children, className }: HeadBlockProps) {
         'bg-head text-head-ink rounded-b-hero',
         '[--color-text-muted:var(--color-head-ink)] [--color-text:var(--color-head-ink)]',
         // Out across main's side padding, and down behind the status bar.
-        '-mx-5 px-5 pt-[max(1rem,env(safe-area-inset-top))] pb-[60px]',
+        '-mx-5 px-5 pt-[max(1rem,env(safe-area-inset-top))]',
+        compact ? 'pb-[22px]' : 'pb-[60px]',
         // On the dark page a dark block would run into the body: a hairline sets it apart.
         'dark:border-border dark:border-b',
         className,
