@@ -21,7 +21,7 @@ import { AvailableSheet } from '@/features/dashboard/AvailableSheet';
 import { CardSheet } from '@/features/goals/CardSheet';
 import { BillRow } from '@/features/shared/BillRow';
 import { CATEGORY_ICONS } from '@/features/shared/categories';
-import { EmptyRows as Empty, PlainSection } from '@/features/shared/PlainSection';
+import { EmptyRows as Empty, PlainSection, ROWS } from '@/features/shared/PlainSection';
 import { SubscriptionDialog } from '@/features/subscriptions/SubscriptionDialog';
 import { cn } from '@/lib/cn';
 import { formatDay, relativeDays } from '@/lib/format';
@@ -35,9 +35,6 @@ import { AccountDialog, type AccountTarget } from './AccountDialog';
 import { AccountSheet } from './AccountSheet';
 import { PaySheet } from './PaySheet';
 import { SpendChart } from './SpendChart';
-
-/** A plain row's hairline above it, on the light page and the dark one. */
-const ROWS = 'divide-y divide-black/7 dark:divide-white/8';
 
 /** How long after the row comes to rest the person's slide is over (see `driving`). */
 const REST_MS = 150;

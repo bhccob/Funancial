@@ -17,6 +17,7 @@ import {
 import { freezeTokensHeld } from '@/domain/game/streaks';
 import { formatMoney } from '@/domain/money';
 import { Avatar } from '@/features/game/Avatar';
+import { ROWS } from '@/features/shared/PlainSection';
 import { cn } from '@/lib/cn';
 import { useAction } from '@/lib/useAction';
 import { useApp } from '@/store/AppStoreProvider';
@@ -357,7 +358,7 @@ export function ShopScreen() {
         )}
         {tab === 'freezes' && (
           <ShopGroup title="Streak freezes">
-            <ul className="divide-y divide-black/7 px-1 dark:divide-white/8">
+            <ul className={cn('px-1', ROWS)}>
               {SHOP_ITEMS.filter((i) => i.slot === 'freeze').map((item) => {
                 const streak = FREEZE_STREAK[item.id];
                 return (

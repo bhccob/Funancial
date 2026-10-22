@@ -13,14 +13,11 @@ import { entryDate, type Entry } from '@/domain/history';
 import { CATEGORY_ICONS } from '@/features/shared/categories';
 import { EntryChip, EntryDetail } from '@/features/shared/EntryParts';
 import { entryLine, type EntryTone } from '@/features/shared/entryLine';
-import { EmptyRows, PlainSection } from '@/features/shared/PlainSection';
+import { EmptyRows, PlainSection, ROWS } from '@/features/shared/PlainSection';
 import { cn } from '@/lib/cn';
 import { formatDay } from '@/lib/format';
 import { useApp } from '@/store/AppStoreProvider';
 import { useMoney, useToday } from '@/store/useFinance';
-
-/** A plain row's hairline above it, on the light page and the dark one. */
-const ROWS = 'divide-y divide-black/7 dark:divide-white/8';
 
 /** The wireframe's amounts: money in in the success color, money out in the danger color. */
 const TONE: Record<EntryTone, string> = {

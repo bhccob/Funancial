@@ -2,6 +2,7 @@ import { useId, useMemo, useState } from 'react';
 import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { spendSeries, type SpendRange } from '@/domain/cardSpend';
 import type { Account } from '@/domain/entities';
+import { GlassTile } from '@/features/shared/PlainSection';
 import { cn } from '@/lib/cn';
 import { formatDay, formatMonthYear } from '@/lib/format';
 import { useApp } from '@/store/AppStoreProvider';
@@ -71,7 +72,7 @@ export function SpendChart({ account }: { account: Account }) {
   const last = series.bars.length - 1;
 
   return (
-    <section aria-labelledby={headingId} className="glass rounded-[24px] p-4">
+    <GlassTile as="section" aria-labelledby={headingId}>
       <h2 id={headingId} className="sr-only">
         Spending
       </h2>
@@ -141,6 +142,6 @@ export function SpendChart({ account }: { account: Account }) {
           );
         })}
       </ul>
-    </section>
+    </GlassTile>
   );
 }

@@ -2,11 +2,9 @@ import { Check, CreditCard, Wallet } from 'lucide-react';
 import { Sheet } from '@/components/ui/Sheet';
 import { heroFigure } from '@/domain/balances';
 import { KIND_LABEL } from '@/features/cards/cardText';
+import { ROWS } from '@/features/shared/PlainSection';
 import { useFinanceView, useMoney } from '@/store/useFinance';
 import { useSelectedAccount } from '@/store/useSelectedAccount';
-
-/** A plain row's hairline above it, on the light page and the dark one. */
-const ROWS = 'divide-y divide-black/7 dark:divide-white/8';
 
 /**
  * Show on Home: which account Home's hero is for. Every account in use, in carousel order, as a plain

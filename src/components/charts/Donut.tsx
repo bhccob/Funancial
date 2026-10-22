@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import type { Slice } from '@/domain/charts';
+import { ROWS } from '@/features/shared/PlainSection';
 import { cn } from '@/lib/cn';
 import { sliceColors } from './colors';
 import { LABEL, layoutLabels } from './labelLayout';
@@ -240,15 +241,12 @@ export function DonutLegend({
   const colors = sliceColors(slices);
   const total = slices.reduce((sum, s) => sum + Math.max(0, s.amount), 0);
   return (
-    <ul className="min-w-0 flex-1">
+    <ul className={cn('min-w-0 flex-1', ROWS)}>
       {slices.map((slice, i) => {
         const on = i === selected;
         const amountTone = on ? 'text-text font-extrabold' : 'text-muted font-bold';
         return (
-          <li
-            key={slice.key}
-            className="border-b border-black/7 last:border-b-0 dark:border-white/8"
-          >
+          <li key={slice.key}>
             <button
               type="button"
               aria-pressed={on}

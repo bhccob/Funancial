@@ -10,6 +10,7 @@ import { PayDialog, type PayTarget } from '@/features/goals/PayDialog';
 import { ActualBalanceDialog } from '@/features/history/ActualBalanceDialog';
 import { EntryChip, EntryDetail } from '@/features/shared/EntryParts';
 import { entryLine } from '@/features/shared/entryLine';
+import { ROWS } from '@/features/shared/PlainSection';
 import { cn } from '@/lib/cn';
 import { formatDate, formatDay } from '@/lib/format';
 import { useApp } from '@/store/AppStoreProvider';
@@ -27,7 +28,6 @@ const PER: Record<Cycle, string> = {
 };
 
 const HEADING = 'text-muted mt-6 mb-1 text-[13px] font-bold';
-const ROWS = 'divide-y divide-black/7 dark:divide-white/8';
 
 /** Whether a History entry moves money on the account: paid with it, into it, or out of it. */
 function names(entry: Entry, id: string): boolean {

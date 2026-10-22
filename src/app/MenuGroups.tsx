@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { NavLink } from 'react-router';
 import { Rise } from '@/components/ui/Rise';
 import { NetWorthSheet } from '@/features/dashboard/NetWorthSheet';
+import { ROWS } from '@/features/shared/PlainSection';
 import { useFinanceView } from '@/store/useFinance';
 import { useInboxItems } from '@/store/useInbox';
 import { MENU_GROUPS, type MenuGroup, type MenuItem, type MenuSheet } from './menu';
@@ -97,7 +98,7 @@ function Group({
   return (
     <>
       <h2 className="text-section mt-[22px] mb-2">{group.title}</h2>
-      <ul className="divide-y divide-black/7 dark:divide-white/8">
+      <ul className={ROWS}>
         {group.items.map((item) => (
           <li key={item.label}>
             <Row item={item} note={notes[item.label]} onOpen={onOpen} />
