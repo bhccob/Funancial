@@ -14,7 +14,7 @@ export interface SectionProps {
 }
 
 /**
- * A page section: a 21px title row, content, and a hairline below (none under the last section).
+ * A page section: a 17px title row, content, and a hairline below (none under the last section).
  * No box: the padding above and below is the space between sections. A page's first section
  * supplies its own top space under the header.
  */
@@ -28,10 +28,7 @@ export function Section({ title, help, action, children, className }: SectionPro
       {(title || action) && (
         <div className="mb-[18px] flex items-center justify-between gap-3">
           {title && (
-            <h2
-              id={headingId}
-              className="text-[21px] leading-tight font-extrabold tracking-[-0.02em]"
-            >
+            <h2 id={headingId} className="text-section">
               {title}
             </h2>
           )}

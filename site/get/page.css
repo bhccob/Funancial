@@ -1,5 +1,5 @@
 @import 'tailwindcss/theme.css' layer(theme);
-@import '@fontsource-variable/manrope';
+@import '@fontsource-variable/inter-tight';
 /* The app's colours and font, as CSS variables on :root. */
 @import '../../src/styles/tokens.css';
 

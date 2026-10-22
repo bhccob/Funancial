@@ -1,5 +1,5 @@
 /**
- * The four phone screens of the story, drawn on a canvas in the app's own look: Manrope, and the
+ * The four phone screens of the story, drawn on a canvas in the app's own look: Inter Tight, and the
  * light colours of src/styles/tokens.css. They are demo money, not a screenshot. `progress` runs from
  * 0 (just arrived) to 1 (settled): numbers count up, bars fill, tiles pop in.
  */
@@ -10,16 +10,16 @@ export type ScreenIndex = 0 | 1 | 2 | 3;
 
 /** The light-theme tokens the screens use. screens.test.ts checks each against tokens.css. */
 export const TOKENS = {
-  '--color-bg': '#ffffff',
-  '--color-border': '#ebebef',
-  '--color-text': '#0d0d0f',
-  '--color-text-muted': '#6d6d76',
+  '--color-bg': '#f2f2f5',
+  '--color-border': '#e6e6ec',
+  '--color-text': '#0b0b12',
+  '--color-text-muted': '#66667a',
   '--color-track': '#ececf1',
-  '--color-accent': '#00b37e',
+  '--color-accent': '#7c5cff',
   '--color-xp': '#7c5cff',
-  '--color-danger': '#cb343a',
-  '--color-chart-1': '#2a78d6',
-  '--color-chart-4': '#eda100',
+  '--color-danger': '#ca2a31',
+  '--color-chart-1': '#7c5cff',
+  '--color-chart-5': '#f59e0b',
   '--color-danger-soft': '#f5d9da',
   '--color-success-soft': '#d2eadf',
   '--color-warning-from': '#fff0d4',
@@ -32,10 +32,10 @@ const INK = TOKENS['--color-text'];
 const MUTED = TOKENS['--color-text-muted'];
 const TRACK = TOKENS['--color-track'];
 
-const FAMILY = '"Manrope Variable", system-ui, sans-serif';
+const FAMILY = '"Inter Tight Variable", system-ui, sans-serif';
 const font = (weight: 700 | 800, size: number) => `${weight} ${size}px ${FAMILY}`;
 
-/** Loads Manrope for the canvas, which does not wait for fonts the way the page's text does. */
+/** Loads Inter Tight for the canvas, which does not wait for fonts the way the page's text does. */
 export async function loadScreenFont(): Promise<void> {
   if (typeof document === 'undefined' || !document.fonts) return;
   const sample = 'Home Budget $0123456789,.%·/';
@@ -121,7 +121,7 @@ function budget(g: CanvasRenderingContext2D, s: number) {
   chrome(g, 'Budget');
   const rows: Array<[string, number, string]> = [
     ['Food', 0.62, TOKENS['--color-accent']],
-    ['Fun', 0.91, TOKENS['--color-chart-4']],
+    ['Fun', 0.91, TOKENS['--color-chart-5']],
     ['Transport', 0.34, TOKENS['--color-accent']],
     ['Shopping', 1.08, TOKENS['--color-danger']],
     ['Overall', 0.48, TOKENS['--color-accent']],

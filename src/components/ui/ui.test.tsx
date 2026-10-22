@@ -361,10 +361,10 @@ describe('Banner', () => {
 });
 
 describe('PageHeader', () => {
-  it('renders page titles at 34px', () => {
+  it('renders page titles at the page size', () => {
     render(<PageHeader title="Goals" />);
     const title = screen.getByRole('heading', { level: 1, name: 'Goals' });
-    expect(title).toHaveClass('text-[34px]', 'font-extrabold', 'tracking-[-0.035em]');
+    expect(title).toHaveClass('text-page');
   });
 
   it('has no line under it; the first section supplies its own top space', () => {
@@ -385,10 +385,10 @@ describe('ProgressBar', () => {
 });
 
 describe('Section', () => {
-  it('renders section titles at 21px', () => {
+  it('renders section titles at the section size', () => {
     render(<Section title="Limits">body</Section>);
     const title = screen.getByRole('heading', { level: 2, name: 'Limits' });
-    expect(title).toHaveClass('text-[21px]', 'font-extrabold', 'tracking-[-0.02em]');
+    expect(title).toHaveClass('text-section');
   });
 
   it('is padded 28px above and below, with a hairline under it', () => {

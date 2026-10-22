@@ -44,7 +44,7 @@ export function AppShell() {
       <main
         ref={main}
         tabIndex={-1}
-        className="mx-auto w-full max-w-6xl px-[22px] pt-[max(1rem,env(safe-area-inset-top))] pb-[calc(6rem+env(safe-area-inset-bottom))] focus:outline-none md:px-10 md:pt-6 md:pb-12 [&_h1:focus]:outline-none"
+        className="mx-auto w-full max-w-6xl px-5 pt-[max(1rem,env(safe-area-inset-top))] pb-[calc(6rem+env(safe-area-inset-bottom))] focus:outline-none md:px-10 md:pt-6 md:pb-12 [&_h1:focus]:outline-none"
       >
         <UpdateBanner />
         <DemoBanner />

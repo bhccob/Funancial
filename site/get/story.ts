@@ -424,7 +424,7 @@ function run(stage: HTMLElement): () => void {
 export function startStory(stage: HTMLElement): () => void {
   let cancelled = false;
   let cleanUp = () => {};
-  // The canvas does not wait for fonts the way the page's text does, so the screens wait for Manrope.
+  // The canvas does not wait for fonts the way the page's text does, so the screens wait for Inter Tight.
   void loadScreenFont()
     .then(() => {
       if (!cancelled) cleanUp = run(stage);

@@ -28,7 +28,7 @@ export function Sheet({ open, title, onClose, children }: SheetProps) {
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
-      className="bg-overlay text-text motion-safe:animate-sheet-up fixed inset-x-0 top-auto bottom-0 m-0 max-h-[calc(100dvh-64px)] w-full max-w-none overflow-y-auto rounded-t-[30px] border-0 p-0 shadow-(--shadow-overlay) backdrop:bg-black/40"
+      className="bg-overlay text-text motion-safe:animate-sheet-up rounded-t-sheet fixed inset-x-0 top-auto bottom-0 m-0 max-h-[calc(100dvh-64px)] w-full max-w-none overflow-y-auto border-0 p-0 shadow-(--shadow-overlay) backdrop:bg-black/40"
     >
       <div className="px-[22px] pt-2.5 pb-[calc(10px+env(safe-area-inset-bottom))]">
         <div aria-hidden className="bg-track mx-auto mb-[18px] h-[5px] w-10 rounded-full" />

@@ -1,3 +1,5 @@
+Superseded on 2026-10-22 by direction A: spec §11 of `docs/superpowers/specs/2026-10-21-funcial-redesign-design.md`.
+
 # Visual direction — E · Open (chosen 2026-10-15)
 
 Clean, modern finance with a light game layer, and the least box styling of the three options the

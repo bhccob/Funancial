@@ -12,7 +12,7 @@ export default {
   loggingBehavior: 'none',
   plugins: {
     CapacitorSQLite: { androidIsEncryption: true, androidBiometric: { biometricAuth: false } },
-    LocalNotifications: { smallIcon: 'ic_stat_reminder', iconColor: '#00B37E' },
+    LocalNotifications: { smallIcon: 'ic_stat_reminder', iconColor: '#7C5CFF' },
     SystemBars: { insetsHandling: 'native', initialViewportFitValueHint: 'cover' },
   },
   ...(devUrl ? { server: { url: devUrl, cleartext: true } } : {}),

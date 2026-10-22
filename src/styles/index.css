@@ -1,5 +1,5 @@
 @import 'tailwindcss';
-@import '@fontsource-variable/manrope';
+@import '@fontsource-variable/inter-tight';
 @import './tokens.css';
 
 /* The download page's words and classes are not the app's: keep them out of the app's CSS. */
@@ -29,6 +29,18 @@
     outline: 2px solid var(--color-focus);
     outline-offset: 2px;
   }
+}
+
+/*
+ * The header's backdrop, painted top first: a violet glow at the top left, a blue one at the right
+ * edge, and under them the dark fall from hero-from to hero-to. Both glows fade out to nothing, so
+ * the dark shows through. White text on its brightest point is checked in tests/unit/tokens.test.ts.
+ */
+@utility bg-hero {
+  background-image:
+    radial-gradient(120% 80% at 10% 0%, var(--color-hero-glow), transparent 55%),
+    radial-gradient(90% 70% at 100% 30%, var(--color-hero-glow-2), transparent 60%),
+    linear-gradient(180deg, var(--color-hero-from), var(--color-hero-to));
 }
 
 /*
