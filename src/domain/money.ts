@@ -146,6 +146,34 @@ export function formatMoney(
   }).format(minor / 10 ** minorDigits(currency));
 }
 
+/**
+ * An amount as `formatMoney` writes it, in the parts Home's hero draws apart: the sign, the currency
+ * (written before the number, or after it in some locales), the whole units with their grouping, and
+ * the decimal mark with the cents ("" for a currency without them). The spaces between are left out.
+ */
+export function moneyParts(
+  minor: number,
+  currency: string,
+  locale?: string,
+): { lead: string; currency: string; units: string; cents: string; currencyFirst: boolean } {
+  const parts = new Intl.NumberFormat(locale, { style: 'currency', currency }).formatToParts(
+    minor / 10 ** minorDigits(currency),
+  );
+  const of = (...types: Intl.NumberFormatPartTypes[]) =>
+    parts
+      .filter((p) => types.includes(p.type))
+      .map((p) => p.value)
+      .join('');
+  return {
+    lead: of('minusSign', 'plusSign'),
+    currency: of('currency'),
+    units: of('integer', 'group'),
+    cents: of('decimal', 'fraction'),
+    currencyFirst:
+      parts.findIndex((p) => p.type === 'currency') < parts.findIndex((p) => p.type === 'integer'),
+  };
+}
+
 /** Plain editable form, e.g. 123450 USD → "1,234.50" (no symbol). */
 export function formatMoneyPlain(minor: number, currency: string): string {
   const d = minorDigits(currency);

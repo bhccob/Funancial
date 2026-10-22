@@ -6,23 +6,6 @@ import type { Expense } from './entities';
 import { monthRange, periodRange, type Range } from './periods';
 import { holdingValue } from './portfolio';
 import type { DataSnapshot } from './snapshot';
-import type { FinanceView } from './view';
-
-/** What was spent on each of the `days` days ending `endDay`, oldest first; quiet days are 0. */
-export function spendingByDay(
-  expenses: Expense[],
-  endDay: LocalDate,
-  days: number,
-): Array<{ day: LocalDate; amount: number }> {
-  const byDay = new Map<LocalDate, number>();
-  for (const e of expenses) byDay.set(e.date, (byDay.get(e.date) ?? 0) + e.amount);
-  const out: Array<{ day: LocalDate; amount: number }> = [];
-  for (let back = days - 1; back >= 0; back--) {
-    const day = addDays(endDay, -back);
-    out.push({ day, amount: byDay.get(day) ?? 0 });
-  }
-  return out;
-}
 
 /** One slice of a donut. `key` is unique within the chart; `'other'` always means the folded Other. */
 export type Slice = { key: string; label: string; amount: number };
@@ -126,21 +109,4 @@ export function paceStatus(pct: number, progress: number): 'ahead' | 'on' | 'und
   if (used > progress + 0.05) return 'ahead';
   if (used < progress - 0.05) return 'under';
   return 'on';
-}
-
-export type MonthLineData = { spent: number; bills: number; left: number | null };
-
-/**
- * This month in three numbers: what is spent, what bills are still to come, and what is left of
- * the overall monthly limit (null without one, and never below 0).
- */
-export function monthLine(view: FinanceView): MonthLineData {
-  const overall = view.limits.find(
-    (l) => l.limit.scope === 'overall' && l.limit.period === 'monthly',
-  );
-  return {
-    spent: view.spending.month,
-    bills: view.billsTotal,
-    left: overall ? Math.max(0, overall.remaining) : null,
-  };
 }

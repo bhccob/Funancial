@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { openProfile, startDemo, startFresh } from './helpers';
 
 test('Help: search the index, open a page and read its worked example', async ({ page }) => {
@@ -46,14 +46,27 @@ test('Help: the old Should I buy it? address goes back to the index', async ({ p
   await expect(page.getByRole('link', { name: /Should I buy it/ })).toHaveCount(0);
 });
 
-test('Home: the "?" on Available to spend opens a tip, gives focus back, and links to its page', async ({
+/**
+ * Invest in the demo, with the price service down so it shows its last prices: the page whose key
+ * numbers carry a "?" (Home's glass hero has none).
+ */
+async function demoInvest(page: Page) {
+  await page.route('**/api/**', (route) =>
+    route.fulfill({ status: 502, json: { error: 'upstream' } }),
+  );
+  await startDemo(page);
+  await page.goto('/invest');
+  await expect(page.getByRole('region', { name: 'Portfolio value' })).toBeVisible();
+}
+
+test('Invest: the "?" on Portfolio value opens a tip, gives focus back, and links to its page', async ({
   page,
 }) => {
-  await startFresh(page);
-  const tip = page.getByRole('button', { name: 'What is available to spend?' });
+  await demoInvest(page);
+  const tip = page.getByRole('button', { name: 'What is portfolio value?' });
   await tip.click();
-  const sheet = page.getByRole('dialog', { name: 'Available to spend' });
-  await expect(sheet).toContainText('What you can still spend this month');
+  const sheet = page.getByRole('dialog', { name: 'Investments' });
+  await expect(sheet).toContainText('Portfolio value, and profit & loss');
 
   await page.keyboard.press('Escape');
   await expect(sheet).toBeHidden();
@@ -61,17 +74,17 @@ test('Home: the "?" on Available to spend opens a tip, gives focus back, and lin
 
   await tip.click();
   await sheet.getByRole('link', { name: "How it's worked out ›" }).click();
-  await expect(page).toHaveURL(/\/help\/available$/);
-  await expect(page.getByRole('heading', { level: 1, name: 'Available to spend' })).toBeVisible();
+  await expect(page).toHaveURL(/\/help\/investments$/);
+  await expect(page.getByRole('heading', { level: 1, name: 'Investments' })).toBeVisible();
 });
 
-test('Home: each "?" can be tapped over its whole 44px, down to its bottom edge', async ({
+test('Invest: each "?" can be tapped over its whole 44px, down to its bottom edge', async ({
   page,
 }) => {
-  // Demo money: a wide amount under the label, which is what can sit over the lower part of the "?".
-  await startDemo(page);
+  // A wide amount under the label, which is what can sit over the lower part of the "?".
+  await demoInvest(page);
   const tips = await page.getByRole('button', { name: /^What is/ }).all();
-  expect(tips).toHaveLength(3);
+  expect(tips.length).toBeGreaterThan(0);
   for (const tip of tips) {
     await tip.evaluate((el) => el.scrollIntoView({ block: 'center' }));
     const box = (await tip.boundingBox())!;

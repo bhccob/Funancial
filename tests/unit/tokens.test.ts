@@ -433,6 +433,17 @@ it('defines the glass recipes of the wireframe', () => {
   expect(utility('glass-bar')).toContain('blur(20px) saturate(180%)');
 });
 
+it("gives back the page's ink to a page surface drawn inside the block (a menu opened from it)", () => {
+  // Inside the block the text tokens are its ink; primary is not taken over, and it is the page's
+  // ink in both modes.
+  expect(utility('page-ink')).toContain('--color-text: var(--color-primary)');
+  expect(utility('page-ink')).toContain('--color-focus: var(--accent)');
+  const light = declarations('@theme static');
+  const dark = declarations(":root[data-theme='dark']");
+  expect(light['--color-primary']).toBe(light['--color-text']);
+  expect(dark['--color-primary']).toBe(dark['--color-text']);
+});
+
 it('defines the block, the two main buttons and the shapes behind the page', () => {
   expect(utility('bg-head')).toContain('var(--head-blobs), var(--head)');
   // The focus ring on the block is the block's ink: the accent can be as dark as the block itself.
@@ -494,12 +505,13 @@ function blockBackdrops(t: (name: string) => string): string[] {
   return stops.flatMap((stop) => [stop, ...glows.map((glow) => composite(glow, stop))]);
 }
 
-/** The header's muted line: the block ink at the share the 0.11 token gives it, as the color it paints. */
-function mutedInk(t: (name: string) => string): string {
-  const match = /^color-mix\(in srgb, (#[0-9a-f]{3,6}) (\d+)%, transparent\)$/.exec(
-    t('--color-hero-muted'),
-  );
-  if (!match) throw new Error(`Not a muted ink: ${t('--color-hero-muted')}`);
+/**
+ * A share of the block ink, as the color it paints: 0.11's muted header line by default, or Home's
+ * dimmed hero (`--color-head-dim`, `--color-head-faint`).
+ */
+function mutedInk(t: (name: string) => string, name = '--color-hero-muted'): string {
+  const match = /^color-mix\(in srgb, (#[0-9a-f]{3,6}) (\d+)%, transparent\)$/.exec(t(name));
+  if (!match) throw new Error(`Not a muted ink: ${t(name)}`);
   const [r, g, b] = parseColor(match[1]!);
   return `rgb(${r} ${g} ${b} / ${Number(match[2]) / 100})`;
 }
@@ -585,9 +597,18 @@ describe.each(CASES)('the $id theme in $mode mode', ({ id, mode }) => {
   it('keeps text and muted text at 4.5:1 or better on the page and on the glass over it', () => {
     const page = t('--color-bg');
     const glass = composite(t('--color-glass'), page);
-    for (const fg of ['--color-text', '--color-text-muted']) {
+    // Home's Overview tiles write what came in and went out in the success and danger colors.
+    for (const fg of ['--color-text', '--color-text-muted', '--color-success', '--color-danger']) {
       expect(contrast(t(fg), page), `${fg} on the page`).toBeGreaterThanOrEqual(4.5);
       expect(contrast(t(fg), glass), `${fg} on the glass`).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  it('keeps the text on the thick glass that hangs over the block at 4.5:1 or better on every point of it', () => {
+    // The bill bubbles' initials and the Available pill's words: the ink of the page, never muted.
+    for (const backdrop of blockBackdrops(t)) {
+      const glass = composite(t('--color-glass-strong'), backdrop);
+      expect(contrast(t('--color-text'), glass), `over ${backdrop}`).toBeGreaterThanOrEqual(4.5);
     }
   });
 
@@ -639,12 +660,63 @@ describe.each(THEMES)('the cards on the %s block', (id) => {
   });
 });
 
+/**
+ * Home's hero sits straight on the block, dimmed as the wireframe dims it: the label, the account and
+ * the currency at --color-head-dim, the cents of the big amount at --color-head-faint. The
+ * wireframe's 60% and 35% fall under the bar on the brightest glows, so each is the least share of
+ * the ink that holds in every theme: 4.5:1 for the small text, 3:1 for the cents, large text at 42px.
+ */
+const HERO_INK = { '--color-head-dim': [84, 4.5], '--color-head-faint': [59, 3] } as const;
+
+/** Whether the ink at `share` (0-1) falls under `ratio` on some point of some theme's block. */
+function failsSomewhere(share: number, ratio: number): boolean {
+  return THEMES.some((id) => {
+    const t = tokensFor(id, 'light');
+    const [r, g, b] = parseColor(t('--head-ink'));
+    const ink = `rgb(${r} ${g} ${b} / ${share})`;
+    return blockBackdrops(t).some(
+      (backdrop) => contrast(composite(ink, backdrop), backdrop) < ratio,
+    );
+  });
+}
+
+it("dims Home's hero by the least share of the ink that holds in every theme", () => {
+  for (const [name, [percent, ratio]] of Object.entries(HERO_INK)) {
+    expect(declarations('@theme static')[name]).toBe(
+      `color-mix(in srgb, var(--head-ink) ${percent}%, transparent)`,
+    );
+    expect(failsSomewhere(percent / 100, ratio), `${name} at ${percent}%`).toBe(false);
+    expect(failsSomewhere((percent - 1) / 100, ratio), `${name} at ${percent - 1}%`).toBe(true);
+  }
+  // The wireframe's own shares, which these raise.
+  expect(failsSomewhere(0.6, 4.5)).toBe(true);
+  expect(failsSomewhere(0.35, 3)).toBe(true);
+});
+
+describe.each(THEMES)("Home's hero on the %s block", (id) => {
+  // The block is the theme's in both modes, so one mode stands for both.
+  const t = tokensFor(id, 'light');
+
+  it('keeps the dimmed label at 4.5:1 and the dimmed cents at 3:1 on every point of the block', () => {
+    for (const backdrop of blockBackdrops(t)) {
+      for (const [name, [, ratio]] of Object.entries(HERO_INK)) {
+        expect(
+          contrast(composite(mutedInk(t, name), backdrop), backdrop),
+          `${name} on ${backdrop}`,
+        ).toBeGreaterThanOrEqual(ratio);
+      }
+    }
+  });
+});
+
 describe.each(CASES)('the edge ring in the $id theme in $mode mode', ({ id, mode }) => {
   const t = tokensFor(id, mode);
 
   it('shows at 3:1 or better on the block, its glows and the page, by its ink or its page-colored ring', () => {
     expect(utility('focus-edge')).toContain('outline: 2px solid var(--color-text)');
     expect(utility('focus-edge')).toContain('0 0 0 2px var(--color-bg)');
+    // On the piece itself, or on the disc of a link that holds it (a bill bubble).
+    expect(utility('focus-edge')).toContain('&:focus-visible, :focus-visible > &');
     for (const backdrop of blockBackdrops(t)) {
       const best = Math.max(
         contrast(t('--color-text'), backdrop),

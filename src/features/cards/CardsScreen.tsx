@@ -1,35 +1,27 @@
 import {
-  Bus,
   Car,
   ChevronDown,
-  ChevronRight,
-  Clapperboard,
   CreditCard,
-  Ellipsis,
-  HeartPulse,
-  House,
   Plus,
   ScanLine,
   Settings,
-  ShoppingBag,
   Snowflake,
-  Utensils,
   Wallet,
-  Zap,
   type LucideIcon,
 } from 'lucide-react';
-import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Link, type LinkProps } from 'react-router';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { HeadBlock } from '@/components/ui/HeadBlock';
 import { Rise } from '@/components/ui/Rise';
 import type { AccountRow } from '@/domain/balances';
 import { categoryLabel, nextDueDate } from '@/domain/budget';
 import { categoryRows } from '@/domain/cardSpend';
-import type { Account, Category, Subscription } from '@/domain/entities';
+import type { Account, Subscription } from '@/domain/entities';
 import type { FinanceView } from '@/domain/view';
 import { AvailableSheet } from '@/features/dashboard/AvailableSheet';
 import { CardSheet } from '@/features/goals/CardSheet';
 import { BillRow } from '@/features/shared/BillRow';
+import { CATEGORY_ICONS } from '@/features/shared/categories';
+import { EmptyRows as Empty, PlainSection } from '@/features/shared/PlainSection';
 import { SubscriptionDialog } from '@/features/subscriptions/SubscriptionDialog';
 import { cn } from '@/lib/cn';
 import { formatDay, relativeDays } from '@/lib/format';
@@ -46,17 +38,6 @@ import { SpendChart } from './SpendChart';
 
 /** A plain row's hairline above it, on the light page and the dark one. */
 const ROWS = 'divide-y divide-black/7 dark:divide-white/8';
-
-const CATEGORY_ICONS: Record<Category, LucideIcon> = {
-  food: Utensils,
-  transport: Bus,
-  rent: House,
-  utilities: Zap,
-  entertainment: Clapperboard,
-  health: HeartPulse,
-  shopping: ShoppingBag,
-  other: Ellipsis,
-};
 
 /** How long after the row comes to rest the person's slide is over (see `driving`). */
 const REST_MS = 150;
@@ -242,42 +223,6 @@ function CardAction({
       {label}
     </button>
   );
-}
-
-/** A section below the block: a title, a "View all" pill when it leads somewhere, then plain rows. */
-function PlainSection({
-  title,
-  to,
-  children,
-}: {
-  title: string;
-  to?: LinkProps['to'];
-  children: ReactNode;
-}) {
-  const headingId = useId();
-  return (
-    <section aria-labelledby={headingId} className="pt-[22px]">
-      <div className="mx-1 mb-3 flex items-center justify-between">
-        <h2 id={headingId} className="text-section">
-          {title}
-        </h2>
-        {to !== undefined && (
-          <Link
-            to={to}
-            className="glass press hit-44 inline-flex h-8 items-center gap-0.5 rounded-full pr-2.5 pl-3 text-[12.5px] font-extrabold"
-          >
-            View all
-            <ChevronRight aria-hidden="true" className="size-3.5" />
-          </Link>
-        )}
-      </div>
-      {children}
-    </section>
-  );
-}
-
-function Empty({ children }: { children: ReactNode }) {
-  return <p className="text-muted mx-1 py-2 text-[14px] font-semibold">{children}</p>;
 }
 
 /** What one account spent this month by category, biggest first, as plain rows. */

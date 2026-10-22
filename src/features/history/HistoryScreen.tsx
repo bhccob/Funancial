@@ -5,6 +5,7 @@ import { Dialog } from '@/components/ui/Dialog';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { RadioGroup } from '@/components/ui/RadioGroup';
+import { SectionLink } from '@/components/ui/Section';
 import { Select } from '@/components/ui/Select';
 import { categoryLabel } from '@/domain/budget';
 import { type Category, type Expense } from '@/domain/entities';
@@ -273,7 +274,10 @@ export function HistoryScreen() {
             Set actual balance
           </Button>
         }
-      />
+      >
+        {/* Income has no row of its own in the menus: its page is one tap from here. */}
+        <SectionLink to="/income">Income stats</SectionLink>
+      </PageHeader>
 
       <div className="border-border flex flex-col gap-4 border-b py-5 sm:flex-row sm:flex-wrap sm:items-end">
         <Select

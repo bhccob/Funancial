@@ -5,13 +5,30 @@ import {
   daysInMonth,
   endOfMonth,
   inRange,
+  lastMonths,
   monthKey,
   monthRange,
   monthsBetween,
   periodRange,
+  sameDaysLastMonth,
   weekRange,
   yearRange,
 } from './periods';
+
+describe('the months before', () => {
+  it('gives the same days of last month, ending on its last day when it is shorter', () => {
+    expect(sameDaysLastMonth('2026-10-22')).toEqual({ start: '2026-09-01', end: '2026-09-22' });
+    expect(sameDaysLastMonth('2026-10-31')).toEqual({ start: '2026-09-01', end: '2026-09-30' });
+    expect(sameDaysLastMonth('2026-03-31')).toEqual({ start: '2026-02-01', end: '2026-02-28' });
+    expect(sameDaysLastMonth('2028-03-30')).toEqual({ start: '2028-02-01', end: '2028-02-29' });
+    expect(sameDaysLastMonth('2026-01-10')).toEqual({ start: '2025-12-01', end: '2025-12-10' });
+  });
+
+  it('lists the last months, oldest first, across a year end', () => {
+    expect(lastMonths('2026-02-10', 4)).toEqual(['2025-11', '2025-12', '2026-01', '2026-02']);
+    expect(lastMonths('2026-10-22', 1)).toEqual(['2026-10']);
+  });
+});
 
 describe('ranges', () => {
   it('week ranges respect the week start', () => {

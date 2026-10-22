@@ -121,10 +121,12 @@
  * The focus ring of a piece that hangs over the block's edge (the Available pill): the ink, with a
  * ring of the page's own color inside it. No one color holds 3:1 on a dark block, its glows and the
  * page; the ink and the page are the two ends of the mode, so one of them always does
- * (tests/unit/tokens.test.ts). The glass's own shadows stay.
+ * (tests/unit/tokens.test.ts). The glass's own shadows stay. It is drawn on the piece when it has the
+ * focus, or when the link it is the disc of has it (a bill bubble, whose words hang below it).
  */
 @utility focus-edge {
-  &:focus-visible {
+  &:focus-visible,
+  :focus-visible > & {
     outline: 2px solid var(--color-text);
     outline-offset: 2px;
     box-shadow:
@@ -132,6 +134,16 @@
       inset 0 1px 0 var(--color-glass-hi),
       0 12px 28px -18px var(--shadow-tint);
   }
+}
+
+/*
+ * The page's ink and focus ring again, for something drawn on the page's own surface inside the top
+ * block (a menu that opens from a button on it), where the text tokens are the block's ink: white on
+ * a white menu. Primary is the page's ink in both modes, and the block does not take it over.
+ */
+@utility page-ink {
+  --color-text: var(--color-primary);
+  --color-focus: var(--accent);
 }
 
 /*

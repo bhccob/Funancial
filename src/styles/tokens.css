@@ -67,6 +67,13 @@
   --color-ring: var(--ring);
   --color-hero-xp: var(--xp);
   /*
+   * Home's hero, dimmed as the wireframe dims it, at the least share of the ink that holds on the
+   * brightest glow of every theme (its 60% and 35% do not): head-dim for the label, the account and
+   * the currency (4.5:1), head-faint for the cents of the big amount, large text (3:1).
+   */
+  --color-head-dim: color-mix(in srgb, var(--head-ink) 84%, transparent);
+  --color-head-faint: color-mix(in srgb, var(--head-ink) 59%, transparent);
+  /*
    * 0.11's names for the top block, until the screens that use them are rebuilt on the names above.
    * hero-muted is the ink at 88%, the least that holds 4.5:1 on the brightest glow of every theme.
    * hero-to is what sits on a pill filled with head-ink: the avatar ink, which is the opposite of

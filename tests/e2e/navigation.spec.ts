@@ -195,12 +195,21 @@ test('unknown route shows not found with a way home', async ({ page }) => {
   await expect(page.getByRole('heading', { level: 1, name: 'Home' })).toBeVisible();
 });
 
-test('add is reachable from Home on mobile and opens Add Expense', async ({ page }, testInfo) => {
+test("add is reachable from Home's Overview on mobile, in a sheet over Home", async ({
+  page,
+}, testInfo) => {
   test.skip(testInfo.project.name !== 'mobile-chromium', 'mobile layout only');
   await startFresh(page);
-  await page.getByRole('link', { name: 'Expense', exact: true }).click();
-  await expect(page.getByRole('heading', { level: 1, name: 'Add' })).toBeVisible();
-  await expect(page.getByRole('radio', { name: 'Expense' })).toBeChecked();
+  const overview = page.getByRole('region', { name: 'Overview' });
+  await overview.getByRole('button', { name: /^Expenses.*Add expense$/ }).click();
+  const expense = page.getByRole('dialog', { name: 'Add expense' });
+  await expect(expense.getByLabel('Amount', { exact: true })).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(expense).toBeHidden();
+
+  await overview.getByRole('button', { name: /^Income.*Add income$/ }).click();
+  await expect(page.getByRole('dialog', { name: 'Add income' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'Home' })).toBeAttached();
 });
 
 test('add is reachable from the sidebar on desktop and opens Add Expense', async ({
@@ -216,16 +225,25 @@ test('add is reachable from the sidebar on desktop and opens Add Expense', async
   await expect(page.getByRole('radio', { name: 'Expense' })).toBeChecked();
 });
 
-test('mobile: Home has three actions, and History stays one tap away in Last 7 days', async ({
+test('mobile: Home has Pay and no row of actions, and History is one tap away from Overview and Recent', async ({
   page,
 }, testInfo) => {
   test.skip(testInfo.project.name !== 'mobile-chromium', 'mobile layout only');
   await startFresh(page);
-  await expect(page.getByRole('link', { name: 'Expense', exact: true })).toBeVisible();
-  await expect(page.getByRole('link', { name: 'Income', exact: true })).toBeVisible();
-  await expect(page.getByRole('link', { name: 'Goals', exact: true })).toBeVisible();
-  await expect(page.getByRole('link', { name: 'Buy it?' })).toHaveCount(0);
-  await expect(page.getByRole('link', { name: 'History' })).toHaveCount(1);
+  await expect(page.getByRole('button', { name: 'Pay', exact: true })).toBeVisible();
+  for (const gone of ['Expense', 'Income', 'Goals', 'Buy it?']) {
+    await expect(page.getByRole('link', { name: gone, exact: true })).toHaveCount(0);
+  }
+  for (const section of ['Overview', 'Recent transactions']) {
+    await expect(
+      page.getByRole('region', { name: section }).getByRole('link', { name: 'View all' }),
+    ).toHaveAttribute('href', '/history');
+  }
+  await page
+    .getByRole('region', { name: 'Recent transactions' })
+    .getByRole('link', { name: 'View all' })
+    .click();
+  await expect(page.getByRole('heading', { level: 1, name: 'History' })).toBeVisible();
 });
 
 test("mobile: Profile's menu is History, Net worth and My numbers, then Quests to Settings", async ({
@@ -309,15 +327,18 @@ test('mobile: Goals and Debts are two pages', async ({ page }, testInfo) => {
   await expect(page.getByRole('button', { name: 'Add goal' })).toHaveCount(0);
 });
 
-test('mobile: Home opens Income, and an income added there shows in its bars', async ({
+test('mobile: History opens Income, and an income added there shows in its bars', async ({
   page,
 }, testInfo) => {
   test.skip(testInfo.project.name !== 'mobile-chromium', 'mobile layout only');
   await startFresh(page);
+  // Home's Overview leads to History, whose header leads to the income stats.
   await page
-    .getByRole('region', { name: 'Net worth' })
-    .getByRole('link', { name: 'Income stats' })
+    .getByRole('region', { name: 'Overview' })
+    .getByRole('link', { name: 'View all' })
     .click();
+  await expect(page.getByRole('heading', { level: 1, name: 'History' })).toBeVisible();
+  await page.getByRole('link', { name: 'Income stats' }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Income' })).toBeVisible();
   await expect(page.getByText('No income yet')).toBeVisible();
 

@@ -132,6 +132,16 @@ const row = (text: string) => {
 };
 
 describe('HistoryScreen', () => {
+  it('opens on this month, with a link to the income stats under its title', () => {
+    renderHistory();
+    expect(screen.getByLabelText('Month')).toHaveValue(bal!.today.slice(0, 7));
+    const link = screen.getByRole('link', { name: 'Income stats' });
+    expect(link).toHaveAttribute('href', '/income');
+    expect(link.closest('header')).toContainElement(
+      screen.getByRole('heading', { level: 1, name: 'History' }),
+    );
+  });
+
   it('lists every kind of entry for the month (BAL-1)', () => {
     renderHistory();
     expect(screen.getByRole('heading', { level: 1, name: 'History' })).toBeInTheDocument();

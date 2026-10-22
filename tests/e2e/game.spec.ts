@@ -1,13 +1,22 @@
 import { expect, test, type Page } from '@playwright/test';
 import { startFresh } from './helpers';
 
-/** The top line on Home: the avatar opens Profile and names the level; one link to the quests names the streak and coins. */
+/** The top line on Home: the avatar opens Profile and names the level. */
 const avatar = (page: Page) => page.getByRole('link', { name: /^Profile, level \d+$/ });
-const hud = (page: Page) => page.getByRole('link', { name: /^\d+-day streak,/ });
 
-/** The Home "Quests" row for the daily logging quest. */
+/** The Quests page's row for the daily logging quest. */
 const logQuest = (page: Page) =>
-  page.getByRole('listitem').filter({ hasText: "Log today's spending" });
+  page
+    .getByRole('region', { name: 'Quests' })
+    .getByRole('listitem')
+    .filter({ hasText: "Log today's spending" });
+
+/** The Quests page's logging streak: "Start a new streak today." until it runs, then "N days". */
+const loggingStreak = (page: Page) =>
+  page
+    .getByRole('region', { name: 'Streaks' })
+    .getByRole('listitem')
+    .filter({ hasText: 'Daily logging' });
 
 test('the first expense pays XP, completes the daily quest and earns a badge', async ({ page }) => {
   await startFresh(page, '/add');
@@ -27,11 +36,9 @@ test('the first expense pays XP, completes the daily quest and earns a badge', a
   // 10 (logging) + 20 (quest) + 50 (badge) XP, and 5 + 10 coins.
   await page.goto('/');
   await expect(avatar(page)).toHaveAttribute('aria-label', 'Profile, level 1');
-  await expect(hud(page)).toHaveAttribute('aria-label', /, 15 coins\. Open quests$/);
-  await expect(hud(page).getByText('15', { exact: true })).toBeVisible();
   await expect(page.getByText('80 / 100 XP')).toHaveCount(0);
 
-  // The XP is on Profile now, on the level bar under the avatar's page title.
+  // The XP and the coins are on Profile, on the level bar under the avatar's page title.
   await avatar(page).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Profile' })).toBeVisible();
   await expect(page.getByRole('progressbar', { name: 'Level progress' })).toHaveAttribute(
@@ -39,6 +46,7 @@ test('the first expense pays XP, completes the daily quest and earns a badge', a
     '80 of 100 XP',
   );
   await expect(page.getByText('80 / 100 XP')).toBeVisible();
+  await expect(page.getByText('15 coins', { exact: true })).toBeVisible();
 
   await page.goto('/quests');
   const badges = page.getByRole('region', { name: 'Badges' });
@@ -47,26 +55,27 @@ test('the first expense pays XP, completes the daily quest and earns a badge', a
   ).toContainText(/Earned /);
 });
 
-test('the monthly backup quest is not offered, on Home or in How to earn', async ({ page }) => {
-  await startFresh(page);
+test('the monthly backup quest is not offered, among the quests or in How to earn', async ({
+  page,
+}) => {
+  await startFresh(page, '/quests');
   await expect(logQuest(page)).toBeVisible();
   await expect(page.getByText('Back up your data')).toHaveCount(0);
 
-  await page.goto('/quests');
   const howTo = page.getByRole('region', { name: 'How to earn' });
   await expect(howTo.getByText(/^Audit your subscriptions/)).toBeVisible();
   await expect(page.getByText('Back up your data')).toHaveCount(0);
 });
 
 test('Nothing spent keeps the day', async ({ page }) => {
-  await startFresh(page);
-  await expect(hud(page)).toHaveAttribute('aria-label', /0-day streak/);
+  await startFresh(page, '/quests');
+  await expect(loggingStreak(page)).toContainText('Start a new streak today.');
 
   await logQuest(page).getByRole('button', { name: 'Nothing spent' }).click();
 
   await expect(logQuest(page)).toContainText('Done');
   await expect(logQuest(page).getByRole('button', { name: 'Nothing spent' })).toHaveCount(0);
-  await expect(hud(page)).toHaveAttribute('aria-label', /1-day streak/);
+  await expect(loggingStreak(page)).toContainText('1 day');
 });
 
 test('the shop refuses a purchase without enough coins', async ({ page }) => {

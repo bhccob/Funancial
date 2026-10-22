@@ -1,7 +1,14 @@
 import { addDays, type LocalDate } from './dates';
 import { CategorySchema, type Category, type Expense } from './entities';
 import { wholePercents } from './income';
-import { daysInMonth, monthKey, monthRange, yearRange } from './periods';
+import {
+  daysInMonth,
+  lastMonths,
+  monthKey,
+  monthRange,
+  sameDaysLastMonth,
+  yearRange,
+} from './periods';
 import type { DataSnapshot } from './snapshot';
 
 /** How far back the chart on the Cards tab looks: 14 days, 12 months or 4 years. */
@@ -32,26 +39,10 @@ const YEARS = 4;
 const pad = (n: number) => String(n).padStart(2, '0');
 
 /** From `base` to `now` as a percent to two decimals; `null` when there was nothing to compare with. */
-function percentChange(now: number, base: number): number | null {
+export function percentChange(now: number, base: number): number | null {
   if (base === 0) return null;
   const percent = Math.round(((now - base) / base) * 10_000) / 100;
   return percent === 0 ? 0 : percent; // never -0
-}
-
-/** The month keys of the last `count` months, oldest first, ending with the month of `day`. */
-function lastMonths(day: LocalDate, count: number): string[] {
-  let y = Number(day.slice(0, 4));
-  let m = Number(day.slice(5, 7));
-  const keys: string[] = [];
-  for (let i = 0; i < count; i++) {
-    keys.unshift(`${y}-${pad(m)}`);
-    m -= 1;
-    if (m === 0) {
-      m = 12;
-      y -= 1;
-    }
-  }
-  return keys;
 }
 
 /** The expenses paid with an account, up to and including `today`. */
@@ -106,9 +97,8 @@ export function spendSeries(
     });
     const total = bars[MONTHS - 1]!.amount;
     // The same days of last month; a month that is shorter ends on its own last day.
-    const [py, pm] = m === 1 ? [y - 1, 12] : [y, m - 1];
-    const sameDay = Math.min(d, daysInMonth(py, pm));
-    const before = between(`${py}-${pad(pm)}-01`, `${py}-${pad(pm)}-${pad(sameDay)}`);
+    const last = sameDaysLastMonth(today);
+    const before = between(last.start, last.end);
     return { label: 'Spent this month', total, change: percentChange(total, before), bars };
   }
 

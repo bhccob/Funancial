@@ -22,14 +22,20 @@ async function addExpense(
   await expect(page.getByText('Expense saved.')).toBeVisible();
 }
 
-const available = (page: Page) => page.getByRole('region', { name: 'Available to spend' });
+/** Home's hero: the account it shows (Main account, the default) and what it has. */
+const hero = (page: Page) => page.getByRole('region', { name: 'Available balance' });
+
+/** The Cards tab's Available to spend pill: the bank and cash, less the bills still to come. */
+async function available(page: Page) {
+  await page.goto('/cards');
+  return page.getByRole('button', { name: /^Available to spend/ });
+}
 
 test('switching currency in Settings relabels amounts without converting them', async ({
   page,
 }) => {
   await start(page);
-  // Savings is shown apart (in Net worth), so only the bank account counts in Available.
-  await expect(available(page)).toContainText('$1,000.00');
+  await expect(hero(page)).toContainText('$1,000.00');
 
   await page.goto('/settings');
   // Only the row's button is there while both dialogs are closed.
@@ -53,7 +59,7 @@ test('switching currency in Settings relabels amounts without converting them', 
   await expect(change).toBeFocused();
 
   await page.goto('/');
-  await expect(available(page)).toContainText('€1,000.00');
+  await expect(hero(page)).toContainText('€1,000.00');
 });
 
 test('a weekly food limit warns at 80% in the motivational tone', async ({ page }) => {
@@ -71,12 +77,18 @@ test('a weekly food limit warns at 80% in the motivational tone', async ({ page 
   await expect(
     page.getByText("Food is at 83%. A few careful days and you've got this!"),
   ).toBeVisible();
-  await expect(page.getByRole('img', { name: 'Food · week: 83% used, $20 left' })).toBeVisible();
+  // The limits live on Spending now, where the bar reads 83%.
+  await page.goto('/budget');
+  await expect(page.getByRole('progressbar', { name: 'Food · weekly' })).toHaveAttribute(
+    'aria-valuetext',
+    '83% used',
+  );
 });
 
 test('card spending becomes a bill until the card is paid', async ({ page }) => {
   await start(page);
-  await expect(available(page)).toContainText('$1,000.00');
+  // Savings is shown apart (in Net worth), so only the bank account counts in Available.
+  await expect(await available(page)).toContainText('$1,000.00');
 
   await page.goto('/debts');
   await page.getByRole('button', { name: 'Add card' }).click();
@@ -89,7 +101,7 @@ test('card spending becomes a bill until the card is paid', async ({ page }) => 
 
   // The new card is an account: Paid with offers it by name, marked as a credit card.
   await addExpense(page, { amount: '50', category: 'Shopping', paidWith: 'Visa (credit card)' });
-  await expect(available(page)).toContainText('$950.00');
+  await expect(await available(page)).toContainText('$950.00');
 
   await page.goto('/debts');
   const visa = page.getByRole('listitem').filter({ hasText: 'Visa' });
@@ -100,9 +112,10 @@ test('card spending becomes a bill until the card is paid', async ({ page }) => 
   await pay.getByRole('button', { name: 'Pay' }).click();
   await expect(visa).toContainText('$0.00');
 
-  await page.goto('/');
   // The Main account paid the card: 1,000 − 50, and no bill left.
-  await expect(available(page)).toContainText('$950.00');
+  await expect(await available(page)).toContainText('$950.00');
+  await page.goto('/');
+  await expect(hero(page)).toContainText('$950.00');
 });
 
 test('there is no salary freeze: its page is gone and Home has no banner for it', async ({
@@ -115,7 +128,7 @@ test('there is no salary freeze: its page is gone and Home has no banner for it'
   await page.goto('/');
   // Wait for Home itself first: an absence check could pass before anything has rendered.
   await expect(page.getByRole('heading', { level: 1, name: 'Home' })).toBeVisible();
-  await expect(available(page)).toBeVisible();
+  await expect(hero(page)).toBeVisible();
   await expect(page.getByText(/^Salary freeze until/)).toHaveCount(0);
 });
 
@@ -137,16 +150,18 @@ test("setting an account's actual balance records a correction", async ({ page }
   await expect(page.getByText('Balance correction')).toBeVisible();
 
   await page.goto('/');
-  await expect(page.getByRole('region', { name: 'Net worth' })).toContainText('Bank & cash $900');
+  await expect(hero(page)).toContainText('$900.00');
+  // 900 in the bank and 5,000 in savings.
+  await expect(page.getByRole('region', { name: 'Net worth' })).toContainText('$5,900.00');
 });
 
-test("Home's Available to spend sheet corrects an account and keeps its place", async ({
+test("the Cards tab's Available to spend sheet corrects an account and keeps its place", async ({
   page,
 }) => {
   await start(page);
-  const number = page.getByRole('button', { name: 'Available to spend: see and correct' });
-  // The name is the amount drawn, then what it does, so it holds the text on screen.
-  await expect(number).toHaveAccessibleName('$1,000.00 Available to spend: see and correct');
+  const number = await available(page);
+  // The name is what it is, then the amount drawn.
+  await expect(number).toHaveAccessibleName('Available to spend $1,000.00');
   await number.click();
   const sheet = page.getByRole('dialog', { name: 'Available to spend' });
   // The accounts that count are listed; savings is not one of them.
@@ -168,10 +183,43 @@ test("Home's Available to spend sheet corrects an account and keeps its place", 
     main.getByRole('button', { name: 'Correct Main account', exact: true }),
   ).toBeFocused();
   await page.keyboard.press('Escape');
-  await expect(available(page)).toContainText('$900.00');
-  await expect(
-    page.getByRole('button', { name: 'Available to spend: see and correct' }),
-  ).toBeFocused();
+  await expect(number).toContainText('$900.00');
+  await expect(number).toBeFocused();
+});
+
+test("adds an expense from Home's Expenses tile, in a sheet over Home, and History lists it", async ({
+  page,
+}) => {
+  await start(page);
+  const expenses = page
+    .getByRole('region', { name: 'Overview' })
+    .getByRole('button', { name: /^Expenses.*Add expense$/ });
+  await expenses.click();
+  const sheet = page.getByRole('dialog', { name: 'Add expense' });
+  await expect(sheet.getByLabel('Amount', { exact: true })).toBeFocused();
+  await sheet.getByLabel('Amount', { exact: true }).fill('23.40');
+  await sheet.getByRole('radio', { name: 'Transport', exact: true }).click();
+  await sheet.getByLabel('Note', { exact: true }).fill('Bus pass');
+  await sheet.getByRole('button', { name: 'Save', exact: true }).click();
+
+  await expect(page.getByText('Expense saved.')).toBeVisible();
+  await expect(sheet).toBeHidden();
+  // Still on Home, which counts it at once.
+  await expect(page.getByRole('heading', { level: 1, name: 'Home' })).toBeVisible();
+  await expect(hero(page)).toContainText('$976.60');
+  await expect(expenses).toContainText('−$23');
+  const recent = page.getByRole('region', { name: 'Recent transactions' });
+  await expect(recent.getByRole('listitem').first()).toContainText('Bus pass');
+
+  // Overview's View all opens History on this month, where it is listed.
+  await page
+    .getByRole('region', { name: 'Overview' })
+    .getByRole('link', { name: 'View all' })
+    .click();
+  await expect(page.getByRole('heading', { level: 1, name: 'History' })).toBeVisible();
+  const row = page.getByRole('listitem').filter({ hasText: 'Bus pass' });
+  await expect(row).toContainText('Transport · Main account');
+  await expect(row).toContainText('−$23.40');
 });
 
 test('a monthly expense also becomes a subscription renewing next month', async ({ page }) => {

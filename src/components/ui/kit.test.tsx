@@ -140,6 +140,22 @@ describe('Menu', () => {
     expect(screen.getByRole('menuitem', { name: 'Edit' })).not.toHaveClass('focus:outline-none');
   });
 
+  it('takes the look of its button from where it sits, and draws the menu in the page ink', async () => {
+    render(
+      <Menu
+        label="More"
+        triggerClassName="glass-head size-[34px]"
+        items={[{ label: 'Move money', onSelect: vi.fn() }]}
+      />,
+    );
+    const trigger = screen.getByRole('button', { name: 'More' });
+    expect(trigger).toHaveClass('glass-head', 'size-[34px]');
+    expect(trigger).not.toHaveClass('text-muted');
+    await userEvent.click(trigger);
+    // On the top block the text tokens are the block's ink; the menu is the page's white.
+    expect(screen.getByRole('menu', { name: 'More' })).toHaveClass('page-ink', 'text-text');
+  });
+
   it('moves with the arrow keys and closes on Escape, back on its button', async () => {
     render(
       <Menu

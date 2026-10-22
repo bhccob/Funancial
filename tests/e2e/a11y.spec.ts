@@ -31,6 +31,10 @@ const focusIsShown = (page: Page) =>
     // The calendar button inside a date field: focus is on it, not on the field, and Chrome rings it.
     if (el instanceof HTMLInputElement && el.type === 'date' && !el.matches(':focus')) return true;
     if (ring(el)) return true;
+    // A bill bubble on Home: the link's ring is drawn on its disc, which hangs over the block's edge.
+    if (el instanceof HTMLAnchorElement && el.firstElementChild && ring(el.firstElementChild)) {
+      return true;
+    }
     if (el instanceof HTMLInputElement || el instanceof HTMLSelectElement) {
       // The hairline's colour as the page resolves it, to tell the focused line from the resting one.
       const probe = document.createElement('div');
@@ -103,16 +107,22 @@ test('add an expense with the keyboard alone', async ({ page }) => {
   const api = watchApi(page);
   await demoByKeyboard(page);
 
-  // A "?" tip is a sheet: Escape closes it and focus is back on the "?".
+  // Show on Home is a sheet: Escape closes it and focus is back on the account that opened it.
   await openAndEscape(
     page,
-    page.getByRole('button', { name: 'What is available to spend?' }),
-    page.getByRole('dialog', { name: 'Available to spend' }),
+    page.getByRole('button', { name: /, change account$/ }),
+    page.getByRole('dialog', { name: 'Show on Home' }),
   );
 
-  await tabTo(page, page.getByRole('main').getByRole('link', { name: 'Expense', exact: true }));
+  // Past Pay, the ⋯, the bills over the block's edge and Overview's View all, to the Expenses tile,
+  // which opens the expense form in a sheet over Home.
+  const tile = page
+    .getByRole('region', { name: 'Overview' })
+    .getByRole('button', { name: /^Expenses.*Add expense$/ });
+  await tabTo(page, tile);
   await page.keyboard.press('Enter');
-  await expect(page.getByRole('heading', { level: 1, name: 'Add' })).toBeVisible();
+  const sheet = page.getByRole('dialog', { name: 'Add expense' });
+  await expect(sheet).toBeVisible();
 
   // The amount starts with focus; the rest is Tab and typing.
   const amount = page.getByLabel('Amount', { exact: true });
@@ -142,7 +152,11 @@ test('add an expense with the keyboard alone', async ({ page }) => {
   await page.keyboard.press('Enter');
 
   await expect(page.getByText('Expense saved.')).toBeVisible();
+  // Still on Home, with focus back on the tile that opened the sheet.
+  await expect(sheet).toBeHidden();
   await expect(page.getByRole('heading', { level: 1, name: 'Home' })).toBeVisible();
+  await expect(tile).toBeFocused();
+  await expectFocusShown(page, 'the Expenses tile after saving');
   expect(api).toEqual([]);
 });
 

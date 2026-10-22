@@ -5,7 +5,6 @@ import type { Slice } from '@/domain/charts';
 import { sliceColor } from './colors';
 import { DayBars } from './DayBars';
 import { Donut, DonutLegend } from './Donut';
-import { MonthLine } from './MonthLine';
 import { PriceLine } from './PriceLine';
 import { Ring } from './Ring';
 import { Sparkline } from './Sparkline';
@@ -191,22 +190,6 @@ describe('Charts have a name and their figures as text', () => {
     expect(within(group).getByRole('button', { name: 'Today: $0.00' })).toBeInTheDocument();
   });
 
-  it('names the month line as a group, each segment reading its label and amount', () => {
-    render(
-      <MonthLine
-        label="This month"
-        segments={[
-          { key: 'spent', label: 'Spent so far: $18.00', amount: 1800, color: 'red' },
-          { key: 'left', label: 'Left: $82.00', amount: 8200, color: 'blue' },
-        ]}
-        selected={null}
-        onSelect={() => {}}
-      />,
-    );
-    const group = screen.getByRole('group', { name: 'This month' });
-    expect(within(group).getAllByRole('button')).toHaveLength(2);
-  });
-
   it('gives a ring, a sparkline and a price line a name for screen readers', () => {
     render(
       <>
@@ -307,78 +290,6 @@ describe('DonutLegend percentages', () => {
       'Other$175.009%',
       'Tiny$50.003%',
     ]);
-  });
-});
-
-describe('MonthLine', () => {
-  const segments = [
-    {
-      key: 'spent',
-      label: 'Spent so far: $1,884.36',
-      amount: 188436,
-      color: 'var(--color-chart-4)',
-    },
-    {
-      key: 'bills',
-      label: 'Bills still to come: $547.81',
-      amount: 54781,
-      color: 'var(--color-chart-5)',
-    },
-  ];
-
-  it('selects a segment by label, and clears it when tapped again', async () => {
-    const onSelect = vi.fn();
-    const { rerender } = render(
-      <MonthLine label="This month" segments={segments} selected={null} onSelect={onSelect} />,
-    );
-    await userEvent.click(screen.getByRole('button', { name: 'Bills still to come: $547.81' }));
-    expect(onSelect).toHaveBeenLastCalledWith('bills');
-
-    rerender(
-      <MonthLine label="This month" segments={segments} selected="bills" onSelect={onSelect} />,
-    );
-    expect(screen.getByRole('button', { name: 'Bills still to come: $547.81' })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    );
-    await userEvent.click(screen.getByRole('button', { name: 'Bills still to come: $547.81' }));
-    expect(onSelect).toHaveBeenLastCalledWith(null);
-  });
-
-  it('sizes each segment by its amount', () => {
-    render(
-      <MonthLine label="This month" segments={segments} selected={null} onSelect={() => {}} />,
-    );
-    expect(screen.getByRole('button', { name: /Spent so far/ }).style.flexGrow).toBe('188436');
-  });
-
-  it('keeps a tiny segment wide enough to tap beside a huge one', () => {
-    render(
-      <MonthLine
-        label="This month"
-        segments={[
-          { key: 'spent', label: 'Spent so far: $2,600', amount: 260000, color: 'red' },
-          { key: 'bills', label: 'Bills still to come: $16', amount: 1600, color: 'blue' },
-        ]}
-        selected={null}
-        onSelect={() => {}}
-      />,
-    );
-    // Sized by amount the bills would be about 2px wide; the minimum keeps them tappable.
-    expect(screen.getByRole('button', { name: /Bills still to come/ })).toHaveClass('min-w-2');
-    expect(screen.getByRole('button', { name: /Spent so far/ })).toHaveClass('min-w-2');
-  });
-
-  it('shows the track only when nothing is left to show', () => {
-    render(
-      <MonthLine
-        label="This month"
-        segments={[{ key: 'spent', label: 'Spent so far: $0.00', amount: 0, color: 'red' }]}
-        selected={null}
-        onSelect={() => {}}
-      />,
-    );
-    expect(screen.queryByRole('button')).not.toBeInTheDocument();
   });
 });
 
@@ -488,6 +399,18 @@ describe('Ring', () => {
     expect(container.querySelectorAll('circle')).toHaveLength(1);
     expect(container.innerHTML).not.toContain('NaN');
   });
+
+  it('draws its track in the page track colour, or the one it is given', () => {
+    const { container, unmount } = render(
+      <Ring value={50} size={44} thickness={3} color="red" label="x" />,
+    );
+    expect(container.querySelector('circle')).toHaveAttribute('stroke', 'var(--color-track)');
+    unmount();
+    const block = render(
+      <Ring value={50} size={44} thickness={3} color="red" track="var(--hg-bg)" label="x" />,
+    );
+    expect(block.container.querySelector('circle')).toHaveAttribute('stroke', 'var(--hg-bg)');
+  });
 });
 
 describe('Sparkline', () => {
@@ -516,6 +439,23 @@ describe('Sparkline', () => {
       expect(d).not.toContain('NaN');
       unmount();
     }
+  });
+
+  it('is a picture only, hidden from a screen reader, without a label', () => {
+    const { container } = render(<Sparkline values={[1, 2]} height={30} color="green" />);
+    const svg = container.querySelector('svg');
+    expect(svg).toHaveAttribute('aria-hidden', 'true');
+    expect(svg).not.toHaveAttribute('role');
+  });
+
+  it('can end on a round dot, drawn as a point the stroke caps round whatever the scale', () => {
+    const { container } = render(<Sparkline values={[1, 3, 2]} height={30} color="green" dot />);
+    const [line, dot] = [...container.querySelectorAll('path')];
+    const end = line!.getAttribute('d')!.split(' ').at(-1)!.slice(1);
+    expect(dot).toHaveAttribute('d', `M${end} l0,0`);
+    expect(dot).toHaveAttribute('stroke-linecap', 'round');
+    expect(dot).toHaveAttribute('vector-effect', 'non-scaling-stroke');
+    expect(Number(dot!.getAttribute('stroke-width'))).toBe(6);
   });
 });
 

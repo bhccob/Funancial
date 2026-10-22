@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -18,6 +18,7 @@ import {
   makeTransaction,
 } from '@/test/fixtures';
 import { freshRealStore } from '@/test/realStore';
+import { CardsScreen } from '@/features/cards/CardsScreen';
 import { DashboardScreen } from './DashboardScreen';
 
 afterEach(() => {
@@ -81,6 +82,8 @@ const visa: Account = makeAccount({
 });
 
 type Seed = {
+  /** Available to spend is the Cards tab's pill; Net worth is Home's tile. */
+  on?: 'home' | 'cards';
   cash?: number;
   /** Without it there is no Visa and no subscription: no bill of any kind. */
   bills?: boolean;
@@ -90,13 +93,14 @@ type Seed = {
 };
 
 /**
- * October 14th on a real store, so a correction really changes Home. Main account holds 3,680
+ * October 14th on a real store, so a correction really changes the screen. Main account holds 3,680
  * (5,000 less 1,320 spent), Savings 3,000. Streamflix (15.99) and the gym (39.00) renew on Main
  * account this month and Tunely (10.99) on the Visa, which owes 230; a car loan is at 1,000. With
  * `reserve` 70 of the Fun limit is held back; `invested` holds 1,000 in shares and `passive` pays
  * 25 into a Passive income account.
  */
 async function renderHome({
+  on = 'home',
   cash = 5_000_00,
   bills = true,
   reserve = false,
@@ -162,23 +166,31 @@ async function renderHome({
     );
   }
   renderWithStore(
-    <MemoryRouter>
-      <DashboardScreen />
-    </MemoryRouter>,
+    <MemoryRouter>{on === 'home' ? <DashboardScreen /> : <CardsScreen />}</MemoryRouter>,
     store,
   );
   return store;
 }
 
-/**
- * The name of a number's button: the amount drawn, then what pressing it does. jsdom drops the space
- * between the two, which a browser keeps (the Home e2e spec checks it there).
- */
-const named = (amount: string, what: string) =>
-  new RegExp(`^${amount.replace(/[$.]/g, '\\$&')}\\s*${what}$`);
+/** `text` as it reads, for a regular expression: its dollar signs and dots escaped. */
+const exactly = (text: string) => text.replace(/[$.]/g, '\\$&');
 
+/**
+ * What opens each sheet: the Cards tab's Available to spend pill, named by its words then its amount,
+ * and Home's Net worth tile, named by what it shows then what it does.
+ */
 const trigger = (which: 'Available to spend' | 'Net worth') =>
-  screen.getByRole('button', { name: new RegExp(`${which}: see and correct$`) });
+  which === 'Available to spend'
+    ? screen.getByRole('button', { name: /^Available to spend/ })
+    : screen.getByRole('button', { name: /Net worth: see and correct$/ });
+
+/** The number each shows: the pill's amount, the tile's total. */
+const shownOn = (which: 'Available to spend' | 'Net worth') =>
+  minor(
+    which === 'Available to spend'
+      ? (trigger(which).querySelector('b')?.textContent ?? null)
+      : within(trigger(which)).getByTestId('net-worth-total').textContent,
+  );
 
 async function openSheet(which: 'Available to spend' | 'Net worth') {
   await userEvent.click(trigger(which));
@@ -193,26 +205,19 @@ const total = (sheet: HTMLElement, label: string) =>
 const correction = () => screen.getByRole('dialog', { name: 'Set actual balance' });
 
 describe('the Available to spend sheet', () => {
-  it('opens from the number', async () => {
-    await renderHome();
+  it('opens from the pill on the Cards tab', async () => {
+    await renderHome({ on: 'cards' });
     const button = trigger('Available to spend');
-    // Its name is the amount you see, then what it does.
+    // Its name is what it is, then the amount you see.
     expect(button).toHaveAccessibleName(
-      named(usd(3_395_01), 'Available to spend: see and correct'),
+      new RegExp(`^Available to spend\\s*${exactly(usd(3_395_01))}$`),
     );
-    expect(button).toHaveTextContent(usd(3_395_01));
-    // The "?" and the eye are buttons of their own, never inside it.
-    for (const other of ['What is available to spend?', 'Hide amounts']) {
-      const el = screen.getByRole('button', { name: other });
-      expect(button).not.toContainElement(el);
-      expect(el.closest('button')).toBe(el);
-    }
     expect(screen.queryByRole('dialog', { name: 'Available to spend' })).not.toBeInTheDocument();
     await openSheet('Available to spend');
   });
 
   it('shows what the number is made of, top to bottom', async () => {
-    await renderHome({ reserve: true });
+    await renderHome({ on: 'cards', reserve: true });
     const sheet = await openSheet('Available to spend');
     // Savings are shown apart, as Saved: not a row here. Tunely is on the Visa, so it is not among
     // the bills: it comes back in the card's payment.
@@ -227,7 +232,7 @@ describe('the Available to spend sheet', () => {
   });
 
   it('lists every account that counts in Available, in carousel order', async () => {
-    const store = await renderHome();
+    const store = await renderHome({ on: 'cards' });
     await store.getState().put(
       'account',
       makeAccount({
@@ -251,7 +256,7 @@ describe('the Available to spend sheet', () => {
   });
 
   it('shows a bill row of nothing as a plain zero, never a minus zero', async () => {
-    await renderHome({ bills: false });
+    await renderHome({ on: 'cards', bills: false });
     const sheet = await openSheet('Available to spend');
     expect(rows(sheet)).toEqual([
       ['Main account', usd(3_680_00)],
@@ -262,7 +267,7 @@ describe('the Available to spend sheet', () => {
   });
 
   it('leaves out Reserved for limits when nothing is reserved', async () => {
-    await renderHome();
+    await renderHome({ on: 'cards' });
     const sheet = await openSheet('Available to spend');
     expect(rows(sheet).map(([label]) => label)).toEqual([
       'Main account',
@@ -277,9 +282,9 @@ describe('the Available to spend sheet', () => {
     ['without one', {}],
     ['with cash overspent below zero', { cash: 1_000_00, reserve: true }],
     ['with savings, passive income and investments', { passive: true, invested: true }],
-  ])('adds up to the number on Home, to the cent, %s', async (_name, seed) => {
-    await renderHome(seed);
-    const shown = minor(trigger('Available to spend').textContent);
+  ])('adds up to the number on the pill, to the cent, %s', async (_name, seed) => {
+    await renderHome({ on: 'cards', ...seed });
+    const shown = shownOn('Available to spend');
     const sheet = await openSheet('Available to spend');
     const sum = rows(sheet).reduce((s, [, value]) => s + minor(value ?? null), 0);
     const [, bottom] = total(sheet, '= Available to spend');
@@ -288,7 +293,7 @@ describe('the Available to spend sheet', () => {
   });
 
   it('opens the correction on the account of the row it was tapped on', async () => {
-    await renderHome();
+    await renderHome({ on: 'cards' });
     const sheet = await openSheet('Available to spend');
     // The button is named by its row: "Correct Main account".
     await userEvent.click(
@@ -301,8 +306,8 @@ describe('the Available to spend sheet', () => {
     expect(within(dialog).getByText(`Funcial thinks: ${usd(3_680_00)}`)).toBeInTheDocument();
   });
 
-  it('puts a correction into the rows, the total and Home', async () => {
-    const store = await renderHome();
+  it('puts a correction into the rows, the total and the pill', async () => {
+    const store = await renderHome({ on: 'cards' });
     const sheet = await openSheet('Available to spend');
     await userEvent.click(
       within(row(sheet, 'Main account')).getByRole('button', { name: 'Correct Main account' }),
@@ -321,10 +326,6 @@ describe('the Available to spend sheet', () => {
     expect(pair(row(sheet, 'Main account'))).toEqual(['Main account', usd(3_700_00)]);
     expect(total(sheet, '= Available to spend')[1]).toBe(usd(3_415_01));
     expect(trigger('Available to spend')).toHaveTextContent(usd(3_415_01));
-    // Net worth rose by the same 20.00: 3,700 + 3,000 − 230 − 1,000.
-    expect(
-      within(screen.getByRole('region', { name: 'Net worth' })).getByText(usd(5_470_00)),
-    ).toBeInTheDocument();
     // The correction is focused back on the button that asked for it.
     expect(
       within(row(sheet, 'Main account')).getByRole('button', { name: 'Correct Main account' }),
@@ -332,8 +333,8 @@ describe('the Available to spend sheet', () => {
   });
 
   it('shows no amount while amounts are hidden', async () => {
-    await renderHome({ reserve: true });
-    await userEvent.click(screen.getByRole('button', { name: 'Hide amounts' }));
+    await renderHome({ on: 'cards', reserve: true });
+    act(() => useAmountsHidden.setState({ hidden: true }));
     const sheet = await openSheet('Available to spend');
     expect(sheet.textContent).not.toMatch(/\d/);
     expect(rows(sheet).map(([, value]) => value)).toEqual(['••••', '••••', '••••', '••••']);
@@ -342,11 +343,14 @@ describe('the Available to spend sheet', () => {
 });
 
 describe('the Net worth sheet', () => {
-  it('opens from the number', async () => {
+  it('opens from the tile on Home', async () => {
     await renderHome();
     const button = trigger('Net worth');
-    expect(button).toHaveAccessibleName(named(usd(5_450_00), 'Net worth: see and correct'));
-    expect(button).toHaveTextContent(usd(5_450_00));
+    // Its name is what it shows, starting with the figure, then what it does.
+    expect(button).toHaveAccessibleName(
+      new RegExp(`^${exactly(usd(5_450_00))}.*Net worth: see and correct$`),
+    );
+    expect(shownOn('Net worth')).toBe(5_450_00);
     expect(screen.queryByRole('dialog', { name: 'Net worth' })).not.toBeInTheDocument();
     await openSheet('Net worth');
   });
@@ -421,7 +425,7 @@ describe('the Net worth sheet', () => {
     ['cash below zero', { cash: 1_000_00 }],
   ])('adds up to the number on Home, to the cent, with %s', async (_name, seed) => {
     await renderHome(seed);
-    const shown = minor(trigger('Net worth').textContent);
+    const shown = shownOn('Net worth');
     const sheet = await openSheet('Net worth');
     const sum = rows(sheet).reduce((s, [, value]) => s + minor(value ?? null), 0);
     expect(minor(total(sheet, '= Net worth')[1] ?? null)).toBe(shown);
@@ -468,8 +472,10 @@ describe('the Net worth sheet', () => {
     ]);
     expect(pair(row(sheet, 'Savings'))).toEqual(['Savings', usd(3_050_00)]);
     expect(total(sheet, '= Net worth')[1]).toBe(usd(5_500_00));
-    // Savings are not part of Available, which stays where it was.
-    expect(trigger('Available to spend')).toHaveTextContent(usd(3_395_01));
+    // Home's hero, for Main account, stays where it was.
+    expect(
+      within(screen.getByRole('region', { name: 'Available balance' })).getByTestId('hero-amount'),
+    ).toHaveTextContent(usd(3_680_00));
   });
 
   it('adds a card paid past its balance, and shows a settled loan as a plain zero', async () => {
@@ -505,7 +511,7 @@ describe('the Net worth sheet', () => {
       ['Visa', usd(50_00)],
       ['Car loan', usd(0)],
     ]);
-    const shown = minor(trigger('Net worth').textContent);
+    const shown = shownOn('Net worth');
     expect(shown).toBe(5_450_00);
     expect(minor(total(sheet, '= Net worth')[1] ?? null)).toBe(shown);
     expect(rows(sheet).reduce((sum, [, value]) => sum + minor(value ?? null), 0)).toBe(shown);
@@ -543,7 +549,7 @@ describe('the Net worth sheet', () => {
     );
     expect(pair(row(sheet, 'Car loan'))).toEqual(['Car loan', usd(-800_00)]);
     expect(total(sheet, '= Net worth')[1]).toBe(usd(5_650_00));
-    expect(trigger('Net worth')).toHaveTextContent(usd(5_650_00));
+    expect(shownOn('Net worth')).toBe(5_650_00);
   });
 
   it('says so when there is nothing owed', async () => {

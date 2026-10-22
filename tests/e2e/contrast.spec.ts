@@ -171,6 +171,33 @@ for (const theme of THEMES) {
       await expectReadable(page, 'the first holding');
     });
 
+    for (const [tile, sheet] of [
+      ['Expenses', 'Add expense'],
+      ['Income', 'Add income'],
+    ] as const) {
+      test(`the ${sheet} sheet from Home's ${tile} tile`, async ({ page }) => {
+        await visit(page, '/');
+        await page
+          .getByRole('region', { name: 'Overview' })
+          .getByRole('button', { name: new RegExp(`^${tile}.*${sheet}$`) })
+          .click();
+        await expect(page.getByRole('dialog', { name: sheet })).toBeVisible();
+        await expectReadable(page, `the ${sheet} sheet`);
+      });
+    }
+
+    test("Home's More menu, a page surface on the block, and Show on Home", async ({ page }) => {
+      await visit(page, '/');
+      await page.getByRole('button', { name: 'More', exact: true }).click();
+      await expect(page.getByRole('menu', { name: 'More' })).toBeVisible();
+      await expectReadable(page, "Home's More menu");
+      await page.keyboard.press('Escape');
+
+      await page.getByRole('button', { name: /, change account$/ }).click();
+      await expect(page.getByRole('dialog', { name: 'Show on Home' })).toBeVisible();
+      await expectReadable(page, 'the Show on Home sheet');
+    });
+
     test("the Net worth sheet from Profile's menu", async ({ page }) => {
       await visit(page, '/profile');
       await page

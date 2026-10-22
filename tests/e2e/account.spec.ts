@@ -101,11 +101,11 @@ async function wipePhone(page: Page) {
 }
 
 /**
- * Home shows what setup was given: the $1,234.00 in the bank account is what is available, and with
- * the $5,000.00 in savings (shown apart, in Net worth) the whole is $6,234.00.
+ * Home shows what setup was given: the $1,234.00 in the bank account, which it shows by default,
+ * and with the $5,000.00 in savings the whole of Net worth is $6,234.00.
  */
 async function expectSetupMoney(page: Page) {
-  await expect(page.getByRole('region', { name: 'Available to spend' })).toContainText('$1,234.00');
+  await expect(page.getByRole('region', { name: 'Available balance' })).toContainText('$1,234.00');
   await expect(page.getByRole('region', { name: 'Net worth' })).toContainText('$6,234.00');
 }
 

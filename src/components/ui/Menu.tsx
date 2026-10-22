@@ -8,8 +8,20 @@ export interface MenuItem {
   danger?: boolean;
 }
 
-/** A "more actions" button with a small menu: arrow keys move, Escape closes, a click outside closes. */
-export function Menu({ label, items }: { label: string; items: MenuItem[] }) {
+/**
+ * A "more actions" button with a small menu: arrow keys move, Escape closes, a click outside closes.
+ * `triggerClassName` draws the button for where it sits (a glass circle on the top block) in place of
+ * the plain muted one. The menu is the page's surface wherever it opens, in the page's ink.
+ */
+export function Menu({
+  label,
+  items,
+  triggerClassName,
+}: {
+  label: string;
+  items: MenuItem[];
+  triggerClassName?: string;
+}) {
   const [open, setOpen] = useState(false);
   const menuId = useId();
   const wrapper = useRef<HTMLDivElement>(null);
@@ -64,9 +76,12 @@ export function Menu({ label, items }: { label: string; items: MenuItem[] }) {
         aria-expanded={open}
         aria-controls={open ? menuId : undefined}
         onClick={() => setOpen((o) => !o)}
-        className="text-muted hover:text-text hover:bg-surface-2 grid size-11 place-items-center rounded-full"
+        className={cn(
+          'grid place-items-center rounded-full',
+          triggerClassName ?? 'text-muted hover:text-text hover:bg-surface-2 size-11',
+        )}
       >
-        <MoreHorizontal aria-hidden className="size-5" />
+        <MoreHorizontal aria-hidden className={triggerClassName ? 'size-[15px]' : 'size-5'} />
       </button>
       {open && (
         <div
@@ -74,7 +89,7 @@ export function Menu({ label, items }: { label: string; items: MenuItem[] }) {
           role="menu"
           aria-label={label}
           onKeyDown={onKeyDown}
-          className="bg-overlay absolute top-full right-0 z-30 mt-1 flex min-w-48 flex-col rounded-md p-1 shadow-(--shadow-overlay)"
+          className="bg-overlay page-ink text-text absolute top-full right-0 z-30 mt-1 flex min-w-48 flex-col rounded-md p-1 text-left shadow-(--shadow-overlay)"
         >
           {items.map((item) => (
             <button

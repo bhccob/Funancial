@@ -5,25 +5,20 @@ import {
   makeDebt,
   makeExpense,
   makeHolding,
-  makeLimit,
   makeProfile,
   makeSale,
-  makeSubscription,
   makeTransaction,
 } from '@/test/fixtures';
 import {
   categorySlices,
-  monthLine,
   netWorthChangeThisMonth,
   netWorthOn,
   netWorthSeries,
   paceStatus,
   periodProgress,
-  spendingByDay,
 } from './charts';
 import type { Account, Category } from './entities';
 import { emptySnapshot } from './snapshot';
-import { computeFinanceView } from './view';
 
 const TODAY = '2026-10-15'; // a Thursday
 const OCTOBER = { start: '2026-10-01', end: '2026-10-31' };
@@ -31,31 +26,6 @@ const OCTOBER = { start: '2026-10-01', end: '2026-10-31' };
 function spend(category: Category, amount: number, date = '2026-10-05') {
   return makeExpense({ category, amount, date });
 }
-
-describe('spendingByDay', () => {
-  it('lists every day of the window, oldest first, with 0 for quiet days', () => {
-    const expenses = [
-      makeExpense({ date: '2026-10-13', amount: 20_00 }),
-      makeExpense({ date: '2026-10-15', amount: 15_00 }),
-      makeExpense({ date: '2026-10-15', amount: 5_00 }),
-      makeExpense({ date: '2026-10-12', amount: 99_00 }), // outside the window
-    ];
-    expect(spendingByDay(expenses, TODAY, 3)).toEqual([
-      { day: '2026-10-13', amount: 20_00 },
-      { day: '2026-10-14', amount: 0 },
-      { day: '2026-10-15', amount: 20_00 },
-    ]);
-  });
-
-  it('crosses a month boundary without skipping or repeating a day', () => {
-    const days = spendingByDay([], '2026-11-02', 4).map((d) => d.day);
-    expect(days).toEqual(['2026-10-30', '2026-10-31', '2026-11-01', '2026-11-02']);
-  });
-
-  it('is empty for a window of no days', () => {
-    expect(spendingByDay([makeExpense({ date: TODAY })], TODAY, 0)).toEqual([]);
-  });
-});
 
 describe('categorySlices', () => {
   it('lists the categories with spending, highest first', () => {
@@ -457,58 +427,5 @@ describe('limit pace', () => {
     expect(paceStatus(50, 15 / 31)).toBe('on');
     expect(paceStatus(39, 4 / 7)).toBe('under');
     expect(paceStatus(135, 0.5)).toBe('ahead');
-  });
-});
-
-describe('monthLine', () => {
-  function view(limits = [] as ReturnType<typeof makeLimit>[]) {
-    const data = emptySnapshot();
-    data.tables.profile = [makeProfile({ openingDate: '2026-10-01' })];
-    data.tables.expense = [
-      makeExpense({ date: '2026-10-03', amount: 300_00 }),
-      makeExpense({ date: '2026-10-10', amount: 100_00 }),
-      makeExpense({ date: '2026-09-20', amount: 999_00 }), // last month
-    ];
-    data.tables.budgetLimit = limits;
-    return computeFinanceView(data, TODAY, 1);
-  }
-
-  it('builds the month line from spending, bills and the overall monthly limit', () => {
-    const overall = makeLimit({
-      scope: 'overall',
-      category: null,
-      period: 'monthly',
-      amount: 1_000_00,
-    });
-    const line = monthLine(view([makeLimit({ period: 'monthly', amount: 50_00 }), overall]));
-    expect(line).toEqual({ spent: 400_00, bills: 0, left: 600_00 });
-  });
-
-  it('counts the bills still to come this month', () => {
-    const data = emptySnapshot();
-    data.tables.profile = [makeProfile({ openingDate: '2026-10-01' })];
-    data.tables.subscription = [makeSubscription({ amount: 15_99, nextRenewal: '2026-10-20' })];
-    expect(monthLine(computeFinanceView(data, TODAY, 1))).toEqual({
-      spent: 0,
-      bills: 15_99,
-      left: null,
-    });
-  });
-
-  it('never lets left go below zero', () => {
-    const overall = makeLimit({
-      scope: 'overall',
-      category: null,
-      period: 'monthly',
-      amount: 250_00,
-    });
-    expect(monthLine(view([overall])).left).toBe(0);
-  });
-
-  it('has left null when there is no overall monthly limit', () => {
-    expect(monthLine(view()).left).toBeNull();
-    const weeklyOverall = makeLimit({ scope: 'overall', category: null, period: 'weekly' });
-    const categoryMonthly = makeLimit({ category: 'food', period: 'monthly' });
-    expect(monthLine(view([weeklyOverall, categoryMonthly])).left).toBeNull();
   });
 });

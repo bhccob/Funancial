@@ -132,7 +132,8 @@ describe('AppShell', () => {
 
   it('leaves focus in a field the new page focused itself', async () => {
     renderAt('/');
-    await userEvent.click(screen.getByRole('link', { name: 'Expense' }));
+    // The sidebar's link: Home adds one in a sheet, not on a page of its own.
+    await userEvent.click(screen.getByRole('link', { name: 'Add expense' }));
     expect(screen.getByRole('heading', { level: 1, name: 'Add' })).toBeInTheDocument();
     expect(screen.getByLabelText('Amount')).toHaveFocus();
   });

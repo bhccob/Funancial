@@ -5,6 +5,7 @@ import {
   formatMoney,
   isAmbiguousDecimal,
   minorDigits,
+  moneyParts,
   parseDecimal,
   parseMoney,
 } from './money';
@@ -133,6 +134,44 @@ describe('formatMoney', () => {
     expect(formatMoney(-188436, 'USD', 'en-US', { whole: true })).toBe('-$1,884');
     expect(formatMoney(-500, 'USD', 'en-US', { whole: true, signDisplay: 'always' })).toBe('-$5');
     expect(formatMoney(1234, 'JPY', 'en-US', { whole: true })).toBe('¥1,234');
+  });
+});
+
+describe('moneyParts', () => {
+  it('splits an amount into its sign, currency, whole units and cents, which make up formatMoney', () => {
+    expect(moneyParts(-261775, 'USD', 'en-US')).toEqual({
+      lead: '-',
+      currency: '$',
+      units: '2,617',
+      cents: '.75',
+      currencyFirst: true,
+    });
+    expect(moneyParts(261775, 'AWG', 'en-US')).toMatchObject({ currency: 'AWG', units: '2,617' });
+    // ¥ has no cents; a locale can put the currency after the number.
+    expect(moneyParts(1234, 'JPY', 'en-US')).toMatchObject({ units: '1,234', cents: '' });
+    expect(moneyParts(123456, 'EUR', 'de-DE')).toEqual({
+      lead: '',
+      currency: '€',
+      units: '1.234',
+      cents: ',56',
+      currencyFirst: false,
+    });
+    for (const [minor, currency, locale] of [
+      [-261775, 'USD', 'en-US'],
+      [123456, 'EUR', 'de-DE'],
+      [0, 'USD', undefined],
+    ] as const) {
+      const {
+        lead,
+        currency: c,
+        units,
+        cents,
+        currencyFirst,
+      } = moneyParts(minor, currency, locale);
+      // The same text, but for the spaces, which the parts leave to their margins.
+      const joined = currencyFirst ? `${lead}${c}${units}${cents}` : `${lead}${units}${cents}${c}`;
+      expect(joined).toBe(formatMoney(minor, currency, locale).replace(/\s/g, ''));
+    }
   });
 });
 

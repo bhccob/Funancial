@@ -1,38 +1,35 @@
-import { act, cleanup, screen, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createMemoryRouter, MemoryRouter, RouterProvider } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { AppShell } from '@/app/AppShell';
 import type { Account, CreditTerms, ReminderSettings } from '@/domain/entities';
-import { EXAMPLES } from '@/domain/examples';
-import { computeGameView } from '@/domain/game/engine';
-import { levelStart } from '@/domain/game/levels';
 import { purchaseEntry } from '@/domain/game/shop';
+import { historyEntries } from '@/domain/history';
 import { formatMoney } from '@/domain/money';
 import { emptySnapshot, type DataSnapshot } from '@/domain/snapshot';
 import { applyRecords, dueGenerated } from '@/domain/sync';
-import { formatDay, formatMonth, formatMonthShort, formatWeekday } from '@/lib/format';
+import { formatDay, formatMonth, formatPercent } from '@/lib/format';
+import type { AppState } from '@/store/appStore';
 import { useAmountsHidden } from '@/store/useAmountsHidden';
+import { useSelectedAccount } from '@/store/useSelectedAccount';
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
 import { fakeAccount, withAccount } from '@/test/fakeAccount';
-import { expectHelpTip } from '@/test/helpTip';
 import { fakeNotifier, onPhone, type FakeNotifier } from '@/test/fakeNotifier';
 import {
   localIso,
   makeAccount,
-  makeCheckIn,
   makeExpense,
-  makeGoal,
-  makeHolding,
   makeIncome,
   makeLedgerEntry,
   makeLegacyPurchase,
-  makeLimit,
   makeProfile,
   makeSettings,
   makeSubscription,
 } from '@/test/fixtures';
-import { ProfileScreen } from '@/features/profile/ProfileScreen';
-import { QuestsScreen } from '@/features/quests/QuestsScreen';
+import { INBOX_NOW, inboxData } from '@/test/inboxData';
+import { freshRealStore } from '@/test/realStore';
+import type { StoreApi } from 'zustand/vanilla';
 import { DashboardScreen } from './DashboardScreen';
 
 const actions = vi.hoisted(() => ({
@@ -40,45 +37,48 @@ const actions = vi.hoisted(() => ({
   skipIncome: vi.fn(async () => {}),
   updateSettings: vi.fn(async () => {}),
 }));
-vi.mock('@/store/useFinance', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/store/useFinance')>()),
-  useFinanceActions: () => actions,
-}));
-// The real game view, counted.
-vi.mock('@/domain/game/engine', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/domain/game/engine')>();
-  return { ...actual, computeGameView: vi.fn(actual.computeGameView) };
+// The real actions, but for the three a banner calls, which are spies.
+vi.mock('@/store/useFinance', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/store/useFinance')>();
+  return {
+    ...actual,
+    useFinanceActions: () => ({ ...actual.useFinanceActions(), ...actions }),
+  };
 });
 
 beforeEach(() => Object.values(actions).forEach((a) => a.mockClear()));
+afterEach(() => {
+  localStorage.clear();
+  useSelectedAccount.setState({ id: null });
+  useAmountsHidden.setState({ hidden: false });
+  vi.useRealTimers();
+});
 
-function example(id: string) {
-  const found = EXAMPLES.find((e) => e.id === id);
-  if (!found) throw new Error(`No worked example ${id}`);
-  return found;
-}
-
-function renderDashboard(data: DataSnapshot, today: string) {
-  return renderWithStore(
-    <MemoryRouter>
-      <DashboardScreen />
-    </MemoryRouter>,
-    createStubStore({ data, today }),
-  );
-}
-
-/** Home with the two pages its top line opens, so a tap can be followed. */
-function renderRouted(data: DataSnapshot, today: string) {
+/** Home with the pages it links to, so a tap can be followed. */
+function renderHome(data: DataSnapshot | StoreApi<AppState>, today = TODAY) {
+  const store = 'getState' in data ? data : createStubStore({ data, today });
+  const page = (title: string) => <h1>{title}</h1>;
   const router = createMemoryRouter(
     [
       { path: '/', element: <DashboardScreen /> },
-      { path: '/profile', element: <ProfileScreen /> },
-      { path: '/quests', element: <QuestsScreen /> },
+      ...['/profile', '/inbox', '/cards', '/history', '/subscriptions'].map((path) => ({
+        path,
+        element: page(path),
+      })),
     ],
     { initialEntries: ['/'] },
   );
-  renderWithStore(<RouterProvider router={router} />, createStubStore({ data, today }));
-  return router;
+  renderWithStore(<RouterProvider router={router} />, store);
+  return { router, store };
+}
+
+/** Home inside the app's shell, which holds the Add expense and Add income sheet. */
+function renderInShell(data: DataSnapshot) {
+  const router = createMemoryRouter(
+    [{ element: <AppShell />, children: [{ path: '/', element: <DashboardScreen /> }] }],
+    { initialEntries: ['/'] },
+  );
+  renderWithStore(<RouterProvider router={router} />, createStubStore({ data, today: TODAY }));
 }
 
 const region = (name: string) => screen.getByRole('region', { name });
@@ -86,28 +86,37 @@ const region = (name: string) => screen.getByRole('region', { name });
 const usd = (minor: number) => formatMoney(minor, 'USD');
 const usdWhole = (minor: number) => formatMoney(minor, 'USD', undefined, { whole: true });
 const october = formatMonth('2026-10');
-/** The text of a line whose bold parts split it: matched on all of it. */
-const line = (text: string) => (_content: string, el: Element | null) =>
-  el?.tagName === 'P' && el.textContent === text;
+/** The element whose own text, split over its children, is exactly `text`. */
+const whole = (text: string) => (_content: string, el: Element | null) =>
+  el?.textContent === text && [...(el.children ?? [])].every((c) => c.textContent !== text);
 
-/** The month line's parts are named "Part: amount", which the amount's own button is not. */
-const SEGMENT = /^(Spent so far|Bills still to come|Left in your monthly limit): /;
-
-/** A Wednesday: with weeks starting Monday the week runs 10-12 to 10-18. */
+/** A Wednesday. */
 const TODAY = '2026-10-14';
-
 const OPENED = '2026-09-01';
 
 const mainAccount = (openingBalance = 5_000_00): Account =>
-  makeAccount({ openingBalance, openingDate: OPENED });
+  makeAccount({ openingBalance, openingDate: OPENED, last4: '4312' });
 
-/** The Visa: owes 230.00 and is paid in full on the 21st, unless its terms say otherwise. */
-const visaCard = (terms: Partial<CreditTerms> = {}): Account =>
+const savingsAccount = (): Account =>
+  makeAccount({
+    id: 'acct-savings',
+    name: 'Savings',
+    kind: 'savings',
+    skin: 'mint',
+    inAvailable: false,
+    openingBalance: 3_000_00,
+    openingDate: OPENED,
+    order: 1,
+  });
+
+/** The Visa: owes 230.00, no limit, paid in full on the 21st, unless its terms say otherwise. */
+const visaCard = (terms: Partial<CreditTerms> = {}, overrides: Partial<Account> = {}): Account =>
   makeAccount({
     id: 'visa',
     name: 'Visa',
     kind: 'credit',
     skin: 'violet',
+    last4: '4242',
     inAvailable: false,
     openingBalance: 230_00,
     openingDate: OPENED,
@@ -121,31 +130,18 @@ const visaCard = (terms: Partial<CreditTerms> = {}): Account =>
       interestRate: 0,
       ...terms,
     },
+    ...overrides,
   });
 
 /**
- * A month in progress. Main account opened with 5,000 and Savings with 3,000 on Sep 1. Spent in
- * October from Main account: rent 1,200, food 90 (all of it this week), fun 30.
- * Bills to come: Streamflix 15.99 (10-20), the Visa 230 (10-21), FitHub 39 (10-28).
- * Limits: food weekly 60 (150%), overall monthly 1,500 (88%), fun monthly 100 (30%).
+ * A month in progress. Main account (4312) opened with 5,000 and Savings with 3,000 on Sep 1; the
+ * Visa (4242) owes 230. Spent in October from Main account: rent 1,200, fun 30, food 20, 50 and 20
+ * (this week). Bills to come: Streamflix 15.99 (10-20), the Visa 230 (10-21), FitHub 39 (10-28).
  */
 function monthData({ income = 0 }: { income?: number } = {}): DataSnapshot {
   const data = emptySnapshot();
   data.tables.profile = [makeProfile({ name: 'Test Player', openingDate: OPENED })];
-  data.tables.account = [
-    mainAccount(),
-    makeAccount({
-      id: 'acct-savings',
-      name: 'Savings',
-      kind: 'savings',
-      skin: 'mint',
-      inAvailable: false,
-      openingBalance: 3_000_00,
-      openingDate: OPENED,
-      order: 1,
-    }),
-    visaCard(),
-  ];
+  data.tables.account = [mainAccount(), savingsAccount(), visaCard()];
   data.tables.expense = [
     ['2026-10-01', 'rent', 1_200_00],
     ['2026-10-05', 'entertainment', 30_00],
@@ -164,67 +160,35 @@ function monthData({ income = 0 }: { income?: number } = {}): DataSnapshot {
     makeSubscription({ name: 'Streamflix', amount: 15_99, nextRenewal: '2026-10-20' }),
     makeSubscription({ name: 'FitHub Gym', amount: 39_00, nextRenewal: '2026-10-28' }),
   ];
-  data.tables.budgetLimit = [
-    makeLimit({ id: 'food', category: 'food', period: 'weekly', amount: 60_00 }),
-    makeLimit({
-      id: 'overall',
-      scope: 'overall',
-      category: null,
-      period: 'monthly',
-      amount: 1_500_00,
-    }),
-    makeLimit({ id: 'fun', category: 'entertainment', period: 'monthly', amount: 100_00 }),
-  ];
-  data.tables.goal = [
-    makeGoal({ name: 'Vacation', target: 5_000_00, current: 100_00 }),
-    makeGoal({ name: 'Emergency fund', target: 10_000_00, current: 3_000_00 }),
-    makeGoal({ name: 'New bike', target: 1_200_00, current: 450_00 }),
-  ];
   data.tables.ledger = [makeLedgerEntry({ key: 'seed', xp: 250, coins: 40 })];
   if (income > 0) {
-    data.tables.income = [makeIncome({ amount: income, date: '2026-10-02' })];
+    data.tables.income = [
+      makeIncome({ amount: income, date: '2026-10-02', createdAt: localIso('2026-10-02') }),
+    ];
   }
   return data;
 }
 
-describe('DashboardScreen top line', () => {
-  it('greets with the name and date, and links the streak and coins to Quests', () => {
-    renderDashboard(monthData(), TODAY);
-    expect(screen.getByRole('heading', { level: 1, name: 'Home' })).toBeInTheDocument();
-    expect(screen.getByText('Hi, Test Player')).toBeInTheDocument();
-    expect(screen.getByText(`· ${formatDay(TODAY)}`)).toBeInTheDocument();
+/** The parts the app's formatter writes an amount in: "$", "3,680" and ".00" (or "US$" …). */
+function partsOf(minor: number) {
+  const parts = new Intl.NumberFormat(undefined, {
+    style: 'currency',
+    currency: 'USD',
+  }).formatToParts(minor / 100);
+  const of = (...types: string[]) =>
+    parts
+      .filter((p) => types.includes(p.type))
+      .map((p) => p.value)
+      .join('');
+  return { currency: of('currency'), cents: of('decimal', 'fraction') };
+}
 
-    // Three days of expenses in a row; 40 coins earned. The level is on the avatar, not here.
-    const link = screen.getByRole('link', { name: '3-day streak, 40 coins. Open quests' });
-    expect(link).toHaveAttribute('href', '/quests');
-    expect(within(link).getByText('3')).toBeInTheDocument();
-    expect(within(link).getByText('40')).toBeInTheDocument();
-    expect(within(link).queryByText('2')).not.toBeInTheDocument();
-    expect(link.querySelector('[role="img"]')).not.toBeInTheDocument();
-    expect(link.querySelector('svg.lucide-flame')).toHaveClass('text-warning');
-    expect(link.querySelector('svg.lucide-coins')).toBeInTheDocument();
-  });
-
-  it('starts with the avatar: a link to Profile named by the level', () => {
-    renderDashboard(monthData(), TODAY);
-    // 250 XP is level 2. The avatar comes before the greeting and the quests link.
-    const [first] = screen.getAllByRole('link');
-    expect(first).toHaveAccessibleName('Profile, level 2');
-    expect(first).toHaveAttribute('href', '/profile');
-    expect(first).toHaveClass('size-11');
-    // The level sits on the avatar as a chip, in the XP colours, ringed in the page colour.
-    const chip = within(first!).getByText('2');
-    expect(chip).toHaveClass('bg-xp-text', 'text-xp-contrast', 'text-[9.5px]', 'font-extrabold');
-    expect(chip).toHaveClass('ring-2', 'ring-bg');
-    // The greeting follows it, outside the link.
-    expect(first).not.toContainElement(screen.getByText('Hi, Test Player'));
-  });
-
-  it('draws the avatar at 36px in a 44px ring in the XP colour, filled to the progress through the level', () => {
+describe('Home top line', () => {
+  it('starts with the avatar, a link to Profile named by the level, wearing its border in a level ring', () => {
     const data = monthData();
     data.tables.settings = [
       makeSettings({
-        cosmetics: { theme: 'theme-violet', avatar: 'avatar-rocket', frame: 'frame-gold' },
+        cosmetics: { theme: 'theme-mono', avatar: 'avatar-rocket', frame: 'frame-gold' },
       }),
     ];
     data.tables.ledger.push(
@@ -232,712 +196,564 @@ describe('DashboardScreen top line', () => {
       purchaseEntry('avatar-rocket', 'p1', localIso('2026-10-01')),
       makeLegacyPurchase('frame-gold', 200, 'p2'),
     );
-    renderDashboard(data, TODAY);
-    const link = screen.getByRole('link', { name: 'Profile, level 2' });
-    const ring = link.querySelector<HTMLElement>('[role="img"]');
+    renderHome(data);
+    // 250 XP is level 2. The avatar comes first.
+    const [first] = screen.getAllByRole('link');
+    expect(first).toHaveAccessibleName('Profile, level 2');
+    expect(first).toHaveAttribute('href', '/profile');
+    expect(first).toHaveClass('size-11');
+    // The ring is 44px in the block's XP colour, filled to the progress through the level.
+    const ring = first!.querySelector<HTMLElement>('[role="img"]');
     expect(ring).toHaveStyle({ width: '44px', height: '44px' });
     const arc = [...(ring?.querySelectorAll('circle') ?? [])].at(-1);
-    expect(arc).toHaveAttribute('stroke', 'var(--color-xp)');
-    expect(arc).toHaveAttribute('stroke-width', '3');
-    // 150 of 264 XP.
+    expect(arc).toHaveAttribute('stroke', 'var(--color-hero-xp)');
     const circumference = 2 * Math.PI * ((44 - 3) / 2);
+    // 150 of 264 XP.
     expect(Number(arc?.getAttribute('stroke-dashoffset'))).toBeCloseTo(
       circumference * (1 - 150 / 264),
       3,
     );
-    // The avatar they wear, in the frame they wear.
-    const face = link.querySelector<HTMLElement>('svg.lucide-rocket')?.parentElement;
-    expect(face).toHaveStyle({ width: '36px', height: '36px' });
+    // The avatar they wear, in the border they wear, small enough that the border clears the ring.
+    const face = first!.querySelector<HTMLElement>('svg.lucide-rocket')?.parentElement;
+    expect(face).toHaveStyle({ width: '30px', height: '30px' });
     expect(face).toHaveClass('ring-[#d4a017]');
   });
 
-  it('opens Profile from the avatar and Quests from the streak and coins', async () => {
-    const router = renderRouted(monthData(), TODAY);
+  it('opens Profile from the avatar', async () => {
+    const { router } = renderHome(monthData());
     await userEvent.click(screen.getByRole('link', { name: 'Profile, level 2' }));
     expect(router.state.location.pathname).toBe('/profile');
-    expect(screen.getByRole('heading', { level: 1, name: 'Profile' })).toBeInTheDocument();
-    cleanup();
+  });
 
-    const again = renderRouted(monthData(), TODAY);
-    await userEvent.click(
-      screen.getByRole('link', { name: '3-day streak, 40 coins. Open quests' }),
-    );
-    expect(again.state.location.pathname).toBe('/quests');
-    expect(screen.getByRole('heading', { level: 1, name: 'Quests' })).toBeInTheDocument();
+  it('greets by name on one line, and says Hi there without one', () => {
+    renderHome(monthData());
+    const hello = screen.getByText('Hi, Test Player');
+    expect(hello).toHaveClass('truncate');
+    // No date, no streak and no coins up here any more.
+    expect(screen.queryByText(`· ${formatDay(TODAY)}`)).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /Open quests$/ })).not.toBeInTheDocument();
   });
 
   it('says Hi there without a name', () => {
-    renderDashboard(emptySnapshot(), TODAY);
+    const data = emptySnapshot();
+    data.tables.profile = [makeProfile({ name: '' })];
+    renderHome(data);
     expect(screen.getByText('Hi there')).toBeInTheDocument();
-    renderDashboard(
-      (() => {
-        const data = emptySnapshot();
-        data.tables.profile = [makeProfile({ name: '' })];
-        return data;
-      })(),
-      TODAY,
-    );
-    expect(screen.getAllByText('Hi there')).toHaveLength(2);
   });
 
-  it('names the top level, shows no coin below 0 and says 1 coin', () => {
-    const data = emptySnapshot();
-    data.tables.ledger = [makeLedgerEntry({ key: 'seed', xp: levelStart(50) + 10, coins: 1 })];
-    const { unmount } = renderDashboard(data, TODAY);
-    expect(screen.getByRole('link', { name: 'Profile, level 50' })).toBeInTheDocument();
-    expect(
-      screen.getByRole('link', { name: '0-day streak, 1 coin. Open quests' }),
-    ).toBeInTheDocument();
-    unmount();
-
-    const owing = emptySnapshot();
-    owing.tables.ledger = [makeLedgerEntry({ key: 'seed', xp: 0, coins: -30, kind: 'purchase' })];
-    renderDashboard(owing, TODAY);
-    expect(screen.getByRole('link', { name: 'Profile, level 1' })).toBeInTheDocument();
-    expect(
-      screen.getByRole('link', { name: '0-day streak, 0 coins. Open quests' }),
-    ).toBeInTheDocument();
-    expect(screen.queryByText(/-30/)).not.toBeInTheDocument();
+  it('shows the currency as a small glass pill on the block', () => {
+    renderHome(monthData());
+    const pill = screen.getByText('USD');
+    expect(pill).toHaveClass('glass-head', 'min-h-[30px]', 'rounded-full');
+    // A placeholder for now: not a control.
+    expect(pill.closest('button, a')).toBeNull();
   });
 
-  it('formats a large coin count like XP, in the label and on screen', () => {
-    const data = emptySnapshot();
-    data.tables.ledger = [makeLedgerEntry({ key: 'seed', xp: 0, coins: 12_345 })];
-    renderDashboard(data, TODAY);
-    const coins = (12_345).toLocaleString();
-    expect(coins).not.toBe('12345');
-    const link = screen.getByRole('link', {
-      name: `0-day streak, ${coins} coins. Open quests`,
-    });
-    expect(within(link).getByText(coins)).toBeInTheDocument();
+  it('links a plain bell to the inbox, with a dot for what is unread', async () => {
+    vi.useFakeTimers({ toFake: ['Date'], now: INBOX_NOW });
+    const { router } = renderHome(inboxData());
+    const bell = screen.getByRole('link', { name: 'Inbox, 7 new' });
+    expect(bell).toHaveAttribute('href', '/inbox');
+    expect(bell).not.toHaveClass('glass-head');
+    expect(bell.querySelector('[data-testid="unread-dot"]')).toBeInTheDocument();
+    await userEvent.click(bell);
+    expect(router.state.location.pathname).toBe('/inbox');
   });
 
-  it('keeps a normal name whole on a phone: the date gives way first, and only a long name is cut', () => {
-    const data = emptySnapshot();
-    data.tables.profile = [makeProfile({ name: 'Demo Player' })];
-    renderDashboard(data, TODAY);
-    const name = screen.getByText('Hi, Demo Player');
-    const date = screen.getByText(`· ${formatDay(TODAY)}`);
-    // The name is plain text in a line that ends in an ellipsis; nothing squeezes it ahead of the date.
-    expect(name).not.toHaveClass('truncate');
-    expect(name.parentElement).toHaveClass('truncate');
-    // Below 400px the date is dropped altogether rather than shown as a stub.
-    expect(date).toHaveClass('hidden', 'min-[400px]:inline');
+  it('shows no dot when everything is read', () => {
+    vi.useFakeTimers({ toFake: ['Date'], now: INBOX_NOW });
+    renderHome(inboxData({ readBefore: '2026-10-14T08:00:00.000Z', read: [] }));
+    const bell = screen.getByRole('link', { name: 'Inbox' });
+    expect(bell.querySelector('[data-testid="unread-dot"]')).not.toBeInTheDocument();
   });
 });
 
-describe('DashboardScreen hero', () => {
-  it('leads with what is available to spend', () => {
-    const avl = example('AVL-1');
-    renderDashboard(avl.data, avl.today);
-    const hero = region('Available to spend');
-    const amount = within(hero).getByText(usd(1_054_01));
-    expect(amount).toHaveClass('text-[50px]');
-    expect(amount).not.toHaveClass('text-[40px]');
+describe('Home hero', () => {
+  it('shows the selected account: a bank account by its balance, as Available balance', () => {
+    renderHome(monthData());
+    // Nothing picked yet: the default account, Main account (5,000 less 1,320 spent).
+    const hero = region('Available balance');
+    expect(within(hero).getByText(whole(usd(3_680_00)))).toBeInTheDocument();
+    expect(
+      within(hero).getByRole('button', { name: 'Main account ·· 4312, change account' }),
+    ).toBeInTheDocument();
   });
 
-  it('shrinks the amount to 40px when it is longer than 11 characters', () => {
-    const data = emptySnapshot();
-    data.tables.profile = [makeProfile({ openingDate: OPENED })];
-    data.tables.account = [mainAccount(123_456_789)];
-    renderDashboard(data, TODAY);
-    const amount = within(region('Available to spend')).getByText(usd(123_456_789));
-    expect(usd(123_456_789).length).toBeGreaterThan(11);
-    expect(amount).toHaveClass('text-[40px]');
-    expect(amount).not.toHaveClass('text-[50px]');
-  });
-
-  it('draws the month as spent, bills to come and what is left, with two keys under it', () => {
-    renderDashboard(monthData(), TODAY);
-    const hero = region('Available to spend');
-    // 1,200 + 90 + 30 spent; 15.99 + 230 + 39 in bills; 1,500 − 1,320 left of the monthly limit.
-    const spent = within(hero).getByRole('button', {
-      name: `Spent so far: ${usdWhole(1_320_00)}`,
-    });
-    const bills = within(hero).getByRole('button', {
-      name: `Bills still to come: ${usdWhole(284_99)}`,
-    });
-    const left = within(hero).getByRole('button', {
-      name: `Left in your monthly limit: ${usdWhole(180_00)}`,
-    });
-    expect(spent).toHaveStyle({ backgroundColor: 'var(--color-chart-4)' });
-    expect(bills).toHaveStyle({ backgroundColor: 'var(--color-chart-5)' });
-    expect(left).toHaveStyle({ backgroundColor: 'var(--color-accent)' });
-
-    expect(within(hero).getByText(usdWhole(1_320_00))).toBeInTheDocument();
-    expect(within(hero).getByText(`spent in ${october}`)).toBeInTheDocument();
-    expect(within(hero).getByText(usdWhole(180_00))).toBeInTheDocument();
-    expect(within(hero).getByText('left in limit')).toBeInTheDocument();
-  });
-
-  it('names a month-line segment when tapped, and restores the key when tapped again', async () => {
-    renderDashboard(monthData(), TODAY);
-    const hero = region('Available to spend');
-    const bills = within(hero).getByRole('button', {
-      name: `Bills still to come: ${usdWhole(284_99)}`,
-    });
-
-    await userEvent.click(bills);
-    expect(bills).toHaveAttribute('aria-pressed', 'true');
-    expect(within(hero).getByText('Bills still to come')).toBeInTheDocument();
-    // A tapped segment shows its exact amount; the idle keys stay in whole units.
-    expect(within(hero).getByText(usd(284_99))).toBeInTheDocument();
-    expect(within(hero).queryByText(usdWhole(284_99))).not.toBeInTheDocument();
-    expect(within(hero).getByText(usdWhole(180_00))).toBeInTheDocument();
-    expect(within(hero).queryByText(`spent in ${october}`)).not.toBeInTheDocument();
-
-    await userEvent.click(bills);
-    expect(within(hero).getByText(`spent in ${october}`)).toBeInTheDocument();
-    expect(within(hero).getByText(usdWhole(1_320_00))).toBeInTheDocument();
-    expect(within(hero).queryByText('Bills still to come')).not.toBeInTheDocument();
-  });
-
-  it('keys the bills to come where there is no monthly limit, and draws no left segment', () => {
+  it('shows a credit card with a limit by what is left to spend, as Available credit', () => {
     const data = monthData();
-    data.tables.budgetLimit = [];
-    renderDashboard(data, TODAY);
-    const hero = region('Available to spend');
-    expect(within(hero).getByText(usdWhole(284_99))).toBeInTheDocument();
-    expect(within(hero).getByText('bills to come')).toBeInTheDocument();
-    expect(within(hero).queryByText('left in limit')).not.toBeInTheDocument();
-    // The segments only: the "?" beside the title and the amount are buttons too.
-    expect(within(hero).getAllByRole('button', { name: SEGMENT })).toHaveLength(2);
+    data.tables.account[2] = visaCard({ limit: 1_000_00 });
+    useSelectedAccount.setState({ id: 'visa' });
+    renderHome(data);
+    expect(within(region('Available credit')).getByText(whole(usd(770_00)))).toBeInTheDocument();
   });
 
-  it('draws only the track when nothing is spent or due', () => {
-    renderDashboard(emptySnapshot(), TODAY);
-    const hero = region('Available to spend');
-    // No segments; the "?", the eye and the amount are the buttons.
-    expect(within(hero).queryAllByRole('button', { name: SEGMENT })).toHaveLength(0);
-    expect(within(hero).getByText(`spent in ${october}`)).toBeInTheDocument();
-    expect(within(hero).getByText('bills to come')).toBeInTheDocument();
-    expect(within(hero).getAllByText(usdWhole(0))).toHaveLength(2);
-  });
-});
-
-describe('DashboardScreen actions', () => {
-  it('shows three labelled actions', () => {
-    renderDashboard(emptySnapshot(), TODAY);
-    expect(screen.getByRole('link', { name: 'Expense' })).toHaveAttribute('href', '/add');
-    expect(screen.getByRole('link', { name: 'Income' })).toHaveAttribute(
-      'href',
-      '/add?type=income',
-    );
-    expect(screen.getByRole('link', { name: 'Goals' })).toHaveAttribute('href', '/goals');
-    expect(screen.queryByRole('link', { name: 'Buy it?' })).not.toBeInTheDocument();
-    expect(document.querySelector('svg.lucide-shopping-bag')).not.toBeInTheDocument();
-  });
-
-  it('keeps History one tap away in Last 7 days, not among the actions', () => {
-    renderDashboard(emptySnapshot(), TODAY);
-    expect(screen.getAllByRole('link', { name: 'History' })).toHaveLength(1);
-    expect(within(region('Last 7 days')).getByRole('link', { name: 'History' })).toHaveAttribute(
-      'href',
-      '/history',
-    );
-    expect(document.querySelector('svg.lucide-clock')).not.toBeInTheDocument();
-  });
-
-  it('makes each a 56px round icon with its word under it, and fills the first', () => {
-    renderDashboard(emptySnapshot(), TODAY);
-    const expense = screen.getByRole('link', { name: 'Expense' });
-    const circle = expense.querySelector('span');
-    expect(circle).toHaveClass('size-14', 'rounded-full', 'bg-primary');
-    expect(expense.querySelector('svg.lucide-plus')).toBeInTheDocument();
-    const income = screen.getByRole('link', { name: 'Income' });
-    expect(income.querySelector('span')).toHaveClass('size-14', 'rounded-full');
-    expect(income.querySelector('span')).not.toHaveClass('bg-primary');
-    expect(income.querySelector('svg.lucide-hand-coins')).toBeInTheDocument();
+  it('shows a credit card without a limit by what is owed, as Owed', () => {
+    useSelectedAccount.setState({ id: 'visa' });
+    renderHome(monthData());
+    const hero = region('Owed');
+    expect(within(hero).getByText(whole(usd(230_00)))).toBeInTheDocument();
     expect(
-      screen.getByRole('link', { name: 'Goals' }).querySelector('svg.lucide-target'),
+      within(hero).getByRole('button', { name: 'Visa ·· 4242, change account' }),
     ).toBeInTheDocument();
   });
-});
 
-describe('DashboardScreen sections', () => {
-  it('shows the sections in order, each under a title', () => {
-    renderDashboard(monthData(), TODAY);
-    expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual([
-      'Available to spend',
-      'Spending',
-      'Last 7 days',
-      'Limits',
-      'Coming up',
-      'Net worth',
-      'Goals',
-      'Quests',
-    ]);
-  });
-});
-
-describe('DashboardScreen spending donut', () => {
-  /** The legend row of a category: the row's button holds its name and its amount. */
-  const legendRow = (spending: HTMLElement, name: string) =>
-    within(spending).getByText(name).closest('button')!;
-
-  it('switches the donut between week and month, and shows a slice when tapped', async () => {
-    renderDashboard(monthData(), TODAY);
-    const spending = region('Spending');
-    const month = within(spending).getByRole('button', { name: 'Month' });
-    const week = within(spending).getByRole('button', { name: 'Week' });
-    expect(month).toHaveAttribute('aria-pressed', 'true');
-    expect(week).toHaveAttribute('aria-pressed', 'false');
-
-    // October: rent, food and fun, biggest first, in whole units in the legend.
-    expect(within(spending).getByText(usdWhole(1_320_00))).toBeInTheDocument();
-    expect(within(spending).getByText(october)).toBeInTheDocument();
-    // (The donut's own list of arcs is only read out, so it has no text.)
-    expect(
-      within(spending)
-        .getAllByRole('listitem')
-        .map((li) => li.textContent)
-        .filter(Boolean),
-    ).toEqual([`Rent${usdWhole(1_200_00)}`, `Food${usdWhole(90_00)}`, `Fun${usdWhole(30_00)}`]);
-
-    // A tap shows the exact amount and the share in the middle.
-    await userEvent.click(legendRow(spending, 'Rent'));
-    expect(legendRow(spending, 'Rent')).toHaveAttribute('aria-pressed', 'true');
-    expect(within(spending).getByText(usd(1_200_00))).toBeInTheDocument();
-    expect(within(spending).getByText('Rent · 91%')).toBeInTheDocument();
-    await userEvent.click(legendRow(spending, 'Rent'));
-    expect(within(spending).getByText(october)).toBeInTheDocument();
-
-    // This week: food only.
-    await userEvent.click(week);
-    expect(week).toHaveAttribute('aria-pressed', 'true');
-    expect(month).toHaveAttribute('aria-pressed', 'false');
-    expect(within(spending).getByText('This week')).toBeInTheDocument();
-    expect(within(spending).getAllByText(usdWhole(90_00))).toHaveLength(2); // centre and legend
-    expect(within(spending).queryByText('Rent')).not.toBeInTheDocument();
-  });
-
-  it('writes no percentages on the donut or in its legend', () => {
-    renderDashboard(monthData(), TODAY);
-    expect(within(region('Spending')).queryAllByText(/^\d+%$/)).toHaveLength(0);
-  });
-
-  it('shows a slice when its arc is read out and tapped by a keyboard or screen reader', async () => {
-    renderDashboard(monthData(), TODAY);
-    const spending = region('Spending');
-    await userEvent.click(
-      within(spending).getByRole('button', { name: `Food, ${usd(90_00)}, 7%` }),
-    );
-    expect(within(spending).getByText('Food · 7%')).toBeInTheDocument();
-  });
-
-  describe('with nothing to show', () => {
-    /** Spent only on the 1st of October: this week is empty, the month is not. */
-    function spentEarlierInTheMonth() {
-      const data = emptySnapshot();
-      data.tables.expense = [
-        makeExpense({ date: '2026-10-01', category: 'rent', amount: 1_200_00 }),
-      ];
-      return data;
-    }
-
-    it('says Nothing spent this week on the Week tab when only earlier weeks have spending', async () => {
-      renderDashboard(spentEarlierInTheMonth(), TODAY);
-      const spending = region('Spending');
-      expect(within(spending).queryByText('No spending yet')).not.toBeInTheDocument();
-      expect(within(spending).queryByText('Nothing spent this week')).not.toBeInTheDocument();
-
-      await userEvent.click(within(spending).getByRole('button', { name: 'Week' }));
-      expect(within(spending).getByText('Nothing spent this week')).toBeInTheDocument();
-      expect(within(spending).queryByText('No spending yet')).not.toBeInTheDocument();
-
-      await userEvent.click(within(spending).getByRole('button', { name: 'Month' }));
-      expect(within(spending).queryByText('Nothing spent this week')).not.toBeInTheDocument();
-    });
-
-    it('keeps No spending yet for a brand-new account, on either tab', async () => {
-      renderDashboard(emptySnapshot(), TODAY);
-      const spending = region('Spending');
-      expect(within(spending).getByText('No spending yet')).toBeInTheDocument();
-      await userEvent.click(within(spending).getByRole('button', { name: 'Week' }));
-      expect(within(spending).getByText('No spending yet')).toBeInTheDocument();
-      expect(within(spending).queryByText('Nothing spent this week')).not.toBeInTheDocument();
-    });
-
-    it('keeps No spending yet on the Month tab of a month with nothing in it', () => {
-      // Spending exists, but in October; today is in November.
-      renderDashboard(spentEarlierInTheMonth(), '2026-11-18');
-      expect(within(region('Spending')).getByText('No spending yet')).toBeInTheDocument();
-    });
-  });
-
-  it('clears a tapped slice when the range changes', async () => {
-    // A transport expense this week, so the week has two slices: Food and Transport.
+  it('falls back to the default account when the one picked has been archived', () => {
     const data = monthData();
-    data.tables.expense.push(
-      makeExpense({ date: '2026-10-13', category: 'transport', amount: 10_00 }),
+    data.tables.account.push(
+      makeAccount({ id: 'old', name: 'Old bank', openingDate: OPENED, archivedOn: '2026-10-10' }),
     );
-    renderDashboard(data, TODAY);
-    const spending = region('Spending');
-    const arcOpacities = () =>
-      [...spending.querySelectorAll('circle')].map((c) => (c as SVGElement).style.opacity);
-
-    // Tap the first slice (Rent in the month). Index 0 is still a slice in the week (Food).
-    await userEvent.click(legendRow(spending, 'Rent'));
-    expect(within(spending).getByText(/· \d+%/)).toHaveTextContent('Rent · 90%');
-    expect(arcOpacities()).toContain('0.25');
-
-    await userEvent.click(within(spending).getByRole('button', { name: 'Week' }));
-    expect(within(spending).getByText('This week')).toBeInTheDocument();
-    expect(within(spending).queryByText(/· \d+%/)).not.toBeInTheDocument();
-    expect(arcOpacities()).not.toContain('0.25');
-    expect(legendRow(spending, 'Food')).toHaveAttribute('aria-pressed', 'false');
-  });
-});
-
-describe('DashboardScreen last 7 days', () => {
-  it('shows the last 7 days and a tapped day', async () => {
-    renderDashboard(monthData(), TODAY);
-    const week = region('Last 7 days');
-    expect(within(week).getByRole('link', { name: 'History' })).toHaveAttribute('href', '/history');
-    expect(within(week).getAllByRole('button')).toHaveLength(7);
-    expect(within(week).getByRole('button', { name: `Today: ${usd(20_00)}` })).toBeInTheDocument();
+    localStorage.setItem('funancial.selectedAccount', 'old');
+    useSelectedAccount.setState({ id: 'old' });
+    renderHome(data);
     expect(
-      within(week).getByRole('button', { name: `${formatWeekday('2026-10-08')}: ${usd(0)}` }),
-    ).toBeInTheDocument();
-    expect(
-      within(week).getByText(line(`This week so far ${usd(90_00)} · tap a day`)),
-    ).toBeInTheDocument();
-
-    const tuesday = formatWeekday('2026-10-13');
-    await userEvent.click(within(week).getByRole('button', { name: `${tuesday}: ${usd(50_00)}` }));
-    expect(within(week).getByText(line(`${tuesday} · spent ${usd(50_00)}`))).toBeInTheDocument();
-
-    const saturday = formatWeekday('2026-10-10');
-    await userEvent.click(within(week).getByRole('button', { name: `${saturday}: ${usd(0)}` }));
-    expect(within(week).getByText(line(`${saturday} · nothing spent`))).toBeInTheDocument();
-
-    await userEvent.click(within(week).getByRole('button', { name: `${saturday}: ${usd(0)}` }));
-    expect(
-      within(week).getByText(line(`This week so far ${usd(90_00)} · tap a day`)),
-    ).toBeInTheDocument();
-  });
-});
-
-describe('DashboardScreen limits', () => {
-  it('rings the top three limits with left or over text', () => {
-    renderDashboard(monthData(), TODAY);
-    const limits = region('Limits');
-    expect(within(limits).getByRole('link', { name: 'Budget' })).toHaveAttribute('href', '/budget');
-    // Highest use first: food at 150%, overall at 88%, fun at 30%.
-    const rings = within(limits).getAllByRole('img');
-    expect(rings.map((r) => r.getAttribute('aria-label'))).toEqual([
-      `Food · week: 150% used, ${usdWhole(30_00)} over`,
-      `Overall: 88% used, ${usdWhole(180_00)} left`,
-      `Fun: 30% used, ${usdWhole(70_00)} left`,
-    ]);
-    const stroke = (ring: HTMLElement) =>
-      [...ring.querySelectorAll('circle')].at(-1)?.getAttribute('stroke');
-    expect(stroke(rings[0]!)).toBe('var(--color-danger)');
-    expect(stroke(rings[1]!)).toBe('var(--color-warning)');
-    expect(stroke(rings[2]!)).toBe('var(--color-accent)');
-    for (const ring of rings) expect(ring).toHaveStyle({ width: '86px', height: '86px' });
-
-    expect(within(limits).getByText('150%')).toBeInTheDocument();
-    expect(within(limits).getByText('Food · week')).toBeInTheDocument();
-    expect(within(limits).getByText(`${usdWhole(30_00)} over`)).toBeInTheDocument();
-    expect(within(limits).getByText(`${usdWhole(180_00)} left`)).toBeInTheDocument();
-  });
-
-  it('shows no more than three rings', () => {
-    const data = monthData();
-    data.tables.budgetLimit.push(
-      makeLimit({ id: 'transport', category: 'transport', period: 'monthly', amount: 50_00 }),
-    );
-    renderDashboard(data, TODAY);
-    expect(within(region('Limits')).getAllByRole('img')).toHaveLength(3);
-  });
-
-  it('shows the food limit at 83% for a worked example', () => {
-    const avl = example('AVL-1');
-    renderDashboard(avl.data, avl.today);
-    const limits = region('Limits');
-    expect(
-      within(limits).getByRole('img', {
-        name: `Food · week: 83% used, ${usdWhole(20_00)} left`,
+      within(region('Available balance')).getByRole('button', {
+        name: 'Main account ·· 4312, change account',
       }),
     ).toBeInTheDocument();
-    expect(within(limits).getByText('83%')).toBeInTheDocument();
+    // The choice is kept as it was picked, for the store to resolve.
+    expect(localStorage.getItem('funancial.selectedAccount')).toBe('old');
+  });
+
+  it('writes the amount big, with the currency and the cents dimmed', () => {
+    renderHome(monthData());
+    const hero = region('Available balance');
+    const amount = within(hero).getByTestId('hero-amount');
+    expect(amount.textContent).toBe(usd(3_680_00));
+    expect(amount).toHaveClass('text-[42px]', 'font-bold');
+    const { currency, cents } = partsOf(3_680_00);
+    expect(within(amount).getByText(currency)).toHaveClass('text-head-dim');
+    expect(within(amount).getByText(cents)).toHaveClass('text-head-faint');
+    // The label is dimmed too, and the eye sits beside it.
+    const label = within(hero).getByRole('heading', { name: 'Available balance' });
+    expect(label.parentElement).toHaveClass('text-head-dim');
+    expect(label.parentElement).toContainElement(
+      within(hero).getByRole('button', { name: 'Hide amounts' }),
+    );
+  });
+
+  it('marks the account with a card when it has its last 4 digits, else a wallet', () => {
+    renderHome(monthData());
+    const chip = screen.getByRole('button', { name: /, change account$/ });
+    expect(chip.querySelector('svg.lucide-credit-card')).toBeInTheDocument();
+    act(() => useSelectedAccount.setState({ id: 'acct-savings' }));
+    const savings = screen.getByRole('button', { name: 'Savings, change account' });
+    expect(savings.querySelector('svg.lucide-wallet')).toBeInTheDocument();
+  });
+
+  it('has Pay and More, each with a 44px tap area round a 34px pill', () => {
+    renderHome(monthData());
+    const pay = screen.getByRole('button', { name: 'Pay' });
+    expect(pay).toHaveClass('btn-head', 'h-[34px]', 'hit-44');
+    expect(pay.querySelector('svg.lucide-nfc')).toBeInTheDocument();
+    const more = screen.getByRole('button', { name: 'More' });
+    expect(more).toHaveClass('glass-head', 'size-[34px]', 'hit-44');
+    // The Saved chip and the Expense and Income buttons have gone.
+    expect(screen.queryByText(/^Saved/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Expense' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Income' })).not.toBeInTheDocument();
+  });
+
+  it('says so when there is no account to show yet', () => {
+    const { container } = render0();
+    expect(screen.getByText('No account yet.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Pay' })).not.toBeInTheDocument();
+    expect(container.innerHTML).not.toMatch(/NaN|Infinity/);
   });
 });
 
-describe('DashboardScreen coming up', () => {
-  it('lists the coming bills with date blocks', () => {
-    renderDashboard(monthData(), TODAY);
-    const bills = region('Coming up');
-    // 15.99 + 230 + 39
-    expect(
-      within(bills).getByRole('link', { name: `${usd(284_99)} this month, Bills & cards` }),
-    ).toHaveAttribute('href', '/subscriptions');
-    const rows = within(bills).getAllByRole('listitem');
-    expect(rows.map((r) => r.textContent)).toEqual([
-      `${formatMonthShort('2026-10-20')}20StreamflixSubscription · in 6 days${usd(15_99)}`,
-      // A card's block reads DUE, the day, then the month.
-      `DUE21${formatMonthShort('2026-10-21')}Visa card paymentPay the full balance · in 7 days${usd(230_00)}`,
-      `${formatMonthShort('2026-10-28')}28FitHub GymSubscription · in 14 days${usd(39_00)}`,
-    ]);
-  });
+/** Home with nothing set up. */
+function render0() {
+  const store = createStubStore({ data: emptySnapshot(), today: TODAY });
+  return renderWithStore(
+    <MemoryRouter>
+      <DashboardScreen />
+    </MemoryRouter>,
+    store,
+  );
+}
 
-  it('names where its header link goes after the total, which stays the visible text', async () => {
-    renderDashboard(monthData(), TODAY);
-    const link = within(region('Coming up')).getByRole('link', { name: /Bills & cards$/ });
-    // A hidden suffix, not an aria-label: the visible words are the start of the name.
-    expect(link).not.toHaveAttribute('aria-label');
-    expect(link.firstChild).toHaveTextContent(`${usd(284_99)} this month`);
-    expect(link.querySelector('.sr-only')).toHaveTextContent(', Bills & cards');
-
-    await userEvent.click(screen.getByRole('button', { name: 'Hide amounts' }));
-    expect(
-      within(region('Coming up')).getByRole('link', { name: '•••• this month, Bills & cards' }),
-    ).toBeInTheDocument();
-    useAmountsHidden.setState({ hidden: false });
-  });
-
-  it('makes every row a button with a chevron', () => {
-    renderDashboard(monthData(), TODAY);
-    const rows = within(region('Coming up')).getAllByRole('listitem');
-    expect(rows).toHaveLength(3);
-    for (const r of rows) {
-      expect(within(r).getByRole('button')).toHaveClass('min-h-11');
-      expect(r.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
-    }
-  });
-
-  it('says "Minimum payment" for a card that is not paid in full', () => {
-    const data = monthData();
-    data.tables.account = data.tables.account.map((a) =>
-      a.id === 'visa' ? visaCard({ payInFull: false, minimumPayment: 25_00 }) : a,
-    );
-    renderDashboard(data, TODAY);
-    const row = within(region('Coming up')).getByRole('button', { name: /Visa card payment/ });
-    expect(row).toHaveTextContent(`Minimum payment · in 7 days${usd(25_00)}`);
-  });
-
-  it('opens the card sheet from the card row, and the editor from a subscription row', async () => {
-    renderDashboard(monthData(), TODAY);
-    await userEvent.click(
-      within(region('Coming up')).getByRole('button', { name: /Visa card payment/ }),
-    );
-    const sheet = screen.getByRole('dialog', { name: 'Visa credit card' });
-    expect(within(sheet).getByText('Credit card')).toBeInTheDocument();
-    expect(within(sheet).getByRole('button', { name: 'Pay card' })).toBeEnabled();
-    expect(within(sheet).getByRole('button', { name: 'Edit card' })).toBeEnabled();
-    await userEvent.keyboard('{Escape}');
-    expect(screen.queryByRole('dialog', { name: 'Visa credit card' })).not.toBeInTheDocument();
-
-    await userEvent.click(within(region('Coming up')).getByRole('button', { name: /Streamflix/ }));
-    const edit = screen.getByRole('dialog', { name: 'Edit subscription' });
-    expect(within(edit).getByLabelText('Name')).toHaveValue('Streamflix');
-  });
-
-  it('shows no more than four bills', () => {
-    const data = monthData();
-    data.tables.subscription = ['A', 'B', 'C', 'D', 'E'].map((name, i) =>
-      makeSubscription({ name, amount: 5_00, nextRenewal: `2026-10-${20 + i}` }),
-    );
-    renderDashboard(data, TODAY);
-    expect(within(region('Coming up')).getAllByRole('listitem')).toHaveLength(4);
-  });
-
-  it('keeps a long bill name on one line', () => {
-    const data = monthData();
-    const name = 'Extremely long subscription name that keeps going';
-    data.tables.subscription = [makeSubscription({ name, nextRenewal: '2026-10-20' })];
-    renderDashboard(data, TODAY);
-    expect(within(region('Coming up')).getByText(name)).toHaveClass('truncate');
-  });
-});
-
-describe('DashboardScreen net worth', () => {
-  it('shows net worth with its monthly change and trend', () => {
-    renderDashboard(monthData({ income: 2_000_00 }), TODAY);
-    const worth = region('Net worth');
-    // 3,680 + 2,000 on Main account + 3,000 savings − 230 card; 7,770 at the end of September.
-    expect(within(worth).getByText(usd(8_450_00))).toBeInTheDocument();
-    const rise = screen.getByText(`▲ ${usdWhole(680_00)} this month`);
-    expect(rise).toHaveClass('text-accent-text');
-    expect(
-      within(worth).getByRole('img', {
-        name: `Net worth over the last 30 days, now ${usd(8_450_00)}`,
-      }),
-    ).toBeInTheDocument();
-    // Bank accounts and cash wallets together, savings, and what the cards and loans owe.
-    expect(within(worth).getByText(`Bank & cash ${usdWhole(5_680_00)}`)).toBeInTheDocument();
-    expect(within(worth).getByText(`Savings ${usdWhole(3_000_00)}`)).toBeInTheDocument();
-    expect(within(worth).getByText(`Debts ${usdWhole(230_00)}`)).toBeInTheDocument();
-  });
-
-  it('counts every savings account in Savings, and leaves archived accounts out', () => {
+describe('Show on Home', () => {
+  it('lists every account in use, with its figure, and checks the one shown', async () => {
     const data = monthData();
     data.tables.account.push(
       makeAccount({
-        id: 'acct-passive',
-        name: 'Passive income',
-        kind: 'savings',
-        skin: 'amber',
-        inAvailable: false,
-        openingBalance: 25_00,
-        openingDate: OPENED,
-        order: 2,
-      }),
-      makeAccount({
-        id: 'wallet',
-        name: 'Wallet',
-        kind: 'cash',
-        skin: 'amber',
-        openingBalance: 40_00,
-        openingDate: OPENED,
-        order: 4,
-      }),
-      makeAccount({
         id: 'old',
         name: 'Old bank',
-        openingBalance: 999_00,
         openingDate: OPENED,
         order: 5,
         archivedOn: '2026-10-01',
       }),
     );
-    renderDashboard(data, TODAY);
-    const worth = region('Net worth');
-    expect(
-      within(worth)
-        .getAllByRole('listitem')
-        .map((li) => li.textContent),
-    ).toEqual([
-      `Bank & cash ${usdWhole(3_720_00)}`,
-      `Savings ${usdWhole(3_025_00)}`,
-      `Debts ${usdWhole(230_00)}`,
-    ]);
-    // 3,720 + 3,025 − 230.
-    expect(within(worth).getByText(usd(6_515_00))).toBeInTheDocument();
-  });
-
-  it('shows a fall with a down arrow in the danger colour', () => {
-    renderDashboard(monthData(), TODAY);
-    const fall = screen.getByText(`▼ ${usdWhole(1_320_00)} this month`);
-    expect(fall).toHaveClass('text-danger');
-    expect(within(region('Net worth')).getByText(usd(6_450_00))).toBeInTheDocument();
-  });
-
-  it('says there is no change when net worth has not moved this month', () => {
-    renderDashboard(emptySnapshot(), TODAY);
-    expect(screen.getByText('No change this month')).toHaveClass('text-muted');
-  });
-
-  it('links to the Income page from the Net worth section, beside the number and not inside it', () => {
-    renderDashboard(monthData(), TODAY);
-    const worth = region('Net worth');
-    const link = within(worth).getByRole('link', { name: 'Income stats' });
-    expect(link).toHaveAttribute('href', '/income');
-    const number = within(worth).getByRole('button', { name: /Net worth: see and correct$/ });
-    expect(number).not.toContainElement(link);
-    expect(link.closest('button')).toBeNull();
-    expect(link.parentElement).toBe(number.parentElement);
-  });
-
-  it('adds Investments to the legend, in the second chart colour, once they are worth something', () => {
-    const data = monthData();
-    data.tables.holding = [
-      makeHolding({
-        shares: 10,
-        quote: { price: 100, previousClose: 99, fxRate: 1, asOf: '2026-10-14T10:00:00.000Z' },
-      }),
-    ];
-    renderDashboard(data, TODAY);
-    const worth = region('Net worth');
-    const item = within(worth).getByText(`Investments ${usdWhole(1_000_00)}`);
-    expect(item.firstElementChild).toHaveStyle({ backgroundColor: 'var(--color-chart-2)' });
-    // Between Savings and Debts, and part of the figure: 6,450 plus the 1,000 held.
-    expect(
-      within(worth)
-        .getAllByRole('listitem')
-        .map((li) => li.textContent),
-    ).toEqual([
-      `Bank & cash ${usdWhole(3_680_00)}`,
-      `Savings ${usdWhole(3_000_00)}`,
-      `Investments ${usdWhole(1_000_00)}`,
-      `Debts ${usdWhole(230_00)}`,
-    ]);
-    expect(within(worth).getByText(usd(7_450_00))).toBeInTheDocument();
-  });
-
-  it('leaves Investments out of the legend when there are none, or none are priced', () => {
-    const data = monthData();
-    renderDashboard(data, TODAY);
-    expect(within(region('Net worth')).queryByText(/^Investments/)).not.toBeInTheDocument();
-    cleanup();
-    data.tables.holding = [makeHolding()];
-    renderDashboard(data, TODAY);
-    expect(within(region('Net worth')).queryByText(/^Investments/)).not.toBeInTheDocument();
-  });
-
-  it('shows 34px net worth', () => {
-    renderDashboard(monthData(), TODAY);
-    expect(within(region('Net worth')).getByText(usd(6_450_00))).toHaveClass('text-[34px]');
-  });
-});
-
-describe('DashboardScreen goals', () => {
-  it('shows two goals in the usual order, with their progress', () => {
-    renderDashboard(monthData(), TODAY);
-    const goals = region('Goals');
-    expect(within(goals).getByRole('link', { name: 'All' })).toHaveAttribute('href', '/goals');
-    // No deadlines: the closest to done first. Vacation (2%) is third and is left out.
-    const rows = within(goals).getAllByRole('listitem');
+    data.tables.account[2] = visaCard({ limit: 1_000_00 }, { frozen: true });
+    renderHome(data);
+    await userEvent.click(screen.getByRole('button', { name: /, change account$/ }));
+    const sheet = screen.getByRole('dialog', { name: 'Show on Home' });
+    const rows = within(sheet).getAllByRole('button');
     expect(rows.map((r) => r.textContent)).toEqual([
-      `New bike${usdWhole(450_00)} of ${usdWhole(1_200_00)} · 37%`,
-      `Emergency fund${usdWhole(3_000_00)} of ${usdWhole(10_000_00)} · 30%`,
+      `Main accountDebit ·· 4312${usd(3_680_00)}`,
+      `SavingsSavings${usd(3_000_00)}`,
+      `VisaCredit ·· 4242 · frozen${usd(770_00)}`,
     ]);
-    const bars = within(goals).getAllByRole('progressbar');
-    expect(bars[0]).toHaveAttribute('aria-valuenow', '37');
-    expect(bars[0]!.firstElementChild).toHaveStyle({ backgroundColor: 'var(--color-chart-1)' });
-    expect(bars[1]!.firstElementChild).toHaveStyle({ backgroundColor: 'var(--color-chart-3)' });
+    expect(rows.map((r) => r.getAttribute('aria-pressed'))).toEqual(['true', 'false', 'false']);
+    expect(rows[0]!.querySelector('svg.lucide-check')).toBeInTheDocument();
+    expect(rows[1]!.querySelector('svg.lucide-check')).not.toBeInTheDocument();
+    expect(
+      within(sheet).getByText('Swiping to a card on the Cards tab changes this too.'),
+    ).toBeInTheDocument();
   });
 
-  it('truncates a 40-character goal name', () => {
-    const data = emptySnapshot();
-    const name = 'A goal with a name that is forty chars!!';
-    expect(name).toHaveLength(40);
-    data.tables.goal = [makeGoal({ name })];
-    renderDashboard(data, TODAY);
-    expect(within(region('Goals')).getByText(name)).toHaveClass('truncate');
+  it('shows the account picked, and keeps it as the one selected', async () => {
+    renderHome(monthData());
+    await userEvent.click(screen.getByRole('button', { name: /, change account$/ }));
+    await userEvent.click(
+      within(screen.getByRole('dialog', { name: 'Show on Home' })).getByRole('button', {
+        name: /^Savings/,
+      }),
+    );
+    expect(screen.queryByRole('dialog', { name: 'Show on Home' })).not.toBeInTheDocument();
+    expect(useSelectedAccount.getState().id).toBe('acct-savings');
+    expect(within(region('Available balance')).getByText(whole(usd(3_000_00)))).toBeInTheDocument();
+    // The choice is kept on the device, as the Cards tab's is.
+    expect(localStorage.getItem('funancial.selectedAccount')).toBe('acct-savings');
   });
 });
 
-describe('DashboardScreen with nothing set up', () => {
-  it('shows friendly empty states on a brand-new account', () => {
-    const { container } = renderDashboard(emptySnapshot(), TODAY);
-    expect(within(region('Spending')).getByText('No spending yet')).toBeInTheDocument();
-    expect(
-      within(region('Spending')).getByText('Expenses you add show up here by category.'),
-    ).toBeInTheDocument();
+/** Home on a real store: Main account 1,000.00 (4312), Savings 500.00 and the Visa owing 230.00. */
+async function realHome(overrides: { visa?: Partial<Account> } = {}) {
+  const { store } = await freshRealStore();
+  const { put } = store.getState();
+  await put('profile', makeProfile({ openingDate: OPENED, salary: null }));
+  await put('account', mainAccount(1_000_00));
+  await put('account', { ...savingsAccount(), openingBalance: 500_00 });
+  await put('account', visaCard({ limit: 1_000_00 }, overrides.visa));
+  renderHome(store);
+  return store;
+}
 
-    expect(within(region('Limits')).getByText('No limits yet')).toBeInTheDocument();
-    expect(within(region('Limits')).getByRole('link', { name: 'Set a limit' })).toHaveAttribute(
-      'href',
-      '/budget',
-    );
-    expect(within(region('Coming up')).getByText('Nothing due this month')).toBeInTheDocument();
-    expect(within(region('Goals')).getByText('No goals yet')).toBeInTheDocument();
-    expect(within(region('Goals')).getByRole('link', { name: 'Add a goal' })).toHaveAttribute(
-      'href',
-      '/goals',
-    );
-    expect(within(region('Available to spend')).getByText(usd(0))).toBeInTheDocument();
-    expect(
-      within(region('Last 7 days')).getByText(line(`This week so far ${usd(0)} · tap a day`)),
-    ).toBeInTheDocument();
+describe('Home Pay', () => {
+  it('pays with the account shown, and the amount drops by exactly what was paid', async () => {
+    const store = await realHome();
+    await userEvent.click(screen.getByRole('button', { name: 'Pay' }));
+    const sheet = screen.getByRole('dialog', { name: 'Pay with Main account' });
+    await userEvent.type(within(sheet).getByLabelText('Amount'), '12.50');
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Pay' }));
+    expect(await within(sheet).findByRole('status')).toHaveTextContent('Paid');
+    expect(store.getState().data.tables.expense).toEqual([
+      expect.objectContaining({ accountId: 'acct-main', amount: 12_50, date: TODAY }),
+    ]);
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Done' }));
+    expect(within(region('Available balance')).getByText(whole(usd(987_50)))).toBeInTheDocument();
+  });
 
-    expect(container.innerHTML).not.toMatch(/NaN|Infinity/);
+  it('pays with a card that was picked to show', async () => {
+    useSelectedAccount.setState({ id: 'visa' });
+    await realHome();
+    await userEvent.click(screen.getByRole('button', { name: 'Pay' }));
+    expect(screen.getByRole('dialog', { name: 'Pay with Visa' })).toBeInTheDocument();
+  });
+
+  it('sends a frozen card to the Cards tab instead of paying', async () => {
+    useSelectedAccount.setState({ id: 'visa' });
+    const store = await realHome({ visa: { frozen: true } });
+    await userEvent.click(screen.getByRole('button', { name: 'Pay' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    const note = screen.getByRole('status');
+    expect(note).toHaveTextContent('This card is frozen. Unfreeze it on the Cards tab.');
+    const link = within(note).getByRole('link', { name: 'Unfreeze it on the Cards tab.' });
+    expect(link).toHaveAttribute('href', '/cards');
+    expect(store.getState().data.tables.expense).toEqual([]);
+
+    // Another account shown: the note is gone.
+    act(() => useSelectedAccount.setState({ id: 'acct-main' }));
+    expect(screen.queryByText(/This card is frozen/)).not.toBeInTheDocument();
   });
 });
 
-describe('DashboardScreen salary', () => {
+describe('Home More menu', () => {
+  it('offers Move money and Correct a balance', async () => {
+    renderHome(monthData());
+    await userEvent.click(screen.getByRole('button', { name: 'More' }));
+    const menu = screen.getByRole('menu', { name: 'More' });
+    expect(
+      within(menu)
+        .getAllByRole('menuitem')
+        .map((i) => i.textContent),
+    ).toEqual(['Move money', 'Correct a balance']);
+  });
+
+  it('corrects the balance of the account shown', async () => {
+    useSelectedAccount.setState({ id: 'acct-savings' });
+    renderHome(monthData());
+    await userEvent.click(screen.getByRole('button', { name: 'More' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Correct a balance' }));
+    const dialog = screen.getByRole('dialog', { name: 'Set actual balance' });
+    expect(dialog).toHaveAccessibleDescription('Savings');
+    expect(within(dialog).getByText(`Funcial thinks: ${usd(3_000_00)}`)).toBeInTheDocument();
+  });
+
+  it('moves 50 from Main account to Savings', async () => {
+    const store = await realHome();
+    await userEvent.click(screen.getByRole('button', { name: 'More' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Move money' }));
+    const dialog = screen.getByRole('dialog', { name: 'Move money' });
+    // From the account shown, to the savings account; never a credit card.
+    expect(within(dialog).getByLabelText('From')).toHaveValue('acct-main');
+    expect(within(dialog).getByLabelText('To')).toHaveValue('acct-savings');
+    expect(
+      within(within(dialog).getByLabelText('To'))
+        .getAllByRole('option')
+        .map((o) => o.textContent),
+    ).toEqual(['Main account', 'Savings']);
+    expect(within(dialog).getByLabelText('Date')).toHaveValue(TODAY);
+    await userEvent.type(within(dialog).getByLabelText('Amount'), '50');
+    await userEvent.type(within(dialog).getByLabelText('Note'), 'For the trip');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Move' }));
+
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'Move money' })).not.toBeInTheDocument(),
+    );
+    expect(store.getState().data.tables.transaction).toEqual([
+      expect.objectContaining({
+        type: 'transfer',
+        amount: 50_00,
+        fromAccountId: 'acct-main',
+        toAccountId: 'acct-savings',
+        date: TODAY,
+        note: 'For the trip',
+      }),
+    ]);
+    expect(within(region('Available balance')).getByText(whole(usd(950_00)))).toBeInTheDocument();
+  });
+
+  it('asks for two different accounts, an amount and a date that has come', async () => {
+    const store = await realHome();
+    await userEvent.click(screen.getByRole('button', { name: 'More' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Move money' }));
+    const dialog = screen.getByRole('dialog', { name: 'Move money' });
+    await userEvent.selectOptions(within(dialog).getByLabelText('To'), 'Main account');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Move' }));
+    expect(within(dialog).getByLabelText('To')).toHaveAccessibleDescription(
+      'Use two different accounts.',
+    );
+    expect(within(dialog).getByLabelText('Amount')).toHaveAccessibleDescription(
+      'Enter an amount like 12.50',
+    );
+    expect(store.getState().data.tables.transaction).toEqual([]);
+  });
+});
+
+describe('Home bills coming up', () => {
+  it('hangs the bills over the block as round glass bubbles, each with what it is and when', () => {
+    renderHome(monthData());
+    const bills = screen.getByRole('list', { name: 'Coming up' });
+    const links = within(bills).getAllByRole('link');
+    expect(links.map((l) => l.getAttribute('aria-label'))).toEqual([
+      'Streamflix, due in 6 days',
+      'Visa card payment, due in 7 days',
+      'FitHub Gym, due in 14 days',
+    ]);
+    expect(links.map((l) => l.textContent)).toEqual([
+      'SStreamflix6 days',
+      'Visa7 days',
+      'FFitHub Gym14 days',
+    ]);
+    for (const link of links) expect(link).toHaveAttribute('href', '/subscriptions');
+    // The disc is the thick glass of what hangs over the block's edge, with its two-tone ring.
+    const disc = links[0]!.firstElementChild;
+    expect(disc).toHaveClass('glass-strong', 'focus-edge', 'size-[58px]', 'rounded-full');
+    expect(links[1]!.querySelector('svg.lucide-credit-card')).toBeInTheDocument();
+    // 42px over the block, with 6px above the discs for their ring, which the scrolling row would clip.
+    expect(bills).toHaveClass('-mt-[48px]', 'pt-1.5');
+  });
+
+  it('opens the bills page from a bubble', async () => {
+    const { router } = renderHome(monthData());
+    await userEvent.click(screen.getByRole('link', { name: 'Streamflix, due in 6 days' }));
+    expect(router.state.location.pathname).toBe('/subscriptions');
+  });
+
+  it('shows no bubbles, and no Coming up, with nothing due', () => {
+    const data = monthData();
+    data.tables.subscription = [];
+    data.tables.account = data.tables.account.filter((a) => a.kind !== 'credit');
+    renderHome(data);
+    expect(screen.queryByText('Coming up')).not.toBeInTheDocument();
+    expect(screen.queryByRole('list', { name: 'Coming up' })).not.toBeInTheDocument();
+  });
+});
+
+describe('Home Overview', () => {
+  /** monthData with 2,000 of income on Oct 2, and 1,600 of income and 1,200 spent early in September. */
+  function withSeptember() {
+    const data = monthData({ income: 2_000_00 });
+    data.tables.income.push(
+      makeIncome({ amount: 1_600_00, date: '2026-09-02', period: '2026-09' }),
+    );
+    data.tables.expense.push(makeExpense({ amount: 1_200_00, date: '2026-09-03' }));
+    return data;
+  }
+
+  it('shows this month so far, in and out, against the same days of last month', () => {
+    renderHome(withSeptember());
+    const overview = region('Overview');
+    const [income, expenses] = within(overview).getAllByRole('button');
+    expect(income).toHaveClass('glass');
+    expect(within(income!).getByText('Income')).toBeInTheDocument();
+    expect(within(income!).getByText(`+${usdWhole(2_000_00)}`)).toHaveClass('text-success');
+    // 2,000 against 1,600, and 1,320 against 1,200.
+    expect(
+      within(income!).getByText(`This month · ${formatPercent(25, true)}`),
+    ).toBeInTheDocument();
+    expect(within(expenses!).getByText('Expenses')).toBeInTheDocument();
+    expect(within(expenses!).getByText(`−${usdWhole(1_320_00)}`)).toHaveClass('text-danger');
+    expect(
+      within(expenses!).getByText(`This month · ${formatPercent(10, true)}`),
+    ).toBeInTheDocument();
+    // Each carries a small ＋.
+    for (const tile of [income!, expenses!]) {
+      expect(tile.querySelector('svg.lucide-plus')?.parentElement).toHaveClass('glass', 'size-7');
+    }
+  });
+
+  it('says This month alone when last month had nothing to compare with', () => {
+    renderHome(monthData({ income: 2_000_00 }));
+    const [income] = within(region('Overview')).getAllByRole('button');
+    expect(within(income!).getByText('This month')).toBeInTheDocument();
+  });
+
+  it('opens History, on this month, from View all', async () => {
+    const { router } = renderHome(monthData());
+    await userEvent.click(within(region('Overview')).getByRole('link', { name: 'View all' }));
+    expect(router.state.location.pathname).toBe('/history');
+  });
+
+  it('opens Add income from the Income tile and Add expense from the Expenses tile', async () => {
+    renderInShell(monthData());
+    const overview = region('Overview');
+    await userEvent.click(within(overview).getByRole('button', { name: /^Income.*Add income$/ }));
+    const income = screen.getByRole('dialog', { name: 'Add income' });
+    expect(within(income).getByLabelText('Amount')).toHaveFocus();
+    await userEvent.click(within(income).getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('dialog', { name: 'Add income' })).not.toBeInTheDocument();
+
+    await userEvent.click(
+      within(overview).getByRole('button', { name: /^Expenses.*Add expense$/ }),
+    );
+    expect(screen.getByRole('dialog', { name: 'Add expense' })).toBeInTheDocument();
+  });
+});
+
+describe('Home Net worth', () => {
+  it('shows the total, this month’s change and line, and what you have and owe', () => {
+    renderHome(monthData());
+    const worth = region('Net worth');
+    const tile = within(worth).getByRole('button', { name: /Net worth: see and correct$/ });
+    expect(tile).toHaveClass('glass');
+    // 3,680 + 3,000 − 230; 7,770 at the end of September.
+    expect(within(tile).getByText(usd(6_450_00))).toBeInTheDocument();
+    expect(within(tile).getByText(`−${usd(1_320_00)} this month`)).toHaveClass('text-danger');
+    expect(tile.querySelector('[data-testid="net-worth-line"]')).toBeInTheDocument();
+    expect(within(tile).getByText(usdWhole(6_680_00)).parentElement).toHaveTextContent(
+      `You have ${usdWhole(6_680_00)}`,
+    );
+    expect(within(tile).getByText(usdWhole(230_00)).parentElement).toHaveTextContent(
+      `You owe ${usdWhole(230_00)}`,
+    );
+    // The split: what you have in the accent, what you owe in grey, in proportion.
+    const [have, owe] = [...tile.querySelectorAll('[data-testid="split"] > i')];
+    expect(have).toHaveClass('bg-accent');
+    expect(have).toHaveStyle({ flexGrow: '668000' });
+    expect(owe).toHaveStyle({ flexGrow: '23000' });
+  });
+
+  it('shows a rise in the success colour', () => {
+    renderHome(monthData({ income: 2_000_00 }));
+    expect(within(region('Net worth')).getByText(`+${usd(680_00)} this month`)).toHaveClass(
+      'text-success',
+    );
+  });
+
+  it('shows no change and no line when the data starts after the 1st', () => {
+    const data = monthData();
+    data.tables.profile = [makeProfile({ name: 'Test Player', openingDate: '2026-10-05' })];
+    renderHome(data);
+    const worth = region('Net worth');
+    expect(within(worth).getByText(usd(6_450_00))).toBeInTheDocument();
+    expect(within(worth).queryByText(/this month$/)).not.toBeInTheDocument();
+    expect(worth.querySelector('[data-testid="net-worth-line"]')).not.toBeInTheDocument();
+  });
+
+  it('opens the Net worth sheet from the tile and from Details', async () => {
+    renderHome(monthData());
+    const worth = region('Net worth');
+    await userEvent.click(within(worth).getByRole('button', { name: 'Details' }));
+    expect(screen.getByRole('dialog', { name: 'Net worth' })).toBeInTheDocument();
+    await userEvent.keyboard('{Escape}');
+    await userEvent.click(
+      within(worth).getByRole('button', { name: /Net worth: see and correct$/ }),
+    );
+    expect(screen.getByRole('dialog', { name: 'Net worth' })).toBeInTheDocument();
+  });
+});
+
+describe('Home Recent transactions', () => {
+  it('shows the 5 newest entries History shows, as plain rows', () => {
+    const data = monthData({ income: 2_000_00 });
+    renderHome(data);
+    const recent = region('Recent transactions');
+    const rows = within(recent).getAllByRole('listitem');
+    expect(rows).toHaveLength(5);
+    // The same five, in the same order.
+    const newest = historyEntries(data).slice(0, 5);
+    expect(newest.map((e) => e.item.id)).toEqual(rows.map((r) => r.dataset.entry));
+    expect(rows.map((r) => r.textContent)).toEqual([
+      `FoodFood · Today−${usd(20_00)}`,
+      `FoodFood · Yesterday−${usd(50_00)}`,
+      `FoodFood · ${formatDay('2026-10-12')}−${usd(20_00)}`,
+      `FunFun · ${formatDay('2026-10-05')}−${usd(30_00)}`,
+      `SalaryIncome · ${formatDay('2026-10-02')}+${usd(2_000_00)}`,
+    ]);
+    expect(within(rows[4]!).getByText(`+${usd(2_000_00)}`)).toHaveClass('text-success');
+    expect(within(rows[0]!).getByText(`−${usd(20_00)}`)).toHaveClass('text-danger');
+    expect(within(recent).getByRole('list')).toHaveClass('divide-y');
+  });
+
+  it('opens History from View all', async () => {
+    const { router } = renderHome(monthData());
+    await userEvent.click(
+      within(region('Recent transactions')).getByRole('link', { name: 'View all' }),
+    );
+    expect(router.state.location.pathname).toBe('/history');
+  });
+
+  it('says so when there is nothing yet', () => {
+    render0();
+    expect(
+      within(region('Recent transactions')).getByText('Nothing here yet.'),
+    ).toBeInTheDocument();
+  });
+});
+
+describe('Home sections', () => {
+  it('keeps to the bubbles, the banners, Overview, Net worth and Recent transactions', () => {
+    renderHome(monthData());
+    const page = screen
+      .getAllByRole('heading', { level: 2 })
+      .filter((heading) => !heading.closest('dialog'));
+    expect(page.map((h) => h.textContent)).toEqual([
+      'Available balance',
+      'Coming up',
+      'Overview',
+      'Net worth',
+      'Recent transactions',
+    ]);
+    for (const gone of ['Spending', 'Last 7 days', 'Limits', 'Goals', 'Quests']) {
+      expect(screen.queryByRole('region', { name: gone })).not.toBeInTheDocument();
+    }
+  });
+});
+
+describe('Home salary', () => {
   /** A $3,000.00 salary paid on the 25th into Main account, set up on 2026-09-01. */
   const sal = (() => {
     const data = emptySnapshot();
@@ -947,26 +763,15 @@ describe('DashboardScreen salary', () => {
         salary: { monthlyAmount: 3_000_00, payDay: 25 },
       }),
     ];
-    data.tables.account = [
-      mainAccount(),
-      makeAccount({
-        id: 'acct-savings',
-        name: 'Savings',
-        kind: 'savings',
-        skin: 'mint',
-        inAvailable: false,
-        openingDate: OPENED,
-        order: 1,
-      }),
-      visaCard(),
-    ];
+    data.tables.account = [mainAccount(), savingsAccount(), visaCard()];
     data.tables.settings = [makeSettings({ defaultAccountId: 'acct-main' })];
     return { data };
   })();
 
+  const due = () => applyRecords(sal.data, dueGenerated(sal.data, '2026-10-25'));
+
   it('asks whether an expected salary arrived and confirms the amount', async () => {
-    const today = '2026-10-25';
-    renderDashboard(applyRecords(sal.data, dueGenerated(sal.data, today)), today);
+    renderHome(due(), '2026-10-25');
     expect(
       screen.getByText(`Your ${october} salary is expected: ${usd(3_000_00)}. Did it arrive?`),
     ).toBeInTheDocument();
@@ -978,8 +783,7 @@ describe('DashboardScreen salary', () => {
   });
 
   it('asks which account the salary went to, starting on its own, and never a card', async () => {
-    const today = '2026-10-25';
-    renderDashboard(applyRecords(sal.data, dueGenerated(sal.data, today)), today);
+    renderHome(due(), '2026-10-25');
     await userEvent.click(screen.getByRole('button', { name: `Confirm ${october} salary` }));
     const dialog = screen.getByRole('dialog', { name: 'Confirm salary' });
     const to = within(dialog).getByLabelText('Goes to');
@@ -995,14 +799,13 @@ describe('DashboardScreen salary', () => {
   });
 
   it('confirms a salary left on an archived account into one still in use', async () => {
-    const today = '2026-10-25';
-    const data = applyRecords(sal.data, dueGenerated(sal.data, today));
+    const data = due();
     // Main account was archived after the salary was expected on it; Savings is the one left.
     data.tables.account = data.tables.account.map((a) =>
       a.id === 'acct-main' ? { ...a, archivedOn: '2026-10-25' } : a,
     );
     expect(data.tables.income[0]).toMatchObject({ status: 'expected', accountId: 'acct-main' });
-    renderDashboard(data, today);
+    renderHome(data, '2026-10-25');
     await userEvent.click(screen.getByRole('button', { name: `Confirm ${october} salary` }));
     const dialog = screen.getByRole('dialog', { name: 'Confirm salary' });
     const to = within(dialog).getByLabelText('Goes to');
@@ -1017,12 +820,11 @@ describe('DashboardScreen salary', () => {
   });
 
   it('asks for an account when none is left to take the salary', async () => {
-    const today = '2026-10-25';
-    const data = applyRecords(sal.data, dueGenerated(sal.data, today));
+    const data = due();
     data.tables.account = data.tables.account.map((a) =>
       a.kind === 'credit' ? a : { ...a, archivedOn: '2026-10-25' },
     );
-    renderDashboard(data, today);
+    renderHome(data, '2026-10-25');
     await userEvent.click(screen.getByRole('button', { name: `Confirm ${october} salary` }));
     const dialog = screen.getByRole('dialog', { name: 'Confirm salary' });
     await userEvent.click(within(dialog).getByRole('button', { name: 'Confirm' }));
@@ -1033,8 +835,7 @@ describe('DashboardScreen salary', () => {
   });
 
   it('confirms the salary on a line field', async () => {
-    const today = '2026-10-25';
-    renderDashboard(applyRecords(sal.data, dueGenerated(sal.data, today)), today);
+    renderHome(due(), '2026-10-25');
     await userEvent.click(screen.getByRole('button', { name: `Confirm ${october} salary` }));
     const dialog = screen.getByRole('dialog', { name: 'Confirm salary' });
     const amount = within(dialog).getByLabelText('Amount received');
@@ -1043,8 +844,7 @@ describe('DashboardScreen salary', () => {
   });
 
   it('lets a salary that never came be marked as not arrived', async () => {
-    const today = '2026-10-25';
-    renderDashboard(applyRecords(sal.data, dueGenerated(sal.data, today)), today);
+    renderHome(due(), '2026-10-25');
     await userEvent.click(
       screen.getByRole('button', { name: `Didn't arrive (${october} salary)` }),
     );
@@ -1052,23 +852,24 @@ describe('DashboardScreen salary', () => {
   });
 
   it('shows no freeze banner', () => {
-    renderDashboard(structuredClone(sal.data), '2026-10-02');
+    renderHome(structuredClone(sal.data), '2026-10-02');
     expect(screen.queryByText(/Salary freeze/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Bills and subscriptions still apply/)).not.toBeInTheDocument();
   });
 
-  it('puts the banners between the top line and the amount', () => {
-    const today = '2026-10-25';
-    renderDashboard(applyRecords(sal.data, dueGenerated(sal.data, today)), today);
+  it('puts the banners under the bills coming up, before Overview', () => {
+    renderHome(due(), '2026-10-25');
     const [banner] = screen.getAllByText(/salary is expected/);
-    const top = screen.getByRole('link', { name: /Open quests$/ });
-    const hero = region('Available to spend');
-    expect(top.compareDocumentPosition(banner!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(banner!.compareDocumentPosition(hero) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const bills = screen.getByRole('list', { name: 'Coming up' });
+    const overview = region('Overview');
+    expect(bills.compareDocumentPosition(banner!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(
+      banner!.compareDocumentPosition(overview) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 });
 
-describe('DashboardScreen reminders invitation', () => {
+describe('Home reminders invitation', () => {
   const INVITE = 'Get reminders for bills, renewals and a daily nudge to log spending.';
   const BLOCKED =
     'Notifications are blocked for Funcial. Turn them on in Android Settings → Apps → Funcial → Notifications.';
@@ -1167,100 +968,7 @@ describe('DashboardScreen reminders invitation', () => {
   });
 });
 
-describe('DashboardScreen quests', () => {
-  it('shows up to three quests on Home, with a link to all of them', () => {
-    const data = emptySnapshot();
-    data.tables.profile = [makeProfile()];
-    data.tables.budgetLimit = [makeLimit()];
-    renderDashboard(data, '2026-10-14');
-
-    // Four quests apply (daily, two weekly and the salary one); Home shows the first three.
-    const quests = region('Quests');
-    expect(within(quests).getByRole('link', { name: 'All' })).toHaveAttribute('href', '/quests');
-    expect(
-      within(quests)
-        .getAllByRole('listitem')
-        .map((li) => li.querySelector('p')?.textContent),
-    ).toEqual([
-      "Log today's spending",
-      'Stay within your limits this week',
-      'Do your weekly check-in',
-    ]);
-  });
-
-  it('puts the quests still to do first, daily before weekly before monthly', () => {
-    const data = emptySnapshot();
-    data.tables.profile = [makeProfile()];
-    data.tables.budgetLimit = [makeLimit()];
-    data.tables.checkIn = [makeCheckIn({ kind: 'no-spend', date: '2026-10-14' })];
-    renderDashboard(data, '2026-10-14');
-
-    // Four quests apply and today's is done: it drops out, leaving three.
-    const rows = within(region('Quests')).getAllByRole('listitem');
-    expect(rows.map((li) => li.querySelector('p')?.textContent)).toEqual([
-      'Stay within your limits this week',
-      'Do your weekly check-in',
-      "Reconcile this month's salary",
-    ]);
-  });
-
-  it('works out the game once for the top line and the quests together', () => {
-    vi.mocked(computeGameView).mockClear();
-    renderDashboard(emptySnapshot(), '2026-10-14');
-    expect(computeGameView).toHaveBeenCalledTimes(1);
-  });
-
-  it('records Nothing spent from Home', async () => {
-    const { store } = renderDashboard(emptySnapshot(), '2026-10-14');
-    await userEvent.click(within(region('Quests')).getByRole('button', { name: 'Nothing spent' }));
-    expect(store.getState().put).toHaveBeenCalledExactlyOnceWith(
-      'checkIn',
-      expect.objectContaining({ id: 'checkin:no-spend:2026-10-14', kind: 'no-spend' }),
-    );
-  });
-});
-
-describe('DashboardScreen help tips', () => {
-  it('explains Available to spend, beside its title', async () => {
-    renderDashboard(monthData(), TODAY);
-    await expectHelpTip(region('Available to spend'), 'available to spend', 'available');
-  });
-
-  it('sets the "?" 4px after the Available to spend title', () => {
-    renderDashboard(monthData(), TODAY);
-    const tip = within(region('Available to spend')).getByRole('button', {
-      name: 'What is available to spend?',
-    });
-    expect(tip.parentElement).toHaveClass('gap-1');
-  });
-
-  it('leaves the month line to its own taps', async () => {
-    renderDashboard(monthData(), TODAY);
-    const hero = region('Available to spend');
-    await userEvent.click(
-      within(hero).getByRole('button', { name: 'What is available to spend?' }),
-    );
-    await userEvent.keyboard('{Escape}');
-    await userEvent.click(
-      within(hero).getByRole('button', { name: `Bills still to come: ${usdWhole(284_99)}` }),
-    );
-    expect(within(hero).getByText('Bills still to come')).toBeInTheDocument();
-  });
-
-  it('explains limits once, on the Limits title and not on each ring', async () => {
-    renderDashboard(monthData(), TODAY);
-    const limits = region('Limits');
-    expect(within(limits).getAllByRole('button', { name: /^What is/ })).toHaveLength(1);
-    await expectHelpTip(limits, 'a limit', 'limits');
-  });
-
-  it('explains Net worth, beside its title', async () => {
-    renderDashboard(monthData(), TODAY);
-    await expectHelpTip(region('Net worth'), 'net worth', 'net-worth');
-  });
-});
-
-describe('DashboardScreen account reminder', () => {
+describe('Home account reminder', () => {
   const ASK = 'Make an account so you can move to a new phone and keep everything.';
 
   function renderWithAccount(namespace: 'real' | 'demo' = 'real') {
@@ -1289,17 +997,12 @@ describe('DashboardScreen account reminder', () => {
   });
 });
 
-describe('DashboardScreen with amounts hidden', () => {
-  afterEach(() => {
-    localStorage.clear();
-    useAmountsHidden.setState({ hidden: false });
-  });
-
+describe('Home with amounts hidden', () => {
   const RUN = /\d[\d.,]*\d|\d/g;
   /**
    * Every run of digits that is read on the page, in its text and in the names it gives to
-   * assistive tech (the month line's parts are named with their amounts): "1,320.00", "21", "88".
-   * Each text node on its own, as neighbours ("3" beside "40") would run together into one.
+   * assistive tech: "1,320.00", "21", "88". Each text node on its own, as neighbours ("3" beside
+   * "40") would run together into one.
    */
   const digitRuns = () => {
     const read: string[] = [];
@@ -1316,24 +1019,22 @@ describe('DashboardScreen with amounts hidden', () => {
   const writtenAs = (minor: number) =>
     [usd(minor), usdWhole(minor)].flatMap((text) => text.match(RUN) ?? []);
 
-  it('has the eye on the Available to spend row, and leaves the top line as it was', () => {
-    renderDashboard(monthData(), TODAY);
+  it('has the eye beside the label: a plain eye with a 44px target', () => {
+    renderHome(monthData());
     const eye = screen.getByRole('button', { name: 'Hide amounts' });
-    const row = screen.getByRole('heading', { name: 'Available to spend' }).parentElement;
-    expect(row).toContainElement(eye);
-    const quests = screen.getByRole('link', { name: /Open quests$/ });
-    expect(quests.parentElement).not.toContainElement(eye);
+    expect(eye).toHaveClass('size-11');
+    expect(eye).toHaveAttribute('aria-pressed', 'false');
+    expect(eye.querySelector('svg.lucide-eye')).toBeInTheDocument();
+    // No circle in it.
+    expect(eye.querySelector('span')).toBeNull();
   });
 
   it('shows no amount and four bullets in their place after the eye is pressed', async () => {
-    renderDashboard(monthData(), TODAY);
-    // Available, spent so far, bills to come, what is left, the Visa, a subscription, net worth, goals.
-    const known = [
-      3_395_01, 1_320_00, 284_99, 180_00, 230_00, 15_99, 39_00, 6_450_00, 3_000_00, 10_000_00,
-    ];
-    expect(digitRuns()).toEqual(
-      expect.arrayContaining(['3,395.01', '1,320', '284.99', '6,450.00']),
-    );
+    renderHome(monthData({ income: 2_000_00 }));
+    // The hero (5,000 + 2,000 − 1,320), the tiles, net worth, its change, have and owe, and the rows.
+    const known = [5_680_00, 2_000_00, 1_320_00, 8_450_00, 680_00, 8_680_00, 230_00, 20_00, 50_00];
+    // The hero writes its cents apart, dimmed.
+    expect(digitRuns()).toEqual(expect.arrayContaining(['5,680', '1,320', '8,450.00']));
 
     await userEvent.click(screen.getByRole('button', { name: 'Hide amounts' }));
 
@@ -1341,91 +1042,35 @@ describe('DashboardScreen with amounts hidden', () => {
     for (const minor of known) {
       for (const written of writtenAs(minor)) expect(runs, written).not.toContain(written);
     }
-    expect(screen.getAllByText('••••').length).toBeGreaterThan(4);
-    // Names, dates and counts stay.
+    expect(screen.getAllByText(/••••/).length).toBeGreaterThan(6);
+    expect(screen.getByRole('button', { name: 'Hide amounts' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(document.querySelector('svg.lucide-eye-off')).toBeInTheDocument();
+    // Names, dates and directions stay.
     expect(screen.getByText('Streamflix')).toBeInTheDocument();
-    expect(screen.getByText('Emergency fund')).toBeInTheDocument();
-    expect(screen.getByText(`spent in ${october}`)).toBeInTheDocument();
     expect(screen.getByText('Hi, Test Player')).toBeInTheDocument();
+    expect(screen.getByText('+•••• this month')).toHaveClass('text-success');
+    // The split would give the share away: it is one plain track.
+    expect(document.querySelectorAll('[data-testid="split"] > i')).toHaveLength(1);
   });
 
   it('shows the amounts again when the eye is pressed again', async () => {
-    renderDashboard(monthData(), TODAY);
+    renderHome(monthData());
     const eye = screen.getByRole('button', { name: 'Hide amounts' });
     await userEvent.click(eye);
-    expect(eye).toHaveAttribute('aria-pressed', 'true');
     await userEvent.click(eye);
     expect(eye).toHaveAttribute('aria-pressed', 'false');
-    expect(digitRuns()).toContain('1,320');
-    expect(screen.queryByText('••••')).not.toBeInTheDocument();
+    expect(digitRuns()).toContain('3,680');
+    expect(screen.queryByText(/••••/)).not.toBeInTheDocument();
   });
 
-  it("keeps the direction of net worth's move beside the bullets, and says no change only when there is none", async () => {
-    const { unmount } = renderDashboard(monthData(), TODAY);
+  it('hides the figures in Show on Home too', async () => {
+    renderHome(monthData());
     await userEvent.click(screen.getByRole('button', { name: 'Hide amounts' }));
-    expect(screen.getByText('▼ •••• this month')).toHaveClass('text-danger');
-    expect(screen.queryByText('No change this month')).not.toBeInTheDocument();
-    unmount();
-
-    // The same Home with 2,000 of income: net worth went up.
-    const rise = renderDashboard(monthData({ income: 2_000_00 }), TODAY);
-    expect(screen.getByText('▲ •••• this month')).toHaveClass('text-accent-text');
-    rise.unmount();
-
-    renderDashboard(emptySnapshot(), TODAY);
-    expect(screen.getByText('No change this month')).toBeInTheDocument();
-  });
-
-  it('calls a move under the smallest whole unit no change, hidden or shown', async () => {
-    const withIncome = (cents: number) => {
-      const data = emptySnapshot();
-      data.tables.profile = [makeProfile({ openingDate: OPENED })];
-      data.tables.account = [mainAccount()];
-      data.tables.income = [makeIncome({ amount: cents, date: '2026-10-02' })];
-      return data;
-    };
-    // 49 cents rounds to $0 and 50 to $1, as the whole-dollar text would have said.
-    const small = renderDashboard(withIncome(49), TODAY);
-    expect(screen.getByText('No change this month')).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'Hide amounts' }));
-    expect(screen.getByText('No change this month')).toBeInTheDocument();
-    small.unmount();
-
-    useAmountsHidden.setState({ hidden: false });
-    renderDashboard(withIncome(50), TODAY);
-    expect(screen.getByText(`▲ ${usdWhole(50)} this month`)).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'Hide amounts' }));
-    expect(screen.getByText('▲ •••• this month')).toBeInTheDocument();
-  });
-
-  it('turns the month line into one plain grey line, as its lengths would give the amounts away', async () => {
-    renderDashboard(monthData(), TODAY);
-    const hero = region('Available to spend');
-    expect(within(hero).getAllByRole('button', { name: SEGMENT })).toHaveLength(3);
-
-    await userEvent.click(screen.getByRole('button', { name: 'Hide amounts' }));
-    expect(within(hero).queryAllByRole('button', { name: SEGMENT })).toHaveLength(0);
-    expect(hero.querySelector('.bg-track')).toBeInTheDocument();
-    expect(within(hero).getAllByText('••••')).toHaveLength(3);
-  });
-
-  it('does not keep naming a month-line part that was tapped before the amounts were hidden', async () => {
-    renderDashboard(monthData(), TODAY);
-    const hero = region('Available to spend');
-    await userEvent.click(
-      within(hero).getByRole('button', { name: `Bills still to come: ${usdWhole(284_99)}` }),
-    );
-    const eye = screen.getByRole('button', { name: 'Hide amounts' });
-    await userEvent.click(eye);
-    expect(within(hero).queryByText('Bills still to come')).not.toBeInTheDocument();
-    expect(within(hero).getByText(`spent in ${october}`)).toBeInTheDocument();
-
-    // Shown again, nothing is selected: the part tapped before has not come back.
-    await userEvent.click(eye);
-    expect(within(hero).queryByText('Bills still to come')).not.toBeInTheDocument();
-    expect(within(hero).getByText(`spent in ${october}`)).toBeInTheDocument();
-    for (const part of within(hero).getAllByRole('button', { name: SEGMENT })) {
-      expect(part).toHaveAttribute('aria-pressed', 'false');
-    }
+    await userEvent.click(screen.getByRole('button', { name: /, change account$/ }));
+    const sheet = screen.getByRole('dialog', { name: 'Show on Home' });
+    expect(within(sheet).getAllByText('••••')).toHaveLength(3);
   });
 });

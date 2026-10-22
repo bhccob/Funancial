@@ -109,7 +109,7 @@ describe('SubscriptionsScreen', () => {
     ).toBeInTheDocument();
   });
 
-  it('shows the same month total as Home, as both come from the same bills', () => {
+  it('adds up the bills Home shows coming up, as both come from the same bills', () => {
     const store = createStubStore({ data: monthData(), today: TODAY });
     const home = renderWithStore(
       <MemoryRouter>
@@ -117,10 +117,12 @@ describe('SubscriptionsScreen', () => {
       </MemoryRouter>,
       store,
     );
-    const comingUp = within(screen.getByRole('region', { name: 'Coming up' }));
+    const comingUp = screen.getByRole('list', { name: 'Coming up' });
     expect(
-      comingUp.getByRole('link', { name: `${usd(245_99)} this month, Bills & cards` }),
-    ).toBeInTheDocument();
+      within(comingUp)
+        .getAllByRole('link')
+        .map((bill) => bill.getAttribute('aria-label')),
+    ).toEqual(['Streamflix, due in 3 days', 'Visa card payment, due in 7 days']);
     home.unmount();
 
     renderWithStore(
@@ -129,6 +131,7 @@ describe('SubscriptionsScreen', () => {
       </MemoryRouter>,
       store,
     );
+    // 15.99 + 230.00: the two Home showed.
     expect(screen.getByText(`${usd(245_99)} due this month`)).toBeInTheDocument();
   });
 

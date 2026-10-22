@@ -51,6 +51,32 @@ export function inRange(d: LocalDate, r: Range): boolean {
   return d >= r.start && d <= r.end;
 }
 
+/**
+ * The same days of the month before as `d` has had of its own so far: its 1st to the same day, or to
+ * its last day when it is shorter (Oct 1-22 for Nov 22; all of February for Mar 31).
+ */
+export function sameDaysLastMonth(d: LocalDate): Range {
+  const [y, m] = month(d) === 1 ? [year(d) - 1, 12] : [year(d), month(d) - 1];
+  const day = Math.min(dayOfMonth(d), daysInMonth(y, m));
+  return { start: `${y}-${pad(m)}-01`, end: `${y}-${pad(m)}-${pad(day)}` };
+}
+
+/** The month keys of the last `count` months, oldest first, ending with the month of `d`. */
+export function lastMonths(d: LocalDate, count: number): string[] {
+  let y = year(d);
+  let m = month(d);
+  const keys: string[] = [];
+  for (let i = 0; i < count; i++) {
+    keys.unshift(`${y}-${pad(m)}`);
+    m -= 1;
+    if (m === 0) {
+      m = 12;
+      y -= 1;
+    }
+  }
+  return keys;
+}
+
 /** Month keys from `fromKey` to `toKey` inclusive (empty if from > to). */
 export function monthsBetween(fromKey: string, toKey: string): string[] {
   const out: string[] = [];
