@@ -39,7 +39,7 @@ export function DayBars({ label, days, selected, onSelect, formatAmount }: DayBa
               className={cn(
                 'block w-2.5 rounded-full motion-safe:transition-colors motion-safe:duration-150',
                 // The bars not picked are the only mark of their amounts, so they hold 3:1 on the glass.
-                on ? 'bg-text' : 'bg-muted/70',
+                on ? 'bg-text' : 'bg-muted/75',
               )}
               style={{ height }}
             />
