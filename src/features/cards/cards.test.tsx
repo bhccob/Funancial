@@ -138,6 +138,44 @@ async function renderReal(extra: (data: DataSnapshot) => void = () => {}) {
 }
 
 const carousel = () => screen.getByRole('group', { name: 'Your cards' });
+
+/**
+ * Stands in for IntersectionObserver, which jsdom lacks, and returns `centre(name)`: the card whose
+ * name starts with `name` is now in the carousel's middle strip. Only the carousel's observer (the
+ * one watching the cards) is told; the block has an observer of its own.
+ */
+function stubObservers(): (name: string) => void {
+  const observers: Array<{ callback: IntersectionObserverCallback; targets: Element[] }> = [];
+  vi.stubGlobal(
+    'IntersectionObserver',
+    class {
+      targets: Element[] = [];
+      callback: IntersectionObserverCallback;
+      constructor(callback: IntersectionObserverCallback) {
+        this.callback = callback;
+        observers.push(this);
+      }
+      observe(target: Element) {
+        this.targets.push(target);
+      }
+      unobserve() {}
+      disconnect() {}
+      takeRecords() {
+        return [];
+      }
+    },
+  );
+  return (name) => {
+    for (const { callback, targets } of observers) {
+      if (!targets.some((t) => t.hasAttribute('data-account-id'))) continue;
+      const entries = targets.map((target) => ({
+        target,
+        isIntersecting: target.getAttribute('aria-label')?.startsWith(name) ?? false,
+      }));
+      callback(entries as never, {} as never);
+    }
+  };
+}
 const cardButtons = () => within(carousel()).getAllByRole('button');
 const card = (name: string) =>
   within(carousel()).getByRole('button', { name: new RegExp(`^${name},`) });
@@ -248,48 +286,47 @@ describe('the block', () => {
   });
 
   it('selects the card in the middle once the person scrolls the carousel', () => {
-    // Every observer on the page; the carousel's is the one watching the cards.
-    const observers: Array<{ callback: IntersectionObserverCallback; targets: Element[] }> = [];
-    vi.stubGlobal(
-      'IntersectionObserver',
-      class {
-        targets: Element[] = [];
-        callback: IntersectionObserverCallback;
-        constructor(callback: IntersectionObserverCallback) {
-          this.callback = callback;
-          observers.push(this);
-        }
-        observe(target: Element) {
-          this.targets.push(target);
-        }
-        unobserve() {}
-        disconnect() {}
-        takeRecords() {
-          return [];
-        }
-      },
-    );
-    /** The card whose name starts with `name` is in the middle strip now. */
-    const centre = (name: string) => {
-      for (const { callback, targets } of observers) {
-        if (!targets.some((t) => t.hasAttribute('data-account-id'))) continue;
-        const entries = targets.map((target) => ({
-          target,
-          isIntersecting: target.getAttribute('aria-label')?.startsWith(name) ?? false,
-        }));
-        callback(entries as never, {} as never);
-      }
-    };
+    const centre = stubObservers();
     renderCards();
     act(() => centre('Visa'));
     expect(useSelectedAccount.getState().id).toBeNull();
     // A finger on the carousel, then the cards slide.
     act(() => {
       fireEvent.pointerDown(carousel());
+      fireEvent.scroll(carousel());
       centre('Visa');
     });
     expect(useSelectedAccount.getState().id).toBe(VISA);
     expect(card('Visa')).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('stops selecting once the slide has come to rest, so a scroll the person did not make selects nothing', async () => {
+    const centre = stubObservers();
+    renderCards();
+    act(() => {
+      fireEvent.pointerDown(carousel());
+      fireEvent.scroll(carousel());
+      centre('Visa');
+    });
+    expect(useSelectedAccount.getState().id).toBe(VISA);
+    act(() => {
+      carousel().dispatchEvent(new Event('scrollend'));
+    });
+    await act(() => new Promise((resolve) => setTimeout(resolve, 250)));
+    // Tab bringing another card into view, or a turn of the phone snapping the row again.
+    act(() => centre('Savings'));
+    expect(useSelectedAccount.getState().id).toBe(VISA);
+  });
+
+  it('selects nothing after a press on the row that moved nothing', () => {
+    const centre = stubObservers();
+    renderCards();
+    act(() => {
+      fireEvent.pointerDown(carousel());
+      fireEvent.pointerUp(carousel());
+      centre('Savings');
+    });
+    expect(useSelectedAccount.getState().id).toBeNull();
   });
 
   it('shows small dots under the carousel, the selected one wider, hidden from screen readers', async () => {

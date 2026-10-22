@@ -58,14 +58,18 @@ const CATEGORY_ICONS: Record<Category, LucideIcon> = {
   other: Ellipsis,
 };
 
+/** How long after the row comes to rest the person's slide is over (see `driving`). */
+const REST_MS = 150;
+
 /**
  * The cards in a row that scrolls sideways, each snapping to the middle. The card in the middle is
- * the selected one: a card the person taps is selected and glides to the middle, and when the person
- * moves the row (a finger, a mouse or a wheel on it) the card that comes to rest in the middle is
- * selected (an IntersectionObserver watches a thin strip down the middle). Nothing is selected by
- * the row on its own: it opens on the selected card without selecting it again, so a card the store
- * falls back to never overwrites the one that was picked; and while the row glides to a card it
- * reports nothing.
+ * the selected one: a card the person taps is selected and glides to the middle, and while the person
+ * slides the row (a finger, a mouse or a wheel on it) the card that comes to the middle is selected
+ * (an IntersectionObserver watches a thin strip down the middle). Nothing is selected by the row on
+ * its own: it opens on the selected card without selecting it again, so a card the store falls back
+ * to never overwrites the one that was picked; while the row glides to a card it reports nothing; and
+ * once a slide has come to rest, a scroll the person did not make (Tab bringing a card into view, a
+ * turned phone snapping the row again) selects nothing.
  */
 function Carousel({
   rows,
@@ -80,8 +84,12 @@ function Carousel({
   const reduced = useReducedMotion();
   const scroller = useRef<HTMLDivElement>(null);
   const cards = useRef(new Map<string, HTMLButtonElement>());
-  // Whether the person is moving the row: set by their touch, cleared when the row moves itself.
+  // Whether the person is moving the row: set by their touch, cleared when the row comes to rest, when
+  // a press moved nothing, and when the row moves itself.
   const driving = useRef(false);
+  // Whether the row has scrolled since the person's touch began.
+  const moved = useRef(false);
+  const resting = useRef<ReturnType<typeof setTimeout>>(undefined);
   // The card in the middle strip, as last reported.
   const centred = useRef<string | null>(null);
   // The first move to the selected card is a jump; later ones glide.
@@ -119,13 +127,47 @@ function Carousel({
     if (!row || !card) return;
     if (placed.current && centred.current === selectedId) return;
     driving.current = false;
-    const left = card.offsetLeft + card.offsetWidth / 2 - row.clientWidth / 2;
+    // Measured against the row on screen, so it holds whatever the cards' offsetParent is (the page
+    // with the sidebar beside it, or a block still rising in).
+    const offset = card.getBoundingClientRect().left - row.getBoundingClientRect().left;
+    const left = row.scrollLeft + offset + card.offsetWidth / 2 - row.clientWidth / 2;
     row.scrollTo?.({ left, behavior: placed.current && !reduced ? 'smooth' : 'instant' });
     placed.current = true;
   }, [selectedId, ids, reduced]);
 
+  // The slide is over a little after the row comes to rest (`scrollend`, or with no such event the
+  // last scroll), so the observer's report of the card that came to rest still counts.
+  useEffect(() => {
+    const row = scroller.current;
+    if (!row) return;
+    const ends = 'onscrollend' in window;
+    const rest = () => {
+      clearTimeout(resting.current);
+      resting.current = setTimeout(() => {
+        driving.current = false;
+      }, REST_MS);
+    };
+    const scrolled = () => {
+      moved.current = true;
+      if (!ends) rest();
+    };
+    row.addEventListener('scroll', scrolled, { passive: true });
+    row.addEventListener('scrollend', rest);
+    return () => {
+      clearTimeout(resting.current);
+      row.removeEventListener('scroll', scrolled);
+      row.removeEventListener('scrollend', rest);
+    };
+  }, []);
+
   const drive = () => {
+    clearTimeout(resting.current);
     driving.current = true;
+    moved.current = false;
+  };
+  // A press that moved nothing (a tap, the row already at its end) leaves nothing driving.
+  const unlessMoved = () => {
+    if (!moved.current) driving.current = false;
   };
 
   return (
@@ -135,10 +177,17 @@ function Carousel({
       aria-label="Your cards"
       onPointerDown={drive}
       onTouchStart={drive}
-      onWheel={drive}
-      // Out to the screen's edges, so a card can slide off them; from a tablet up the side room lets
-      // the first and last card reach the middle too.
-      className="-mx-5 flex snap-x snap-mandatory [scrollbar-width:none] gap-3 overflow-x-auto px-5 pt-4 pb-1.5 sm:px-[calc(50%-135px)] [&::-webkit-scrollbar]:hidden"
+      onPointerUp={unlessMoved}
+      onTouchEnd={unlessMoved}
+      onWheel={() => {
+        drive();
+        clearTimeout(resting.current);
+        resting.current = setTimeout(unlessMoved, REST_MS);
+      }}
+      // Out to the screen's edges, so a card can slide off them. From a tablet up the side room lets
+      // the first and last card reach the middle too: half the row less half a card (135px), where the
+      // 50% is of the box the row stands out of by 20px a side, so it is 115px.
+      className="relative -mx-5 flex snap-x snap-mandatory [scrollbar-width:none] gap-3 overflow-x-auto px-5 pt-4 pb-1.5 sm:px-[calc(50%-115px)] [&::-webkit-scrollbar]:hidden"
     >
       {rows.map((row, i) => (
         <AccountCard

@@ -1,12 +1,28 @@
 import { expect, test, type Page } from '@playwright/test';
 import { onboard, startDemo } from './helpers';
 
+// The "mobile:" cases run on the phone, the "wide:" ones on the desktop project, where the sidebar is.
 test.beforeEach(() => {
-  test.skip(test.info().project.name !== 'mobile-chromium', 'the Cards tab on a phone');
+  const { title, project } = test.info();
+  const wide = title.startsWith('wide:');
+  test.skip(
+    project.name !== (wide ? 'desktop-chromium' : 'mobile-chromium'),
+    wide ? 'the Cards tab on a wide screen' : 'the Cards tab on a phone',
+  );
 });
 
 const cards = (page: Page) => page.getByRole('group', { name: 'Your cards' });
 const actions = (page: Page) => page.getByRole('group', { name: 'Card actions' });
+
+/** How far, in px, a card's middle is from the middle of the row it scrolls in. */
+async function offCentre(page: Page, name: string): Promise<number> {
+  const row = await cards(page).boundingBox();
+  const card = await cards(page)
+    .getByRole('button', { name: new RegExp(`^${name},`) })
+    .boundingBox();
+  if (!row || !card) return Infinity;
+  return Math.abs(card.x + card.width / 2 - (row.x + row.width / 2));
+}
 
 /** Setup with 1,000.00 in the bank account, then the Cards tab from the tab bar. */
 async function openCards(page: Page) {
@@ -143,4 +159,45 @@ test('mobile: with reduced motion the frost only fades in, and the balance jumps
   await actions(page).getByRole('button', { name: 'Freeze' }).click();
   await expect(frost).toHaveCSS('opacity', '1');
   await expect(frost).toHaveCSS('scale', '1');
+});
+
+for (const width of [1280, 820]) {
+  test(`wide: at ${width}px a tapped card glides to the middle of the row, the end ones too`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await startDemo(page);
+    await page.goto('/cards');
+    for (const name of ['Demo Visa', 'Savings', 'Passive income', 'Main account', 'Cash wallet']) {
+      const card = cards(page).getByRole('button', { name: new RegExp(`^${name},`) });
+      await card.click();
+      await expect(card).toHaveAttribute('aria-pressed', 'true');
+      await expect.poll(() => offCentre(page, name), { message: name }).toBeLessThan(4);
+    }
+    // The row opens on it again, in the middle.
+    await page.reload();
+    await expect(cards(page).getByRole('button', { name: /^Cash wallet,/ })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    await expect.poll(() => offCentre(page, 'Cash wallet')).toBeLessThan(4);
+  });
+}
+
+test('wide: with reduced motion the row opens with the selected card in the middle', async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await startDemo(page);
+  await page.goto('/cards');
+  await cards(page)
+    .getByRole('button', { name: /^Savings,/ })
+    .click();
+  await expect.poll(() => offCentre(page, 'Savings')).toBeLessThan(4);
+  await page.reload();
+  await expect(cards(page).getByRole('button', { name: /^Savings,/ })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  await expect.poll(() => offCentre(page, 'Savings')).toBeLessThan(4);
 });
