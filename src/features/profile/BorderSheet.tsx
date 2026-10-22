@@ -17,7 +17,8 @@ const LEGACY: Option = { id: 'frame-game', name: 'Game color', level: null };
  * Your border: the ring the avatar wears. None, then the six borders in the order they unlock, each
  * drawn on the person's own avatar. One that is open can be picked, which wears it and closes the
  * sheet; one the level has not reached is greyed and says which level opens it. The border worn is
- * checked. A frame bought in 0.11 is listed after them while it is owned.
+ * checked, and a tap on it only closes the sheet. A frame bought in 0.11 is listed after them while
+ * it is owned.
  */
 export function BorderSheet({ open, onClose }: { open: boolean; onClose(): void }) {
   const { owned, cosmetics } = useGameView();
@@ -32,6 +33,8 @@ export function BorderSheet({ open, onClose }: { open: boolean; onClose(): void 
   ];
 
   async function pick(id: string) {
+    // It is worn already: there is nothing to save.
+    if (id === cosmetics.frame) return onClose();
     setBusy(true);
     const worn = await run(() => equip(id));
     setBusy(false);

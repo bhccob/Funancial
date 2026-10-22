@@ -127,7 +127,7 @@ test('the Lv badge on Profile opens the border sheet: a border the level has rea
 }) => {
   await startDemo(page);
   await page.goto('/profile');
-  await page.getByRole('button', { name: /^Level \d+, choose your border$/ }).click();
+  await page.getByRole('button', { name: /^Lv \d+, choose your border$/ }).click();
   const sheet = page.getByRole('dialog', { name: 'Your border' });
   // The demo player is past level 5 and short of 11.
   await expect(sheet.getByRole('button', { name: /^Silver/ })).toBeDisabled();
@@ -139,7 +139,7 @@ test('the Lv badge on Profile opens the border sheet: a border the level has rea
   await sheet.getByRole('button', { name: /^Bronze/ }).click();
   await expect(sheet).toBeHidden();
 
-  await page.getByRole('button', { name: /^Level \d+, choose your border$/ }).click();
+  await page.getByRole('button', { name: /^Lv \d+, choose your border$/ }).click();
   await expect(
     page.getByRole('dialog', { name: 'Your border' }).getByRole('button', { name: /^Bronze/ }),
   ).toHaveAttribute('aria-pressed', 'true');

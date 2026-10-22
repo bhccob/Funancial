@@ -59,7 +59,7 @@ export function ProfileScreen() {
             <div className="mt-1 flex flex-col items-center text-center">
               <button
                 type="button"
-                aria-label={`Level ${level.level}, choose your border`}
+                aria-label={`Lv ${level.level}, choose your border`}
                 onClick={() => setChoosing(true)}
                 // The focus ring sits out past the widest border (Prism's), so it clears it.
                 className="press relative rounded-full focus-visible:outline-offset-[8px]"
@@ -133,8 +133,8 @@ export function ProfileScreen() {
         <MenuGroups riseFrom={3} />
         <Rise index={5}>
           <p className="text-muted mx-1 mt-3.5 text-[12px] leading-[1.45] font-semibold">
-            Goals are in the Spending tab · Income opens from Home · Bills &amp; cards and Loans are
-            on the Cards tab.
+            Goals are in the Spending tab · Income stats are in History · Bills &amp; cards and
+            Loans are on the Cards tab.
           </p>
         </Rise>
       </div>

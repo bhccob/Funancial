@@ -363,7 +363,7 @@ for (const theme of GAME_THEMES) {
 
       test("the border sheet from Profile's Lv badge", async ({ page }) => {
         await visit(page, '/profile');
-        await page.getByRole('button', { name: /^Level \d+, choose your border$/ }).click();
+        await page.getByRole('button', { name: /^Lv \d+, choose your border$/ }).click();
         await expect(page.getByRole('dialog', { name: 'Your border' })).toBeVisible();
         await expectReadable(page, 'the border sheet', look);
       });

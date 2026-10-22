@@ -118,7 +118,8 @@ describe('Profile screen: the block', () => {
 
   it('puts a Lv badge on the avatar, in the block button, that opens the border sheet', async () => {
     renderProfile(levelTwo());
-    const open = header().getByRole('button', { name: 'Level 2, choose your border' });
+    // Named from the words it shows, so a voice user can say what they see (WCAG 2.5.3).
+    const open = header().getByRole('button', { name: 'Lv 2, choose your border' });
     const badge = within(open).getByText('Lv 2');
     expect(badge).toHaveClass('btn-head');
     expect(open.querySelector('svg.lucide-rocket')).toBeInTheDocument();
@@ -153,7 +154,7 @@ describe('Profile screen: the block', () => {
     expect(bar.firstElementChild).toHaveStyle({ width: '0%' });
     expect(header().getByText('0 / 100 XP')).toBeInTheDocument();
     expect(header().getByText('100 to level 2')).toBeInTheDocument();
-    expect(header().getByRole('button', { name: /^Level 1,/ })).toHaveTextContent('Lv 1');
+    expect(header().getByRole('button', { name: /^Lv 1,/ })).toHaveTextContent('Lv 1');
     cleanup();
 
     const top = emptySnapshot();
@@ -167,7 +168,7 @@ describe('Profile screen: the block', () => {
     expect(bar).toHaveAttribute('aria-valuenow', '1');
     expect(bar).toHaveAttribute('aria-valuemax', '1');
     expect(bar.firstElementChild).toHaveStyle({ width: '100%' });
-    expect(header().getByRole('button', { name: /^Level 50,/ })).toHaveTextContent('Lv 50');
+    expect(header().getByRole('button', { name: /^Lv 50,/ })).toHaveTextContent('Lv 50');
   });
 });
 
@@ -297,7 +298,7 @@ describe('Profile screen: the menus', () => {
     renderProfile();
     expect(
       page().getByText(
-        'Goals are in the Spending tab · Income opens from Home · Bills & cards and Loans are on the Cards tab.',
+        'Goals are in the Spending tab · Income stats are in History · Bills & cards and Loans are on the Cards tab.',
       ),
     ).toBeInTheDocument();
   });
@@ -342,7 +343,7 @@ describe('Profile screen: the order', () => {
 
 describe('Profile screen: the border sheet', () => {
   const openSheet = async (level: number) =>
-    userEvent.click(header().getByRole('button', { name: `Level ${level}, choose your border` }));
+    userEvent.click(header().getByRole('button', { name: `Lv ${level}, choose your border` }));
   const sheet = () => screen.getByRole('dialog', { name: 'Your border' });
   const option = (name: string) =>
     within(sheet()).getByRole('button', { name: new RegExp(`^${name}`) });
@@ -435,6 +436,21 @@ describe('Profile screen: the border sheet', () => {
       'settings',
       expect.objectContaining({ cosmetics: expect.objectContaining({ frame: 'frame-none' }) }),
     );
+  });
+
+  it('closes without saving when the border worn is tapped', async () => {
+    const data = atLevel(12);
+    data.tables.settings = [
+      makeSettings({
+        cosmetics: { theme: 'theme-mono', avatar: 'avatar-sprout', frame: 'frame-silver' },
+      }),
+    ];
+    const put = vi.fn(async () => {});
+    renderProfile(data, { put });
+    await openSheet(12);
+    await userEvent.click(option('Silver'));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(put).not.toHaveBeenCalled();
   });
 
   it('keeps Gold shut at level 12: nothing is saved', async () => {
