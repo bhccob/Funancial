@@ -63,7 +63,11 @@ Where this plan is silent, match the file. Where this plan states a rule, it win
    - `frame-none` is always available
    - a border is wearable when the level reaches it **or** a purchase of it exists, so bought `frame-silver`, `frame-gold` and `frame-game` stay wearable
    - frames leave the Shop
-3. **Home's "Available balance"** is a new `FinanceView.bankAndCash`: the balances of the `inAvailable` accounts, with nothing taken off. These are debit and cash by default, never credit or savings. The spec's `available` (bills, card payments and reserves off) moves to the Cards tab's pill.
+3. **Home's hero shows the selected account** (revised wireframe, owner-approved). The selected account is a device-level store shared with the Cards carousel (ledger ruling R-Q6). What each account shows:
+   - debit, cash and savings: their balance, labelled "Available balance"
+   - credit: what is left to spend (limit − owed), labelled "Available credit"; with no limit set, the amount owed, labelled "Owed"
+
+   The spec's `available` (bills, card payments and reserves off) is the Cards tab's pill. **Task 5 is built before Task 4,** because Home uses its store and its Pay flow.
 4. **Home keeps its banners** (expected salary, reminders, account) under the bill bubbles. It drops its Spending, Week, Limits, Net worth, Goals and Quests sections:
    - Limits and Goals live on Spending (Budget gains a Goals section).
    - Quests live on Profile.
@@ -94,11 +98,13 @@ Where this plan is silent, match the file. Where this plan states a rule, it win
 
    (Task 5.)
 5. **Home's numbers:**
-   - Available balance = sum of the in-Available balances
+   - the hero equals the selected account's figure: a credit card's limit − owed, or "Owed" with no limit
+   - the selection survives a restart, and an archived selection falls back
    - the Overview change compares the same days of last month (Oct 1–22 vs Sep 1–22; Mar 31 compares to Feb's last day)
+   - the net-worth change is hidden when the data doesn't reach the start of the month
    - Recent shows the 5 newest entries History shows
 
-   (Task 4.)
+   (Tasks 4 and 5.)
 
 ---
 
@@ -218,6 +224,7 @@ Where this plan is silent, match the file. Where this plan states a rule, it win
   - "Your money": History, Net worth (opens `NetWorthSheet`), My numbers (`soon`, disabled)
   - "You": Quests, Shop, Inbox, Help, Settings
 - **`AppShell`:**
+  - `<body>` wears `page-blobs` (the page's soft shapes)
   - drops the fan
   - keeps `AddSheet` (opened by Home in Task 4)
   - `main` bottom padding clears the 86px bar
@@ -235,54 +242,87 @@ Where this plan is silent, match the file. Where this plan states a rule, it win
 - [ ] **Step 4: Run** typecheck, lint, `npm test`, and the mobile e2e (navigation, help, inbox, contrast). Expected: PASS.
 - [ ] **Step 5: Commit:** `feat: an edge-to-edge tab bar with Profile, and the theme block`.
 
-### Task 4: Home
+### Task 4: Home (revised wireframe; built after Task 5)
+
+**Source:** `home()`, `hero()` and `acctSheet()` in `design/redesign-v3/glass-themes.html` (re-copied for the revised Home).
 
 **Files:**
 - Create:
-  - `src/domain/history.ts` (the History entry list, moved from `HistoryScreen`)
   - `src/domain/overview.ts`
   - `src/features/dashboard/MoveMoneyDialog.tsx`
+  - `src/features/dashboard/ShowOnHomeSheet.tsx`
+  - `src/features/dashboard/NetWorthTile.tsx`
 - Modify:
-  - `src/domain/view.ts` (`bankAndCash`)
   - `src/features/dashboard/DashboardScreen.tsx`, `HomeTopLine.tsx`
-  - `src/features/history/HistoryScreen.tsx`
   - drop the Home-only sections that are no longer used
 - Test:
-  - `src/domain/view.test.ts`, `src/domain/overview.test.ts`, `src/domain/history.test.ts`
+  - `src/domain/overview.test.ts`
   - `src/features/dashboard/dashboard.test.tsx`
   - e2e finance/demo/a11y where they touch Home
 
 **Interfaces:**
-- **`FinanceView.bankAndCash: number`** (Call 3).
-- **`historyEntries(data): Entry[]`**, newest first. It is the exact list `HistoryScreen` shows.
+- **Consumes from Task 5:**
+  - `useSelectedAccount` / `selectedAccount(data, today, storedId)`
+  - `heroFigure(row: AccountRow): { label: 'Available balance' | 'Available credit' | 'Owed'; amount: number }` (Call 3)
+  - `PaySheet` with a starting account
+  - `historyEntries(data)`
 - **`monthToDate(data, today)`** returns `{ income, expenses, incomeChange, expensesChange, incomeSeries, expensesSeries }`:
   - change = percent vs the same days of last month, `null` when last month is 0
   - series = the last 7 months' totals, oldest first
   - income counts confirmed income only; expenses are expenses only
-- **The block** holds:
-  - Top line: the avatar wearing its border, with level ring (→ `/profile`); "Hi, welcome back!" over the name; a `glass-head` AWG pill (the profile currency code; a placeholder until P6); a `glass-head` bell (→ `/inbox`, with an unread dot).
-  - "Available balance" with the eye (the existing hide-amounts toggle), then the amount at 46px with dimmed cents. It is a `CountUp`.
-  - `glass-head` "Saved Afl. X ›", which opens the existing savings and goals view: `AvailableSheet`'s Saved part or `/goals`.
-  - The buttons: `btn-head` "＋ Expense" and `glass-head` "＋ Income" (both open `AddSheet`), and `glass-head` "⋯" (a small menu: "Move money" opens `MoveMoneyDialog`, "Correct a balance" opens `ActualBalanceDialog`).
-  - "Coming up" label.
+- **`netWorthSummary(data, today, view)`** returns `{ total, have, owe, change: number | null, series: number[] | null }`:
+  - `have` and `owe` are the parts of `view.netWorth`
+  - `change` and `series` are `null` unless the data reaches the start of this month (the profile's opening date ≤ the 1st). The series is daily over this month, from the existing `netWorthOn`.
+  - Never invent a figure.
+- **Top line:**
+  - the avatar wearing its border, with level ring (→ `/profile`)
+  - a one-line "Hi, <name>" ("Hi there" without one)
+  - a small `glass-head` currency pill (30px, the profile currency code; a placeholder until P6)
+  - a plain bell, no circle (→ `/inbox`, unread dot)
+- **Hero:** no box, nothing else.
+  - **Label:** `heroFigure().label` at 60% opacity, with a plain eye icon (the existing hide-amounts toggle; 44px tap area).
+  - **Amount:** at 42px/700 with "Afl." and the cents dimmed, as a `CountUp`.
+  - **Account chip:** plain text with an icon (`CreditCard` when it has a `last4`, else `Wallet`), "<name> ·· <last4>" and a chevron. It opens `ShowOnHomeSheet`.
+  - **Two buttons:**
+    - Pay (`btn-head`, 34px visible / 44px tap, `Nfc` icon) opens `PaySheet` on the selected account. On a frozen account it says "This card is frozen. Unfreeze it on the Cards tab." with a link to `/cards`.
+    - ⋯ (a 34px `glass-head` circle) opens a small menu: "Move money" (→ `MoveMoneyDialog`) and "Correct a balance" (→ `ActualBalanceDialog` on the selected account).
+- **`ShowOnHomeSheet`:** "Show on Home".
+  - Every active account, as a plain row: icon, name, kind ·· last4 (· frozen), `heroFigure` amount, and a check on the selected one.
+  - Picking one sets the shared selection and closes the sheet.
+  - Foot: "Swiping to a card on the Cards tab changes this too."
 - **Below the block:**
-  - Bill bubbles (`view.bills`, `glass-strong` circles with logo or initial and days left; a tap opens `/subscriptions`), pulled 42px over the block's edge.
-  - The banners.
-  - Overview: two `glass` tiles, Income (→ `/income`) and Expenses (→ `/budget`), each with sparkline, total and change. "View all" → `/history`.
-  - Recent transactions: 5 plain rows. "View all" → `/history`.
+  - **Bill bubbles** (`view.bills`, `glass-strong` circles with logo or initial and days left; a tap opens `/subscriptions`), pulled 42px over the block's edge.
+  - **The banners.**
+  - **Overview:**
+    - Two `glass` tiles, each with a small `glass` ＋ circle at the top right. Tapping the Income tile opens the add-Income sheet, and the Expenses tile the add-Expense sheet (`AddSheet`).
+    - Each tile shows its sparkline, total and change.
+    - "View all" → `/history`, showing this month.
+  - **Net worth** (`NetWorthTile`, a `glass` tile):
+    - total; change this month in success/danger with a small sparkline (both hidden when `null`)
+    - a have/owe split bar (have in the accent, owe in grey)
+    - "You have X · You owe Y"
+    - The tile and "Details" open `NetWorthSheet`.
+  - **Recent transactions:** 5 plain rows. "View all" → `/history`.
 - **`MoveMoneyDialog`:** from, to, amount, date and note, then `finance.transfer`, with the existing account rules and copy. It errors with "Use two different accounts." when from and to match.
+- **No longer on Home:** the "Saved" chip and the Expense/Income buttons.
 
-- [ ] **Step 1: Write the tests** for `bankAndCash`, `monthToDate` (same days, month-end, a zero last month) and `historyEntries` (same order as the old screen). Then the Home tests:
-  - the balance equals `bankAndCash`
-  - the eye masks every amount
-  - Expense and Income open their sheets
-  - Move money moves 50 from Main to Savings
-  - bubbles list `view.bills`
-  - Recent shows 5
+- [ ] **Step 1: Write the tests:**
+  - `monthToDate`: same days, month-end, a zero last month
+  - `netWorthSummary`: change hidden when the data starts this month
+  - Home:
+    - the hero shows the selected account's figure, with labels for debit, credit with a limit, and credit without one
+    - the chip sheet lists every account and picking one changes the hero
+    - Pay opens on the selected account; frozen shows the message
+    - the eye masks every amount
+    - the Income and Expense tiles open their sheets
+    - Move money moves 50 from Main to Savings
+    - bubbles list `view.bills`
+    - the Net worth tile shows have and owe
+    - Recent shows 5
 - [ ] **Step 2: Run them.** Expected: FAIL.
-- [ ] **Step 3: Implement** to the file's `home()`.
+- [ ] **Step 3: Implement** to the file's `home()`, `hero()` and `acctSheet()`.
 - [ ] **Step 4: Run** typecheck, lint, `npm test`, and the affected mobile e2e. Expected: PASS.
-- [ ] **Step 5: Commit:** `feat: Home as in the glass wireframe`.
+- [ ] **Step 5: Commit:** `feat: Home as in the revised glass wireframe`.
 
 ### Task 5: Cards tab
 
@@ -291,7 +331,10 @@ Where this plan is silent, match the file. Where this plan states a rule, it win
   - `src/services/payment.ts` (`PaymentService` and the local implementation)
   - `src/features/cards/` (`CardsScreen`, `AccountCard`, `AccountDialog`, `AccountSheet`, `PaySheet`, `SpendChart`)
   - `src/domain/cardSpend.ts`
+  - `src/store/useSelectedAccount.ts`
+  - `src/domain/history.ts` (the History entry list, moved from `HistoryScreen`, which then imports it)
 - Modify:
+  - `src/features/history/HistoryScreen.tsx`
   - `src/store/financeActions.ts` (`setAccountFrozen`; `addExpense` refuses a frozen account)
   - `src/features/shared/AccountField.tsx` (expense pickers leave frozen accounts out)
   - `src/app/routes.tsx`
@@ -308,11 +351,20 @@ Where this plan is silent, match the file. Where this plan states a rule, it win
   - month: the last 12 months, "Spent this month", change vs the same days of last month
   - year: the last 4 years, "Spent this year"
 - **`categoryRows(data, accountId, today)`** returns this month's rows by category: count, amount and whole percent.
+- **`useSelectedAccount`** (ledger ruling R-Q6): a zustand store persisted with `safeStorage` key `funancial.selectedAccount`, as `useAmountsHidden` does.
+  - `selectedAccount(data, today, storedId): Account | null` returns the stored account while it is active, else `defaultAccount`, else the first active account.
+  - Home (Task 4) reads it.
+- **`heroFigure(row: AccountRow)`** returns `{ label: 'Available balance' | 'Available credit' | 'Owed'; amount }` (Call 3). Home's hero and its account sheet use it.
+- **`historyEntries(data): Entry[]`**, newest first. It is the exact list `HistoryScreen` shows; `AccountSheet` and Home's Recent read it.
 - **The screen**, as in the file's `cards()`:
   - **Block:** title "Cards" with a ＋ (opens `AccountDialog` for a new debit, credit, savings or cash account).
-  - **Carousel:** the active accounts (loans never) as glass cards. The card shows kind, chip and contactless mark when it has a `last4`, balance (credit: owed and free), name and `•••• last4`, and the frost and "FROZEN" badge when frozen. The centred card is the selected one (IntersectionObserver).
+  - **Carousel:** the active accounts (loans never) as glass cards. The card shows kind, chip and contactless mark when it has a `last4`, balance (credit: owed and free), name and `•••• last4`, and the frost and "FROZEN" badge when frozen. Selecting a card writes the shared selection:
+    - the centred card is selected (IntersectionObserver)
+    - tapping a card selects it and scrolls it to the centre
+    - the carousel opens on the stored selection
+    - small dots under it show the selected card (the active dot is wider)
   - **Actions:**
-    - Pay (`btn-head`): `PaySheet` takes amount, category and note, then shows "Pay", "Paying…" and done. The card's balance counts to its new value. It is disabled with "Unfreeze to pay" on a frozen card, and refused on savings with the existing copy.
+    - Pay (`btn-head`): `PaySheet({ accountId, onClose })` (Home opens it too) takes amount, category and note, then shows "Pay", "Paying…" and done. The card's balance counts to its new value. It is disabled with "Unfreeze to pay" on a frozen card, and refused on savings with the existing copy.
     - Freeze / Unfreeze (`setAccountFrozen`, frost in 380ms, fade only under reduced motion).
     - View card: `AccountSheet` shows details, then "Pay the card" (credit, existing `PayDialog`) or "Correct the balance", the account's last 10 History entries and its subscriptions.
     - Settings: `AccountDialog` edits name, kind (fixed once it has history, as now), last 4, credit terms, in-Available and delete. Delete reuses the existing move-subscriptions and archive flow. `CardDialog` folds into it.
@@ -326,6 +378,10 @@ Where this plan is silent, match the file. Where this plan states a rule, it win
   - Freeze disables Pay
   - a new cash account appears in the carousel
   - the chart follows the selected card
+  - tapping a card selects it, and the selection survives a reload of the store
+  - an archived stored selection falls back
+  - `heroFigure` for debit, credit with a limit, and credit without one
+  - `historyEntries` matches the History screen's order
   - the pill equals `view.available`
 - [ ] **Step 2: Run them.** Expected: FAIL.
 - [ ] **Step 3: Implement.**
