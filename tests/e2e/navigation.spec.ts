@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { openProfile, startFresh } from './helpers';
+import { openProfile, startDemo, startFresh } from './helpers';
 
 const bar = (page: Page) => page.getByRole('navigation', { name: 'Primary' });
 /** The ＋ in the tab bar: named Add while the fan is shut, Close while it is open. */
@@ -54,6 +54,81 @@ test('mobile: at 360×640 the current tab shows all of "Spending"', async ({ pag
     };
   });
   expect(fits).toEqual({ label: true, link: true, inside: true });
+});
+
+/**
+ * Taps the tab named `name` low on a long page and returns where the ink pill was, frame by frame
+ * for about 45 frames from the tap: its top against the bar's, and its left edge.
+ */
+async function pillAfterTap(page: Page, name: string) {
+  // Settled first: motion leaves no transform on the pill once it has come to rest.
+  await expect(bar(page).locator('a > span.absolute')).toHaveCSS('transform', 'none');
+  // Low on the page: the old pill is measured scrolled, the new one once the new screen opens at its top.
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  const height = (await bar(page).boundingBox())!.height;
+  expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(height);
+  await page.evaluate(() => {
+    const nav = document.querySelector('nav[aria-label="Primary"]')!;
+    (window as unknown as { pill: Promise<{ tops: number[]; lefts: number[] }> }).pill =
+      new Promise((resolve) => {
+        const tops: number[] = [];
+        const lefts: number[] = [];
+        let frames = 0;
+        const sample = () => {
+          const pill = nav.querySelector('a > span.absolute');
+          if (pill) {
+            const box = pill.getBoundingClientRect();
+            tops.push(box.top - nav.getBoundingClientRect().top);
+            lefts.push(box.left);
+          }
+          if (++frames < 45) requestAnimationFrame(sample);
+          else resolve({ tops, lefts });
+        };
+        document.addEventListener('click', () => requestAnimationFrame(sample), {
+          capture: true,
+          once: true,
+        });
+      });
+  });
+  await bar(page).getByRole('link', { name }).click();
+  const seen = await page.evaluate(
+    () => (window as unknown as { pill: Promise<{ tops: number[]; lefts: number[] }> }).pill,
+  );
+  expect(seen.tops.length).toBeGreaterThan(30);
+  return { ...seen, height, furthest: Math.max(...seen.tops.map(Math.abs)) };
+}
+
+test('mobile: tapped low on a long page, the tab pill glides along the bar, never in from off it', async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== 'mobile-chromium', 'mobile layout only');
+  // The demo money fills Budget well past the screen.
+  await startDemo(page);
+  await bar(page).getByRole('link', { name: 'Spending' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Budget' })).toBeVisible();
+
+  const pill = await pillAfterTap(page, 'Cards');
+
+  await expect(page.getByRole('heading', { level: 1, name: 'Bills & cards' })).toBeVisible();
+  expect(pill.furthest, 'the pill stays within the bar').toBeLessThan(pill.height);
+  // It glides sideways, through places between the two tabs, rather than jumping.
+  expect(new Set(pill.lefts.map(Math.round)).size).toBeGreaterThan(5);
+});
+
+test('mobile: reduced motion: tapped low on a long page, the tab pill jumps, in the bar', async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== 'mobile-chromium', 'mobile layout only');
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await startDemo(page);
+  await bar(page).getByRole('link', { name: 'Spending' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Budget' })).toBeVisible();
+
+  const pill = await pillAfterTap(page, 'Cards');
+
+  expect(pill.furthest, 'the pill stays within the bar').toBeLessThan(pill.height);
+  // No glide: a few frames after the tap it is at rest on Cards.
+  expect(new Set(pill.lefts.slice(3).map(Math.round)).size).toBe(1);
 });
 
 test('mobile: the ＋ opens the fan, and Escape closes it with focus back on the ＋', async ({

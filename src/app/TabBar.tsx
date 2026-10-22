@@ -65,7 +65,11 @@ export function TabBar({
   className?: string;
 }) {
   return (
-    <nav
+    // With `layoutScroll`, motion takes the fixed bar for a scroll root and measures the pill against
+    // the screen, not the page. Without it the old pill is measured with the page scrolled and the
+    // new one after the new screen opens at its top, and the pill glides in from that far off the bar.
+    <motion.nav
+      layoutScroll
       aria-label="Primary"
       className={cn(
         'bg-glass ring-glass-line shadow-glass fixed inset-x-3.5 bottom-[calc(22px+env(safe-area-inset-bottom))] z-30 flex h-[66px] items-center gap-1 rounded-full px-1.5 ring-1 backdrop-blur-[20px] backdrop-saturate-[1.6] ring-inset md:hidden',
@@ -96,6 +100,6 @@ export function TabBar({
       {TABS.slice(2).map((tab) => (
         <Tab key={tab.path} {...tab} />
       ))}
-    </nav>
+    </motion.nav>
   );
 }
