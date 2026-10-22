@@ -1,7 +1,8 @@
 @import 'tailwindcss/theme.css' layer(theme);
 @import '@fontsource-variable/inter-tight';
-/* The app's colours and font, as CSS variables on :root. */
+/* The app's colours and font, as CSS variables on :root: the tokens, and Black & White, which they point at. */
 @import '../../src/styles/tokens.css';
+@import '../../src/styles/themes.css';
 
 :root {
   /*
@@ -114,7 +115,7 @@ h2 {
   font-weight: 800;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  /* The app's violet, a little darker so it too holds on the backdrop. */
+  /* The app's accent, a little darker so it too holds on the backdrop. */
   color: color-mix(in srgb, var(--color-xp-text) 80%, black);
 }
 

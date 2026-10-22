@@ -1,12 +1,15 @@
 /*
- * Design tokens — direction A "Midnight Glass". Values and usage rules: spec §11 of
- * docs/superpowers/specs/2026-10-21-funcial-redesign-design.md, with the changes the phase 2 plan
- * approved (chart order and dark steps, three darker text colors, the Ocean blue).
+ * Design tokens. The text, surface, status and chart colors are fixed; the page, the accent, the top
+ * block and the XP bar belong to the theme, a set of variables in themes.css that <html data-game-theme>
+ * picks (Black & White when none is). The tokens below only point at them, so a theme change reaches
+ * every utility with no rebuild. The theme sets them on <html>; a Shop preview sets them on its own
+ * element, which reads the raw variables (--head, --accent …) rather than these.
  * Light values live in @theme (they are the defaults and generate Tailwind utilities);
  * dark values override the same variables when <html data-theme="dark">.
  */
 @theme static {
-  --color-bg: #f2f2f5;
+  /* The page. The theme's, so it differs a little from one theme to the next. */
+  --color-bg: var(--page);
   --color-surface: #ffffff;
   --color-surface-2: #ebebf0;
   --color-overlay: #ffffff;
@@ -17,13 +20,17 @@
   --color-track: #ececf1;
   --color-primary: #0b0b12;
   --color-primary-contrast: #ffffff;
-  /* Violet is the one accent. The icon on an accent fill is a mark, not text, so it needs 3:1. */
-  --color-accent: #7c5cff;
-  --color-accent-contrast: #ffffff;
-  --color-accent-text: #5b3fe0;
-  --color-xp: #7c5cff;
-  --color-xp-text: #5b3fe0;
-  --color-xp-contrast: #ffffff;
+  /*
+   * The theme's accent: chart marks, the current tab, links and the XP bar on the page. It is dark
+   * enough to be text, so accent-text and xp-text are the same color. The label on an accent fill is
+   * accent-contrast, checked at 4.5:1 for every theme in tests/unit/tokens.test.ts.
+   */
+  --color-accent: var(--accent);
+  --color-accent-contrast: var(--accent-ink);
+  --color-accent-text: var(--accent);
+  --color-xp: var(--accent);
+  --color-xp-text: var(--accent);
+  --color-xp-contrast: var(--accent-ink);
   /* The three status colors are held at 4.5:1 on surface-2 too, not only on white. */
   --color-success: #147a3a;
   --color-warning: #9a5900;
@@ -33,23 +40,40 @@
   /* Soft tints for the two sides of a bar (below / above break-even). Fills only, never text. */
   --color-danger-soft: #f5d9da;
   --color-success-soft: #d2eadf;
-  --color-focus: #7c5cff;
+  --color-focus: var(--accent);
   /*
-   * Glass: a frosted card over the page (glass) and over the header (glass-hero), each with its
-   * hairline. The scrim dims the page behind an overlay. The header colors are the same in both themes:
-   * the header is always dark. Its text is checked on the brightest point, the glow over hero-from.
+   * Glass over the page (glass), the thicker glass for pieces that hang over the edge of the top block
+   * (glass-strong), and the tab bar, each with its hairline; glass-hi is the lit edge along the top.
+   * The scrim dims the page behind an overlay.
    */
-  --color-glass: rgb(255 255 255 / 0.86);
-  --color-glass-line: rgb(10 10 20 / 0.06);
-  --color-glass-hero: rgb(255 255 255 / 0.08);
-  --color-glass-hero-line: rgb(255 255 255 / 0.12);
+  --color-glass: rgb(255 255 255 / 0.48);
+  --color-glass-line: rgb(255 255 255 / 0.85);
+  --color-glass-hi: #ffffff;
+  --color-glass-strong: rgb(255 255 255 / 0.66);
+  --color-glass-bar: rgb(255 255 255 / 0.78);
+  --color-glass-bar-line: rgb(0 0 0 / 0.07);
   --color-scrim: rgb(11 11 18 / 0.35);
-  --color-hero-from: #14121f;
-  --color-hero-to: #0b0b12;
-  --color-hero-glow: rgb(124 92 255 / 0.55);
-  --color-hero-glow-2: rgb(37 99 235 / 0.35);
-  --color-hero-text: #ffffff;
-  --color-hero-muted: rgb(255 255 255 / 0.66);
+  /*
+   * The top block: its text (head-ink), the main button on it with its label, the ring round the
+   * avatar and the XP fill. The block keeps the theme in dark mode too. The glass on the block is
+   * the theme's own, --hg-bg and --hg-line: dark glass on a dark block, light glass on a light one.
+   */
+  --color-head-ink: var(--head-ink);
+  --color-hmain: var(--hmain);
+  --color-hmain-ink: var(--hmain-ink);
+  --color-ring: var(--ring);
+  --color-hero-xp: var(--xp);
+  /*
+   * 0.11's names for the top block, until the screens that use them are rebuilt on the names above.
+   * hero-muted is the ink at 88%, the least that holds 4.5:1 on the brightest glow of every theme.
+   * hero-to is what sits on a pill filled with head-ink: the avatar ink, which is the opposite of
+   * head-ink in both kinds of block.
+   */
+  --color-hero-text: var(--head-ink);
+  --color-hero-muted: color-mix(in srgb, var(--head-ink) 88%, transparent);
+  --color-hero-to: var(--av-ink);
+  --color-glass-hero: var(--hg-bg);
+  --color-glass-hero-line: var(--hg-line);
   /*
    * Banner cards: each tone is a soft gradient (from, to) and a muted second line. The title, the
    * sentence and the buttons use the ink tokens. Contrast is checked in tests/unit/tokens.test.ts.
@@ -79,18 +103,18 @@
   --color-chart-4: #ec4899;
   --color-chart-5: #f59e0b;
   --color-chart-6: #14b8a6;
-  /* "Other" slices and segments always use this, whatever their position (3:1 or better on the page). */
-  --color-chart-other: #868b96;
+  /* "Other" slices and segments always use this, whatever their position (3:1 or better on the page of every theme). */
+  --color-chart-other: #838893;
 
   --radius-sm: 6px;
   --radius-md: 10px;
   --radius-lg: 16px;
-  /* The shapes of direction A, by name: tile, key, card, a sheet's top corners, the header's bottom corners. */
+  /* The shapes, by name: tile, key, card, a sheet's top corners, the top block's bottom corners. */
   --radius-tile: 24px;
   --radius-key: 18px;
   --radius-card: 24px;
   --radius-sheet: 28px;
-  --radius-hero: 34px;
+  --radius-hero: 36px;
 
   --font-sans: 'Inter Tight Variable', system-ui, sans-serif;
 
@@ -120,9 +144,10 @@
   --shadow-overlay: 0 24px 60px rgb(0 0 0 / 0.18);
   --shadow-float: 0 10px 30px rgb(0 0 0 / 0.14);
   --shadow-tile: 0 1px 2px rgb(10 10 20 / 0.04);
-  --shadow-glass: 0 12px 30px -12px rgb(10 10 20 / 0.35);
-  /* The violet glow under the plus button. */
-  --shadow-plus: 0 10px 24px -8px rgb(124 92 255 / 0.7);
+  /* The glass on the page casts the theme's tint. */
+  --shadow-glass: 0 12px 28px -18px var(--shadow-tint);
+  /* The glow under the plus button, in the accent. */
+  --shadow-plus: 0 10px 20px -10px var(--accent);
 
   /* The one easing curve of the glass look, for glides and rises. */
   --ease-glass: cubic-bezier(0.2, 0.8, 0.2, 1);
@@ -135,7 +160,8 @@
 
 /*
  * Motion timings, plain variables because no Tailwind utility reads them. src/lib/motion.ts mirrors
- * them for the animations that run in JavaScript, and a test holds the two together.
+ * them for the animations that run in JavaScript, and a test holds the two together. The last one
+ * is how strong the soft shapes behind the page are (page-blobs); dark mode turns them down.
  */
 :root {
   --duration-press: 140ms;
@@ -145,6 +171,7 @@
   --stagger-fan: 50ms;
   --duration-count: 900ms;
   --press-scale: 0.96;
+  --page-blobs-strength: 1;
 }
 
 :root[data-theme='dark'] {
@@ -159,21 +186,24 @@
   --color-track: #24242e;
   --color-primary: #f4f4f8;
   --color-primary-contrast: #0b0b10;
-  --color-accent: #9d85ff;
-  --color-accent-contrast: #0b0b10;
-  --color-accent-text: #9d85ff;
-  --color-xp: #9d85ff;
-  --color-xp-text: #9d85ff;
-  --color-xp-contrast: #0b0b10;
   --color-success: #4ade80;
   --color-warning: #f2a93b;
   --color-danger: #ff6b6f;
   --color-danger-contrast: #0b0b10;
   --color-danger-soft: #3d2326;
   --color-success-soft: #143a2e;
-  --color-focus: #9d85ff;
-  --color-glass: rgb(28 28 38 / 0.82);
+  /*
+   * Dark mode turns the page and the glass over it dark and keeps the top block as the theme made it.
+   * The accent turns light: each theme has a lighter one under its dark rule in themes.css.
+   */
+  --color-glass: rgb(28 28 38 / 0.55);
   --color-glass-line: rgb(255 255 255 / 0.08);
+  --color-glass-hi: rgb(255 255 255 / 0.08);
+  --color-glass-strong: rgb(28 28 38 / 0.82);
+  --color-glass-bar: rgb(28 28 38 / 0.78);
+  --color-glass-bar-line: rgb(255 255 255 / 0.08);
+  /* The shapes behind the page are 40% as strong on the dark page. */
+  --page-blobs-strength: 0.4;
   --color-demo-from: #3b2a6b;
   --color-demo-to: #1e2a4a;
   --color-demo-muted: #c9c3e6;
@@ -197,35 +227,4 @@
 
   --shadow-overlay: 0 24px 60px rgb(0 0 0 / 0.55);
   --shadow-float: 0 10px 30px rgb(0 0 0 / 0.5);
-}
-
-/*
- * Game themes (the shop's colors). <html data-game-theme> is set while the app is unlocked, from the
- * equipped theme; violet is the base tokens above, so it has no rule. Each theme gives the XP fill and
- * the XP text one color, checked at 5.5:1 against the page and the chip text (--color-xp-contrast)
- * and 4.6:1 against the progress track. The dark rules are more specific, so they win in dark mode.
- */
-:root[data-game-theme='ocean'] {
-  --color-xp: #1b5bc6;
-  --color-xp-text: #1b5bc6;
-}
-:root[data-game-theme='orchid'] {
-  --color-xp: #a8189a;
-  --color-xp-text: #a8189a;
-}
-:root[data-game-theme='graphite'] {
-  --color-xp: #4a4f5c;
-  --color-xp-text: #4a4f5c;
-}
-:root[data-theme='dark'][data-game-theme='ocean'] {
-  --color-xp: #6aa6ff;
-  --color-xp-text: #6aa6ff;
-}
-:root[data-theme='dark'][data-game-theme='orchid'] {
-  --color-xp: #f08ae0;
-  --color-xp-text: #f08ae0;
-}
-:root[data-theme='dark'][data-game-theme='graphite'] {
-  --color-xp: #c3c8d4;
-  --color-xp-text: #c3c8d4;
 }

@@ -1,6 +1,7 @@
 @import 'tailwindcss';
 @import '@fontsource-variable/inter-tight';
 @import './tokens.css';
+@import './themes.css';
 
 /* The download page's words and classes are not the app's: keep them out of the app's CSS. */
 @source not '../../site';
@@ -32,15 +33,92 @@
 }
 
 /*
- * The header's backdrop, painted top first: a violet glow at the top left, a blue one at the right
- * edge, and under them the dark fall from hero-from to hero-to. Both glows fade out to nothing, so
- * the dark shows through. White text on its brightest point is checked in tests/unit/tokens.test.ts.
+ * The top block's backdrop, painted top first: the theme's glowing shapes, and under them its color.
+ * The block's text on the brightest point of it is checked for every theme in tests/unit/tokens.test.ts.
+ * bg-hero is 0.11's name for it, kept until the header is rebuilt.
  */
+@utility bg-head {
+  background-image: var(--head-blobs), var(--head);
+}
 @utility bg-hero {
-  background-image:
-    radial-gradient(120% 80% at 10% 0%, var(--color-hero-glow), transparent 55%),
-    radial-gradient(90% 70% at 100% 30%, var(--color-hero-glow-2), transparent 60%),
-    linear-gradient(180deg, var(--color-hero-from), var(--color-hero-to));
+  @apply bg-head;
+}
+
+/*
+ * Glass. Each is a background, a hairline, a lit top edge, a shadow and a blur that picks up what is
+ * behind it (the shapes in the block or on the page), so they need no other classes but a radius and
+ * padding. glass-head is on the top block, in the theme's own glass: dark on a dark block, light on a
+ * light one. glass is on the page. glass-strong is the same with more white, for pieces that hang over
+ * the edge of a dark block (the Available pill, the bill bubbles, the stats card), where the blur
+ * would otherwise show the block through. glass-bar is the tab bar: a plain bar with a hairline above.
+ */
+@utility glass-head {
+  background: var(--hg-bg);
+  border: 1px solid var(--hg-line);
+  backdrop-filter: blur(22px) saturate(180%);
+  box-shadow:
+    inset 0 1px 0 var(--hg-hi),
+    inset 0 -1px 0 rgb(255 255 255 / 0.06),
+    0 10px 24px -14px rgb(0 0 0 / 0.45);
+}
+@utility glass {
+  background: var(--color-glass);
+  border: 1px solid var(--color-glass-line);
+  backdrop-filter: blur(22px) saturate(180%);
+  box-shadow:
+    inset 0 1px 0 var(--color-glass-hi),
+    0 12px 28px -18px var(--shadow-tint);
+}
+@utility glass-strong {
+  @apply glass;
+  background: var(--color-glass-strong);
+}
+@utility glass-bar {
+  background: var(--color-glass-bar);
+  border-top: 1px solid var(--color-glass-bar-line);
+  backdrop-filter: blur(20px) saturate(180%);
+}
+
+/*
+ * The two main buttons: btn-head sits on the top block, in the theme's block button; btn-accent sits
+ * on the page, in its accent. Each has a light sheen over its top edge. Their labels are checked
+ * against the fill for every theme in tests/unit/tokens.test.ts.
+ */
+@utility btn-head {
+  background:
+    linear-gradient(180deg, rgb(255 255 255 / 0.35), rgb(255 255 255 / 0) 60%), var(--hmain);
+  color: var(--hmain-ink);
+  border: 1px solid rgb(255 255 255 / 0.4);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.55),
+    0 10px 20px -10px rgb(0 0 0 / 0.45);
+}
+@utility btn-accent {
+  background:
+    linear-gradient(180deg, rgb(255 255 255 / 0.3), rgb(255 255 255 / 0) 60%), var(--accent);
+  color: var(--accent-ink);
+  border: 1px solid rgb(255 255 255 / 0.35);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.5),
+    0 10px 20px -10px var(--accent);
+}
+
+/*
+ * The soft shapes behind the page, which the glass blurs: a fixed layer under everything in the
+ * element that wears this (the body). It makes that element its own stacking context, so the layer
+ * sits above the element's own background and below its content. Dark mode turns it down to 40%.
+ */
+@utility page-blobs {
+  isolation: isolate;
+  &::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background: var(--page-blobs);
+    opacity: var(--page-blobs-strength);
+  }
 }
 
 /*

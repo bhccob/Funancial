@@ -1,6 +1,6 @@
 /**
  * The four phone screens of the story, drawn on a canvas in the app's own look: Inter Tight, and the
- * light colours of src/styles/tokens.css. They are demo money, not a screenshot. `progress` runs from
+ * light colours of src/styles/tokens.css and themes.css (Black & White). They are demo money, not a screenshot. `progress` runs from
  * 0 (just arrived) to 1 (settled): numbers count up, bars fill, tiles pop in.
  */
 
@@ -8,15 +8,15 @@ export const SCREEN = { w: 540, h: 1140 } as const;
 
 export type ScreenIndex = 0 | 1 | 2 | 3;
 
-/** The light-theme tokens the screens use. screens.test.ts checks each against tokens.css. */
+/** The light-theme tokens the screens use. siteTokens.test.ts checks each against tokens.css and themes.css. */
 export const TOKENS = {
-  '--color-bg': '#f2f2f5',
+  '--color-bg': '#eeeef0',
   '--color-border': '#e6e6ec',
   '--color-text': '#0b0b12',
   '--color-text-muted': '#66667a',
   '--color-track': '#ececf1',
-  '--color-accent': '#7c5cff',
-  '--color-xp': '#7c5cff',
+  '--color-accent': '#0b0b0c',
+  '--color-xp': '#0b0b0c',
   '--color-danger': '#ca2a31',
   '--color-chart-1': '#7c5cff',
   '--color-chart-5': '#f59e0b',

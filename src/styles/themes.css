@@ -1,0 +1,522 @@
+/*
+ * The twelve themes of the Shop, from design/redesign-v3/glass-themes.html. A theme is the variables
+ * below: the top block and the glass on it, the page, the main buttons, the XP bar, the avatar and
+ * the cards. Each sits under :root[data-game-theme='<id>'] (the equipped theme, which useGameTheme
+ * puts on <html>) and [data-theme-preview='<id>'] (a Shop card showing it). tokens.css points the
+ * color tokens (--color-bg, --color-accent …) at them. Black & White is also on :root, so it is what
+ * the app wears with no theme, and with a theme it no longer has.
+ *
+ * A theme has a dark block (Black & White, Midnight Navy, Forest Night, Plum Night, Espresso) or a
+ * light one, which sets the glass on it and the ink on it. The block keeps its theme in dark mode;
+ * only the page goes dark, so each theme has a lighter accent for it, under its own dark rule.
+ *
+ * Where a value in the file failed a contrast check (tests/unit/tokens.test.ts), the one token was
+ * darkened, and the test lists each such change.
+ */
+
+/* Black & White: free, and the default. */
+:root,
+:root[data-game-theme='mono'],
+[data-theme-preview='mono'] {
+  /* The top block, and the glow in it. */
+  --head: linear-gradient(180deg, #141416, #050506);
+  --head-blobs:
+    radial-gradient(38% 30% at 18% 18%, rgba(255, 255, 255, 0.28), transparent 70%),
+    radial-gradient(42% 38% at 92% 46%, rgba(170, 170, 185, 0.32), transparent 70%),
+    radial-gradient(34% 28% at 42% 96%, rgba(255, 255, 255, 0.16), transparent 70%);
+  --head-ink: #fff;
+  /* The page, and the soft shapes behind it. */
+  --page: #eeeef0;
+  --page-blobs:
+    radial-gradient(40% 18% at 88% 46%, rgba(20, 20, 26, 0.07), transparent 70%),
+    radial-gradient(42% 18% at 8% 66%, rgba(255, 255, 255, 0.95), transparent 70%),
+    radial-gradient(40% 16% at 70% 88%, rgba(20, 20, 26, 0.05), transparent 70%),
+    radial-gradient(36% 14% at 20% 40%, rgba(20, 20, 26, 0.04), transparent 70%);
+  /* Dark glass on the block. */
+  --hg-bg: rgba(255, 255, 255, 0.1);
+  --hg-line: rgba(255, 255, 255, 0.2);
+  --hg-hi: rgba(255, 255, 255, 0.22);
+  /* The main button on the block, and the accent: chart marks, the current tab, buttons on the page. */
+  --hmain: #fff;
+  --hmain-ink: #0b0b0c;
+  --accent: #0b0b0c;
+  --accent-ink: #fff;
+  /* The ring round the avatar, the XP fill, the avatar. */
+  --ring: #fff;
+  --xp: #fff;
+  --av: #fff;
+  --av-ink: #0b0b0c;
+  /* The cards over the block, and the shadow under glass on the page. */
+  --card-tint: rgba(255, 255, 255, 0.16);
+  --card-tint-2: rgba(200, 200, 215, 0.2);
+  --card-tint-3: rgba(255, 255, 255, 0.08);
+  --shadow-tint: rgba(0, 0, 0, 0.35);
+}
+
+/*
+ * Dark mode, for Black & White and for a theme the app does not know. It comes before the other
+ * themes on purpose: it matches with the same weight as their rules, so theirs must come after it to
+ * keep their own page shapes. Their dark accents below are more specific and win either way.
+ */
+:root[data-theme='dark'],
+:root[data-theme='dark'][data-game-theme='mono'] {
+  --accent: #f4f4f8;
+  --accent-ink: #0b0b10;
+  /* The white shape of the light page would glare on the dark one. */
+  --page-blobs:
+    radial-gradient(42% 18% at 8% 66%, rgba(255, 255, 255, 0.2), transparent 70%),
+    radial-gradient(40% 18% at 88% 46%, rgba(170, 170, 185, 0.14), transparent 70%);
+}
+
+/* Sunny Sky: light block. */
+:root[data-game-theme='sky'],
+[data-theme-preview='sky'] {
+  /* The top block, and the glow in it. */
+  --head: linear-gradient(160deg, #fff6c8, #eaf2ff);
+  --head-blobs:
+    radial-gradient(40% 32% at 15% 20%, rgba(255, 214, 51, 0.75), transparent 70%),
+    radial-gradient(45% 40% at 95% 40%, rgba(96, 165, 250, 0.6), transparent 70%),
+    radial-gradient(35% 30% at 45% 100%, rgba(255, 230, 120, 0.55), transparent 70%);
+  --head-ink: #13213c;
+  /* The page, and the soft shapes behind it. */
+  --page: #f6f7fb;
+  --page-blobs:
+    radial-gradient(40% 18% at 90% 46%, rgba(96, 165, 250, 0.32), transparent 70%),
+    radial-gradient(42% 18% at 6% 68%, rgba(255, 214, 51, 0.38), transparent 70%),
+    radial-gradient(40% 16% at 72% 90%, rgba(96, 165, 250, 0.22), transparent 70%);
+  /* Light glass on the block. */
+  --hg-bg: rgba(255, 255, 255, 0.42);
+  --hg-line: rgba(255, 255, 255, 0.85);
+  --hg-hi: #fff;
+  /* The main button on the block, and the accent: chart marks, the current tab, buttons on the page. */
+  --hmain: #2f5fe0;
+  --hmain-ink: #fff;
+  --accent: #2f5fe0;
+  --accent-ink: #fff;
+  /* The ring round the avatar, the XP fill, the avatar. */
+  --ring: #2f5fe0;
+  --xp: #2f5fe0;
+  --av: #13213c;
+  --av-ink: #fff;
+  /* The cards over the block, and the shadow under glass on the page. */
+  --card-tint: rgba(47, 95, 224, 0.55);
+  --card-tint-2: rgba(255, 214, 51, 0.55);
+  --card-tint-3: rgba(255, 255, 255, 0.35);
+  --shadow-tint: rgba(40, 70, 140, 0.35);
+}
+
+/* Lemon Mint: light block. */
+:root[data-game-theme='lemon'],
+[data-theme-preview='lemon'] {
+  /* The top block, and the glow in it. */
+  --head: linear-gradient(160deg, #fffbd0, #e8f8ee);
+  --head-blobs:
+    radial-gradient(40% 32% at 15% 20%, rgba(250, 230, 60, 0.7), transparent 70%),
+    radial-gradient(45% 40% at 95% 40%, rgba(52, 211, 153, 0.5), transparent 70%),
+    radial-gradient(35% 30% at 45% 100%, rgba(253, 240, 130, 0.55), transparent 70%);
+  --head-ink: #17261e;
+  /* The page, and the soft shapes behind it. */
+  --page: #f7faf4;
+  --page-blobs:
+    radial-gradient(40% 18% at 90% 46%, rgba(52, 211, 153, 0.3), transparent 70%),
+    radial-gradient(42% 18% at 6% 68%, rgba(250, 230, 60, 0.38), transparent 70%),
+    radial-gradient(40% 16% at 72% 90%, rgba(52, 211, 153, 0.2), transparent 70%);
+  /* Light glass on the block. */
+  --hg-bg: rgba(255, 255, 255, 0.42);
+  --hg-line: rgba(255, 255, 255, 0.85);
+  --hg-hi: #fff;
+  /* The main button on the block, and the accent: chart marks, the current tab, buttons on the page. */
+  --hmain: #198657;
+  --hmain-ink: #fff;
+  --accent: #00794b;
+  --accent-ink: #fff;
+  /* The ring round the avatar, the XP fill, the avatar. */
+  --ring: #1f8a5a;
+  --xp: #1f8a5a;
+  --av: #17261e;
+  --av-ink: #fff;
+  /* The cards over the block, and the shadow under glass on the page. */
+  --card-tint: rgba(31, 138, 90, 0.55);
+  --card-tint-2: rgba(250, 230, 60, 0.55);
+  --card-tint-3: rgba(255, 255, 255, 0.35);
+  --shadow-tint: rgba(30, 100, 60, 0.35);
+}
+
+/* Pastel: light block. */
+:root[data-game-theme='pastel'],
+[data-theme-preview='pastel'] {
+  /* The top block, and the glow in it. */
+  --head: linear-gradient(160deg, #f1e8ff, #e8f7f0);
+  --head-blobs:
+    radial-gradient(40% 32% at 15% 20%, rgba(192, 150, 255, 0.65), transparent 70%),
+    radial-gradient(45% 40% at 95% 40%, rgba(110, 220, 170, 0.5), transparent 70%),
+    radial-gradient(35% 30% at 45% 100%, rgba(140, 190, 255, 0.5), transparent 70%);
+  --head-ink: #17151f;
+  /* The page, and the soft shapes behind it. */
+  --page: #f8f7fc;
+  --page-blobs:
+    radial-gradient(40% 18% at 90% 46%, rgba(192, 150, 255, 0.3), transparent 70%),
+    radial-gradient(42% 18% at 6% 68%, rgba(110, 220, 170, 0.3), transparent 70%),
+    radial-gradient(40% 16% at 72% 90%, rgba(140, 190, 255, 0.24), transparent 70%);
+  /* Light glass on the block. */
+  --hg-bg: rgba(255, 255, 255, 0.42);
+  --hg-line: rgba(255, 255, 255, 0.85);
+  --hg-hi: #fff;
+  /* The main button on the block, and the accent: chart marks, the current tab, buttons on the page. */
+  --hmain: #7c4ddb;
+  --hmain-ink: #fff;
+  --accent: #7b4bd9;
+  --accent-ink: #fff;
+  /* The ring round the avatar, the XP fill, the avatar. */
+  --ring: #7c4ddb;
+  --xp: #7c4ddb;
+  --av: #17151f;
+  --av-ink: #fff;
+  /* The cards over the block, and the shadow under glass on the page. */
+  --card-tint: rgba(124, 77, 219, 0.5);
+  --card-tint-2: rgba(110, 220, 170, 0.55);
+  --card-tint-3: rgba(255, 255, 255, 0.35);
+  --shadow-tint: rgba(90, 60, 160, 0.35);
+}
+
+/* Daisy: light block. */
+:root[data-game-theme='daisy'],
+[data-theme-preview='daisy'] {
+  /* The top block, and the glow in it. */
+  --head: linear-gradient(160deg, #fff8d0, #eef2e2);
+  --head-blobs:
+    radial-gradient(40% 32% at 15% 20%, rgba(255, 220, 70, 0.7), transparent 70%),
+    radial-gradient(45% 40% at 95% 40%, rgba(140, 170, 100, 0.5), transparent 70%),
+    radial-gradient(35% 30% at 45% 100%, rgba(255, 235, 140, 0.5), transparent 70%);
+  --head-ink: #22281b;
+  /* The page, and the soft shapes behind it. */
+  --page: #f8f8f1;
+  --page-blobs:
+    radial-gradient(40% 18% at 90% 46%, rgba(140, 170, 100, 0.32), transparent 70%),
+    radial-gradient(42% 18% at 6% 68%, rgba(255, 220, 70, 0.36), transparent 70%),
+    radial-gradient(40% 16% at 72% 90%, rgba(140, 170, 100, 0.22), transparent 70%);
+  /* Light glass on the block. */
+  --hg-bg: rgba(255, 255, 255, 0.42);
+  --hg-line: rgba(255, 255, 255, 0.85);
+  --hg-hi: #fff;
+  /* The main button on the block, and the accent: chart marks, the current tab, buttons on the page. */
+  --hmain: #56703f;
+  --hmain-ink: #fff;
+  --accent: #56703f;
+  --accent-ink: #fff;
+  /* The ring round the avatar, the XP fill, the avatar. */
+  --ring: #56703f;
+  --xp: #56703f;
+  --av: #22281b;
+  --av-ink: #fff;
+  /* The cards over the block, and the shadow under glass on the page. */
+  --card-tint: rgba(86, 112, 63, 0.55);
+  --card-tint-2: rgba(255, 220, 70, 0.55);
+  --card-tint-3: rgba(255, 255, 255, 0.35);
+  --shadow-tint: rgba(80, 90, 40, 0.35);
+}
+
+/* Peach: light block. */
+:root[data-game-theme='peach'],
+[data-theme-preview='peach'] {
+  /* The top block, and the glow in it. */
+  --head: linear-gradient(160deg, #ffeadb, #fff6e6);
+  --head-blobs:
+    radial-gradient(40% 32% at 15% 20%, rgba(255, 160, 110, 0.65), transparent 70%),
+    radial-gradient(45% 40% at 95% 40%, rgba(255, 200, 120, 0.55), transparent 70%),
+    radial-gradient(35% 30% at 45% 100%, rgba(255, 180, 150, 0.5), transparent 70%);
+  --head-ink: #2a1a12;
+  /* The page, and the soft shapes behind it. */
+  --page: #fdf8f4;
+  --page-blobs:
+    radial-gradient(40% 18% at 90% 46%, rgba(255, 160, 110, 0.3), transparent 70%),
+    radial-gradient(42% 18% at 6% 68%, rgba(255, 200, 120, 0.32), transparent 70%),
+    radial-gradient(40% 16% at 72% 90%, rgba(255, 160, 110, 0.2), transparent 70%);
+  /* Light glass on the block. */
+  --hg-bg: rgba(255, 255, 255, 0.42);
+  --hg-line: rgba(255, 255, 255, 0.85);
+  --hg-hi: #fff;
+  /* The main button on the block, and the accent: chart marks, the current tab, buttons on the page. */
+  --hmain: #c4531a;
+  --hmain-ink: #fff;
+  --accent: #b64601;
+  --accent-ink: #fff;
+  /* The ring round the avatar, the XP fill, the avatar. */
+  --ring: #d2602a;
+  --xp: #cd5c25;
+  --av: #2a1a12;
+  --av-ink: #fff;
+  /* The cards over the block, and the shadow under glass on the page. */
+  --card-tint: rgba(210, 96, 42, 0.55);
+  --card-tint-2: rgba(255, 200, 120, 0.6);
+  --card-tint-3: rgba(255, 255, 255, 0.35);
+  --shadow-tint: rgba(150, 70, 20, 0.35);
+}
+
+/* Powder Blue: light block. */
+:root[data-game-theme='powder'],
+[data-theme-preview='powder'] {
+  /* The top block, and the glow in it. */
+  --head: linear-gradient(160deg, #e6edff, #f3f2ff);
+  --head-blobs:
+    radial-gradient(40% 32% at 15% 20%, rgba(130, 160, 255, 0.6), transparent 70%),
+    radial-gradient(45% 40% at 95% 40%, rgba(180, 170, 255, 0.5), transparent 70%),
+    radial-gradient(35% 30% at 45% 100%, rgba(150, 200, 255, 0.5), transparent 70%);
+  --head-ink: #141c3a;
+  /* The page, and the soft shapes behind it. */
+  --page: #f6f7fd;
+  --page-blobs:
+    radial-gradient(40% 18% at 90% 46%, rgba(130, 160, 255, 0.3), transparent 70%),
+    radial-gradient(42% 18% at 6% 68%, rgba(180, 170, 255, 0.28), transparent 70%),
+    radial-gradient(40% 16% at 72% 90%, rgba(150, 200, 255, 0.24), transparent 70%);
+  /* Light glass on the block. */
+  --hg-bg: rgba(255, 255, 255, 0.42);
+  --hg-line: rgba(255, 255, 255, 0.85);
+  --hg-hi: #fff;
+  /* The main button on the block, and the accent: chart marks, the current tab, buttons on the page. */
+  --hmain: #4a5fd6;
+  --hmain-ink: #fff;
+  --accent: #4a5fd6;
+  --accent-ink: #fff;
+  /* The ring round the avatar, the XP fill, the avatar. */
+  --ring: #4a5fd6;
+  --xp: #4a5fd6;
+  --av: #141c3a;
+  --av-ink: #fff;
+  /* The cards over the block, and the shadow under glass on the page. */
+  --card-tint: rgba(74, 95, 214, 0.55);
+  --card-tint-2: rgba(180, 170, 255, 0.55);
+  --card-tint-3: rgba(255, 255, 255, 0.35);
+  --shadow-tint: rgba(50, 70, 160, 0.35);
+}
+
+/* Seafoam: light block. */
+:root[data-game-theme='seafoam'],
+[data-theme-preview='seafoam'] {
+  /* The top block, and the glow in it. */
+  --head: linear-gradient(160deg, #ddf6ef, #eef8fb);
+  --head-blobs:
+    radial-gradient(40% 32% at 15% 20%, rgba(60, 210, 180, 0.55), transparent 70%),
+    radial-gradient(45% 40% at 95% 40%, rgba(110, 190, 240, 0.5), transparent 70%),
+    radial-gradient(35% 30% at 45% 100%, rgba(120, 230, 210, 0.45), transparent 70%);
+  --head-ink: #0c2a2a;
+  /* The page, and the soft shapes behind it. */
+  --page: #f4f9f9;
+  --page-blobs:
+    radial-gradient(40% 18% at 90% 46%, rgba(60, 210, 180, 0.28), transparent 70%),
+    radial-gradient(42% 18% at 6% 68%, rgba(110, 190, 240, 0.26), transparent 70%),
+    radial-gradient(40% 16% at 72% 90%, rgba(60, 210, 180, 0.2), transparent 70%);
+  /* Light glass on the block. */
+  --hg-bg: rgba(255, 255, 255, 0.42);
+  --hg-line: rgba(255, 255, 255, 0.85);
+  --hg-hi: #fff;
+  /* The main button on the block, and the accent: chart marks, the current tab, buttons on the page. */
+  --hmain: #068476;
+  --hmain-ink: #fff;
+  --accent: #00776a;
+  --accent-ink: #fff;
+  /* The ring round the avatar, the XP fill, the avatar. */
+  --ring: #13897a;
+  --xp: #13897a;
+  --av: #0c2a2a;
+  --av-ink: #fff;
+  /* The cards over the block, and the shadow under glass on the page. */
+  --card-tint: rgba(19, 137, 122, 0.55);
+  --card-tint-2: rgba(110, 190, 240, 0.55);
+  --card-tint-3: rgba(255, 255, 255, 0.35);
+  --shadow-tint: rgba(20, 100, 90, 0.35);
+}
+
+/* Midnight Navy: dark block. */
+:root[data-game-theme='navy'],
+[data-theme-preview='navy'] {
+  /* The top block, and the glow in it. */
+  --head: linear-gradient(180deg, #0d1738, #060b1f);
+  --head-blobs:
+    radial-gradient(40% 32% at 18% 18%, rgba(59, 130, 246, 0.6), transparent 70%),
+    radial-gradient(45% 40% at 95% 45%, rgba(34, 211, 238, 0.4), transparent 70%),
+    radial-gradient(35% 30% at 40% 100%, rgba(99, 102, 241, 0.45), transparent 70%);
+  --head-ink: #fff;
+  /* The page, and the soft shapes behind it. */
+  --page: #f1f4fb;
+  --page-blobs:
+    radial-gradient(40% 18% at 90% 46%, rgba(59, 130, 246, 0.26), transparent 70%),
+    radial-gradient(42% 18% at 6% 68%, rgba(34, 211, 238, 0.22), transparent 70%),
+    radial-gradient(40% 16% at 72% 90%, rgba(99, 102, 241, 0.2), transparent 70%);
+  /* Dark glass on the block. */
+  --hg-bg: rgba(255, 255, 255, 0.1);
+  --hg-line: rgba(255, 255, 255, 0.2);
+  --hg-hi: rgba(255, 255, 255, 0.22);
+  /* The main button on the block, and the accent: chart marks, the current tab, buttons on the page. */
+  --hmain: #9fd0ff;
+  --hmain-ink: #0b1430;
+  --accent: #2557d6;
+  --accent-ink: #fff;
+  /* The ring round the avatar, the XP fill, the avatar. */
+  --ring: #9fd0ff;
+  --xp: #9fd0ff;
+  --av: #9fd0ff;
+  --av-ink: #0b0b0c;
+  /* The cards over the block, and the shadow under glass on the page. */
+  --card-tint: rgba(59, 130, 246, 0.42);
+  --card-tint-2: rgba(34, 211, 238, 0.35);
+  --card-tint-3: rgba(255, 255, 255, 0.1);
+  --shadow-tint: rgba(20, 40, 110, 0.35);
+}
+
+/* Forest Night: dark block. */
+:root[data-game-theme='forest'],
+[data-theme-preview='forest'] {
+  /* The top block, and the glow in it. */
+  --head: linear-gradient(180deg, #0c2219, #05130d);
+  --head-blobs:
+    radial-gradient(40% 32% at 18% 18%, rgba(16, 185, 129, 0.55), transparent 70%),
+    radial-gradient(45% 40% at 95% 45%, rgba(132, 204, 22, 0.35), transparent 70%),
+    radial-gradient(35% 30% at 40% 100%, rgba(20, 184, 166, 0.4), transparent 70%);
+  --head-ink: #fff;
+  /* The page, and the soft shapes behind it. */
+  --page: #f1f6f2;
+  --page-blobs:
+    radial-gradient(40% 18% at 90% 46%, rgba(16, 185, 129, 0.24), transparent 70%),
+    radial-gradient(42% 18% at 6% 68%, rgba(132, 204, 22, 0.22), transparent 70%),
+    radial-gradient(40% 16% at 72% 90%, rgba(20, 184, 166, 0.18), transparent 70%);
+  /* Dark glass on the block. */
+  --hg-bg: rgba(255, 255, 255, 0.1);
+  --hg-line: rgba(255, 255, 255, 0.2);
+  --hg-hi: rgba(255, 255, 255, 0.22);
+  /* The main button on the block, and the accent: chart marks, the current tab, buttons on the page. */
+  --hmain: #a7f0cf;
+  --hmain-ink: #08241a;
+  --accent: #007952;
+  --accent-ink: #fff;
+  /* The ring round the avatar, the XP fill, the avatar. */
+  --ring: #a7f0cf;
+  --xp: #a7f0cf;
+  --av: #a7f0cf;
+  --av-ink: #0b0b0c;
+  /* The cards over the block, and the shadow under glass on the page. */
+  --card-tint: rgba(16, 185, 129, 0.4);
+  --card-tint-2: rgba(132, 204, 22, 0.32);
+  --card-tint-3: rgba(255, 255, 255, 0.1);
+  --shadow-tint: rgba(10, 70, 45, 0.35);
+}
+
+/* Plum Night: dark block. */
+:root[data-game-theme='plum'],
+[data-theme-preview='plum'] {
+  /* The top block, and the glow in it. */
+  --head: linear-gradient(180deg, #24102f, #12071a);
+  --head-blobs:
+    radial-gradient(40% 32% at 18% 18%, rgba(168, 85, 247, 0.6), transparent 70%),
+    radial-gradient(45% 40% at 95% 45%, rgba(236, 72, 153, 0.42), transparent 70%),
+    radial-gradient(35% 30% at 40% 100%, rgba(129, 140, 248, 0.4), transparent 70%);
+  --head-ink: #fff;
+  /* The page, and the soft shapes behind it. */
+  --page: #f6f2f9;
+  --page-blobs:
+    radial-gradient(40% 18% at 90% 46%, rgba(168, 85, 247, 0.24), transparent 70%),
+    radial-gradient(42% 18% at 6% 68%, rgba(236, 72, 153, 0.2), transparent 70%),
+    radial-gradient(40% 16% at 72% 90%, rgba(129, 140, 248, 0.2), transparent 70%);
+  /* Dark glass on the block. */
+  --hg-bg: rgba(255, 255, 255, 0.1);
+  --hg-line: rgba(255, 255, 255, 0.2);
+  --hg-hi: rgba(255, 255, 255, 0.22);
+  /* The main button on the block, and the accent: chart marks, the current tab, buttons on the page. */
+  --hmain: #e8d2ff;
+  --hmain-ink: #2a0f3a;
+  --accent: #8a2fd6;
+  --accent-ink: #fff;
+  /* The ring round the avatar, the XP fill, the avatar. */
+  --ring: #e8d2ff;
+  --xp: #e8d2ff;
+  --av: #e8d2ff;
+  --av-ink: #0b0b0c;
+  /* The cards over the block, and the shadow under glass on the page. */
+  --card-tint: rgba(168, 85, 247, 0.42);
+  --card-tint-2: rgba(236, 72, 153, 0.36);
+  --card-tint-3: rgba(255, 255, 255, 0.1);
+  --shadow-tint: rgba(80, 20, 110, 0.35);
+}
+
+/* Espresso: dark block. */
+:root[data-game-theme='espresso'],
+[data-theme-preview='espresso'] {
+  /* The top block, and the glow in it. */
+  --head: linear-gradient(180deg, #24170e, #120b06);
+  --head-blobs:
+    radial-gradient(40% 32% at 18% 18%, rgba(245, 158, 11, 0.5), transparent 70%),
+    radial-gradient(45% 40% at 95% 45%, rgba(234, 88, 12, 0.38), transparent 70%),
+    radial-gradient(35% 30% at 40% 100%, rgba(250, 204, 21, 0.3), transparent 70%);
+  --head-ink: #fff;
+  /* The page, and the soft shapes behind it. */
+  --page: #f8f4ef;
+  --page-blobs:
+    radial-gradient(40% 18% at 90% 46%, rgba(245, 158, 11, 0.24), transparent 70%),
+    radial-gradient(42% 18% at 6% 68%, rgba(234, 88, 12, 0.18), transparent 70%),
+    radial-gradient(40% 16% at 72% 90%, rgba(250, 204, 21, 0.18), transparent 70%);
+  /* Dark glass on the block. */
+  --hg-bg: rgba(255, 255, 255, 0.1);
+  --hg-line: rgba(255, 255, 255, 0.2);
+  --hg-hi: rgba(255, 255, 255, 0.22);
+  /* The main button on the block, and the accent: chart marks, the current tab, buttons on the page. */
+  --hmain: #fde4a6;
+  --hmain-ink: #24170e;
+  --accent: #a65308;
+  --accent-ink: #fff;
+  /* The ring round the avatar, the XP fill, the avatar. */
+  --ring: #fde4a6;
+  --xp: #fde4a6;
+  --av: #fde4a6;
+  --av-ink: #0b0b0c;
+  /* The cards over the block, and the shadow under glass on the page. */
+  --card-tint: rgba(245, 158, 11, 0.4);
+  --card-tint-2: rgba(234, 88, 12, 0.34);
+  --card-tint-3: rgba(255, 255, 255, 0.1);
+  --shadow-tint: rgba(100, 50, 10, 0.35);
+}
+
+/* The dark-mode accents: each theme's accent, lightened to about 5.7:1 on the raised surface of the dark page. */
+:root[data-theme='dark'][data-game-theme='sky'] {
+  --accent: #6594fe;
+  --accent-ink: #0b0b10;
+}
+:root[data-theme='dark'][data-game-theme='lemon'] {
+  --accent: #46a977;
+  --accent-ink: #0b0b10;
+}
+:root[data-theme='dark'][data-game-theme='pastel'] {
+  --accent: #a381fe;
+  --accent-ink: #0b0b10;
+}
+:root[data-theme='dark'][data-game-theme='daisy'] {
+  --accent: #839f6b;
+  --accent-ink: #0b0b10;
+}
+:root[data-theme='dark'][data-game-theme='peach'] {
+  --accent: #ea7642;
+  --accent-ink: #0b0b10;
+}
+:root[data-theme='dark'][data-game-theme='powder'] {
+  --accent: #748fff;
+  --accent-ink: #0b0b10;
+}
+:root[data-theme='dark'][data-game-theme='seafoam'] {
+  --accent: #3ea696;
+  --accent-ink: #0b0b10;
+}
+:root[data-theme='dark'][data-game-theme='navy'] {
+  --accent: #6393fe;
+  --accent-ink: #0b0b10;
+}
+:root[data-theme='dark'][data-game-theme='forest'] {
+  --accent: #48a97e;
+  --accent-ink: #0b0b10;
+}
+:root[data-theme='dark'][data-game-theme='plum'] {
+  --accent: #b878ff;
+  --accent-ink: #0b0b10;
+}
+:root[data-theme='dark'][data-game-theme='espresso'] {
+  --accent: #d88044;
+  --accent-ink: #0b0b10;
+}
