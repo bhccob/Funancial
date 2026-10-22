@@ -1,14 +1,26 @@
 import type { BackButtonListenerEvent } from '@capacitor/app';
-import { SystemBars, SystemBarsStyle } from '@capacitor/core';
+import { SystemBars, SystemBarsStyle, SystemBarType } from '@capacitor/core';
 import { topDialog } from '@/lib/dialogStack';
 import { onBarsBackground } from '@/lib/systemBars';
+import { onThemeApplied } from '@/lib/theme';
 import { handleBack } from '../back';
 import { listen } from './listen';
 
 /**
+ * Light icons on `bar` over a dark background, dark ones over a light one. Each call names its bar:
+ * a style without one lands on both.
+ */
+function setBarStyle(bar: SystemBarType, dark: boolean) {
+  SystemBars.setStyle({ style: dark ? SystemBarsStyle.Dark : SystemBarsStyle.Light, bar }).catch(
+    (e: unknown) => console.error('Could not set the system bar style', e),
+  );
+}
+
+/**
  * Makes the web app behave like a phone app: the back gesture closes a dialog, then goes back a
- * screen, then backgrounds the app; and the status-bar icons follow what is behind the bar (light
- * icons on the dark theme or under the dark glass header, dark icons on the light theme otherwise).
+ * screen, then backgrounds the app; and the system bars' icons follow what is behind them. The
+ * status bar's are light on the dark theme or under the dark glass header, dark on the light theme
+ * otherwise; the navigation bar's follow the theme alone, as the header never reaches the bottom.
  *
  * Nothing here is worth stopping the app for: a failure is logged and the app starts without it.
  */
@@ -31,10 +43,16 @@ export async function installShell(): Promise<void> {
       'the back button',
     );
 
-    onBarsBackground((background) => {
-      SystemBars.setStyle({
-        style: background === 'dark' ? SystemBarsStyle.Dark : SystemBarsStyle.Light,
-      }).catch((e: unknown) => console.error('Could not set the system bar style', e));
+    onBarsBackground((background) =>
+      setBarStyle(SystemBarType.StatusBar, background === 'dark'),
+    );
+    // The theme is applied again on each change of preference or of the phone's own setting, often
+    // to the same one: only a change is passed on, as `onBarsBackground` does for the status bar.
+    let navigationDark: boolean | undefined;
+    onThemeApplied((dark) => {
+      if (dark === navigationDark) return;
+      navigationDark = dark;
+      setBarStyle(SystemBarType.NavigationBar, dark);
     });
   } catch (e) {
     console.error('Could not set up the Android shell', e);

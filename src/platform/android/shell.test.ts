@@ -7,7 +7,7 @@ const native = vi.hoisted(() => ({
   listeners: {} as Record<string, Listener>,
   addListener: vi.fn(),
   minimizeApp: vi.fn(async () => {}),
-  setStyle: vi.fn(async () => {}),
+  setStyle: vi.fn<(options: { style: string; bar?: string }) => Promise<void>>(async () => {}),
 }));
 
 vi.mock('@capacitor/app', () => ({
@@ -117,50 +117,63 @@ describe('installShell: back button', () => {
 });
 
 describe('installShell: system bars', () => {
-  it('sets light icons on a dark theme and dark icons on a light one, as the theme changes', async () => {
+  /** The style last asked of one bar, `'StatusBar'` or `'NavigationBar'`. */
+  const styleOf = (bar: string) =>
+    native.setStyle.mock.calls.filter(([options]) => options.bar === bar).at(-1)?.[0].style;
+
+  it('sets light icons on a dark theme and dark icons on a light one, on both bars, as the theme changes', async () => {
     const { installShell, initTheme, setThemePreference } = await load();
     initTheme();
     await installShell();
     // The theme was applied before the shell was installed: its style is set straight away.
-    expect(native.setStyle).toHaveBeenLastCalledWith({ style: 'LIGHT' });
+    expect([styleOf('StatusBar'), styleOf('NavigationBar')]).toEqual(['LIGHT', 'LIGHT']);
 
     setThemePreference('dark');
-    expect(native.setStyle).toHaveBeenLastCalledWith({ style: 'DARK' });
+    expect([styleOf('StatusBar'), styleOf('NavigationBar')]).toEqual(['DARK', 'DARK']);
     setThemePreference('light');
-    expect(native.setStyle).toHaveBeenLastCalledWith({ style: 'LIGHT' });
+    expect([styleOf('StatusBar'), styleOf('NavigationBar')]).toEqual(['LIGHT', 'LIGHT']);
   });
 
-  it('sets light icons while a dark header holds the top of the screen, dark ones when it lets go', async () => {
+  it('sets light status-bar icons while a dark header holds the top of the screen, and leaves the navigation bar to the theme', async () => {
     const { installShell, initTheme, claimDarkTop } = await load();
     initTheme();
     await installShell();
-    expect(native.setStyle).toHaveBeenLastCalledWith({ style: 'LIGHT' });
 
     const release = claimDarkTop();
-    expect(native.setStyle).toHaveBeenLastCalledWith({ style: 'DARK' });
+    expect(styleOf('StatusBar')).toBe('DARK');
+    // The bottom of the page is still light: its buttons keep their dark icons.
+    expect(styleOf('NavigationBar')).toBe('LIGHT');
     release();
-    expect(native.setStyle).toHaveBeenLastCalledWith({ style: 'LIGHT' });
+    expect(styleOf('StatusBar')).toBe('LIGHT');
+
+    // Each style names its bar: one without a bar would land on both.
+    for (const [options] of native.setStyle.mock.calls) expect(options.bar).toBeDefined();
+    expect(native.setStyle).not.toHaveBeenCalledWith({ style: 'DARK', bar: 'NavigationBar' });
   });
 
-  it('does not ask the system again for a style it already has', async () => {
-    stubMatchMedia(true);
-    const { installShell, initTheme, claimDarkTop } = await load();
-    initTheme();
-    await installShell();
-
-    claimDarkTop()();
-
-    expect(native.setStyle).toHaveBeenCalledExactlyOnceWith({ style: 'DARK' });
-  });
-
-  it('starts with light icons when the app opens in the dark theme', async () => {
+  it('starts with light icons on both bars when the app opens in the dark theme', async () => {
     stubMatchMedia(true);
     const { installShell, initTheme } = await load();
     initTheme();
 
     await installShell();
 
-    expect(native.setStyle).toHaveBeenCalledExactlyOnceWith({ style: 'DARK' });
+    expect(native.setStyle.mock.calls).toEqual([
+      [{ style: 'DARK', bar: 'StatusBar' }],
+      [{ style: 'DARK', bar: 'NavigationBar' }],
+    ]);
+  });
+
+  it('does not ask the system again for a style a bar already has', async () => {
+    stubMatchMedia(true);
+    const { installShell, initTheme, claimDarkTop, setThemePreference } = await load();
+    initTheme();
+    await installShell();
+
+    claimDarkTop()();
+    setThemePreference('dark');
+
+    expect(native.setStyle).toHaveBeenCalledTimes(2);
   });
 
   it('logs a style the system refuses instead of leaving the rejection unhandled', async () => {
