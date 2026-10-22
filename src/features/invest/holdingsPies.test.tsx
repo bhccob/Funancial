@@ -311,7 +311,7 @@ describe('Holdings pie', () => {
     }
   });
 
-  it('has choices at least 44px tall, and animates nothing unless motion is welcome', () => {
+  it('has choices with a 44px tap area, and animates nothing unless motion is welcome', () => {
     renderTab(mixed());
     for (const name of ['All', 'Stocks', 'ETFs']) {
       const button = within(selector()).getByRole('button', { name });

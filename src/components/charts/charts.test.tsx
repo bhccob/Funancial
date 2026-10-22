@@ -349,7 +349,8 @@ describe('DayBars', () => {
     expect(bar('Sun: $0.00').style.height).toBe('6px');
     expect(bar('Fri: $24.10').className).toContain('bg-text');
     expect(bar('Today: $48.49').className).toContain('bg-text');
-    expect(bar('Sat: $88.45').className).toContain('bg-track');
+    expect(bar('Sat: $88.45').className).toContain('bg-muted/70');
+    expect(bar('Sat: $88.45').className).not.toContain('bg-track');
     expect(bar('Sat: $88.45').className).not.toContain('bg-text');
   });
 

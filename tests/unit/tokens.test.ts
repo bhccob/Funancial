@@ -621,6 +621,50 @@ describe.each(CASES)('the $id theme in $mode mode', ({ id, mode }) => {
   });
 });
 
+/**
+ * The glass of a tile on the page over each backdrop it can sit on: the page, and the peak of each
+ * shape behind it at the mode's strength.
+ */
+function glassOnPage(t: (name: string) => string): string[] {
+  const page = t('--color-bg');
+  const strength = Number(t('--page-blobs-strength'));
+  const peaks = t('--page-blobs').match(/rgba?\([^)]*\)/g)!;
+  return [page, ...peaks.map((peak) => composite(peak, page, strength))].map((backdrop) =>
+    composite(t('--color-glass'), backdrop),
+  );
+}
+
+/** Whether the muted ink at `share` (0-1) falls under 3:1 on the glass, in some theme in some mode. */
+function quietBarsFail(share: number): boolean {
+  return CASES.some(({ id, mode }) => {
+    const t = tokensFor(id, mode);
+    const [r, g, b] = parseColor(t('--color-text-muted'));
+    const ink = `rgb(${r} ${g} ${b} / ${share})`;
+    return glassOnPage(t).some((glass) => contrast(composite(ink, glass), glass) < 3);
+  });
+}
+
+it("draws a chart's quiet bars in the least share of the muted ink that holds 3:1 on the glass", () => {
+  // A bar's length is the only mark of its month's amount until it is tapped, so the bars that are
+  // not picked are graphics (WCAG 1.4.11: 3:1). DayBars paints them `bg-muted/NN`; NN is the least
+  // whole share that holds in every theme in both modes, over every shape behind the glass.
+  const match = /bg-muted\/(\d+)/.exec(readFileSync('src/components/charts/DayBars.tsx', 'utf8'));
+  expect(match, 'the quiet bars in DayBars').not.toBeNull();
+  const percent = Number(match![1]);
+  expect(quietBarsFail(percent / 100), `bg-muted/${percent}`).toBe(false);
+  expect(quietBarsFail((percent - 1) / 100), `bg-muted/${percent - 1}`).toBe(true);
+  // The track colour they had (about 1.1:1) never did.
+  for (const { id, mode } of CASES) {
+    const t = tokensFor(id, mode);
+    for (const glass of glassOnPage(t)) {
+      expect(
+        contrast(t('--color-track'), glass),
+        `track on ${glass} (${id}, ${mode})`,
+      ).toBeLessThan(3);
+    }
+  }
+});
+
 /** The cards' veil and sheen on a light block, then on a dark one, as glass-card sets them. */
 function cardGlass(): Record<'light' | 'dark', { veil: string; sheen: string }> {
   const body = utility('glass-card');
