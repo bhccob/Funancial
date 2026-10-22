@@ -4,8 +4,8 @@ export const FAQ: Array<{ q: string; a: string }> = [
     a: 'Available to spend also takes away the bills still to come this month, plus the next payment due on each credit card, and the money you reserved for limits. Savings are not in it: they are shown apart, as Saved.',
   },
   {
-    q: "Why didn't my cash drop when I paid by card?",
-    a: 'A card purchase adds to what you owe on the card. Your cash drops when you pay the card off.',
+    q: "Why didn't my bank account drop when I paid by credit card?",
+    a: 'A credit card purchase adds to what you owe on the card. Your bank account drops when you pay the card off.',
   },
   {
     q: "Why isn't my expected income counted?",

@@ -173,7 +173,7 @@ const passiveAccount = (openingDate: LocalDate) =>
 const BAL_1: WorkedExample = {
   id: 'BAL-1',
   rule: 'Net worth',
-  title: 'Net worth = cash + savings + investments − debts',
+  title: 'Net worth = accounts + investments − debts',
   today: '2026-10-10',
   data: ex.snapshot({
     profile: [ex.profile({ openingDate: '2026-10-01' })],
@@ -230,12 +230,12 @@ const BAL_1: WorkedExample = {
     ],
   }),
   steps: [
-    'You started on Oct 1 with $1,000.00 cash and $5,000.00 savings.',
+    'You started on Oct 1 with $1,000.00 in Main account and $5,000.00 in Savings.',
     'Salary of $3,000.00 arrived. The $200.00 side gig is still only expected, so it is not counted yet.',
-    'Groceries $120.00 on debit leave cash. The $80.00 jacket went on the card, so cash is untouched and the card owes $80.00.',
+    'Groceries $120.00 on debit leave Main account. The $80.00 jacket went on the card, so Main account is untouched and the card owes $80.00.',
     'The $50.00 expense from Sep 30 is before you started, so your opening balance already includes it.',
-    'You moved $500.00 to savings, paid $30.00 off the card, and corrected cash down by $20.00.',
-    'Cash $3,330.00 + savings $5,500.00 − card $50.00 = net worth $8,780.00.',
+    'You moved $500.00 to Savings, paid $30.00 off the card, and corrected Main account down by $20.00.',
+    'Main account $3,330.00 + Savings $5,500.00 − card $50.00 = net worth $8,780.00.',
   ],
   result: { cash: 3_330_00, savings: 5_500_00, passive: 0, card: 50_00, netWorth: 8_780_00 },
 };
@@ -263,10 +263,10 @@ const EXP_1: WorkedExample = {
     ],
   }),
   steps: [
-    'Lunch for $12.50 on debit lowers cash from $500.00 to $487.50.',
-    'Headphones for $60.00 on the card leave cash alone, but you now owe $60.00 on the card.',
+    'Lunch for $12.50 on debit lowers Main account from $500.00 to $487.50.',
+    'Headphones for $60.00 on the card leave Main account alone, but you now owe $60.00 on the card.',
     'Both count as spending in their category for your limits.',
-    'Net worth: $487.50 cash − $60.00 card = $427.50.',
+    'Net worth: $487.50 in Main account − $60.00 card = $427.50.',
   ],
   result: { cash: 487_50, card: 60_00, netWorth: 427_50 },
 };
@@ -274,7 +274,7 @@ const EXP_1: WorkedExample = {
 const AVL_1: WorkedExample = {
   id: 'AVL-1',
   rule: 'Available balance',
-  title: 'Available = bank and cash − upcoming bills − reserved limits',
+  title: 'Available = bank accounts and cash − upcoming bills − reserved limits',
   today: '2026-10-14',
   data: ex.snapshot({
     profile: [ex.profile({ openingDate: '2026-10-01' })],
@@ -368,8 +368,8 @@ const SUB_1: WorkedExample = {
   }),
   steps: [
     'Streamflix costs $15.99 and renews on the 20th.',
-    'On Oct 19 it is an upcoming bill: cash is still $1,000.00 but only $984.01 is available to spend.',
-    'On Oct 20 Funcial records the $15.99 charge as an expense, so cash drops to $984.01.',
+    'On Oct 19 it is an upcoming bill: Main account is still $1,000.00 but only $984.01 is available to spend.',
+    'On Oct 20 Funcial records the $15.99 charge as an expense, so Main account drops to $984.01.',
     'The next renewal moves to Nov 20, so nothing more is due this month.',
   ],
   result: {

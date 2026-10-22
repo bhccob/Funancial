@@ -13,6 +13,21 @@ const allProse = () => [
 ];
 const page = (id: string) => helpPage(id)!.body.join(' ');
 
+/**
+ * allProse() and what the worked examples say: their titles, steps and result labels. A glossary
+ * entry is one line here ("Cash: Notes and coins..."), so a term is read with its meaning.
+ */
+const everyHelpLine = () => [
+  ...HELP_PAGES.flatMap((p) => [p.summary, ...p.body]),
+  ...GLOSSARY.map((g) => `${g.term}: ${g.meaning}`),
+  ...FAQ.flatMap((f) => [f.q, f.a]),
+  ...LEGAL.privacy,
+  ...LEGAL.terms,
+  ...LEGAL.disclaimers.flatMap((d) => [d.title, d.text]),
+  ...EXAMPLES.flatMap((e) => [e.title, ...e.steps]),
+  ...Object.values(RESULT_ROWS).map((r) => r.label),
+];
+
 /** The ids the "?" tips link to; changing one breaks those links. */
 const PAGE_IDS = [
   'available',
@@ -320,5 +335,79 @@ describe('numbers in help prose', () => {
       ...LEGAL.disclaimers.flatMap((d) => [d.title, d.text]),
     ];
     expect(prose.filter((line) => /\d/.test(line))).toEqual([]);
+  });
+});
+
+describe('help speaks accounts', () => {
+  it('sends a dividend to any of your accounts, or reinvests it', () => {
+    expect(helpPage('dividends')!.body[3]).toBe(
+      'It can go to any of your accounts, like Main account or Savings, or you can reinvest it in the same holding. If a payout never comes, you can say so.',
+    );
+  });
+
+  it('counts net worth over your accounts, and says a move between them changes nothing', () => {
+    const body = helpPage('net-worth')!.body;
+    expect(body[1]).toBe(
+      'What you have is the money in your accounts (bank, cash and savings) and your investments at their latest price. What you owe is what is on your credit cards and your loans.',
+    );
+    expect(body[2]).toBe(
+      'Spending lowers it, and saving, earning and paying down what you owe raise it. Moving money between your accounts does not change it.',
+    );
+  });
+
+  it('says a card purchase adds to the card, and the money in your accounts drops on a payoff', () => {
+    const body = helpPage('cards')!.body;
+    expect(body[0]).toBe(
+      'Spending on a credit card does not take money from your bank account. It adds to what you owe on the card.',
+    );
+    expect(body[1]).toBe(
+      'The money in your accounts drops when you pay by debit or cash, or when you pay the card off.',
+    );
+    expect(body[3]).toBe(
+      'Money you only expect does not count until it arrives. Moving money between your accounts changes where it sits, not what you are worth.',
+    );
+  });
+
+  it('starts the glossary with Account, and keeps Cash to notes and coins', () => {
+    expect(GLOSSARY[0]).toEqual({
+      term: 'Account',
+      meaning:
+        'A place your money sits: a bank account, a credit card, savings or a cash wallet. Funcial shows each one as a card.',
+    });
+    expect(GLOSSARY.find((g) => g.term === 'Cash')!.meaning).toBe(
+      'Notes and coins in your pocket. Add a cash account to keep track of them.',
+    );
+  });
+
+  it('keeps the glossary in A to Z order', () => {
+    const terms = GLOSSARY.map((g) => g.term);
+    expect(terms).toEqual([...terms].sort((a, b) => a.localeCompare(b, 'en')));
+  });
+
+  it('asks why the bank account did not drop after a credit card purchase', () => {
+    expect(FAQ[1]).toEqual({
+      q: "Why didn't my bank account drop when I paid by credit card?",
+      a: 'A credit card purchase adds to what you owe on the card. Your bank account drops when you pay the card off.',
+    });
+  });
+
+  it('calls the example money Main account, not cash', () => {
+    expect(RESULT_ROWS.cash!.label).toBe('Main account');
+    expect(RESULT_ROWS.cashBefore!.label).toBe('Main account before the renewal');
+    expect(RESULT_ROWS.cashAfter!.label).toBe('Main account after the renewal');
+    expect(EXAMPLES.find((e) => e.id === 'BAL-1')!.title).toBe(
+      'Net worth = accounts + investments − debts',
+    );
+    expect(EXAMPLES.find((e) => e.id === 'EXP-1')!.steps[0]).toContain('lowers Main account from');
+  });
+
+  it('no Help prose uses cash for the bank account', () => {
+    const cashIsOk =
+      /cash (wallet|account)|debit or cash|bank accounts? and (your )?cash|notes and coins|bank, cash and savings/i;
+    const lines = everyHelpLine();
+    // The check must read the examples and the labels too, or it would pass over the very words it is for.
+    expect(lines).toContain(EXAMPLES[0]!.title);
+    expect(lines).toContain(RESULT_ROWS.cashBefore!.label);
+    expect(lines.filter((line) => /\bcash\b/i.test(line) && !cashIsOk.test(line))).toEqual([]);
   });
 });

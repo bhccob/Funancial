@@ -29,7 +29,7 @@ export type ResultKind = 'money' | 'percent' | 'count' | 'level';
 /** The words for each key of an example's `result`. A key with no entry here fails a test. */
 export const RESULT_ROWS: Record<string, { label: string; kind: ResultKind }> = {
   // Cards and balances
-  cash: { label: 'Cash', kind: 'money' },
+  cash: { label: 'Main account', kind: 'money' },
   savings: { label: 'Savings', kind: 'money' },
   passive: { label: 'Passive income', kind: 'money' },
   card: { label: 'Owed on the card', kind: 'money' },
@@ -49,8 +49,8 @@ export const RESULT_ROWS: Record<string, { label: string; kind: ResultKind }> = 
   // Subscriptions
   billsBefore: { label: 'Bills to come before the renewal', kind: 'money' },
   availableBefore: { label: 'Available before the renewal', kind: 'money' },
-  cashBefore: { label: 'Cash before the renewal', kind: 'money' },
-  cashAfter: { label: 'Cash after the renewal', kind: 'money' },
+  cashBefore: { label: 'Main account before the renewal', kind: 'money' },
+  cashAfter: { label: 'Main account after the renewal', kind: 'money' },
   billsAfter: { label: 'Bills to come after the renewal', kind: 'money' },
   nextRenewalMonth: { label: 'Next renewal, month', kind: 'count' },
   nextRenewalDay: { label: 'Next renewal, day of the month', kind: 'count' },
@@ -91,13 +91,13 @@ export const HELP_PAGES: HelpPage[] = [
   {
     id: 'cards',
     title: 'Cards and balances',
-    summary: "Why card spending isn't cash",
+    summary: "Why card spending doesn't touch your bank account",
     group: 'numbers',
     body: [
-      'Spending on a credit card does not take money from your cash. It adds to what you owe on the card.',
-      'Your cash drops when you pay with debit or cash, or when you pay the card off.',
+      'Spending on a credit card does not take money from your bank account. It adds to what you owe on the card.',
+      'The money in your accounts drops when you pay by debit or cash, or when you pay the card off.',
       'An expense is money you spent and did not get back. It counts toward your limits whichever way you paid.',
-      'Money you only expect does not count until it arrives. Moving money between cash and savings changes where it sits, not what you are worth.',
+      'Money you only expect does not count until it arrives. Moving money between your accounts changes where it sits, not what you are worth.',
     ],
     exampleIds: ['EXP-1', 'BAL-1'],
   },
@@ -107,7 +107,7 @@ export const HELP_PAGES: HelpPage[] = [
     summary: 'Bills that come back on their own',
     group: 'numbers',
     body: [
-      'A subscription is a bill that repeats. Once its renewal falls in the current month it is an upcoming bill: it lowers Available to spend, and your cash stays where it is.',
+      'A subscription is a bill that repeats. Once its renewal falls in the current month it is an upcoming bill: it lowers Available to spend, and the money in your accounts stays where it is.',
       "A subscription charged to a credit card does not lower Available to spend by itself. It lands on the card on the renewal day, and shows up in the card's next payment instead.",
       'On the renewal day Funcial records the charge as an expense, and the money drops from the account it is charged to. The next renewal moves forward by one cycle.',
       'Renewals count toward your limits like any other expense.',
@@ -121,8 +121,8 @@ export const HELP_PAGES: HelpPage[] = [
     group: 'numbers',
     body: [
       'Net worth is everything you have, minus everything you owe.',
-      'What you have is your cash, your savings, the passive income you have received, and your investments at their latest price. What you owe is your card balances and your loans.',
-      'Spending lowers it, and saving, earning and paying down what you owe raise it. Moving money between cash and savings does not change it.',
+      'What you have is the money in your accounts (bank, cash and savings) and your investments at their latest price. What you owe is what is on your credit cards and your loans.',
+      'Spending lowers it, and saving, earning and paying down what you owe raise it. Moving money between your accounts does not change it.',
     ],
   },
   {
@@ -146,7 +146,7 @@ export const HELP_PAGES: HelpPage[] = [
       'A dividend is a payment a company makes to the people who hold its shares.',
       'Expected payouts come from the real ex-dates the price service reports. When a date is a guess, it shows a ~ in front of it.',
       'An expected payout is not money yet. When it arrives, you confirm it: check the amount you really received and the day it arrived, and choose where it goes.',
-      'It can go to cash, savings or passive income, or you can reinvest it in the same holding. If a payout never comes, you can say so.',
+      'It can go to any of your accounts, like Main account or Savings, or you can reinvest it in the same holding. If a payout never comes, you can say so.',
       'Every confirmed dividend counts toward your profit & loss.',
     ],
   },

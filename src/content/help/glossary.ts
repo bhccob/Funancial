@@ -1,6 +1,11 @@
 /** The words the app uses, A to Z. */
 export const GLOSSARY: Array<{ term: string; meaning: string }> = [
   {
+    term: 'Account',
+    meaning:
+      'A place your money sits: a bank account, a credit card, savings or a cash wallet. Funcial shows each one as a card.',
+  },
+  {
     term: 'Available to spend',
     meaning:
       'What is left of the money in your bank accounts and cash after the bills still to come this month, plus the next payment due on each credit card, and the money you reserved for limits. Savings are not counted; they are shown apart, as Saved.',
@@ -9,7 +14,10 @@ export const GLOSSARY: Array<{ term: string; meaning: string }> = [
     term: 'Badge',
     meaning: 'A reward for a first or a milestone, like logging your first expense.',
   },
-  { term: 'Cash', meaning: 'Money you can spend now: your wallet and your checking account.' },
+  {
+    term: 'Cash',
+    meaning: 'Notes and coins in your pocket. Add a cash account to keep track of them.',
+  },
   { term: 'Coins', meaning: 'What you earn alongside XP. You spend them in the Shop.' },
   {
     term: 'Confirmed',
