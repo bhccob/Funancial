@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { openProfile, startFresh } from './helpers';
+import { openProfile, startDemo, startFresh } from './helpers';
 
 const bar = (page: Page) => page.getByRole('navigation', { name: 'Primary' });
 const TABS = ['Home', 'Cards', 'Spending', 'Invest', 'Profile'];
@@ -336,6 +336,34 @@ test('mobile: Goals and Debts are two pages', async ({ page }, testInfo) => {
   await expect(page.getByRole('button', { name: 'Add card' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Add loan' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Add goal' })).toHaveCount(0);
+});
+
+test("mobile: Spending's Goals section leads to the Goals page with View all", async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== 'mobile-chromium', 'mobile layout only');
+  // The demo has goals, so the section's pill is View all.
+  await startDemo(page);
+  await bar(page).getByRole('link', { name: 'Spending' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Budget' })).toBeVisible();
+  await page.getByRole('region', { name: 'Goals' }).getByRole('link', { name: 'View all' }).click();
+  await expect(page).toHaveURL(/\/goals$/);
+  await expect(page.getByRole('heading', { level: 1, name: 'Goals' })).toBeVisible();
+});
+
+test("mobile: Spending's Goals section leads to the Goals page with Set a goal when there are none", async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== 'mobile-chromium', 'mobile layout only');
+  await startFresh(page);
+  await bar(page).getByRole('link', { name: 'Spending' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Budget' })).toBeVisible();
+  await page
+    .getByRole('region', { name: 'Goals' })
+    .getByRole('link', { name: 'Set a goal' })
+    .click();
+  await expect(page).toHaveURL(/\/goals$/);
+  await expect(page.getByRole('heading', { level: 1, name: 'Goals' })).toBeVisible();
 });
 
 test('mobile: History opens Income, and an income added there shows in its bars', async ({
