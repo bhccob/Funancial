@@ -30,6 +30,10 @@ export function claimDarkTop(): () => void {
  * held, else `'light'`. It runs once for the background as it stands (when a theme is already
  * applied) and then each time that changes, not for a change that leaves it as it was. Returns an
  * unsubscribe.
+ *
+ * A `cb` that throws is logged and goes no further: it is called from inside a claim, its release
+ * and the theme's own listeners, and none of those may be cut short by it (a claim cut short is
+ * never released, and the bars would stay dark for the rest of the session).
  */
 export function onBarsBackground(cb: (background: BarsBackground) => void): () => void {
   let themeIsDark = false;
@@ -38,7 +42,11 @@ export function onBarsBackground(cb: (background: BarsBackground) => void): () =
     const background = themeIsDark || claims > 0 ? 'dark' : 'light';
     if (background === last) return;
     last = background;
-    cb(background);
+    try {
+      cb(background);
+    } catch (e) {
+      console.error('Could not report what is behind the status bar', e);
+    }
   };
   const stopTheme = onThemeApplied((dark) => {
     themeIsDark = dark;

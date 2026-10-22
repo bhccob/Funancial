@@ -20,6 +20,9 @@ export function GlassHeader({ children, className }: GlassHeaderProps) {
   useEffect(() => {
     const element = header.current;
     if (!element) return;
+    // False once unmounted: an entry the observer queued just before is still delivered after the
+    // disconnect, and must not take a claim nothing is left to release.
+    let live = true;
     let release: (() => void) | undefined;
     const cover = (covering: boolean) => {
       if (covering && !release) release = claimDarkTop();
@@ -37,6 +40,7 @@ export function GlassHeader({ children, className }: GlassHeaderProps) {
     // little under it. The header is "at the top" while it touches that strip.
     const observer = new IntersectionObserver(
       (entries) => {
+        if (!live) return;
         const latest = entries.at(-1);
         if (latest) cover(latest.isIntersecting);
       },
@@ -44,6 +48,7 @@ export function GlassHeader({ children, className }: GlassHeaderProps) {
     );
     observer.observe(element);
     return () => {
+      live = false;
       observer.disconnect();
       cover(false);
     };

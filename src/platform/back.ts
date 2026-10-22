@@ -1,5 +1,5 @@
 export interface BackEnv {
-  /** The innermost open modal dialog, if any. */
+  /** The innermost open dialog, if any, of either kind: a modal one or the modeless ＋ fan. */
   topDialog(): HTMLDialogElement | null;
   /** One step back in the app's own history. */
   back(): void;

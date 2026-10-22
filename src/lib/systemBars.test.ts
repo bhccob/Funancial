@@ -132,4 +132,27 @@ describe('claimDarkTop', () => {
     third();
     expect(heard).toHaveBeenLastCalledWith('light');
   });
+
+  it('counts the claim and tells the other listeners when one listener throws, and logs it', async () => {
+    const { claimDarkTop, onBarsBackground, heard } = await listen('light');
+    const failure = new Error('bridge down');
+    let throwing = false;
+    onBarsBackground(() => {
+      if (throwing) throw failure;
+    });
+    const after = vi.fn();
+    onBarsBackground(after);
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    throwing = true;
+
+    const release = claimDarkTop();
+    expect(heard).toHaveBeenLastCalledWith('dark');
+    expect(after).toHaveBeenLastCalledWith('dark');
+    release();
+    expect(heard).toHaveBeenLastCalledWith('light');
+    expect(after).toHaveBeenLastCalledWith('light');
+
+    expect(consoleError).toHaveBeenCalledWith(expect.stringContaining('status bar'), failure);
+    consoleError.mockRestore();
+  });
 });

@@ -119,5 +119,16 @@ describe('GlassHeader', () => {
       expect(heard).toHaveBeenLastCalledWith('light');
       expect(observer?.disconnect).toHaveBeenCalledTimes(1);
     });
+
+    it('takes no claim for an entry that arrives after unmount', () => {
+      const { unmount } = render(<GlassHeader>Hi</GlassHeader>);
+      const [observer] = FakeObserver.all;
+
+      unmount();
+      // Queued before the disconnect, delivered after it: a disconnect does not drop it.
+      observer?.see(true);
+
+      expect(heard).toHaveBeenLastCalledWith('light');
+    });
   });
 });
