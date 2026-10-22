@@ -311,6 +311,14 @@ describe('help copy says what the code does', () => {
     expect(page('subscriptions')).toContain("shows up in the card's next payment");
   });
 
+  it('leaves out of Available only the accounts kept out of it, not passive income as such', () => {
+    // A dividend confirmed into an account in Available counts; an older Passive income account does not.
+    expect(page('available')).toContain(
+      'Investments and pay that is only expected are not part of it either, nor is any account you keep out of it.',
+    );
+    expect(page('available')).not.toMatch(/passive income/i);
+  });
+
   it('says passive income goes to the account picked for each dividend, not a place of its own', () => {
     const passive = GLOSSARY.find((g) => g.term === 'Passive income')!.meaning;
     expect(passive).toContain('Dividends go to whichever account you pick when you confirm them');

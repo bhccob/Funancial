@@ -70,7 +70,7 @@ export const HELP_PAGES: HelpPage[] = [
       'Available to spend is the money you can use now without touching money that is already spoken for.',
       'It starts with the money in your bank accounts and your cash. Then it takes away the bills still to come this month, plus the next payment due on each credit card. It also takes away the unspent part of any limit you chose to reserve.',
       "A subscription charged to a credit card is not taken off on its own. It lands on the card on the renewal day, and comes back as the card's next payment.",
-      'Savings are not part of it. They are shown apart, as Saved. Investments, passive income and pay that is only expected are not part of it either.',
+      'Savings are not part of it. They are shown apart, as Saved. Investments and pay that is only expected are not part of it either, nor is any account you keep out of it.',
       'If it is lower than the money in your bank accounts and cash, those bills and reserved limits are the reason.',
     ],
     exampleIds: ['AVL-1'],
