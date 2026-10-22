@@ -118,9 +118,11 @@ Each is the call made, why, and what it costs if wrong.
 
 ## Phone check (owner)
 
-**Pending.**
+**Passed 2026-10-22.** 0.10 (versionCode 10) was installed from `main` over 0.8 on the owner's
+Nothing Phone (3a), and the first-launch upgrade logged no errors. The owner confirmed the
+balances match and everything works, including the 0.9 deletion fixes.
 
-Before installing 0.10, note on 0.9:
+The checklist used. Before installing 0.10, note on 0.9:
 - Home → Available to spend, and its sheet's Cash and Savings
 - the Net worth total
 - what each card owes
