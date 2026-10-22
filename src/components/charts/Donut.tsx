@@ -245,7 +245,10 @@ export function DonutLegend({
         const on = i === selected;
         const amountTone = on ? 'text-text font-extrabold' : 'text-muted font-bold';
         return (
-          <li key={slice.key} className="border-border border-b last:border-b-0">
+          <li
+            key={slice.key}
+            className="border-b border-black/7 last:border-b-0 dark:border-white/8"
+          >
             <button
               type="button"
               aria-pressed={on}

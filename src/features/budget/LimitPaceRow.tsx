@@ -16,8 +16,9 @@ export interface LimitPaceRowProps {
 }
 
 /**
- * One limit as a bar in its state colour with a thin pace mark: where the bar would stand if the
- * money were spent evenly through the period. The line under it says the same in words.
+ * One limit as a plain row: a bar in its state colour with a thin pace mark, where the bar would
+ * stand if the money were spent evenly through the period. The line under it says the same in
+ * words. The list it is in draws the hairlines between rows.
  */
 export function LimitPaceRow({ status, progress, onEdit }: LimitPaceRowProps) {
   const money = useMoney();
@@ -27,7 +28,7 @@ export function LimitPaceRow({ status, progress, onEdit }: LimitPaceRowProps) {
   const left = remaining >= 0 ? `${money(remaining)} left` : `${money(-remaining)} over`;
 
   return (
-    <li className="border-border border-t py-3.5 first:border-t-0 first:pt-0">
+    <li className="py-3.5">
       <div className="flex items-center gap-3">
         <div className="flex min-w-0 flex-1 items-center gap-2">
           <span className="truncate text-[15.5px] font-extrabold">{name}</span>

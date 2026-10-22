@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { Section } from '@/components/ui/Section';
+import { ROWS } from '@/features/shared/PlainSection';
 import { cn } from '@/lib/cn';
 import { relativeTime } from '@/lib/format';
 import { marketConfigured, type NewsItem } from '@/services/market';
@@ -13,7 +13,10 @@ const MAX_SYMBOLS = 25;
 
 const isWebLink = (url: string) => /^https?:\/\//i.test(url);
 
-/** Headlines for what the person holds, newest as the service sends them, filterable by holding. */
+/**
+ * Headlines for what the person holds, newest as the service sends them, as plain rows, filterable
+ * by holding with chips: glass, and the chosen one in ink.
+ */
 export function NewsTab() {
   const holdings = useApp((s) => s.data.tables.holding);
   const configured = marketConfigured();
@@ -68,7 +71,7 @@ export function NewsTab() {
                   onClick={() => setChosen(s)}
                   className={cn(
                     'h-11 rounded-full px-4 text-sm font-bold motion-safe:transition-colors',
-                    on ? 'bg-primary text-primary-contrast' : 'bg-surface-2 text-text',
+                    on ? 'bg-primary text-primary-contrast' : 'glass text-text',
                   )}
                 >
                   {s ?? 'All'}
@@ -78,12 +81,9 @@ export function NewsTab() {
           </div>
         )}
         {shown.length > 0 ? (
-          <ul>
+          <ul className={ROWS}>
             {shown.map((item) => (
-              <li
-                key={`${item.symbol} ${item.url}`}
-                className="border-border border-t first:border-t-0"
-              >
+              <li key={`${item.symbol} ${item.url}`}>
                 <a
                   href={item.url}
                   target="_blank"
@@ -109,8 +109,8 @@ export function NewsTab() {
 
   return (
     <>
-      <Section>{body}</Section>
-      <p className="text-muted pt-1 text-[12.5px] font-bold">
+      <div className="px-1 pt-4">{body}</div>
+      <p className="text-muted mx-1 pt-5 text-[12.5px] font-bold">
         News data is for informational purposes only. Not financial advice.
       </p>
     </>

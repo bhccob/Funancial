@@ -7,8 +7,7 @@ import { Button } from '@/components/ui/Button';
 import { CompanyLogo, LogoDisc } from '@/components/ui/CompanyLogo';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { HelpTip } from '@/components/ui/HelpTip';
-import { Section } from '@/components/ui/Section';
-import { underlineTab } from '@/components/ui/underlineTab';
+import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import type { Slice } from '@/domain/charts';
 import type { Holding } from '@/domain/entities';
 import {
@@ -18,6 +17,7 @@ import {
   TYPE_LABELS,
   type HoldingRow,
 } from '@/domain/portfolio';
+import { GlassTile, PlainSection, ROWS } from '@/features/shared/PlainSection';
 import { cn } from '@/lib/cn';
 import { formatPercent, sharesText } from '@/lib/format';
 import { useApp } from '@/store/AppStoreProvider';
@@ -30,6 +30,9 @@ import { SoldList } from './SoldList';
 /** Stocks, then ETFs, then the rest: the order of the pie's choices and of the rows. */
 const TYPES: Array<Holding['type']> = ['stock', 'etf', 'other'];
 
+/** What the pie shows: all the holdings, or those of one type. */
+type PieChoice = 'all' | Holding['type'];
+
 /** What `?pie=` says for each type; All has none. */
 const PIE_PARAMS: Record<Holding['type'], string> = {
   stock: 'stocks',
@@ -41,7 +44,7 @@ function HoldingItem({ row }: { row: HoldingRow }) {
   const { format, formatConverted: money } = useInvestMoney();
   const { holding, value, gainPct } = row;
   return (
-    <li className="border-border border-t first:border-t-0">
+    <li>
       <Link
         to={`/invest/holding/${holding.id}`}
         className="flex min-h-14 w-full items-center gap-3 py-2.5 text-left"
@@ -137,10 +140,10 @@ function PieBlock({ rows, label }: { rows: HoldingRow[]; label: string }) {
 }
 
 /**
- * What the person holds: the portfolio's value and how it moved, what the investments have made in
- * all, one pie of the holdings (All, or just Stocks, ETFs or Other, the choice kept in `?pie=`), the
- * holdings by type, each opening its own page, and what was sold. `refresh` fetches prices for a
- * new holding.
+ * What the person holds: the portfolio's value and how it moved, and what the investments have made
+ * in all, each in a glass tile; one pie of the holdings in another (All, or just Stocks, ETFs or
+ * Other, the choice kept in `?pie=`); then the holdings by type as plain rows, each opening its own
+ * page, and what was sold. `refresh` fetches prices for a new holding.
  */
 export function HoldingsTab({ refresh }: { refresh(): Promise<void> }) {
   // The portfolio is converted row by row, so what is written here adds up on the screen.
@@ -184,80 +187,77 @@ export function HoldingsTab({ refresh }: { refresh(): Promise<void> }) {
   return (
     <>
       {rows.length === 0 ? (
-        <Section>
-          <EmptyState
-            title={sales ? 'No holdings right now' : 'No investments yet'}
-            action={
-              <Button onClick={() => setAdding(true)}>
-                {sales ? 'Add a holding' : 'Add your first holding'}
-              </Button>
-            }
-          />
-        </Section>
+        <div className="pt-[22px]">
+          <GlassTile>
+            <EmptyState
+              title={sales ? 'No holdings right now' : 'No investments yet'}
+              action={
+                <Button onClick={() => setAdding(true)}>
+                  {sales ? 'Add a holding' : 'Add your first holding'}
+                </Button>
+              }
+            />
+          </GlassTile>
+        </div>
       ) : (
-        <Section
+        <PlainSection
           title="Portfolio value"
           help={<HelpTip pageId="investments" label="portfolio value" />}
           action={
-            <Button
-              size="sm"
-              aria-label="Add a holding"
-              className="-my-3"
-              onClick={() => setAdding(true)}
-            >
+            <Button size="sm" aria-label="Add a holding" onClick={() => setAdding(true)}>
               <Plus aria-hidden="true" className="size-4" />
               Add
             </Button>
           }
         >
-          <p className="text-[34px] leading-tight font-extrabold tracking-[-0.035em] tabular-nums">
-            {money(value)}
-          </p>
-          {(hasDay || gainPct !== null) && (
-            <p className="mt-1 text-[13.5px] font-extrabold tabular-nums">
-              {hasDay && change(dayChange, `${money(Math.abs(dayChange))} today`)}
-              {hasDay && gainPct !== null && <span className="text-muted"> · </span>}
-              {gainPct !== null && change(gainPct, `${formatPercent(gainPct)} all time`)}
+          <GlassTile>
+            <p className="text-[34px] leading-tight font-extrabold tracking-[-0.035em] tabular-nums">
+              {money(value)}
             </p>
-          )}
-        </Section>
+            {(hasDay || gainPct !== null) && (
+              <p className="mt-1 text-[13.5px] font-extrabold tabular-nums">
+                {hasDay && change(dayChange, `${money(Math.abs(dayChange))} today`)}
+                {hasDay && gainPct !== null && <span className="text-muted"> · </span>}
+                {gainPct !== null && change(gainPct, `${formatPercent(gainPct)} all time`)}
+              </p>
+            )}
+          </GlassTile>
+        </PlainSection>
       )}
 
       {(rows.length > 0 || sales) && <ProfitAndLoss />}
 
       {priced.length > 0 && (
-        <Section>
-          <div role="group" aria-label="Allocation" className="-mt-2 mb-2 flex flex-wrap gap-x-5">
-            {[{ type: null, label: 'All' }, ...priced].map((g) => {
-              const on = g.type === (choice?.type ?? null);
-              return (
-                <button
-                  key={g.label}
-                  type="button"
-                  aria-pressed={on}
-                  onClick={() => pick(g.type)}
-                  className={underlineTab(on)}
-                >
-                  {g.label}
-                </button>
-              );
-            })}
-          </div>
-          {/* Keyed by the choice, so a slice picked on one pie is not still picked on the next. */}
-          <PieBlock
-            key={choice?.type ?? 'all'}
-            rows={choice ? choice.rows : rows}
-            label={choice ? choice.label : 'All holdings'}
-          />
-        </Section>
+        <div className="pt-[22px]">
+          <GlassTile>
+            <SegmentedControl<PieChoice>
+              label="Allocation"
+              tone="glass"
+              stretch
+              value={choice?.type ?? 'all'}
+              options={[
+                { value: 'all', label: 'All' },
+                ...priced.map((g) => ({ value: g.type, label: g.label })),
+              ]}
+              onChange={(value) => pick(value === 'all' ? null : value)}
+              className="mb-4"
+            />
+            {/* Keyed by the choice, so a slice picked on one pie is not still picked on the next. */}
+            <PieBlock
+              key={choice?.type ?? 'all'}
+              rows={choice ? choice.rows : rows}
+              label={choice ? choice.label : 'All holdings'}
+            />
+          </GlassTile>
+        </div>
       )}
 
       {(rows.length > 0 || sales) && (
-        <Section>
+        <div className="pt-[22px]">
           {byType.map((g) => (
             <div key={g.type} className="mt-5 first:mt-0">
-              <h3 className="text-muted text-[13px] font-bold">{g.label}</h3>
-              <ul aria-label={g.label}>
+              <h3 className="text-muted mx-1 text-[13px] font-bold">{g.label}</h3>
+              <ul aria-label={g.label} className={cn('px-1', ROWS)}>
                 {g.rows.map((row) => (
                   <HoldingItem key={row.holding.id} row={row} />
                 ))}
@@ -265,19 +265,19 @@ export function HoldingsTab({ refresh }: { refresh(): Promise<void> }) {
             </div>
           ))}
           {noRate > 0 && (
-            <p className="text-muted mt-3 text-sm font-semibold">
+            <p className="text-muted mx-1 mt-3 text-sm font-semibold">
               {`${noRate} holding${noRate === 1 ? ' has' : 's have'} no exchange rate yet`}
             </p>
           )}
           {best && worst && (
-            <p className="text-muted mt-3 text-[13.5px] font-bold tabular-nums">
+            <p className="text-muted mx-1 mt-3 text-[13.5px] font-bold tabular-nums">
               {`Best: ${best.holding.symbol} ${formatPercent(best.gainPct!, true)} · Worst: ${worst.holding.symbol} ${formatPercent(worst.gainPct!, true)}`}
             </p>
           )}
           <SoldList />
-        </Section>
+        </div>
       )}
-      <p className="text-muted pt-1 text-[12.5px] font-bold">
+      <p className="text-muted mx-1 pt-5 text-[12.5px] font-bold">
         Prices delayed · not financial advice
       </p>
 

@@ -2,7 +2,7 @@ import { useId, useMemo, useState, type ReactNode } from 'react';
 import { DayBars } from '@/components/charts/DayBars';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { Section } from '@/components/ui/Section';
+import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { addDays } from '@/domain/dates';
 import {
   dividendTotals,
@@ -14,6 +14,7 @@ import {
   type ExpectedPayout,
 } from '@/domain/dividends';
 import { dividendStreak } from '@/domain/game/streaks';
+import { GlassTile, PlainSection, ROWS } from '@/features/shared/PlainSection';
 import { cn } from '@/lib/cn';
 import { formatDay, formatMonthShort, formatMonthYear, formatPercent } from '@/lib/format';
 import { useAction } from '@/lib/useAction';
@@ -25,9 +26,9 @@ import { ConfirmDividendDialog } from './ConfirmDividendDialog';
 
 type Dir = 'next' | 'past';
 
-const PERIODS: Array<{ id: Dir; label: string }> = [
-  { id: 'next', label: 'Next 12 months' },
-  { id: 'past', label: 'Last 12 months' },
+const PERIODS: Array<{ value: Dir; label: string }> = [
+  { value: 'next', label: 'Next 12 months' },
+  { value: 'past', label: 'Last 12 months' },
 ];
 
 const UNKNOWN = '—';
@@ -45,7 +46,10 @@ function Figure({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-/** A title and a muted line on the left, an amount on the right, and optionally actions below. */
+/**
+ * A plain row: a title and a muted line on the left, an amount on the right, and optionally actions
+ * below. The list it is in draws the hairlines between rows.
+ */
 function Row({
   title,
   titleId,
@@ -60,7 +64,7 @@ function Row({
   children?: ReactNode;
 }) {
   return (
-    <li className="border-border border-t py-2.5 first:border-t-0">
+    <li className="py-2.5">
       <div className="flex min-h-11 items-center gap-3">
         <span className="flex min-w-0 flex-1 flex-col">
           <span id={titleId} className="truncate text-[15px] font-extrabold">
@@ -106,9 +110,9 @@ function DueRow({
 }
 
 /**
- * Dividends: what came in and what is expected, a bar per month, the payouts waiting to be
- * confirmed, those coming in the next 60 days, the holdings that pay the most, and the streak of
- * months with a dividend.
+ * Dividends: what came in and what is expected, with a bar per month, in one glass tile; then, as
+ * plain rows, the payouts waiting to be confirmed, those coming in the next 60 days, the holdings
+ * that pay the most, and the streak of months with a dividend.
  */
 export function DividendsTab() {
   // Each figure is converted on its own, from its profile-currency amount, and rounded once. So a
@@ -154,9 +158,11 @@ export function DividendsTab() {
 
   if (view.empty) {
     return (
-      <Section>
-        <EmptyState title="No dividends yet. Holdings that pay dividends show up here." />
-      </Section>
+      <div className="pt-[22px]">
+        <GlassTile>
+          <EmptyState title="No dividends yet. Holdings that pay dividends show up here." />
+        </GlassTile>
+      </div>
     );
   }
 
@@ -165,64 +171,59 @@ export function DividendsTab() {
 
   return (
     <>
-      <Section>
-        <dl className="grid grid-cols-2 gap-x-4 gap-y-5">
-          <Figure label="This month">{money(totals.month)}</Figure>
-          <Figure label="This year">{money(totals.year)}</Figure>
-          <Figure label="Next 12 months">{`~${money(projected, { whole: true })}`}</Figure>
-          <Figure label="Yield">
-            {value > 0 ? formatPercent((projected * 100) / value) : UNKNOWN}
-          </Figure>
-        </dl>
+      <div className="pt-[22px]">
+        <GlassTile>
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-5">
+            <Figure label="This month">{money(totals.month)}</Figure>
+            <Figure label="This year">{money(totals.year)}</Figure>
+            <Figure label="Next 12 months">{`~${money(projected, { whole: true })}`}</Figure>
+            <Figure label="Yield">
+              {value > 0 ? formatPercent((projected * 100) / value) : UNKNOWN}
+            </Figure>
+          </dl>
 
-        <div role="group" aria-label="Months shown" className="mt-6 flex flex-wrap gap-2">
-          {PERIODS.map(({ id, label }) => {
-            const on = id === dir;
-            return (
-              <button
-                key={id}
-                type="button"
-                aria-pressed={on}
-                onClick={() => {
-                  setDir(id);
-                  setSelected(null);
-                }}
-                className={cn(
-                  'h-11 rounded-full px-4 text-sm font-bold motion-safe:transition-colors',
-                  on ? 'bg-primary text-primary-contrast' : 'bg-surface-2 text-text',
-                )}
-              >
-                {label}
-              </button>
-            );
-          })}
-        </div>
-        <div className="mt-5">
-          <DayBars
-            label={dir === 'next' ? 'Expected dividends per month' : 'Dividends received per month'}
-            days={months}
-            selected={selected}
-            onSelect={setSelected}
-            formatAmount={(minor) => money(minor)}
+          <SegmentedControl<Dir>
+            label="Months shown"
+            tone="glass"
+            stretch
+            value={dir}
+            options={PERIODS}
+            onChange={(next) => {
+              setDir(next);
+              setSelected(null);
+            }}
+            className="mt-6"
           />
-        </div>
-        <p aria-live="polite" className="text-muted mt-3.5 text-sm font-bold">
-          {picked ? (
-            <>
-              <b className="text-text">{formatMonthYear(picked.month)}</b> ·{' '}
-              <b className="text-text">{money(picked.amount)}</b>
-            </>
-          ) : dir === 'next' ? (
-            'Expected after tax · tap a month'
-          ) : (
-            'Received · tap a month'
-          )}
-        </p>
-      </Section>
+          {/* Out to the tile's 8px, so twelve month names keep apart on a phone. */}
+          <div className="-mx-2 mt-5">
+            <DayBars
+              label={
+                dir === 'next' ? 'Expected dividends per month' : 'Dividends received per month'
+              }
+              days={months}
+              selected={selected}
+              onSelect={setSelected}
+              formatAmount={(minor) => money(minor)}
+            />
+          </div>
+          <p aria-live="polite" className="text-muted mt-3.5 text-sm font-bold">
+            {picked ? (
+              <>
+                <b className="text-text">{formatMonthYear(picked.month)}</b> ·{' '}
+                <b className="text-text">{money(picked.amount)}</b>
+              </>
+            ) : dir === 'next' ? (
+              'Expected after tax · tap a month'
+            ) : (
+              'Received · tap a month'
+            )}
+          </p>
+        </GlassTile>
+      </div>
 
       {due.length > 0 && (
-        <Section title="Due">
-          <ul>
+        <PlainSection title="Due">
+          <ul className={cn('px-1', ROWS)}>
             {due.map((p) => (
               <DueRow
                 key={`${p.holding.id}:${p.payDate}`}
@@ -234,12 +235,12 @@ export function DividendsTab() {
               />
             ))}
           </ul>
-        </Section>
+        </PlainSection>
       )}
 
       {coming.length > 0 && (
-        <Section title="Coming up">
-          <ul>
+        <PlainSection title="Coming up">
+          <ul className={cn('px-1', ROWS)}>
             {coming.map((p) => {
               const tax =
                 p.holding.withholdingPct > 0
@@ -255,12 +256,12 @@ export function DividendsTab() {
               );
             })}
           </ul>
-        </Section>
+        </PlainSection>
       )}
 
       {payers.length > 0 && (
-        <Section title="Top payers">
-          <ul>
+        <PlainSection title="Top payers">
+          <ul className={cn('px-1', ROWS)}>
             {payers.map(({ holding, annual }) => (
               <Row
                 key={holding.id}
@@ -269,19 +270,19 @@ export function DividendsTab() {
               />
             ))}
           </ul>
-        </Section>
+        </PlainSection>
       )}
 
       {streak.active && (
-        <Section title="Dividend streak">
+        <PlainSection title="Dividend streak">
           {streak.count > 0 ? (
-            <p className="text-[15px] font-extrabold tabular-nums">
+            <p className="mx-1 text-[15px] font-extrabold tabular-nums">
               {`${streak.count} ${streak.unit}${streak.count === 1 ? '' : 's'}`}
             </p>
           ) : (
-            <p className="text-muted text-sm font-semibold">Start a new streak today.</p>
+            <p className="text-muted mx-1 text-sm font-semibold">Start a new streak today.</p>
           )}
-        </Section>
+        </PlainSection>
       )}
 
       <ConfirmDividendDialog payout={confirming} onClose={() => setConfirming(null)} />

@@ -324,7 +324,7 @@ describe('Holdings tab', () => {
     expect(within(region('Portfolio value')).getByRole('button', { name: 'Add a holding' })).toBe(
       add,
     );
-    expect(add.parentElement?.parentElement).toBe(
+    expect(add.parentElement).toBe(
       screen.getByRole('heading', { name: 'Portfolio value' }).parentElement,
     );
     // "+ Add", 44px tall, and the muted colour of the action slot does not reach it.
@@ -1967,5 +1967,87 @@ describe('News tab', () => {
     renderNews(noHoldings());
     expect(screen.getByText('No headlines for your holdings right now.')).toBeInTheDocument();
     expect(fetchNews).not.toHaveBeenCalled();
+  });
+});
+
+describe('Invest in glass', () => {
+  /** The glass tile an element sits in (not the element itself), or null. */
+  const tileOf = (el: HTMLElement) => el.parentElement?.closest<HTMLElement>('.glass') ?? null;
+  const PLAIN = ['divide-y', 'divide-black/7'];
+
+  it('titles the page at the 28px of every page title', () => {
+    renderInvest(portfolioData());
+    expect(screen.getByRole('heading', { level: 1, name: 'Invest' })).toHaveClass('text-page');
+  });
+
+  it('draws the tabs on one glass track, the chosen one lifted onto the surface', () => {
+    renderInvest(portfolioData());
+    expect(screen.getByRole('tablist', { name: 'Invest' })).toHaveClass('glass', 'rounded-full');
+    expect(tab('Holdings')).toHaveClass('bg-surface', 'text-text');
+    expect(tab('Dividends')).not.toHaveClass('bg-surface');
+    expect(tab('Dividends')).toHaveClass('text-muted');
+  });
+
+  it('shows the currency and Refresh as glass pills', () => {
+    configured();
+    renderInvest(portfolioData());
+    expect(screen.getByRole('button', { name: 'Shown in USD' })).toHaveClass('glass');
+    expect(screen.getByRole('button', { name: 'Refresh' })).toHaveClass('glass');
+  });
+
+  it('keeps its sections plain and puts the value, profit and loss and pie in glass tiles', () => {
+    renderInvest(portfolioData());
+    for (const name of ['Portfolio value', 'Profit & loss · all time']) {
+      expect(region(name)).not.toHaveClass('glass');
+    }
+    const value = within(region('Portfolio value')).getByText(usd(1_950_00));
+    expect(tileOf(value)).toHaveClass('rounded-[24px]', 'p-4');
+
+    const profit = within(region('Profit & loss · all time')).getByText('On what you hold');
+    expect(tileOf(profit)).toHaveClass('rounded-[24px]', 'p-4');
+    expect(within(tileOf(profit)!).getByRole('list')).toHaveClass(...PLAIN);
+
+    // The pie and the choice of what it shows are one tile.
+    const pie = tileOf(screen.getByRole('group', { name: 'All holdings' }));
+    expect(pie).toHaveClass('rounded-[24px]', 'p-4');
+    expect(tileOf(screen.getByRole('group', { name: 'Allocation' }))).toBe(pie);
+  });
+
+  it('lists the holdings as plain rows with hairlines, with no box round them', () => {
+    renderInvest(portfolioData());
+    for (const name of ['Stocks', 'ETFs']) {
+      const list = screen.getByRole('list', { name });
+      expect(list).toHaveClass(...PLAIN);
+      expect(tileOf(list)).toBeNull();
+    }
+  });
+
+  it('puts the empty portfolio in a glass tile', () => {
+    renderInvest(noHoldings());
+    expect(tileOf(screen.getByText('No investments yet'))).toHaveClass('rounded-[24px]');
+  });
+
+  it('puts the dividend figures and bars in one glass tile, and lists the payouts as plain rows', () => {
+    renderDividends();
+    const tile = tileOf(screen.getByText('This month', { selector: 'dt' }));
+    expect(tile).toHaveClass('rounded-[24px]', 'p-4');
+    expect(tile).toContainElement(screen.getByRole('group', { name: 'Months shown' }));
+    expect(tile).toContainElement(bar('2026-10', 11_22));
+    for (const name of ['Due', 'Coming up', 'Top payers']) {
+      expect(region(name)).not.toHaveClass('glass');
+      expect(within(region(name)).getByRole('list')).toHaveClass(...PLAIN);
+    }
+  });
+
+  it('lists headlines as plain rows, under chips that are glass until chosen', async () => {
+    configured();
+    fetchNews.mockResolvedValue({ items: headlines() });
+    renderInvest(portfolioData(), '/invest?tab=news');
+    const chips = await screen.findByRole('group', { name: 'Filter by holding' });
+    expect(within(chips).getByRole('button', { name: 'All' })).toHaveClass('bg-primary');
+    expect(within(chips).getByRole('button', { name: 'KO' })).toHaveClass('glass');
+    const list = screen.getByRole('link', { name: /Apple unveils/ }).closest('ul');
+    expect(list).toHaveClass(...PLAIN);
+    expect(tileOf(list!)).toBeNull();
   });
 });

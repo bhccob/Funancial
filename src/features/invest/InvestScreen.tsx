@@ -24,7 +24,10 @@ type TabId = (typeof TABS)[number]['id'];
 const NOT_CONFIGURED = 'Live prices need the price service. Showing your last prices.';
 const UNREACHABLE = "Couldn't reach the price service. Showing your last prices.";
 
-/** Invest: holdings, dividends and news under one title, the tab kept in `?tab=`. */
+/**
+ * Invest: holdings, dividends and news under one title, the tab kept in `?tab=`. The tabs are one
+ * glass track with the chosen tab lifted onto it, as a SegmentedControl on glass draws its options.
+ */
 export function InvestScreen() {
   const [params, setParams] = useSearchParams();
   const tab: TabId = TABS.find((t) => t.id === params.get('tab'))?.id ?? 'holdings';
@@ -77,7 +80,7 @@ export function InvestScreen() {
           (marketConfigured() || stored) && (
             <Button
               size="sm"
-              variant="secondary"
+              variant="glass"
               aria-haspopup="dialog"
               onClick={() => setPicking(true)}
             >
@@ -96,7 +99,7 @@ export function InvestScreen() {
         ))}
         <Button
           size="sm"
-          variant="secondary"
+          variant="glass"
           className="mt-1"
           disabled={status === 'refreshing'}
           onClick={() => void refresh()}
@@ -115,7 +118,7 @@ export function InvestScreen() {
         role="tablist"
         aria-label="Invest"
         onKeyDown={onKeyDown}
-        className="border-border mt-3 flex gap-6 border-b"
+        className="glass mt-3 flex gap-0.5 rounded-full p-1"
       >
         {TABS.map(({ id, label }) => {
           const on = id === tab;
@@ -130,8 +133,10 @@ export function InvestScreen() {
               tabIndex={on ? 0 : -1}
               onClick={() => choose(id)}
               className={cn(
-                '-mb-px min-h-11 min-w-11 border-b-2 px-0.5 text-[15px] font-extrabold',
-                on ? 'border-text text-text' : 'text-muted border-transparent',
+                'press min-h-11 min-w-11 flex-1 rounded-full px-3 text-[14px] font-extrabold select-none',
+                'motion-safe:ease-glass motion-safe:transition-[transform,color,background-color] motion-safe:duration-(--duration-press)',
+                // The same lifted pill as a SegmentedControl on glass.
+                on ? 'bg-surface text-text shadow-[0_2px_8px_-4px_rgb(0_0_0/0.3)]' : 'text-muted',
               )}
             >
               {label}

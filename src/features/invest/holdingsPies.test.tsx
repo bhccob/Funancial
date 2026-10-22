@@ -315,7 +315,8 @@ describe('Holdings pie', () => {
     renderTab(mixed());
     for (const name of ['All', 'Stocks', 'ETFs']) {
       const button = within(selector()).getByRole('button', { name });
-      expect(button).toHaveClass('min-h-11');
+      // The glass control's 34px choices carry a 44px tap area (hit-44).
+      expect(button).toHaveClass('hit-44');
       expect(button.className).not.toMatch(/(^|\s)(transition|animate-)/);
     }
   });

@@ -1,6 +1,7 @@
 import { ChevronDown } from 'lucide-react';
 import { useId, useMemo, useState } from 'react';
 import { soldGroups } from '@/domain/sales';
+import { ROWS } from '@/features/shared/PlainSection';
 import { cn } from '@/lib/cn';
 import { sharesText } from '@/lib/format';
 import { useApp } from '@/store/AppStoreProvider';
@@ -21,7 +22,7 @@ export function SoldList() {
   if (groups.length === 0) return null;
 
   return (
-    <div className="border-border mt-4 border-t first:mt-0 first:border-t-0">
+    <div className="mx-1 mt-4 border-t border-black/7 first:mt-0 first:border-t-0 dark:border-white/8">
       <button
         type="button"
         aria-expanded={open}
@@ -38,12 +39,9 @@ export function SoldList() {
           )}
         />
       </button>
-      <ul id={listId} aria-label="Sold" hidden={!open}>
+      <ul id={listId} aria-label="Sold" hidden={!open} className={ROWS}>
         {groups.map((g) => (
-          <li
-            key={g.symbol}
-            className="border-border flex min-h-14 items-center gap-3 border-t py-2.5 first:border-t-0"
-          >
+          <li key={g.symbol} className="flex min-h-14 items-center gap-3 py-2.5">
             <span className="flex min-w-0 flex-1 flex-col">
               <span className="truncate text-[15px] font-extrabold">{`${g.symbol} · ${g.name}`}</span>
               <span className="text-muted text-[13px] font-semibold">

@@ -6,7 +6,15 @@ import { buildDemoSnapshot } from '@/data/demoSeed';
 import { limitStatus } from '@/domain/budget';
 import { formatMoney } from '@/domain/money';
 import { emptySnapshot, type DataSnapshot } from '@/domain/snapshot';
-import { localIso, makeExpense, makeLimit, makeProfile, makeSettings } from '@/test/fixtures';
+import { formatDate } from '@/lib/format';
+import {
+  localIso,
+  makeExpense,
+  makeGoal,
+  makeLimit,
+  makeProfile,
+  makeSettings,
+} from '@/test/fixtures';
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
 import { BudgetScreen } from './BudgetScreen';
 
@@ -23,6 +31,7 @@ vi.mock('@/store/useFinance', async (importOriginal) => ({
 const TODAY = '2026-10-15';
 // Expected text is built with the app's formatter: the test machine's locale decides "$" vs "US$".
 const usd = (minor: number) => formatMoney(minor, 'USD');
+const usdWhole = (minor: number) => formatMoney(minor, 'USD', undefined, { whole: true });
 
 beforeEach(() => {
   actions.saveLimit.mockClear();
@@ -371,6 +380,104 @@ describe('BudgetScreen', () => {
     await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
     expect(within(dialog).getByText('You already have this limit.')).toBeInTheDocument();
     expect(actions.saveLimit).not.toHaveBeenCalled();
+  });
+});
+
+describe('Spending in glass', () => {
+  it('puts the donut and its legend in one glass tile, still named Spending', () => {
+    renderBudget(ledger());
+    const tile = screen.getByRole('region', { name: 'Spending' });
+    expect(tile).toHaveClass('glass', 'rounded-[24px]', 'p-4');
+    expect(within(tile).getByRole('button', { name: /^Rent\b/ })).toBeInTheDocument();
+  });
+
+  it('lists the limits as plain rows, with the hairline of every plain list', () => {
+    renderBudget(ledger());
+    const limits = screen.getByRole('region', { name: 'Limits' });
+    expect(within(limits).getByRole('list')).toHaveClass('divide-y', 'divide-black/7');
+    expect(limits).not.toHaveClass('glass');
+  });
+});
+
+describe('Goals on Spending', () => {
+  const goals = () => screen.getByRole('region', { name: 'Goals' });
+
+  it('lists the demo goals as plain rows, each with its ring and saved of target', () => {
+    renderBudget();
+    const section = goals();
+    expect(within(section).getByRole('heading', { level: 2, name: 'Goals' })).toBeInTheDocument();
+    expect(within(section).getByRole('list')).toHaveClass('divide-y', 'divide-black/7');
+    // A deadline first (the bike's, 120 days out), then the goal with none.
+    const rows = within(section).getAllByRole('listitem');
+    expect(rows.map((r) => r.textContent)).toEqual([
+      `New bike37% saved · by ${formatDate('2027-02-12')}${usdWhole(450_00)}of ${usdWhole(1_200_00)}`,
+      `Emergency fund30% saved${usdWhole(3_000_00)}of ${usdWhole(10_000_00)}`,
+    ]);
+    expect(within(rows[0]!).getByRole('img', { name: 'New bike: 37% saved' })).toBeInTheDocument();
+    expect(
+      within(rows[1]!).getByRole('img', { name: 'Emergency fund: 30% saved' }),
+    ).toBeInTheDocument();
+  });
+
+  it('opens the Goals page from View all', () => {
+    renderBudget();
+    expect(within(goals()).getByRole('link', { name: 'View all' })).toHaveAttribute(
+      'href',
+      '/goals',
+    );
+  });
+
+  it('sits under the limits', () => {
+    renderBudget();
+    const limits = screen.getByRole('region', { name: 'Limits' });
+    expect(limits.compareDocumentPosition(goals()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('shows three goals at most: soonest deadline first, then the closest to done', () => {
+    const data = ledger();
+    const goal = (name: string, current: number, deadline: string | null = null) =>
+      makeGoal({ name, target: 100_00, current, deadline });
+    data.tables.goal = [
+      goal('Far', 10_00),
+      goal('Near done', 90_00),
+      goal('Later', 50_00, '2027-03-01'),
+      goal('Sooner', 20_00, '2027-01-01'),
+      goal('Halfway', 50_00),
+    ];
+    renderBudget(data);
+    const names = within(goals())
+      .getAllByRole('img')
+      .map((ring) => ring.getAttribute('aria-label')!.split(':')[0]);
+    expect(names).toEqual(['Sooner', 'Later', 'Near done']);
+  });
+
+  it('says a reached goal is reached', () => {
+    const data = ledger();
+    data.tables.goal = [makeGoal({ name: 'Laptop', target: 800_00, current: 900_00 })];
+    renderBudget(data);
+    const row = within(goals()).getByRole('listitem');
+    expect(row).toHaveTextContent(`LaptopGoal reached${usdWhole(900_00)}of ${usdWhole(800_00)}`);
+    expect(within(row).getByRole('img', { name: 'Laptop: 112% saved' })).toBeInTheDocument();
+  });
+
+  it('truncates a long goal name', () => {
+    const data = ledger();
+    const name = 'A goal with a name that is forty chars!!';
+    data.tables.goal = [makeGoal({ name })];
+    renderBudget(data);
+    expect(within(goals()).getByText(name)).toHaveClass('truncate');
+  });
+
+  it('offers to set a goal when there are none, with no View all beside it', () => {
+    renderBudget(ledger());
+    const section = goals();
+    expect(within(section).getByText('No goals yet.')).toBeInTheDocument();
+    expect(within(section).getByRole('link', { name: 'Set a goal' })).toHaveAttribute(
+      'href',
+      '/goals',
+    );
+    expect(within(section).queryByRole('link', { name: 'View all' })).not.toBeInTheDocument();
+    expect(within(section).queryByRole('list')).not.toBeInTheDocument();
   });
 });
 

@@ -1,14 +1,16 @@
 import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import { useId, useMemo, useState } from 'react';
 import { Donut, DonutLegend } from '@/components/charts/Donut';
-import { Section } from '@/components/ui/Section';
 import type { BudgetLimit } from '@/domain/entities';
 import { categorySlices, periodProgress } from '@/domain/charts';
 import { addDays } from '@/domain/dates';
 import { monthKey, monthRange } from '@/domain/periods';
+import { EmptyRows, GlassTile, PlainSection, ROWS } from '@/features/shared/PlainSection';
+import { cn } from '@/lib/cn';
 import { formatMonth, formatMonthYear } from '@/lib/format';
 import { useApp } from '@/store/AppStoreProvider';
 import { useFinanceView, useMoney, useToday } from '@/store/useFinance';
+import { GoalsSection } from './GoalsSection';
 import { LimitDialog } from './LimitDialog';
 import { LimitPaceRow } from './LimitPaceRow';
 
@@ -22,14 +24,16 @@ const arrow =
   'text-text hover:bg-surface-2 grid size-11 place-items-center rounded-full disabled:pointer-events-none disabled:opacity-45';
 
 /**
- * Budget: the month's spending as a big donut with its legend, then the limits of the current
- * week and month as bars with a pace mark. The month can go back, never past this one.
+ * Budget, the Spending tab: the month's spending as a big donut with its legend in a glass tile,
+ * then the limits of the current week and month as plain rows of bars with a pace mark, then the
+ * goals. The month can go back, never past this one.
  */
 export function BudgetScreen() {
   const view = useFinanceView();
   const money = useMoney();
   const today = useToday();
   const expenses = useApp((s) => s.data.tables.expense);
+  const goals = useApp((s) => s.data.tables.goal);
   const weekStartsOn = useApp((s) => s.data.tables.settings[0]?.weekStartsOn ?? 1);
   const spendingId = useId();
 
@@ -90,14 +94,11 @@ export function BudgetScreen() {
       </header>
 
       <div className="lg:grid lg:grid-cols-2 lg:items-start lg:gap-x-14">
-        <section
-          aria-labelledby={spendingId}
-          className="border-border min-w-0 max-lg:border-b max-lg:pb-7"
-        >
+        <GlassTile as="section" aria-labelledby={spendingId} className="mt-3.5 min-w-0">
           <h2 id={spendingId} className="sr-only">
             Spending
           </h2>
-          <div className="mt-3.5 mb-[18px] flex justify-center">
+          <div className="mb-[18px] flex justify-center">
             <Donut
               label="Spending by category"
               slices={slices}
@@ -118,10 +119,10 @@ export function BudgetScreen() {
               onSelect={setSlice}
             />
           )}
-        </section>
+        </GlassTile>
 
-        <div className="min-w-0 lg:[&>section:first-child]:pt-0">
-          <Section
+        <div className="min-w-0 lg:[&>section:first-child]:pt-3.5">
+          <PlainSection
             title="Limits"
             action={
               <span className="text-muted text-[12.5px] font-bold">
@@ -130,7 +131,7 @@ export function BudgetScreen() {
             }
           >
             {view.limits.length > 0 ? (
-              <ul>
+              <ul className={cn('px-1', ROWS)}>
                 {view.limits.map((status) => (
                   <LimitPaceRow
                     key={status.limit.id}
@@ -141,17 +142,18 @@ export function BudgetScreen() {
                 ))}
               </ul>
             ) : (
-              <p className="text-muted font-semibold">No limits yet. Add one to see your pace.</p>
+              <EmptyRows>No limits yet. Add one to see your pace.</EmptyRows>
             )}
             <button
               type="button"
               onClick={() => setEditing(null)}
-              className="mt-2 -mb-1 inline-flex min-h-11 items-center gap-2 text-[15px] font-extrabold"
+              className="mx-1 mt-2 -mb-1 inline-flex min-h-11 items-center gap-2 text-[15px] font-extrabold"
             >
               <Plus aria-hidden="true" className="size-[18px]" />
               Add a limit
             </button>
-          </Section>
+          </PlainSection>
+          <GoalsSection goals={goals} />
         </div>
       </div>
 
