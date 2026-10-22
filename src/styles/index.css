@@ -44,6 +44,15 @@
 }
 
 /*
+ * The glass header goes up over main's top padding, which holds the status bar's height, so it
+ * reaches the top edge. Not when a banner is above it: the header then follows the banner, in the
+ * flow, and the padding stays.
+ */
+main:has(> [data-shell-banners]:empty) [data-glass-header] {
+  margin-top: calc(-1 * max(1rem, env(safe-area-inset-top)));
+}
+
+/*
  * Press feedback for anything tappable: it shrinks to --press-scale while pressed and springs back,
  * over --duration-press, and only where the person has not asked for less motion. It transitions
  * `transform` alone; a control that also fades its colors (Button) adds its own

@@ -46,8 +46,11 @@ export function AppShell() {
         tabIndex={-1}
         className="mx-auto w-full max-w-6xl px-5 pt-[max(1rem,env(safe-area-inset-top))] pb-[calc(6rem+env(safe-area-inset-bottom))] focus:outline-none md:px-10 md:pt-6 md:pb-12 [&_h1:focus]:outline-none"
       >
-        <UpdateBanner />
-        <DemoBanner />
+        {/* Empty when neither banner shows, which lets the page's glass header reach the top edge (index.css). */}
+        <div data-shell-banners className="flex flex-col gap-2 empty:hidden">
+          <UpdateBanner />
+          <DemoBanner />
+        </div>
         <Outlet />
       </main>
       <MenuSheet open={menuOpen} onClose={() => setMenuOpen(false)} />

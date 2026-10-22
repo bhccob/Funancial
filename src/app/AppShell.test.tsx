@@ -2,7 +2,7 @@ import { act, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createMemoryRouter, Link, RouterProvider } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { renderWithStore } from '@/test/appStoreStub';
+import { createStubStore, renderWithStore } from '@/test/appStoreStub';
 import { AppShell } from './AppShell';
 import { appRouteObjects } from './router';
 
@@ -85,6 +85,22 @@ describe('AppShell', () => {
     const bar = screen.getByRole('navigation', { name: 'Primary' });
     const follows = bar.compareDocumentPosition(screen.getByRole('main'));
     expect(follows & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('keeps the banners in a box that is empty and out of the layout when none shows', () => {
+    renderAt('/');
+    // The glass header reaches the top edge only while this is :empty (index.css).
+    const banners = screen.getByRole('main').querySelector('[data-shell-banners]');
+    expect(banners).toBeEmptyDOMElement();
+    expect(banners).toHaveClass('empty:hidden');
+  });
+
+  it('puts a banner that shows in that box', () => {
+    const router = createMemoryRouter(appRouteObjects, { initialEntries: ['/'] });
+    renderWithStore(<RouterProvider router={router} />, createStubStore({ namespace: 'demo' }));
+    const banners = screen.getByRole('main').querySelector('[data-shell-banners]');
+    expect(banners).not.toBeEmptyDOMElement();
+    expect(banners).toHaveTextContent("You're exploring with demo money");
   });
 
   it('leaves focus in a field the new page focused itself', async () => {

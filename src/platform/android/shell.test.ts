@@ -21,12 +21,13 @@ vi.mock('@capacitor/core', async (importOriginal) => ({
 /** A fresh copy of the shell and the modules it listens to, so no test hears an earlier one's. */
 async function load() {
   vi.resetModules();
-  const [{ installShell }, theme, dialogs] = await Promise.all([
+  const [{ installShell }, theme, dialogs, bars] = await Promise.all([
     import('./shell'),
     import('@/lib/theme'),
     import('@/lib/dialogStack'),
+    import('@/lib/systemBars'),
   ]);
-  return { installShell, ...theme, ...dialogs };
+  return { installShell, ...theme, ...dialogs, ...bars };
 }
 
 function pressBack(canGoBack: boolean) {
@@ -127,6 +128,29 @@ describe('installShell: system bars', () => {
     expect(native.setStyle).toHaveBeenLastCalledWith({ style: 'DARK' });
     setThemePreference('light');
     expect(native.setStyle).toHaveBeenLastCalledWith({ style: 'LIGHT' });
+  });
+
+  it('sets light icons while a dark header holds the top of the screen, dark ones when it lets go', async () => {
+    const { installShell, initTheme, claimDarkTop } = await load();
+    initTheme();
+    await installShell();
+    expect(native.setStyle).toHaveBeenLastCalledWith({ style: 'LIGHT' });
+
+    const release = claimDarkTop();
+    expect(native.setStyle).toHaveBeenLastCalledWith({ style: 'DARK' });
+    release();
+    expect(native.setStyle).toHaveBeenLastCalledWith({ style: 'LIGHT' });
+  });
+
+  it('does not ask the system again for a style it already has', async () => {
+    stubMatchMedia(true);
+    const { installShell, initTheme, claimDarkTop } = await load();
+    initTheme();
+    await installShell();
+
+    claimDarkTop()();
+
+    expect(native.setStyle).toHaveBeenCalledExactlyOnceWith({ style: 'DARK' });
   });
 
   it('starts with light icons when the app opens in the dark theme', async () => {
