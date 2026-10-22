@@ -106,7 +106,8 @@ export type GameView = {
 export function computeGameView(data: DataSnapshot, ctx: GameContext): GameView {
   const { ledger } = data.tables;
   const totals = ledgerTotals(ledger);
-  const owned = ownedItems(ledger);
+  const level = levelInfo(totals.xp);
+  const owned = ownedItems(ledger, level.level);
   // The sort is stable, so entries written in the same moment keep the ledger's order, reversed below.
   const history = [...ledger]
     .sort((a, b) => (a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : 0))
@@ -114,7 +115,7 @@ export function computeGameView(data: DataSnapshot, ctx: GameContext): GameView 
     .reverse();
   return {
     totals,
-    level: levelInfo(totals.xp),
+    level,
     streaks: computeStreaks(data, ctx),
     quests: currentQuests(data, ctx),
     badges: badgeViews(data),

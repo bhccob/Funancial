@@ -192,7 +192,7 @@ export function defaultSettings(now: string): Settings {
       dividends: true,
       prompted: false,
     },
-    cosmetics: { theme: 'theme-violet', avatar: 'avatar-sprout', frame: 'frame-none' },
+    cosmetics: { theme: 'theme-mono', avatar: 'avatar-sprout', frame: 'frame-none' },
     investCurrency: null,
     investFx: null,
     inbox: { readBefore: null, read: [] },

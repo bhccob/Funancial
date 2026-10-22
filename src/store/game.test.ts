@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { gameUpdates } from '@/domain/game/engine';
 import { challengeViews } from '@/domain/game/challenges';
 import { ledgerTotals, netByKey } from '@/domain/game/ledger';
+import { levelStart } from '@/domain/game/levels';
 import { ownedItems } from '@/domain/game/shop';
 import type { GameContext } from '@/domain/game/types';
 import { computeGameView } from '@/domain/game/engine';
@@ -11,6 +12,7 @@ import {
   makeExpense,
   makeGoal,
   makeLedgerEntry,
+  makeLegacyPurchase,
   makeLimit,
   makeSubscription,
 } from '@/test/fixtures';
@@ -374,19 +376,19 @@ describe('the shop', () => {
   it('buys with coins, refuses when short, equips only what is owned', async () => {
     const { store, game } = await withCoins(100);
 
-    await expect(game.buy('theme-ocean')).rejects.toThrow('Not enough coins.');
+    await expect(game.buy('theme-sky')).rejects.toThrow('Not enough coins.');
     await expect(game.buy('nothing-here')).rejects.toThrow("That item isn't in the shop.");
     expect(coinsLeft(store)).toBe(100);
 
     await expect(game.equip('avatar-rocket')).rejects.toThrow('Buy it first.');
     await game.buy('avatar-rocket');
     expect(coinsLeft(store)).toBe(20);
-    expect(ownedItems(ledgerOf(store)).has('avatar-rocket')).toBe(true);
+    expect(ownedItems(ledgerOf(store), 1).has('avatar-rocket')).toBe(true);
     await expect(game.buy('avatar-rocket')).rejects.toThrow('You already own this.');
 
     await game.equip('avatar-rocket');
     expect(store.getState().data.tables.settings[0]?.cosmetics).toEqual({
-      theme: 'theme-violet',
+      theme: 'theme-mono',
       avatar: 'avatar-rocket',
       frame: 'frame-none',
     });
@@ -399,6 +401,17 @@ describe('the shop', () => {
     const { store, game } = await setup();
     await game.equip('frame-none');
     expect(store.getState().data.tables.settings[0]?.cosmetics.frame).toBe('frame-none');
+    await game.equip('theme-mono');
+    expect(store.getState().data.tables.settings[0]?.cosmetics.theme).toBe('theme-mono');
+  });
+
+  it('buys a theme and wears it', async () => {
+    const { store, game } = await withCoins(500);
+    await expect(game.equip('theme-sky')).rejects.toThrow('Buy it first.');
+    await game.buy('theme-sky');
+    expect(coinsLeft(store)).toBe(100);
+    await game.equip('theme-sky');
+    expect(computeGameView(store.getState().data, ctxOf(store)).cosmetics.theme).toBe('theme-sky');
   });
 
   it('uses only themes, avatars and frames, and says so before asking for a purchase', async () => {
@@ -417,6 +430,62 @@ describe('the shop', () => {
     await game.buy('freeze-checkin');
     await game.buy('freeze-checkin');
     await expect(game.buy('freeze-checkin')).rejects.toThrow('You can hold 2 at a time.');
+  });
+});
+
+describe('borders', () => {
+  async function atXp(xp: number) {
+    const t = await setup();
+    await t.store.getState().put('ledger', makeLedgerEntry({ key: 'seed', xp, coins: 0 }));
+    return t;
+  }
+  const frameOf = (store: StoreApi<AppState>) =>
+    store.getState().data.tables.settings[0]?.cosmetics.frame;
+
+  it('wears a border once its level is reached, and says which level before then', async () => {
+    const { store, game } = await atXp(levelStart(5) - 1); // level 4
+    await expect(game.equip('frame-bronze')).rejects.toThrow('Reach level 5 to wear this border.');
+    await expect(game.equip('frame-silver')).rejects.toThrow('Reach level 11 to wear this border.');
+    await expect(game.equip('frame-prism')).rejects.toThrow('Reach level 50 to wear this border.');
+    expect(frameOf(store)).toBe('frame-none'); // nothing was put on
+
+    await store.getState().put('ledger', makeLedgerEntry({ key: 'level-5', xp: 1, coins: 0 }));
+    await game.equip('frame-bronze');
+    expect(frameOf(store)).toBe('frame-bronze');
+    expect(computeGameView(store.getState().data, ctxOf(store)).cosmetics.frame).toBe(
+      'frame-bronze',
+    );
+    await expect(game.equip('frame-silver')).rejects.toThrow('Reach level 11 to wear this border.');
+  });
+
+  it('wears a frame bought in 0.11 at any level, but no other border', async () => {
+    const { store, game } = await setup();
+    await store.getState().put('ledger', makeLegacyPurchase('frame-gold', 200));
+    await game.equip('frame-gold');
+    expect(frameOf(store)).toBe('frame-gold');
+    await expect(game.equip('frame-diamond')).rejects.toThrow(
+      'Reach level 41 to wear this border.',
+    );
+  });
+
+  it('takes a border off by wearing none', async () => {
+    const { store, game } = await atXp(levelStart(11));
+    await game.equip('frame-silver');
+    await game.equip('frame-none');
+    expect(frameOf(store)).toBe('frame-none');
+  });
+
+  it('puts a worn border back to none when the level drops below it', async () => {
+    const { store, game } = await atXp(levelStart(11));
+    await game.equip('frame-silver');
+    // The XP is taken back, as when what earned it is removed.
+    await store
+      .getState()
+      .put(
+        'ledger',
+        makeLedgerEntry({ key: 'seed', kind: 'reversal', xp: -levelStart(11), coins: 0 }),
+      );
+    expect(computeGameView(store.getState().data, ctxOf(store)).cosmetics.frame).toBe('frame-none');
   });
 });
 

@@ -25,6 +25,7 @@ import {
   makeHolding,
   makeIncome,
   makeLedgerEntry,
+  makeLegacyPurchase,
   makeLimit,
   makeProfile,
   makeSettings,
@@ -229,7 +230,7 @@ describe('DashboardScreen top line', () => {
     data.tables.ledger.push(
       makeLedgerEntry({ key: 'bonus', xp: 0, coins: 400 }),
       purchaseEntry('avatar-rocket', 'p1', localIso('2026-10-01')),
-      purchaseEntry('frame-gold', 'p2', localIso('2026-10-01')),
+      makeLegacyPurchase('frame-gold', 200, 'p2'),
     );
     renderDashboard(data, TODAY);
     const link = screen.getByRole('link', { name: 'Profile, level 2' });

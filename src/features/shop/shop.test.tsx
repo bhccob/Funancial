@@ -6,7 +6,7 @@ import { SHOP_ITEMS, purchaseEntry } from '@/domain/game/shop';
 import { emptySnapshot, type DataSnapshot } from '@/domain/snapshot';
 import { toastStore } from '@/lib/toast';
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
-import { localIso, makeLedgerEntry, makeSettings } from '@/test/fixtures';
+import { localIso, makeLedgerEntry, makeLegacyPurchase, makeSettings } from '@/test/fixtures';
 import { freshRealStore } from '@/test/realStore';
 import { ShopScreen } from './ShopScreen';
 
@@ -73,7 +73,6 @@ describe('Shop screen: items', () => {
     const sections: [string, string][] = [
       ['Themes', 'theme'],
       ['Avatars', 'avatar'],
-      ['Frames', 'frame'],
       ['Streak freezes', 'freeze'],
     ];
     for (const [title, slot] of sections) {
@@ -89,35 +88,40 @@ describe('Shop screen: items', () => {
     }
   });
 
-  it('previews themes as a dot in their light or dark color, avatars, and frames on the avatar', () => {
-    const { container } = renderShop((d) => {
-      d.tables.ledger = [bought('avatar-rocket')];
-      d.tables.settings = [
-        makeSettings({
-          cosmetics: { theme: 'theme-violet', avatar: 'avatar-rocket', frame: 'frame-none' },
-        }),
-      ];
-    });
+  it('previews each theme as a dot in its own top block, and avatars', () => {
+    const { container } = renderShop();
 
     const dot = (name: string) => row(name).querySelector('span.size-6.rounded-full');
-    expect(dot('Violet')).toHaveClass('bg-[#7c5cff]', 'dark:bg-[#9d85ff]');
-    expect(dot('Ocean')).toHaveClass('bg-[#1f63d6]', 'dark:bg-[#6aa6ff]');
-    expect(dot('Orchid')).toHaveClass('bg-[#a8189a]', 'dark:bg-[#f08ae0]');
-    expect(dot('Graphite')).toHaveClass('bg-[#4a4f5c]', 'dark:bg-[#c3c8d4]');
-    expect(dot('Violet')).toHaveAttribute('aria-hidden', 'true');
+    const themes: [string, string][] = [
+      ['Black & White', 'mono'],
+      ['Sunny Sky', 'sky'],
+      ['Lemon Mint', 'lemon'],
+      ['Pastel', 'pastel'],
+      ['Daisy Sage', 'daisy'],
+      ['Peach Sorbet', 'peach'],
+      ['Powder Blue', 'powder'],
+      ['Seafoam', 'seafoam'],
+      ['Midnight Navy', 'navy'],
+      ['Forest Night', 'forest'],
+      ['Plum Night', 'plum'],
+      ['Espresso', 'espresso'],
+    ];
+    for (const [name, id] of themes) {
+      expect(dot(name)).toHaveAttribute('data-theme-preview', id);
+      expect(dot(name)).toHaveClass('bg-head');
+      expect(dot(name)).toHaveAttribute('aria-hidden', 'true');
+    }
 
     expect(row('Cat').querySelector('svg.lucide-cat')).toBeInTheDocument();
     expect(row('Gem').querySelector('svg.lucide-gem')).toBeInTheDocument();
-
-    // A frame is shown around the avatar being worn (the rocket), not the default sprout.
-    const silver = row('Silver');
-    expect(silver.querySelector('svg.lucide-rocket')).toBeInTheDocument();
-    expect(silver.querySelector('[class*="ring-[#a8adb7]"]')).toBeInTheDocument();
-    expect(row('Gold').querySelector('[class*="ring-[#d4a017]"]')).toBeInTheDocument();
-    expect(row('Game color').querySelector('[class*="ring-xp"]')).toBeInTheDocument();
-    expect(row('No frame').querySelector('[class*="ring-2"]')).not.toBeInTheDocument();
-
     expect(container.querySelector('svg.lucide-snowflake')).toBeInTheDocument();
+  });
+
+  it('sells no frames: borders come with the level', () => {
+    renderShop();
+    expect(screen.queryByRole('region', { name: 'Frames' })).not.toBeInTheDocument();
+    expect(screen.queryByText('No frame')).not.toBeInTheDocument();
+    expect(screen.queryByText('Game color')).not.toBeInTheDocument();
   });
 });
 
@@ -127,10 +131,10 @@ describe('Shop screen: buttons', () => {
       d.tables.ledger = [earned(100)];
     });
 
-    const ocean = row('Ocean');
-    const buy = within(ocean).getByRole('button', { name: 'Buy Ocean' });
+    const sky = row('Sunny Sky');
+    const buy = within(sky).getByRole('button', { name: 'Buy Sunny Sky' });
     expect(buy).toBeDisabled();
-    expect(within(ocean).getByText('Not enough coins.')).toBeInTheDocument();
+    expect(within(sky).getByText('Not enough coins.')).toBeInTheDocument();
     expect(buy).toHaveAccessibleDescription('Not enough coins.');
 
     // 100 coins is enough for the 80-coin Rocket: no reason, Buy is on.
@@ -141,24 +145,42 @@ describe('Shop screen: buttons', () => {
 
   it('shows In use for what is worn, Use for what is owned, and Buy for the rest', () => {
     renderShop((d) => {
-      d.tables.ledger = [earned(500), bought('avatar-cat'), bought('frame-gold', 'p2')];
+      d.tables.ledger = [earned(1_000), bought('avatar-cat'), bought('theme-sky', 'p2')];
       d.tables.settings = [
         makeSettings({
-          cosmetics: { theme: 'theme-violet', avatar: 'avatar-cat', frame: 'frame-none' },
+          cosmetics: { theme: 'theme-mono', avatar: 'avatar-cat', frame: 'frame-none' },
         }),
       ];
     });
 
     // The free items are owned from the start.
-    expect(within(row('Violet')).getByText('In use')).toBeInTheDocument();
-    expect(within(row('Violet')).queryByRole('button')).not.toBeInTheDocument();
+    expect(within(row('Black & White')).getByText('In use')).toBeInTheDocument();
+    expect(within(row('Black & White')).queryByRole('button')).not.toBeInTheDocument();
     expect(within(row('Cat')).getByText('In use')).toBeInTheDocument();
-    expect(within(row('No frame')).getByText('In use')).toBeInTheDocument();
     expect(within(row('Sprout')).getByRole('button', { name: 'Use Sprout' })).toBeEnabled();
-    expect(within(row('Gold')).getByRole('button', { name: 'Use Gold' })).toBeEnabled();
-    expect(within(row('Gold')).queryByText('In use')).not.toBeInTheDocument();
-    expect(within(row('Silver')).getByRole('button', { name: 'Buy Silver' })).toBeEnabled();
-    expect(within(row('Ocean')).queryByText('In use')).not.toBeInTheDocument();
+    expect(within(row('Sunny Sky')).getByRole('button', { name: 'Use Sunny Sky' })).toBeEnabled();
+    expect(within(row('Sunny Sky')).queryByText('In use')).not.toBeInTheDocument();
+    expect(within(row('Lemon Mint')).getByRole('button', { name: 'Buy Lemon Mint' })).toBeEnabled();
+  });
+
+  it('shows a 0.11 Ocean purchase as an owned Powder Blue, worn as it was', () => {
+    renderShop((d) => {
+      d.tables.ledger = [earned(1_000), makeLegacyPurchase('theme-ocean', 150)];
+      d.tables.settings = [
+        makeSettings({
+          cosmetics: { theme: 'theme-ocean', avatar: 'avatar-sprout', frame: 'frame-none' },
+        }),
+      ];
+    });
+
+    expect(within(row('Powder Blue')).getByText('In use')).toBeInTheDocument();
+    expect(within(row('Powder Blue')).queryByRole('button')).not.toBeInTheDocument();
+    expect(
+      within(row('Black & White')).getByRole('button', { name: 'Use Black & White' }),
+    ).toBeEnabled();
+    // Orchid was never bought, so Pastel is still for sale; the coins are as they were.
+    expect(within(row('Pastel')).getByRole('button', { name: 'Buy Pastel' })).toBeEnabled();
+    expect(screen.getByText('850 coins')).toBeInTheDocument();
   });
 
   it('asks the store to wear an owned item', async () => {
@@ -176,7 +198,7 @@ describe('Shop screen: buttons', () => {
     expect(put).toHaveBeenCalledWith(
       'settings',
       expect.objectContaining({
-        cosmetics: { theme: 'theme-violet', avatar: 'avatar-cat', frame: 'frame-none' },
+        cosmetics: { theme: 'theme-mono', avatar: 'avatar-cat', frame: 'frame-none' },
       }),
     );
   });
@@ -257,7 +279,7 @@ describe('Shop screen: freezes', () => {
 describe('Shop screen: buying', () => {
   it('buys after confirming, then uses the item', async () => {
     const { store } = await freshRealStore();
-    await store.getState().put('ledger', earned(260));
+    await store.getState().put('ledger', earned(510));
     renderWithStore(
       <>
         <ShopScreen />
@@ -266,20 +288,22 @@ describe('Shop screen: buying', () => {
       store,
     );
 
-    await userEvent.click(screen.getByRole('button', { name: 'Buy Ocean' }));
-    const dialog = screen.getByRole('dialog', { name: 'Buy Ocean for 150 coins?' });
+    await userEvent.click(screen.getByRole('button', { name: 'Buy Sunny Sky' }));
+    const dialog = screen.getByRole('dialog', { name: 'Buy Sunny Sky for 400 coins?' });
     await userEvent.click(within(dialog).getByRole('button', { name: 'Buy' }));
 
     // The toast moves out of the dialog as it closes, so look for it once the dialog is gone.
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
-    expect(screen.getByText('Ocean is yours.')).toBeInTheDocument();
+    expect(screen.getByText('Sunny Sky is yours.')).toBeInTheDocument();
     expect(screen.getByText('110 coins')).toBeInTheDocument();
 
-    await userEvent.click(within(row('Ocean')).getByRole('button', { name: 'Use Ocean' }));
+    await userEvent.click(within(row('Sunny Sky')).getByRole('button', { name: 'Use Sunny Sky' }));
 
-    expect(await within(row('Ocean')).findByText('In use')).toBeInTheDocument();
-    expect(within(row('Violet')).getByRole('button', { name: 'Use Violet' })).toBeInTheDocument();
-    expect(store.getState().data.tables.settings[0]?.cosmetics.theme).toBe('theme-ocean');
+    expect(await within(row('Sunny Sky')).findByText('In use')).toBeInTheDocument();
+    expect(
+      within(row('Black & White')).getByRole('button', { name: 'Use Black & White' }),
+    ).toBeInTheDocument();
+    expect(store.getState().data.tables.settings[0]?.cosmetics.theme).toBe('theme-sky');
   });
 
   it('puts the purchase in the ledger as the price in coins', async () => {

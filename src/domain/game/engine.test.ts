@@ -14,6 +14,7 @@ import type { LedgerEntry } from '../entities';
 import { emptySnapshot, type DataSnapshot } from '../snapshot';
 import { applyRecords } from '../sync';
 import { computeGameView, gameUpdates } from './engine';
+import { levelStart } from './levels';
 import { purchaseEntry } from './shop';
 import type { GameContext } from './types';
 
@@ -317,7 +318,7 @@ describe('gameUpdates', () => {
 
 describe('computeGameView', () => {
   it('builds the view', () => {
-    const ocean = purchaseEntry('theme-ocean', 'p1', localIso('2026-10-10'));
+    const sky = purchaseEntry('theme-sky', 'p1', localIso('2026-10-10'));
     const data = snap({
       expense: [loggedOn(today, 'e1')],
       ledger: [
@@ -326,22 +327,22 @@ describe('computeGameView', () => {
           key: 'log:expense:e1',
           kind: 'award',
           xp: 10,
-          coins: 200,
+          coins: 500,
           createdAt: localIso('2026-10-09'),
         }),
-        ocean,
+        sky,
       ],
       challenge: [makeChallenge({ id: 'c1', start: today, end: addDays(today, 1) })],
       settings: [
         makeSettings({
-          cosmetics: { theme: 'theme-ocean', avatar: 'avatar-cat', frame: 'frame-none' },
+          cosmetics: { theme: 'theme-sky', avatar: 'avatar-cat', frame: 'frame-none' },
         }),
       ],
     });
 
     const view = computeGameView(data, ctx);
 
-    expect(view.totals).toEqual({ xp: 10, coins: 50 });
+    expect(view.totals).toEqual({ xp: 10, coins: 100 });
     expect(view.level).toMatchObject({ level: 1, tier: 'Bronze Saver', xpIntoLevel: 10 });
     expect(view.streaks.map((s) => s.kind)).toEqual([
       'logging',
@@ -361,24 +362,48 @@ describe('computeGameView', () => {
     ]);
     expect(view.quests.map((q) => q.id)).toEqual(['log-today', 'week-checkin']);
     expect(view.challenges.map((c) => c.challenge.id)).toEqual(['c1']);
-    expect(view.owned).toEqual(
-      new Set(['theme-violet', 'avatar-sprout', 'frame-none', 'theme-ocean']),
-    );
+    expect(view.owned).toEqual(new Set(['theme-mono', 'avatar-sprout', 'frame-none', 'theme-sky']));
     // The cat was never bought, so the avatar falls back to the sprout.
     expect(view.cosmetics).toEqual({
-      theme: 'theme-ocean',
+      theme: 'theme-sky',
       avatar: 'avatar-sprout',
       frame: 'frame-none',
     });
-    expect(view.history.map((e) => e.id)).toEqual([ocean.id, 'log:expense:e1#0']);
+    expect(view.history.map((e) => e.id)).toEqual([sky.id, 'log:expense:e1#0']);
   });
 
   it('wears the defaults before settings exist', () => {
     expect(computeGameView(emptySnapshot(), ctx).cosmetics).toEqual({
-      theme: 'theme-violet',
+      theme: 'theme-mono',
       avatar: 'avatar-sprout',
       frame: 'frame-none',
     });
+  });
+
+  it('owns the borders the level has reached, and wears one of them', () => {
+    const settings = makeSettings({
+      cosmetics: { theme: 'theme-mono', avatar: 'avatar-sprout', frame: 'frame-silver' },
+    });
+    const atLevel = (level: number) =>
+      computeGameView(
+        snap({
+          ledger: [makeLedgerEntry({ key: 'seed', xp: levelStart(level), coins: 0 })],
+          settings: [settings],
+        }),
+        ctx,
+      );
+
+    const eleven = atLevel(11);
+    expect(eleven.level.level).toBe(11);
+    expect(eleven.owned).toEqual(
+      new Set(['theme-mono', 'avatar-sprout', 'frame-none', 'frame-bronze', 'frame-silver']),
+    );
+    expect(eleven.cosmetics.frame).toBe('frame-silver');
+
+    // One level short of Silver, the stored border is not worn.
+    const ten = atLevel(10);
+    expect(ten.owned.has('frame-silver')).toBe(false);
+    expect(ten.cosmetics.frame).toBe('frame-none');
   });
 
   describe('history', () => {

@@ -65,15 +65,15 @@ describe('Root', () => {
 
   it('puts the equipped game theme on the page while unlocked, and takes it off when locked', () => {
     const data = onboarded();
-    data.tables.ledger = [purchaseEntry('theme-ocean', 'p1', '2026-10-01T10:00:00.000Z')];
+    data.tables.ledger = [purchaseEntry('theme-powder', 'p1', '2026-10-01T10:00:00.000Z')];
     data.tables.settings = [
       makeSettings({
-        cosmetics: { theme: 'theme-ocean', avatar: 'avatar-sprout', frame: 'frame-none' },
+        cosmetics: { theme: 'theme-powder', avatar: 'avatar-sprout', frame: 'frame-none' },
       }),
     ];
     const store = createStubStore({ phase: 'unlocked', data });
     renderWithStore(<Root />, store);
-    expect(document.documentElement.dataset.gameTheme).toBe('ocean');
+    expect(document.documentElement.dataset.gameTheme).toBe('powder');
 
     act(() => store.setState({ phase: 'locked', lockMode: 'pin' }));
     expect(document.documentElement.dataset.gameTheme).toBeUndefined();

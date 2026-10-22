@@ -75,7 +75,7 @@ test('the shop refuses a purchase without enough coins', async ({ page }) => {
     page.getByText("Coins are for fun. They can't be bought and have no money value."),
   ).toBeVisible();
 
-  const ocean = page.getByRole('listitem').filter({ hasText: 'Ocean' });
-  await expect(ocean.getByRole('button', { name: 'Buy Ocean' })).toBeDisabled();
-  await expect(ocean.getByText('Not enough coins.')).toBeVisible();
+  const sky = page.getByRole('listitem').filter({ hasText: 'Sunny Sky' });
+  await expect(sky.getByRole('button', { name: 'Buy Sunny Sky' })).toBeDisabled();
+  await expect(sky.getByText('Not enough coins.')).toBeVisible();
 });

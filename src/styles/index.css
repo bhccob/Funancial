@@ -109,6 +109,45 @@
 }
 
 /*
+ * The Prism border (frame-prism, level 50): a 2px rainbow ring round a round piece, outside it as the
+ * other borders' rings are (a conic gradient cannot be a box-shadow, so it is a masked layer), with
+ * a pale glass edge on both sides of it. It makes the piece `relative`, for the layer to sit on.
+ */
+@utility frame-prism {
+  position: relative;
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 0.55),
+    0 0 0 3px rgb(255 255 255 / 0.5);
+  &::before {
+    content: '';
+    position: absolute;
+    inset: -2px;
+    padding: 2px;
+    border-radius: inherit;
+    pointer-events: none;
+    background: conic-gradient(
+      from 200deg,
+      #ff5f6d,
+      #ffc371,
+      #f9f871,
+      #7be495,
+      #4cc9f0,
+      #8f7bff,
+      #ff7bd5,
+      #ff5f6d
+    );
+    /* Only the 2px of padding shows: the gradient less its content box. */
+    -webkit-mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask:
+      linear-gradient(#000 0 0) content-box exclude,
+      linear-gradient(#000 0 0);
+  }
+}
+
+/*
  * The soft shapes behind the page, which the glass blurs: a fixed layer under everything in the
  * element that wears this (the body). It makes that element its own stacking context, so the layer
  * sits above the element's own background and below its content. Dark mode turns it down to 40%.

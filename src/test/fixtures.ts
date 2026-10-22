@@ -200,6 +200,20 @@ export function makeLedgerEntry(overrides: Partial<LedgerEntry> = {}): LedgerEnt
   };
 }
 
+/**
+ * A purchase the Shop no longer sells, as 0.11 wrote it: a retired theme (`theme-ocean`) or a frame
+ * (`frame-gold`). `purchaseEntry` refuses these, so a test that needs one writes it here.
+ */
+export function makeLegacyPurchase(itemId: string, coins: number, purchaseId = 'p1'): LedgerEntry {
+  return makeLedgerEntry({
+    key: `shop:${itemId}:${purchaseId}`,
+    kind: 'purchase',
+    xp: 0,
+    coins: -coins,
+    label: `Bought: ${itemId}`,
+  });
+}
+
 export function makeCheckIn(overrides: Partial<CheckIn> = {}): CheckIn {
   return {
     id: newId(),

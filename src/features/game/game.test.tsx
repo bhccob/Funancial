@@ -17,6 +17,7 @@ import {
   makeAccount,
   makeExpense,
   makeLedgerEntry,
+  makeLegacyPurchase,
   makeLimit,
   makeSettings,
   makeSubscription,
@@ -107,10 +108,22 @@ describe('Avatar', () => {
       unmount();
       return classes;
     };
+    expect(ring('frame-bronze')).toMatch(/\bring-2\b.*\bring-\[#b0703c\]/);
     expect(ring('frame-silver')).toMatch(/\bring-2\b.*\bring-\[#a8adb7\]/);
     expect(ring('frame-gold')).toMatch(/\bring-2\b.*\bring-\[#d4a017\]/);
+    expect(ring('frame-platinum')).toMatch(/\bring-2\b.*\bring-\[#8fb3c9\]/);
+    expect(ring('frame-diamond')).toMatch(/\bring-2\b.*\bring-\[#4cc9f0\]/);
     expect(ring('frame-game')).toMatch(/\bring-2\b.*\bring-xp\b/);
     expect(ring('frame-none')).not.toMatch(/\bring/);
+    expect(ring('frame-unknown')).not.toMatch(/\bring/);
+  });
+
+  it('draws the prism frame as a rainbow ring, not a plain one', () => {
+    const { container } = renderIn(<Avatar item="avatar-cat" frame="frame-prism" size={40} />);
+    const classes = (container.firstElementChild as HTMLElement).className;
+    // frame-prism is the conic-gradient ring in index.css; a plain 2px ring could not be a gradient.
+    expect(classes).toMatch(/\bframe-prism\b/);
+    expect(classes).not.toMatch(/\bring-/);
   });
 
   it('is as big as asked and is not read out on its own', () => {
@@ -134,44 +147,77 @@ describe('useGameTheme', () => {
   it('applies the equipped game theme while unlocked, and removes it when locked', async () => {
     const { store } = await freshRealStore();
     await store.getState().setSecret('2468', 'pin'); // a store with no lock cannot be locked
-    await store.getState().put('ledger', makeLedgerEntry({ key: 'seed', xp: 0, coins: 200 }));
+    await store.getState().put('ledger', makeLedgerEntry({ key: 'seed', xp: 0, coins: 500 }));
     const game = createGameActions(store);
     renderHook(() => useGameTheme(), { wrapper: wrapperFor(store) });
-    expect(themeOf()).toBe('violet');
+    expect(themeOf()).toBe('mono');
 
     await act(async () => {
-      await game.buy('theme-ocean');
-      await game.equip('theme-ocean');
+      await game.buy('theme-sky');
+      await game.equip('theme-sky');
     });
-    expect(themeOf()).toBe('ocean');
+    expect(themeOf()).toBe('sky');
 
     act(() => store.getState().lock());
     expect(store.getState().phase).toBe('locked');
     expect(themeOf()).toBeUndefined();
   });
 
-  it('follows the equipped theme and falls back to violet for one that is not owned', () => {
+  it('follows the equipped theme and falls back to mono for one that is not owned', () => {
     const settings = (theme: string) =>
       makeSettings({ cosmetics: { theme, avatar: 'avatar-sprout', frame: 'frame-none' } });
-    const owned = [purchaseEntry('theme-orchid', 'p1', '2026-10-01T10:00:00.000Z')];
+    const owned = [purchaseEntry('theme-forest', 'p1', '2026-10-01T10:00:00.000Z')];
     const store = createStubStore({
       data: dataWith((d) => {
-        d.tables.settings = [settings('theme-graphite')];
+        d.tables.settings = [settings('theme-navy')];
         d.tables.ledger = owned;
       }),
     });
     renderHook(() => useGameTheme(), { wrapper: wrapperFor(store) });
-    expect(themeOf()).toBe('violet'); // graphite is equipped but was never bought
+    expect(themeOf()).toBe('mono'); // navy is equipped but was never bought
 
     act(() =>
       store.setState({
         data: dataWith((d) => {
-          d.tables.settings = [settings('theme-orchid')];
+          d.tables.settings = [settings('theme-forest')];
           d.tables.ledger = owned;
         }),
       }),
     );
-    expect(themeOf()).toBe('orchid');
+    expect(themeOf()).toBe('forest');
+  });
+
+  it('shows a 0.11 theme as the one that replaced it, and the old default as mono', () => {
+    const settings = (theme: string) =>
+      makeSettings({ cosmetics: { theme, avatar: 'avatar-sprout', frame: 'frame-none' } });
+    const ocean = [makeLegacyPurchase('theme-ocean', 150)];
+    const store = createStubStore({
+      data: dataWith((d) => {
+        d.tables.settings = [settings('theme-violet')];
+        d.tables.ledger = ocean;
+      }),
+    });
+    renderHook(() => useGameTheme(), { wrapper: wrapperFor(store) });
+    expect(themeOf()).toBe('mono'); // violet was the free default
+
+    act(() =>
+      store.setState({
+        data: dataWith((d) => {
+          d.tables.settings = [settings('theme-ocean')];
+          d.tables.ledger = ocean;
+        }),
+      }),
+    );
+    expect(themeOf()).toBe('powder'); // the Ocean that was bought is Powder Blue now
+
+    act(() =>
+      store.setState({
+        data: dataWith((d) => {
+          d.tables.settings = [settings('theme-ocean')];
+        }),
+      }),
+    );
+    expect(themeOf()).toBe('mono'); // Ocean was never bought, so there is nothing to read it as
   });
 
   it('sets nothing before the app is unlocked, and cleans up when it goes', () => {
@@ -180,7 +226,7 @@ describe('useGameTheme', () => {
     expect(themeOf()).toBeUndefined();
 
     act(() => store.setState({ phase: 'unlocked' }));
-    expect(themeOf()).toBe('violet');
+    expect(themeOf()).toBe('mono');
 
     view.unmount();
     expect(themeOf()).toBeUndefined();

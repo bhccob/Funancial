@@ -6,7 +6,6 @@ import { Section } from '@/components/ui/Section';
 import type { Cosmetics } from '@/domain/entities';
 import { FREEZE_LIMIT, purchaseBlocker, SHOP_ITEMS, type ShopItem } from '@/domain/game/shop';
 import { freezeTokensHeld } from '@/domain/game/streaks';
-import { cn } from '@/lib/cn';
 import { useAction } from '@/lib/useAction';
 import { useApp } from '@/store/AppStoreProvider';
 import { useGameActions, useGameView } from '@/store/useGame';
@@ -16,17 +15,8 @@ import { BuyDialog } from './BuyDialog';
 const SECTIONS = [
   { slot: 'theme', title: 'Themes' },
   { slot: 'avatar', title: 'Avatars' },
-  { slot: 'frame', title: 'Frames' },
   { slot: 'freeze', title: 'Streak freezes' },
 ] as const;
-
-/** Each theme's game color, light then dark: the dot follows the page's `data-theme`. */
-const SWATCHES: Record<string, string> = {
-  'theme-violet': 'bg-[#7c5cff] dark:bg-[#9d85ff]',
-  'theme-ocean': 'bg-[#1f63d6] dark:bg-[#6aa6ff]',
-  'theme-orchid': 'bg-[#a8189a] dark:bg-[#f08ae0]',
-  'theme-graphite': 'bg-[#4a4f5c] dark:bg-[#c3c8d4]',
-};
 
 /** The streak a freeze protects. */
 const FREEZE_STREAK: Record<string, 'logging' | 'checkin'> = {
@@ -34,19 +24,19 @@ const FREEZE_STREAK: Record<string, 'logging' | 'checkin'> = {
   'freeze-checkin': 'checkin',
 };
 
-function Preview({ item, worn }: { item: ShopItem; worn: Cosmetics }) {
+function Preview({ item }: { item: ShopItem }) {
   switch (item.slot) {
     case 'theme':
+      // A dot in the theme's own top block: themes.css styles it under data-theme-preview.
       return (
         <span
           aria-hidden="true"
-          className={cn('size-6 shrink-0 rounded-full', SWATCHES[item.id])}
+          data-theme-preview={item.id.replace(/^theme-/, '')}
+          className="bg-head size-6 shrink-0 rounded-full"
         />
       );
     case 'avatar':
       return <Avatar item={item.id} frame="frame-none" size={32} />;
-    case 'frame':
-      return <Avatar item={worn.avatar} frame={item.id} size={32} />;
     case 'freeze':
       return <Snowflake aria-hidden="true" className="text-xp-text size-5 shrink-0" />;
   }
@@ -82,7 +72,7 @@ function ItemRow({ item, worn, owned, blocker, held, onBuy, onUse }: ItemRowProp
   return (
     <li className="flex items-center gap-3 py-3">
       <span className="grid size-9 shrink-0 place-items-center">
-        <Preview item={item} worn={worn} />
+        <Preview item={item} />
       </span>
       <div className="min-w-0 flex-1">
         <p className="text-sm font-semibold">{item.name}</p>
@@ -132,7 +122,7 @@ function ItemRow({ item, worn, owned, blocker, held, onBuy, onUse }: ItemRowProp
   );
 }
 
-/** The coin shop: game themes, avatars and badge frames to wear, and streak freezes, for coins. */
+/** The coin shop: game themes and avatars to wear, and streak freezes, for coins. */
 export function ShopScreen() {
   const game = useGameView();
   const data = useApp((s) => s.data);

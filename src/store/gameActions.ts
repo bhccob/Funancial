@@ -2,7 +2,9 @@ import type { StoreApi } from 'zustand/vanilla';
 import { defaultSettings, type Challenge, type ChallengeKind } from '@/domain/entities';
 import { isLoggedExpense } from '@/domain/game/activity';
 import { newChallenge, startRequirement } from '@/domain/game/challenges';
-import { ownedItems, purchaseBlocker, purchaseEntry, SHOP_ITEMS } from '@/domain/game/shop';
+import { ledgerTotals } from '@/domain/game/ledger';
+import { BORDERS, levelInfo } from '@/domain/game/levels';
+import { ownedItems, purchaseBlocker, purchaseEntry, wearSlot } from '@/domain/game/shop';
 import { newId, nowIso } from '@/domain/ids';
 import { weekRange } from '@/domain/periods';
 import { gameContext, type AppState } from './appStore';
@@ -68,15 +70,24 @@ export function createGameActions(store: StoreApi<AppState>) {
       await state().put('ledger', purchaseEntry(itemId, newId(), nowIso()));
     },
 
-    /** Puts on a theme, avatar or frame that is owned. A freeze is spent by the game, not worn. */
+    /**
+     * Puts on a theme, avatar or frame that is owned: a border is owned from its level. A freeze is
+     * spent by the game, not worn.
+     */
     async equip(itemId: string) {
-      const item = SHOP_ITEMS.find((i) => i.id === itemId);
-      if (!item || item.slot === 'freeze') throw new Error(COSMETIC_ONLY);
-      if (!ownedItems(state().data.tables.ledger).has(item.id)) throw new Error('Buy it first.');
+      const slot = wearSlot(itemId);
+      if (!slot) throw new Error(COSMETIC_ONLY);
+      const { ledger } = state().data.tables;
+      if (!ownedItems(ledger, levelInfo(ledgerTotals(ledger).xp).level).has(itemId)) {
+        const border = BORDERS.find((b) => b.id === itemId);
+        throw new Error(
+          border ? `Reach level ${border.level} to wear this border.` : 'Buy it first.',
+        );
+      }
       const settings = state().data.tables.settings[0] ?? defaultSettings(nowIso());
       await state().put('settings', {
         ...settings,
-        cosmetics: { ...settings.cosmetics, [item.slot]: item.id },
+        cosmetics: { ...settings.cosmetics, [slot]: itemId },
         updatedAt: nowIso(),
       });
     },

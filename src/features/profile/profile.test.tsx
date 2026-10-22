@@ -8,7 +8,13 @@ import { levelStart } from '@/domain/game/levels';
 import { purchaseEntry } from '@/domain/game/shop';
 import { emptySnapshot, type DataSnapshot } from '@/domain/snapshot';
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
-import { localIso, makeLedgerEntry, makeProfile, makeSettings } from '@/test/fixtures';
+import {
+  localIso,
+  makeLedgerEntry,
+  makeLegacyPurchase,
+  makeProfile,
+  makeSettings,
+} from '@/test/fixtures';
 
 /** The whole app at /profile, as nav.test does, so a row can be followed to its page. */
 function renderProfile(data: DataSnapshot = emptySnapshot()) {
@@ -34,7 +40,7 @@ function levelTwo(): DataSnapshot {
   data.tables.ledger = [
     makeLedgerEntry({ key: 'seed', xp: 250, coins: 400 }),
     purchaseEntry('avatar-rocket', 'p1', localIso('2026-10-01')),
-    purchaseEntry('frame-gold', 'p2', localIso('2026-10-01')),
+    makeLegacyPurchase('frame-gold', 200, 'p2'),
   ];
   data.tables.settings = [
     makeSettings({

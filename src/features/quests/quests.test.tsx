@@ -20,6 +20,7 @@ import {
   makeGoal,
   makeHolding,
   makeLedgerEntry,
+  makeLegacyPurchase,
   makeLimit,
   makeProfile,
   makeSettings,
@@ -75,7 +76,7 @@ describe('Quests screen: header', () => {
       d.tables.ledger = [
         makeLedgerEntry({ key: 'seed', xp: 250, coins: 400 }),
         purchaseEntry('avatar-rocket', 'p1', AT('2026-10-01')),
-        purchaseEntry('frame-gold', 'p2', AT('2026-10-01')),
+        makeLegacyPurchase('frame-gold', 200, 'p2'),
       ];
       d.tables.settings = [
         makeSettings({
@@ -514,7 +515,7 @@ describe('Quests screen: badges', () => {
           coins: 10,
           createdAt: AT('2026-10-10'),
         }),
-        purchaseEntry('frame-gold', 'p1', AT('2026-10-01')),
+        makeLegacyPurchase('frame-gold', 200, 'p1'),
       ];
       d.tables.settings = [
         makeSettings({

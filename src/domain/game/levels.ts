@@ -63,3 +63,29 @@ export function levelInfo(totalXp: number): LevelInfo {
   const xpForNext = xpForLevel(level);
   return { level, tier: tierOf(level), xpIntoLevel, xpForNext, progress: xpIntoLevel / xpForNext };
 }
+
+export type Border = { id: string; name: string; level: number };
+
+/**
+ * The profile borders, each worn from the level that unlocks it. The ids are `frame-*` cosmetics
+ * (`frame-none` is always there and is not listed). Silver to Diamond open with a tier.
+ */
+export const BORDERS: readonly Border[] = [
+  { id: 'frame-bronze', name: 'Bronze', level: 5 },
+  { id: 'frame-silver', name: 'Silver', level: 11 },
+  { id: 'frame-gold', name: 'Gold', level: 21 },
+  { id: 'frame-platinum', name: 'Platinum', level: 31 },
+  { id: 'frame-diamond', name: 'Diamond', level: 41 },
+  { id: 'frame-prism', name: 'Prism', level: MAX_LEVEL },
+];
+
+/** The ids of the borders unlocked by `level`, lowest first. */
+export function bordersAt(level: number): string[] {
+  return BORDERS.filter((b) => b.level <= level).map((b) => b.id);
+}
+
+/** The border that reaching `level` unlocks, or `null` when that level unlocks none. */
+export function newBorderAt(level: number): { id: string; name: string } | null {
+  const border = BORDERS.find((b) => b.level === level);
+  return border ? { id: border.id, name: border.name } : null;
+}
