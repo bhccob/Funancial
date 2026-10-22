@@ -81,6 +81,8 @@ export function SegmentedControl<T extends string>({
               className={cn(
                 // z-10: the label stays above the pill however far the pill sweeps across it.
                 'motion-safe:ease-glass relative z-10 motion-safe:transition-colors motion-safe:duration-(--duration-small)',
+                // The ones not chosen on the block's glass are in its full ink: the 88% muted line
+                // falls under 4.5:1 there in some themes.
                 on
                   ? hero
                     ? 'text-hero-to'
@@ -88,7 +90,7 @@ export function SegmentedControl<T extends string>({
                       ? 'text-text'
                       : 'text-primary-contrast'
                   : hero
-                    ? 'text-hero-muted'
+                    ? 'text-hero-text'
                     : 'text-muted',
               )}
             >

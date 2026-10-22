@@ -100,6 +100,24 @@ describe('SegmentedControl', () => {
     for (const b of screen.getAllByRole('button')) expect(b).toHaveClass('h-8.5', 'hit-44');
     expect(screen.getByRole('group', { name: 'Period' })).toHaveClass('bg-glass-hero');
   });
+
+  it("writes the options not chosen on the block's glass in the block's full ink", () => {
+    // The 88% muted line falls under 4.5:1 on that glass in Forest Night and Espresso.
+    render(
+      <SegmentedControl
+        label="Period"
+        tone="hero"
+        value="week"
+        options={[...options]}
+        onChange={vi.fn()}
+      />,
+    );
+    for (const label of ['Month', 'Year']) {
+      expect(screen.getByText(label), label).toHaveClass('text-hero-text');
+      expect(screen.getByText(label), label).not.toHaveClass('text-hero-muted');
+    }
+    expect(screen.getByText('Week')).toHaveClass('text-hero-to');
+  });
 });
 
 describe('SegmentedControl stretched', () => {

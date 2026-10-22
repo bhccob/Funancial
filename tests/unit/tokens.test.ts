@@ -493,9 +493,6 @@ const ROW_TEXT = [
   '--color-danger',
 ] as const;
 
-/** The themes whose brightest glow, under the block's glass, is too light for the 88% muted ink. */
-const MUTED_LOW_ON_GLASS = new Set<string>(['forest', 'espresso']);
-
 /** The colors the block's text can sit on: each end of its gradient, and each glow at full strength over each end. */
 function blockBackdrops(t: (name: string) => string): string[] {
   const stops = t('--head').match(/#[0-9a-f]{6}/gi)!;
@@ -514,6 +511,20 @@ function mutedInk(t: (name: string) => string, name = '--color-hero-muted'): str
   if (!match) throw new Error(`Not a muted ink: ${t(name)}`);
   const [r, g, b] = parseColor(match[1]!);
   return `rgb(${r} ${g} ${b} / ${Number(match[2]) / 100})`;
+}
+
+/**
+ * The ink SegmentedControl writes its options not chosen in on the block's glass, as the color it
+ * paints: read from the component, as the 88% muted line falls under 4.5:1 on that glass over the
+ * brightest glows of Forest Night and Espresso.
+ */
+function heroIdleInk(t: (name: string) => string): string {
+  const source = readFileSync('src/components/ui/SegmentedControl.tsx', 'utf8');
+  // The labels not chosen: `: hero ? 'text-…'` (the chosen ones read `? hero ? …`).
+  const name = /:\s*hero\s*\?\s*'text-([\w-]+)'/.exec(source)?.[1];
+  if (!name) throw new Error('No ink for the options not chosen on the block glass');
+  const value = t(`--color-${name}`);
+  return value.startsWith('color-mix(') ? mutedInk(t, `--color-${name}`) : value;
 }
 
 describe.each(CASES)('the $id theme in $mode mode', ({ id, mode }) => {
@@ -543,19 +554,14 @@ describe.each(CASES)('the $id theme in $mode mode', ({ id, mode }) => {
     }
   });
 
-  it('keeps the muted header line readable on the block glass, but for the themes that use the ink there', () => {
-    const lowest = Math.min(
-      ...blockBackdrops(t).map((backdrop) => {
-        const glass = composite(t('--hg-bg'), backdrop);
-        return contrast(composite(mutedInk(t), glass), glass);
-      }),
-    );
-    if (MUTED_LOW_ON_GLASS.has(id)) {
-      // The brightest glow under glass takes the 88% ink under 4.5:1; screens put the full ink there.
-      expect(lowest).toBeLessThan(4.5);
-      expect(lowest).toBeGreaterThanOrEqual(3.9);
-    } else {
-      expect(lowest).toBeGreaterThanOrEqual(4.5);
+  it("keeps the Shop's tabs not chosen at 4.5:1 or better on the block glass, on every point of it", () => {
+    // Themes, Avatars and Freezes are a SegmentedControl on the block's glass (`tone="hero"`).
+    const ink = heroIdleInk(t);
+    for (const backdrop of blockBackdrops(t)) {
+      const glass = composite(t('--hg-bg'), backdrop);
+      expect(contrast(composite(ink, glass), glass), `over ${backdrop}`).toBeGreaterThanOrEqual(
+        4.5,
+      );
     }
   });
 
