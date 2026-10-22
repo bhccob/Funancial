@@ -154,9 +154,9 @@ describe('profitAndLoss', () => {
         makeSale({ proceeds: 80_00, cost: 100_00 }),
       ],
       dividend: [
-        makeDividend({ amount: 11_20, bucket: 'cash' }),
-        makeDividend({ amount: 8_50, bucket: 'reinvest', sharesAdded: 0.1 }),
-        makeDividend({ status: 'skipped', amount: 0, bucket: null }),
+        makeDividend({ amount: 11_20 }),
+        makeDividend({ amount: 8_50, accountId: null, reinvested: true, sharesAdded: 0.1 }),
+        makeDividend({ status: 'skipped', amount: 0, accountId: null }),
       ],
     });
     const pl = profitAndLoss(data, 'USD');

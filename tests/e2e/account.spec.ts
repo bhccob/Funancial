@@ -101,7 +101,16 @@ async function wipePhone(page: Page) {
 }
 
 /**
- * An account made in setup, with $6,234.00 on it and its copy saved on the service; then the phone is
+ * Home shows what setup was given: the $1,234.00 in the bank account is what is available, and with
+ * the $5,000.00 in savings (shown apart, in Net worth) the whole is $6,234.00.
+ */
+async function expectSetupMoney(page: Page) {
+  await expect(page.getByRole('region', { name: 'Available to spend' })).toContainText('$1,234.00');
+  await expect(page.getByRole('region', { name: 'Net worth' })).toContainText('$6,234.00');
+}
+
+/**
+ * An account made in setup, with $6,234.00 in it and its copy saved on the service; then the phone is
  * wiped, so the next thing the page shows is the welcome screen of a new phone.
  */
 async function accountThenNewPhone(
@@ -116,7 +125,7 @@ async function accountThenNewPhone(
     savings: '5000',
     salary: { amount: '4200', payDay: '25' },
   });
-  await expect(page.getByRole('region', { name: 'Available to spend' })).toContainText('$6,234.00');
+  await expectSetupMoney(page);
 
   // The service heard the keys and a sealed copy, never the password or the data.
   const [signup] = service.seen.filter((s) => s.route === 'signup');
@@ -159,14 +168,14 @@ test('an account made in setup brings the same data to a phone with nothing on i
   await page.getByLabel('Confirm PIN').fill('2468');
   await page.getByRole('button', { name: 'Set PIN' }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Home' })).toBeVisible();
-  await expect(page.getByRole('region', { name: 'Available to spend' })).toContainText('$6,234.00');
+  await expectSetupMoney(page);
 
   // The PIN is the day-to-day lock from here on.
   await page.reload();
   await expect(page.getByRole('heading', { level: 1, name: 'Welcome back' })).toBeVisible();
   await page.getByLabel('PIN').fill('2468');
   await page.getByLabel('PIN').press('Enter');
-  await expect(page.getByRole('region', { name: 'Available to spend' })).toContainText('$6,234.00');
+  await expectSetupMoney(page);
 });
 
 test('someone who has started setup on a new phone can still log in to their account', async ({
@@ -189,7 +198,7 @@ test('someone who has started setup on a new phone can still log in to their acc
   await expect(page.getByRole('heading', { level: 1, name: 'Lock this phone' })).toBeVisible();
   await page.getByRole('button', { name: 'Skip the lock' }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Home' })).toBeVisible();
-  await expect(page.getByRole('region', { name: 'Available to spend' })).toContainText('$6,234.00');
+  await expectSetupMoney(page);
 });
 
 test('setup offline offers Skip for now, and asks the service for nothing', async ({ page }) => {

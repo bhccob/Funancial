@@ -127,13 +127,14 @@ test('add an expense with the keyboard alone', async ({ page }) => {
   await expect(page.getByRole('radio', { name: 'Fun', exact: true })).toBeChecked();
   await expectFocusShown(page, 'the Category chips');
 
-  // Paid with is tabs, still radios: Tab lands on the choice and the arrows move it.
-  const cash = page.getByRole('radio', { name: 'Cash' });
-  await tabTo(page, cash);
-  await expect(cash).toBeChecked();
-  await page.keyboard.press('ArrowRight');
-  await expect(page.getByRole('radio', { name: 'Debit card' })).toBeChecked();
-  await expectFocusShown(page, 'the Paid with tabs');
+  // Paid with is a select of the accounts: Tab lands on it, on the Main account (first in line),
+  // and the arrow keys step to the next one, the Demo Visa.
+  const paidWith = page.getByLabel('Paid with');
+  await tabTo(page, paidWith);
+  await expect(paidWith.locator('option:checked')).toHaveText('Main account');
+  await page.keyboard.press('ArrowDown');
+  await expect(paidWith.locator('option:checked')).toHaveText('Demo Visa (credit card)');
+  await expectFocusShown(page, 'the Paid with select');
 
   await tabTo(page, page.getByLabel('Note', { exact: true }));
   await page.keyboard.type('Team lunch');
@@ -188,7 +189,7 @@ test('set a limit with the keyboard alone, and focus comes back to Add a limit',
 });
 
 for (const width of [360, 375]) {
-  test(`four tabs fit on one line in a dialog at ${width}px, and each is 44px wide`, async ({
+  test(`four cycle tabs fit on one line in a dialog at ${width}px, each 44px wide, over a Paid with line`, async ({
     page,
   }, testInfo) => {
     test.skip(testInfo.project.name !== 'mobile-chromium', 'phone widths only');
@@ -202,15 +203,32 @@ for (const width of [360, 375]) {
     await expect(dialog).toBeVisible();
     // Widths depend on the font, so measure once it has loaded.
     await page.evaluate(() => document.fonts.ready);
-    // Cycle has four tabs; Paid with has four on demo money (Cash, Debit card, Demo Visa, Other).
-    for (const legend of ['Cycle', 'Paid with']) {
-      const tabs = dialog.getByRole('group', { name: legend }).locator('label');
-      const boxes = await tabs.evaluateAll((labels) =>
-        labels.map((l) => l.getBoundingClientRect()),
-      );
-      expect(boxes, legend).toHaveLength(4);
-      expect(new Set(boxes.map((b) => Math.round(b.top))).size, `${legend} on one line`).toBe(1);
-      for (const b of boxes) expect(b.width, `${legend} tab width`).toBeGreaterThanOrEqual(43.9);
-    }
+
+    // Cycle is four tabs.
+    const tabs = dialog.getByRole('group', { name: 'Cycle' }).locator('label');
+    const boxes = await tabs.evaluateAll((labels) => labels.map((l) => l.getBoundingClientRect()));
+    expect(boxes, 'Cycle').toHaveLength(4);
+    expect(new Set(boxes.map((b) => Math.round(b.top))).size, 'Cycle on one line').toBe(1);
+    for (const b of boxes) expect(b.width, 'Cycle tab width').toBeGreaterThanOrEqual(43.9);
+
+    // Paid with is a select of the accounts, not tabs: one 44px line inside the dialog, naming the
+    // demo's accounts in carousel order (a card is told apart by "(credit card)").
+    const paidWith = dialog.getByLabel('Paid with');
+    await expect(paidWith).toHaveJSProperty('tagName', 'SELECT');
+    await expect(dialog.getByRole('group', { name: 'Paid with' })).toHaveCount(0);
+    await expect(paidWith.locator('option')).toHaveText([
+      'Main account',
+      'Demo Visa (credit card)',
+      'Savings',
+      'Cash wallet',
+      'Passive income',
+    ]);
+    const line = (await paidWith.boundingBox())!;
+    const frame = (await dialog.boundingBox())!;
+    expect(line.height, 'Paid with height').toBeGreaterThanOrEqual(43.9);
+    expect(line.x, 'Paid with starts inside the dialog').toBeGreaterThanOrEqual(frame.x);
+    expect(line.x + line.width, 'Paid with ends inside the dialog').toBeLessThanOrEqual(
+      frame.x + frame.width,
+    );
   });
 }

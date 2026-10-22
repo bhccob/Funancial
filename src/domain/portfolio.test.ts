@@ -333,9 +333,9 @@ describe('breakEven', () => {
 
   it('takes every confirmed dividend of the holding off the cost, reinvested ones too', () => {
     const data = withDividends(
-      paid({ amount: 10_00, bucket: 'cash' }),
-      paid({ amount: 8_50, bucket: 'reinvest', sharesAdded: 0.1 }),
-      paid({ amount: 11_50, bucket: 'passive' }),
+      paid({ amount: 10_00 }),
+      paid({ amount: 8_50, accountId: null, reinvested: true, sharesAdded: 0.1 }),
+      paid({ amount: 11_50, accountId: 'acct-passive' }),
     );
     // (500.00 − 30.00) ÷ 10 shares
     expect(breakEven(data, ko)).toEqual({ perShare: 50_00, afterDividends: 47_00 });
@@ -343,7 +343,7 @@ describe('breakEven', () => {
 
   it('ignores skipped payouts and the payouts of other holdings', () => {
     const data = withDividends(
-      paid({ amount: 0, status: 'skipped', bucket: null }),
+      paid({ amount: 0, status: 'skipped', accountId: null }),
       makeDividend({ holdingId: 'other', amount: 99_00 }),
       paid({ amount: 5_00 }),
     );

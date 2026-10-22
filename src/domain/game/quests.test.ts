@@ -423,7 +423,7 @@ describe('currentQuests', () => {
       const holding = [payer('2026-10-05', '2026-10-12')];
       for (const dividend of [
         recorded('2026-10-12'),
-        recorded('2026-10-12', { status: 'skipped', amount: 0, bucket: null }),
+        recorded('2026-10-12', { status: 'skipped', amount: 0, accountId: null }),
       ]) {
         expect(quest(snap({ holding, dividend: [dividend] }), 'month-dividends')).toMatchObject({
           done: true,

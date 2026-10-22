@@ -577,7 +577,7 @@ describe('upcomingReminders', () => {
         holdingId: 'ko',
         expectedPayDate: '2026-10-27',
         status,
-        ...(status === 'skipped' ? { amount: 0, bucket: null } : {}),
+        ...(status === 'skipped' ? { amount: 0, accountId: null } : {}),
       });
       const data = build({
         reminders: { dividends: true },

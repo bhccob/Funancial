@@ -138,7 +138,10 @@ test('confirming a due dividend shows the reward and earns First Dividend', asyn
   await page.getByRole('tab', { name: 'Dividends' }).click();
   await page.getByRole('region', { name: 'Due' }).getByRole('button', { name: 'Confirm' }).click();
   const dialog = page.getByRole('dialog', { name: 'Confirm KO dividend' });
-  await dialog.getByRole('radio', { name: 'Passive' }).click();
+  // Where it went is a select of the accounts it can arrive in, then Reinvest.
+  const to = dialog.getByLabel('Where did it go?');
+  await expect(to.locator('option')).toHaveText(['Main account', 'Savings', 'Reinvest']);
+  await to.selectOption({ label: 'Savings' });
   await dialog.getByRole('button', { name: 'Confirm', exact: true }).click();
 
   await expect(page.getByText('Dividend confirmed.')).toBeVisible();

@@ -196,7 +196,7 @@ describe('badgeAwards', () => {
   });
 
   it('earns First Dividend from a confirmed dividend, not a skipped one', () => {
-    const skipped = makeDividend({ status: 'skipped', amount: 0, bucket: null });
+    const skipped = makeDividend({ status: 'skipped', amount: 0, accountId: null });
     expect(earned(snap({ dividend: [skipped] }))).toEqual([]);
     expect(badgeAwards(snap({ dividend: [skipped, makeDividend()] }), ctx)).toEqual([
       {
@@ -213,7 +213,7 @@ describe('badgeAwards', () => {
   it('earns Dividend Collector from twelve confirmed dividends', () => {
     const confirmed = (n: number) => Array.from({ length: n }, () => makeDividend());
     const skipped = Array.from({ length: 5 }, () =>
-      makeDividend({ status: 'skipped', amount: 0, bucket: null }),
+      makeDividend({ status: 'skipped', amount: 0, accountId: null }),
     );
     expect(earned(snap({ dividend: [...confirmed(11), ...skipped] }))).toEqual(['first-dividend']);
     const twelve = snap({ dividend: confirmed(12) });
@@ -259,7 +259,7 @@ describe('badgeAwards', () => {
       paidOn: '2026-10-05',
       status: 'skipped',
       amount: 0,
-      bucket: null,
+      accountId: null,
     });
     expect(earned(usd(paid('2026-10-03', 99_99), skipped))).toEqual(['first-dividend']);
   });

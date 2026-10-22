@@ -108,7 +108,7 @@ describe('loggingAwards', () => {
             id: 'd2',
             status: 'skipped',
             amount: 0,
-            bucket: null,
+            accountId: null,
             createdAt: localIso('2026-10-15', 10),
           }),
         ],

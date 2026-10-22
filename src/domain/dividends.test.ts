@@ -148,7 +148,7 @@ describe('expectedPayouts', () => {
         expectedPayDate: '2027-02-03',
         status: 'skipped',
         amount: 0,
-        bucket: null,
+        accountId: null,
       }),
       // Another holding's record with a matching date does not hide this one.
       makeDividend({ holdingId: 'someone-else', expectedPayDate: '2027-05-04' }),
@@ -215,7 +215,7 @@ describe('expectedPayouts', () => {
       [182, 90],
       [365, 180],
     ] as const;
-    const skipped = { status: 'skipped', amount: 0, bucket: null } as const;
+    const skipped = { status: 'skipped', amount: 0, accountId: null } as const;
     const shown = (ko: Holding, daysAway: number) => {
       const data = dataOf([ko]);
       data.tables.dividend = [
@@ -682,10 +682,10 @@ describe('dividendTotals', () => {
       makeDividend({ paidOn, amount, ...over });
     data.tables.dividend = [
       paid('2026-11-05', 10_00),
-      paid('2026-10-12', 20_00, { bucket: 'reinvest', sharesAdded: 0.3 }),
-      paid('2026-09-30', 40_00, { bucket: 'savings' }),
+      paid('2026-10-12', 20_00, { accountId: null, reinvested: true, sharesAdded: 0.3 }),
+      paid('2026-09-30', 40_00, { accountId: 'acct-savings' }),
       paid('2025-12-31', 80_00),
-      paid('2026-11-06', 0, { status: 'skipped', bucket: null }),
+      paid('2026-11-06', 0, { status: 'skipped', accountId: null }),
     ];
     expect(dividendTotals(data, '2026-11-20')).toEqual({
       month: 10_00,
@@ -736,10 +736,10 @@ describe('projections', () => {
     data.tables.dividend = [
       paid('2026-10-05', 11_20),
       paid('2026-10-14', 1_00),
-      paid('2026-09-20', 5_00, { bucket: 'reinvest', sharesAdded: 0.1 }),
+      paid('2026-09-20', 5_00, { accountId: null, reinvested: true, sharesAdded: 0.1 }),
       paid('2025-11-01', 3_00),
       paid('2025-10-31', 9_99), // 13 months back
-      paid('2026-08-10', 0, { status: 'skipped', bucket: null }),
+      paid('2026-08-10', 0, { status: 'skipped', accountId: null }),
     ];
     const past = monthlyIncome(data, 'USD', TODAY, 'past');
     expect(past).toHaveLength(12);

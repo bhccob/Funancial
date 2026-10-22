@@ -352,7 +352,7 @@ describe('computeStreaks', () => {
         paidOn: '2026-10-02',
         status: 'skipped',
         amount: 0,
-        bucket: null,
+        accountId: null,
       });
       const data = snap({
         holding: [makeHolding()],
