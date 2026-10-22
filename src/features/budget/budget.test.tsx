@@ -95,6 +95,13 @@ async function openNewLimit() {
 }
 
 describe('BudgetScreen', () => {
+  it('titles the page at the 28px of every page title', () => {
+    renderBudget(ledger());
+    const title = screen.getByRole('heading', { level: 1, name: 'Budget' });
+    expect(title).toHaveClass('text-page');
+    expect(title).not.toHaveClass('text-[34px]');
+  });
+
   it('starts on this month and cannot go past it', async () => {
     renderBudget(ledger());
     expect(screen.getByRole('heading', { level: 1, name: 'Budget' })).toBeInTheDocument();

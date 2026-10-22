@@ -64,7 +64,7 @@ export function BudgetScreen() {
   return (
     <div>
       <header className="flex flex-wrap items-center justify-between gap-x-3">
-        <h1 className="text-[34px] leading-tight font-extrabold tracking-[-0.035em]">Budget</h1>
+        <h1 className="text-page">Budget</h1>
         <div role="group" aria-label="Month" className="-mr-2.5 inline-flex items-center gap-0.5">
           <button
             type="button"
