@@ -58,33 +58,39 @@ describe('AppShell', () => {
     expect(screen.getByRole('main')).toHaveClass('focus:outline-none');
   });
 
-  it('leaves focus on a bar link that was used, which stays on screen', async () => {
+  it('leaves focus on a tab that was used, which stays on screen', async () => {
     renderAt('/');
     const bar = screen.getByRole('navigation', { name: 'Primary' });
-    await userEvent.click(within(bar).getByRole('link', { name: 'Budget' }));
+    await userEvent.click(within(bar).getByRole('link', { name: 'Spending' }));
     expect(screen.getByRole('heading', { level: 1, name: 'Budget' })).toBeInTheDocument();
-    expect(within(bar).getByRole('link', { name: 'Budget' })).toHaveFocus();
+    expect(within(bar).getByRole('link', { name: 'Spending' })).toHaveFocus();
   });
 
-  it('moves focus to the heading of a screen chosen from the Menu sheet, not back to the Menu button', async () => {
-    renderAt('/');
-    const bar = screen.getByRole('navigation', { name: 'Primary' });
-    const menu = within(bar).getByRole('button', { name: 'Menu' });
-    await userEvent.click(menu);
-    await userEvent.click(
-      within(screen.getByRole('dialog', { name: 'Menu' })).getByRole('link', { name: /^Goals/ }),
-    );
-
-    const goals = screen.getByRole('heading', { level: 1, name: 'Goals' });
-    expect(menu).not.toHaveFocus();
-    expect(goals).toHaveFocus();
+  it('moves focus to the heading of a screen chosen on Profile', async () => {
+    renderAt('/profile');
+    await userEvent.click(within(screen.getByRole('main')).getByRole('link', { name: /^Goals/ }));
+    expect(screen.getByRole('heading', { level: 1, name: 'Goals' })).toHaveFocus();
   });
 
-  it('puts the bottom bar before the page, so Tab goes on into the page after a bar link', () => {
+  it('puts the tab bar before the page, so Tab goes on into the page after a tab', () => {
     renderAt('/');
     const bar = screen.getByRole('navigation', { name: 'Primary' });
     const follows = bar.compareDocumentPosition(screen.getByRole('main'));
     expect(follows & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('has no Menu button and no Menu sheet: Profile holds the menu', () => {
+    renderAt('/');
+    expect(screen.queryByRole('button', { name: 'Menu' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Menu' })).not.toBeInTheDocument();
+  });
+
+  it('leaves room under the page for the floating tab bar on phones', () => {
+    renderAt('/');
+    expect(screen.getByRole('main')).toHaveClass(
+      'pb-[calc(110px+env(safe-area-inset-bottom))]',
+      'md:pb-12',
+    );
   });
 
   it('keeps the banners in a box that is empty and out of the layout when none shows', () => {
@@ -126,7 +132,7 @@ describe('AppShell scroll', () => {
     scrollTo.mockClear();
 
     const bar = screen.getByRole('navigation', { name: 'Primary' });
-    await userEvent.click(within(bar).getByRole('link', { name: 'Budget' }));
+    await userEvent.click(within(bar).getByRole('link', { name: 'Spending' }));
     expect(screen.getByRole('heading', { level: 1, name: 'Budget' })).toBeInTheDocument();
     expect(scrollTo).toHaveBeenLastCalledWith(0, 0);
   });
@@ -136,7 +142,7 @@ describe('AppShell scroll', () => {
     const router = renderAt('/');
     scrolledTo(640);
     const bar = screen.getByRole('navigation', { name: 'Primary' });
-    await userEvent.click(within(bar).getByRole('link', { name: 'Budget' }));
+    await userEvent.click(within(bar).getByRole('link', { name: 'Spending' }));
     scrolledTo(0);
     scrollTo.mockClear();
 

@@ -44,18 +44,23 @@ export function useModalDialog(open: boolean, onClose: () => void): ModalDialogP
     return () => removeDialog(el);
   }, [open]);
 
+  // Both handlers stop the event where it is: a dialog can sit inside another (the limit question
+  // inside the add sheet), and React passes the key and `cancel` on to the outer one, which would
+  // close too. One press closes one dialog.
   return {
     ref,
     // Escape: handle the key ourselves so the close request doesn't also fire `cancel`.
     onKeyDown(e) {
       if (e.key === 'Escape') {
         e.preventDefault();
+        e.stopPropagation();
         onClose();
       }
     },
     // Other close requests (e.g. Android back gesture) arrive as `cancel`.
     onCancel(e) {
       e.preventDefault();
+      e.stopPropagation();
       onClose();
     },
   };

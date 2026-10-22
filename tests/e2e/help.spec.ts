@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { startDemo, startFresh } from './helpers';
+import { openProfile, startDemo, startFresh } from './helpers';
 
 test('Help: search the index, open a page and read its worked example', async ({ page }) => {
   await startFresh(page, '/help');
@@ -18,16 +18,12 @@ test('Help: search the index, open a page and read its worked example', async ({
   await expect(page.getByRole('heading', { level: 1, name: 'Help' })).toBeVisible();
 });
 
-test('mobile: the Menu lists Help, no longer marked Soon, and opens it', async ({
+test('mobile: Profile lists Help, no longer marked Soon, and opens it', async ({
   page,
 }, testInfo) => {
   test.skip(testInfo.project.name !== 'mobile-chromium', 'mobile layout only');
   await startFresh(page);
-  await page
-    .getByRole('navigation', { name: 'Primary' })
-    .getByRole('button', { name: 'Menu' })
-    .click();
-  const row = page.getByRole('dialog', { name: 'Menu' }).getByRole('link', { name: /^Help/ });
+  const row = (await openProfile(page)).getByRole('link', { name: /^Help/ });
   await expect(row).not.toContainText('Soon');
   await row.click();
   await expect(page.getByRole('heading', { level: 1, name: 'Help' })).toBeVisible();

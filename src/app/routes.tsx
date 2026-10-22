@@ -18,7 +18,7 @@ import { SubscriptionsScreen } from '@/features/subscriptions/SubscriptionsScree
 import { SettingsScreen } from '@/features/settings/SettingsScreen';
 
 /**
- * Every screen the app routes to. What the bottom bar, Menu sheet and sidebar list, with each
+ * Every screen the app routes to. What the tab bar, Profile and sidebar list, with each
  * item's name and icon, lives in `menu.ts`.
  */
 export interface AppRoute {

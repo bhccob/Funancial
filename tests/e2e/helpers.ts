@@ -85,6 +85,20 @@ export async function startFresh(page: Page, path = '/') {
   if (path !== '/') await page.goto(path);
 }
 
+/**
+ * On a phone: Home from the tab bar, then Profile from the avatar there, which holds the menu the
+ * tab bar has no room for. Returns the page, where its rows are.
+ */
+export async function openProfile(page: Page) {
+  await page
+    .getByRole('navigation', { name: 'Primary' })
+    .getByRole('link', { name: 'Home' })
+    .click();
+  await page.getByRole('link', { name: /^Profile, level \d+$/ }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Profile' })).toBeVisible();
+  return page.getByRole('main');
+}
+
 /** First run → "Try with demo money" → Home with the demo banner. */
 export async function startDemo(page: Page) {
   await page.goto('/');

@@ -34,16 +34,24 @@ export interface MenuGroup {
   items: MenuItem[];
 }
 
-/** The three places the bottom bar links to besides the Menu, and the sidebar's first links. */
+/** The sidebar's first links. */
 export const HOME: NavTarget = { path: '/', label: 'Home', icon: House };
 export const BUDGET: NavTarget = { path: '/budget', label: 'Budget', icon: ChartPie };
 export const INVEST: NavTarget = { path: '/invest', label: 'Invest', icon: TrendingUp };
 export const PRIMARY_LINKS: NavTarget[] = [HOME, BUDGET, INVEST];
 
+/**
+ * The phone's tab bar, with the ＋ between Cards and Spending. Cards and Spending open today's
+ * Bills & cards and Budget pages until their own pages are built.
+ */
+export const CARDS_TAB: NavTarget = { path: '/subscriptions', label: 'Cards', icon: CreditCard };
+export const SPENDING_TAB: NavTarget = { path: '/budget', label: 'Spending', icon: ChartPie };
+export const TABS = [HOME, CARDS_TAB, SPENDING_TAB, INVEST] as const;
+
 /** Where the avatar on Home goes: the person's level, coins and the menu below them. */
 export const PROFILE: NavTarget = { path: '/profile', label: 'Profile', icon: CircleUser };
 
-/** Everything else, grouped the way the Menu sheet and the sidebar list it. */
+/** Everything else, grouped the way Profile and the sidebar list it. */
 export const MENU_GROUPS: MenuGroup[] = [
   {
     title: 'Your money',

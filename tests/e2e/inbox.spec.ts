@@ -1,17 +1,10 @@
 import { expect, test, type Page, type TestInfo } from '@playwright/test';
-import { startDemo, startFresh } from './helpers';
+import { openProfile, startDemo, startFresh } from './helpers';
 
-/** Opens the Inbox as each layout lists it: in the Menu sheet on a phone, in the sidebar on desktop. */
+/** Opens the Inbox as each layout lists it: on Profile on a phone, in the sidebar on desktop. */
 async function openInbox(page: Page, testInfo: TestInfo) {
   if (testInfo.project.name === 'mobile-chromium') {
-    await page
-      .getByRole('navigation', { name: 'Primary' })
-      .getByRole('button', { name: 'Menu' })
-      .click();
-    await page
-      .getByRole('dialog', { name: 'Menu' })
-      .getByRole('link', { name: /^Inbox/ })
-      .click();
+    await (await openProfile(page)).getByRole('link', { name: /^Inbox/ }).click();
   } else {
     await page
       .getByRole('navigation', { name: 'All sections' })

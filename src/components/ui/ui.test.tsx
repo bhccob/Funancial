@@ -253,12 +253,45 @@ describe('Sheet and Dialog focus', () => {
   });
 });
 
+describe('Sheet title', () => {
+  it('names the sheet without drawing the name, unless asked to draw it', () => {
+    const { rerender } = render(<Sheet open title="Details" onClose={() => {}} />);
+    const title = within(screen.getByRole('dialog', { name: 'Details' })).getByRole('heading', {
+      level: 2,
+      name: 'Details',
+    });
+    expect(title).toHaveClass('sr-only');
+
+    rerender(<Sheet open title="Details" showTitle onClose={() => {}} />);
+    expect(title).toHaveClass('text-section');
+    expect(title).not.toHaveClass('sr-only');
+  });
+});
+
+describe('nested dialogs', () => {
+  it('Escape closes only the inner one, as Android back does', async () => {
+    const outer = vi.fn();
+    const inner = vi.fn();
+    const page = (asking: boolean) => (
+      <Sheet open title="Add expense" onClose={outer}>
+        <Dialog open={asking} title="Over your limit?" onClose={inner} />
+      </Sheet>
+    );
+    const { rerender } = render(page(false));
+    rerender(page(true));
+    screen.getByRole('dialog', { name: 'Over your limit?' }).focus();
+    await userEvent.keyboard('{Escape}');
+    expect(inner).toHaveBeenCalledTimes(1);
+    expect(outer).not.toHaveBeenCalled();
+  });
+});
+
 describe('Toaster', () => {
-  it('floats toasts just above the 64px bottom bar on phones, and low on desktop', () => {
+  it('floats toasts just above the floating tab bar on phones, and low on desktop', () => {
     toastStore.setState({ toasts: [] });
     const { container } = render(<Toaster />);
     expect(container.firstElementChild).toHaveClass(
-      'bottom-[calc(76px+env(safe-area-inset-bottom))]',
+      'bottom-[calc(100px+env(safe-area-inset-bottom))]',
       'md:bottom-8',
     );
   });

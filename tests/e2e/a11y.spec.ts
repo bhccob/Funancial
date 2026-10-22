@@ -151,9 +151,10 @@ test('set a limit with the keyboard alone, and focus comes back to Add a limit',
 }) => {
   const api = watchApi(page);
   await demoByKeyboard(page);
+  // The sidebar's Budget on desktop, the tab bar's Spending on a phone: the same page.
   await tabTo(
     page,
-    page.getByRole('navigation').getByRole('link', { name: 'Budget', exact: true }),
+    page.getByRole('navigation').getByRole('link', { name: /^(Budget|Spending)$/ }),
   );
   await page.keyboard.press('Enter');
   await expect(page.getByRole('heading', { level: 1, name: 'Budget' })).toBeVisible();
@@ -197,7 +198,11 @@ for (const width of [360, 375]) {
     await demoByKeyboard(page);
     // Opened by keyboard like everything else here (the URL change is not a mouse action).
     await page.goto('/subscriptions');
-    await tabTo(page, page.getByRole('button', { name: 'Add', exact: true }).first());
+    // The page's own Add, not the tab bar's ＋ (also "Add"), which comes first.
+    await tabTo(
+      page,
+      page.getByRole('main').getByRole('button', { name: 'Add', exact: true }).first(),
+    );
     await page.keyboard.press('Enter');
     const dialog = page.getByRole('dialog');
     await expect(dialog).toBeVisible();

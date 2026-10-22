@@ -1,43 +1,146 @@
-import { expect, test } from '@playwright/test';
-import { startFresh } from './helpers';
+import { expect, test, type Page } from '@playwright/test';
+import { openProfile, startFresh } from './helpers';
 
-test('mobile: the bottom bar and the Menu sheet navigate', async ({ page }, testInfo) => {
+const bar = (page: Page) => page.getByRole('navigation', { name: 'Primary' });
+/** The ＋ in the tab bar: named Add while the fan is shut, Close while it is open. */
+const plus = (page: Page) => bar(page).getByRole('button', { name: /^(Add|Close)$/ });
+/** The fan of Expense and Income; exact, as the add sheets are named "Add expense" and "Add income". */
+const fan = (page: Page) => page.getByRole('dialog', { name: 'Add', exact: true });
+
+test('mobile: the tab bar navigates, and Profile opens from the avatar on Home', async ({
+  page,
+}, testInfo) => {
   test.skip(testInfo.project.name !== 'mobile-chromium', 'mobile layout only');
   await startFresh(page);
-  const bar = page.getByRole('navigation', { name: 'Primary' });
-  await expect(bar).toBeVisible();
+  await expect(bar(page)).toBeVisible();
   await expect(page.getByRole('navigation', { name: 'All sections' })).toBeHidden();
-  await expect(bar.locator('a, button')).toHaveText(['Home', 'Budget', 'Invest', 'Menu']);
+  const slots = bar(page).locator('a, button');
+  await expect(slots).toHaveCount(5);
+  for (const [i, name] of ['Home', 'Cards', 'Add', 'Spending', 'Invest'].entries()) {
+    await expect(slots.nth(i)).toHaveAccessibleName(name);
+  }
 
-  await bar.getByRole('link', { name: 'Budget' }).click();
+  await bar(page).getByRole('link', { name: 'Spending' }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Budget' })).toBeVisible();
+  await expect(bar(page).getByRole('link', { name: 'Spending' })).toHaveAttribute(
+    'aria-current',
+    'page',
+  );
+  await bar(page).getByRole('link', { name: 'Cards' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Bills & cards' })).toBeVisible();
 
-  const menuButton = bar.getByRole('button', { name: 'Menu' });
-  await menuButton.click();
-  const menu = page.getByRole('dialog', { name: 'Menu' });
-  await expect(menu).toBeVisible();
-  await menu.getByRole('link', { name: 'Settings' }).click();
-  await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible();
-  await expect(menu).toBeHidden();
-  // The screen chosen takes focus on its name, not the Menu button the sheet handed it back to.
+  const profile = await openProfile(page);
+  await profile.getByRole('link', { name: /^Settings/ }).click();
+  // The screen chosen takes focus on its name.
   await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeFocused();
 });
 
-test('mobile: Escape closes the Menu sheet', async ({ page }, testInfo) => {
+test('mobile: at 360×640 the current tab shows all of "Spending"', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'mobile-chromium', 'mobile layout only');
-  await startFresh(page);
-  const menuButton = page
-    .getByRole('navigation', { name: 'Primary' })
-    .getByRole('button', { name: 'Menu' });
-  await menuButton.click();
-  const menu = page.getByRole('dialog', { name: 'Menu' });
-  await expect(menu).toBeVisible();
-  await page.keyboard.press('Escape');
-  await expect(menu).toBeHidden();
-  await expect(menuButton).toBeFocused();
+  await page.setViewportSize({ width: 360, height: 640 });
+  await startFresh(page, '/budget');
+  const tab = bar(page).getByRole('link', { name: 'Spending' });
+  const label = tab.getByText('Spending', { exact: true });
+  await expect(label).toBeVisible();
+  const fits = await tab.evaluate((link) => {
+    const text = [...link.querySelectorAll('span')].find((s) => s.textContent === 'Spending')!;
+    const inner = text.getBoundingClientRect();
+    const outer = link.getBoundingClientRect();
+    const nav = link.closest('nav')!.getBoundingClientRect();
+    return {
+      label: text.scrollWidth <= text.clientWidth,
+      link: link.scrollWidth <= link.clientWidth,
+      inside: inner.left >= outer.left && inner.right <= outer.right && outer.right <= nav.right,
+    };
+  });
+  expect(fits).toEqual({ label: true, link: true, inside: true });
 });
 
-test('desktop: the sidebar navigates and the bottom bar is hidden', async ({ page }, testInfo) => {
+test('mobile: the ＋ opens the fan, and Escape closes it with focus back on the ＋', async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== 'mobile-chromium', 'mobile layout only');
+  await startFresh(page);
+  await plus(page).click();
+  await expect(fan(page)).toBeVisible();
+  await expect(plus(page)).toHaveAccessibleName('Close');
+  await expect(plus(page)).toHaveAttribute('aria-expanded', 'true');
+  await expect(fan(page).getByRole('button', { name: 'Expense' })).toBeFocused();
+  await expect(fan(page).getByRole('button', { name: 'Income' })).toBeVisible();
+
+  await page.keyboard.press('Escape');
+  await expect(fan(page)).toBeHidden();
+  await expect(plus(page)).toHaveAccessibleName('Add');
+  await expect(plus(page)).toBeFocused();
+});
+
+test('mobile: ＋, then Expense, adds an expense that shows in History', async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== 'mobile-chromium', 'mobile layout only');
+  await startFresh(page);
+  await plus(page).click();
+  await fan(page).getByRole('button', { name: 'Expense' }).click();
+  const sheet = page.getByRole('dialog', { name: 'Add expense' });
+  await expect(sheet).toBeVisible();
+  await expect(sheet.getByRole('heading', { level: 2, name: 'Add expense' })).toBeVisible();
+  await expect(fan(page)).toBeHidden();
+  const amount = sheet.getByLabel('Amount', { exact: true });
+  await expect(amount).toBeFocused();
+  await amount.fill('4.20');
+  await sheet.getByRole('button', { name: 'Save', exact: true }).click();
+
+  await expect(page.getByText('Expense saved.')).toBeVisible();
+  await expect(sheet).toBeHidden();
+  // Still on Home, with focus back on the ＋ that started it.
+  await expect(page.getByRole('heading', { level: 1, name: 'Home' })).toBeVisible();
+  await expect(plus(page)).toBeFocused();
+
+  const profile = await openProfile(page);
+  await profile.getByRole('link', { name: /^History/ }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'History' })).toBeVisible();
+  await expect(page.getByText('−$4.20')).toBeVisible();
+});
+
+test('mobile: the bottom of Settings clears the tab bar', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'mobile-chromium', 'mobile layout only');
+  await startFresh(page, '/settings');
+  await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible();
+  for (const size of [
+    { width: 375, height: 812 },
+    { width: 360, height: 640 },
+  ]) {
+    await page.setViewportSize(size);
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    const last = page.getByRole('main').getByRole('button').last();
+    await expect(last).toBeInViewport();
+    await expect
+      .poll(async () => {
+        const button = (await last.boundingBox())!;
+        const top = (await bar(page).boundingBox())!.y;
+        return button.y + button.height <= top;
+      }, `the last button ends above the tab bar at ${size.width}×${size.height}`)
+      .toBe(true);
+  }
+});
+
+test('mobile: reduced motion: the fan only fades', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'mobile-chromium', 'mobile layout only');
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await startFresh(page);
+  await plus(page).click();
+  const expense = fan(page).getByRole('button', { name: 'Expense' });
+  await expect(expense).toBeVisible();
+  // Read at once, while a rise would still be on its way: nothing moves or grows, it only fades in.
+  const moving = await expense.evaluate((el) => {
+    const s = getComputedStyle(el);
+    return { transform: s.transform, translate: s.translate, scale: s.scale };
+  });
+  expect(moving).toEqual({ transform: 'none', translate: 'none', scale: 'none' });
+  await expect.poll(() => expense.evaluate((el) => getComputedStyle(el).opacity)).toBe('1');
+});
+
+test('desktop: the sidebar navigates and the tab bar is hidden', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop-chromium', 'desktop layout only');
   await startFresh(page);
   const sidebar = page.getByRole('navigation', { name: 'All sections' });
@@ -92,18 +195,13 @@ test('mobile: Home has three actions, and History stays one tap away in Last 7 d
   await expect(page.getByRole('link', { name: 'History' })).toHaveCount(1);
 });
 
-test('mobile: the Menu has no Buy it?, no About you and no Salary freeze', async ({
+test('mobile: Profile has no Buy it?, no About you and no Salary freeze', async ({
   page,
 }, testInfo) => {
   test.skip(testInfo.project.name !== 'mobile-chromium', 'mobile layout only');
   await startFresh(page);
-  await page
-    .getByRole('navigation', { name: 'Primary' })
-    .getByRole('button', { name: 'Menu' })
-    .click();
-  const menu = page.getByRole('dialog', { name: 'Menu' });
-  // The sheet's own name (not drawn), then its two groups.
-  await expect(menu.getByRole('heading', { level: 2 })).toHaveText(['Menu', 'Your money', 'You']);
+  const menu = await openProfile(page);
+  await expect(menu.getByRole('heading', { level: 2 })).toHaveText(['Your money', 'You']);
   await expect(menu.getByRole('link', { name: /^Buy it\?/ })).toHaveCount(0);
   await expect(menu.getByRole('link', { name: /^About you/ })).toHaveCount(0);
   await expect(menu.getByRole('link', { name: /^Salary freeze/ })).toHaveCount(0);
@@ -151,39 +249,28 @@ test('mobile: a new screen opens at its top, and Back returns to where the last 
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(left);
 });
 
-test('mobile: the Menu opens Goals and Debts as two pages', async ({ page }, testInfo) => {
+test('mobile: Profile opens Goals and Debts as two pages', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'mobile-chromium', 'mobile layout only');
   await startFresh(page);
-  const menuButton = page
-    .getByRole('navigation', { name: 'Primary' })
-    .getByRole('button', { name: 'Menu' });
-  const menu = page.getByRole('dialog', { name: 'Menu' });
 
-  await menuButton.click();
-  await menu.getByRole('link', { name: /^Goals/ }).click();
+  await (await openProfile(page)).getByRole('link', { name: /^Goals/ }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Goals' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Add goal' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Add card' })).toHaveCount(0);
 
-  await menuButton.click();
-  await menu.getByRole('link', { name: /^Debts/ }).click();
+  await (await openProfile(page)).getByRole('link', { name: /^Debts/ }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Debts' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Add card' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Add loan' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Add goal' })).toHaveCount(0);
 });
 
-test('mobile: the Menu opens Income, and an income added there shows in its bars', async ({
+test('mobile: Profile opens Income, and an income added there shows in its bars', async ({
   page,
 }, testInfo) => {
   test.skip(testInfo.project.name !== 'mobile-chromium', 'mobile layout only');
   await startFresh(page);
-  const menu = page.getByRole('dialog', { name: 'Menu' });
-  await page
-    .getByRole('navigation', { name: 'Primary' })
-    .getByRole('button', { name: 'Menu' })
-    .click();
-  const row = menu.getByRole('link', { name: /^Income/ });
+  const row = (await openProfile(page)).getByRole('link', { name: /^Income/ });
   await expect(row).toContainText('$0.00 this month');
   await row.click();
   await expect(page.getByRole('heading', { level: 1, name: 'Income' })).toBeVisible();

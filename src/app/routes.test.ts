@@ -10,7 +10,7 @@ import { IncomeScreen } from '@/features/income/IncomeScreen';
 import { HoldingPage } from '@/features/invest/HoldingPage';
 import { InvestScreen } from '@/features/invest/InvestScreen';
 import { ShopScreen } from '@/features/shop/ShopScreen';
-import { MENU_GROUPS, PRIMARY_LINKS } from './menu';
+import { MENU_GROUPS, PRIMARY_LINKS, PROFILE, TABS } from './menu';
 import { APP_ROUTES } from './routes';
 
 it('has unique paths', () => {
@@ -41,11 +41,14 @@ it('routes every spec screen', () => {
   );
 });
 
-it('routes every screen the bottom bar, Menu sheet and sidebar link to', () => {
+it('routes every screen the tab bar, Profile and sidebar link to', () => {
   const routed = new Set(APP_ROUTES.map((r) => r.path));
+  // The sidebar's list, which names each screen once.
   const linked = [...PRIMARY_LINKS, ...MENU_GROUPS.flatMap((g) => g.items)].map((l) => l.path);
   expect(linked.filter((path) => !routed.has(path))).toEqual([]);
   expect(new Set(linked).size).toBe(linked.length);
+  // The tabs open some of those same screens, and the avatar opens Profile.
+  expect([...TABS, PROFILE].map((l) => l.path).filter((path) => !routed.has(path))).toEqual([]);
 });
 
 it('says only where each screen is; names and icons live in menu.ts', () => {
