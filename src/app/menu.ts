@@ -1,6 +1,7 @@
 import {
   ChartPie,
   CircleQuestionMark,
+  CircleUser,
   Clock,
   CreditCard,
   HandCoins,
@@ -38,6 +39,9 @@ export const HOME: NavTarget = { path: '/', label: 'Home', icon: House };
 export const BUDGET: NavTarget = { path: '/budget', label: 'Budget', icon: ChartPie };
 export const INVEST: NavTarget = { path: '/invest', label: 'Invest', icon: TrendingUp };
 export const PRIMARY_LINKS: NavTarget[] = [HOME, BUDGET, INVEST];
+
+/** Where the avatar on Home goes: the person's level, coins and the menu below them. */
+export const PROFILE: NavTarget = { path: '/profile', label: 'Profile', icon: CircleUser };
 
 /** Everything else, grouped the way the Menu sheet and the sidebar list it. */
 export const MENU_GROUPS: MenuGroup[] = [

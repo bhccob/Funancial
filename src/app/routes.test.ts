@@ -32,6 +32,7 @@ it('routes every spec screen', () => {
       '/income',
       '/invest',
       '/invest/holding/:id',
+      '/profile',
       '/quests',
       '/settings',
       '/shop',

@@ -1,8 +1,9 @@
 import { expect, test, type Page } from '@playwright/test';
 import { startFresh } from './helpers';
 
-/** The top line on Home: one link to the quests, named by its level, XP, streak and coins. */
-const hud = (page: Page) => page.getByRole('link', { name: /^Level \d+,/ });
+/** The top line on Home: the avatar opens Profile and names the level; one link to the quests names the streak and coins. */
+const avatar = (page: Page) => page.getByRole('link', { name: /^Profile, level \d+$/ });
+const hud = (page: Page) => page.getByRole('link', { name: /^\d+-day streak,/ });
 
 /** The Home "Quests" row for the daily logging quest. */
 const logQuest = (page: Page) =>
@@ -25,10 +26,19 @@ test('the first expense pays XP, completes the daily quest and earns a badge', a
 
   // 10 (logging) + 20 (quest) + 50 (badge) XP, and 5 + 10 coins.
   await page.goto('/');
-  await expect(hud(page)).toHaveAttribute('aria-label', /Level 1, 80 of 100 XP/);
+  await expect(avatar(page)).toHaveAttribute('aria-label', 'Profile, level 1');
   await expect(hud(page)).toHaveAttribute('aria-label', /, 15 coins\. Open quests$/);
   await expect(hud(page).getByText('15', { exact: true })).toBeVisible();
   await expect(page.getByText('80 / 100 XP')).toHaveCount(0);
+
+  // The XP is on Profile now, on the level bar under the avatar's page title.
+  await avatar(page).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Profile' })).toBeVisible();
+  await expect(page.getByRole('progressbar', { name: 'Level progress' })).toHaveAttribute(
+    'aria-valuetext',
+    '80 of 100 XP',
+  );
+  await expect(page.getByText('80 / 100 XP')).toBeVisible();
 
   await page.goto('/quests');
   const badges = page.getByRole('region', { name: 'Badges' });

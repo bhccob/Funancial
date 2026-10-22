@@ -1,11 +1,12 @@
 import { act, cleanup, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router';
+import { createMemoryRouter, MemoryRouter, RouterProvider } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Account, CreditTerms, ReminderSettings } from '@/domain/entities';
 import { EXAMPLES } from '@/domain/examples';
 import { computeGameView } from '@/domain/game/engine';
 import { levelStart } from '@/domain/game/levels';
+import { purchaseEntry } from '@/domain/game/shop';
 import { formatMoney } from '@/domain/money';
 import { emptySnapshot, type DataSnapshot } from '@/domain/snapshot';
 import { applyRecords, dueGenerated } from '@/domain/sync';
@@ -29,6 +30,8 @@ import {
   makeSettings,
   makeSubscription,
 } from '@/test/fixtures';
+import { ProfileScreen } from '@/features/profile/ProfileScreen';
+import { QuestsScreen } from '@/features/quests/QuestsScreen';
 import { DashboardScreen } from './DashboardScreen';
 
 const actions = vi.hoisted(() => ({
@@ -61,6 +64,20 @@ function renderDashboard(data: DataSnapshot, today: string) {
     </MemoryRouter>,
     createStubStore({ data, today }),
   );
+}
+
+/** Home with the two pages its top line opens, so a tap can be followed. */
+function renderRouted(data: DataSnapshot, today: string) {
+  const router = createMemoryRouter(
+    [
+      { path: '/', element: <DashboardScreen /> },
+      { path: '/profile', element: <ProfileScreen /> },
+      { path: '/quests', element: <QuestsScreen /> },
+    ],
+    { initialEntries: ['/'] },
+  );
+  renderWithStore(<RouterProvider router={router} />, createStubStore({ data, today }));
+  return router;
 }
 
 const region = (name: string) => screen.getByRole('region', { name });
@@ -170,37 +187,82 @@ function monthData({ income = 0 }: { income?: number } = {}): DataSnapshot {
 }
 
 describe('DashboardScreen top line', () => {
-  it('greets with the name and date, and links level, streak and coins to Quests', () => {
+  it('greets with the name and date, and links the streak and coins to Quests', () => {
     renderDashboard(monthData(), TODAY);
     expect(screen.getByRole('heading', { level: 1, name: 'Home' })).toBeInTheDocument();
     expect(screen.getByText('Hi, Test Player')).toBeInTheDocument();
     expect(screen.getByText(`· ${formatDay(TODAY)}`)).toBeInTheDocument();
 
-    // 250 XP: 150 into the 264 of level 2. Three days of expenses in a row; 40 coins earned.
-    const link = screen.getByRole('link', {
-      name: 'Level 2, 150 of 264 XP, 3-day streak, 40 coins. Open quests',
-    });
+    // Three days of expenses in a row; 40 coins earned. The level is on the avatar, not here.
+    const link = screen.getByRole('link', { name: '3-day streak, 40 coins. Open quests' });
     expect(link).toHaveAttribute('href', '/quests');
     expect(within(link).getByText('3')).toBeInTheDocument();
     expect(within(link).getByText('40')).toBeInTheDocument();
-    expect(within(link).getByText('2')).toBeInTheDocument();
+    expect(within(link).queryByText('2')).not.toBeInTheDocument();
+    expect(link.querySelector('[role="img"]')).not.toBeInTheDocument();
     expect(link.querySelector('svg.lucide-flame')).toHaveClass('text-warning');
     expect(link.querySelector('svg.lucide-coins')).toBeInTheDocument();
   });
 
-  it('draws the level ring at 40px in the XP colour, filled to the progress through the level', () => {
+  it('starts with the avatar: a link to Profile named by the level', () => {
     renderDashboard(monthData(), TODAY);
-    const link = screen.getByRole('link', { name: /Open quests$/ });
+    // 250 XP is level 2. The avatar comes before the greeting and the quests link.
+    const [first] = screen.getAllByRole('link');
+    expect(first).toHaveAccessibleName('Profile, level 2');
+    expect(first).toHaveAttribute('href', '/profile');
+    expect(first).toHaveClass('size-11');
+    // The level sits on the avatar as a chip, in the XP colours, ringed in the page colour.
+    const chip = within(first!).getByText('2');
+    expect(chip).toHaveClass('bg-xp-text', 'text-xp-contrast', 'text-[9.5px]', 'font-extrabold');
+    expect(chip).toHaveClass('ring-2', 'ring-bg');
+    // The greeting follows it, outside the link.
+    expect(first).not.toContainElement(screen.getByText('Hi, Test Player'));
+  });
+
+  it('draws the avatar at 36px in a 44px ring in the XP colour, filled to the progress through the level', () => {
+    const data = monthData();
+    data.tables.settings = [
+      makeSettings({
+        cosmetics: { theme: 'theme-violet', avatar: 'avatar-rocket', frame: 'frame-gold' },
+      }),
+    ];
+    data.tables.ledger.push(
+      makeLedgerEntry({ key: 'bonus', xp: 0, coins: 400 }),
+      purchaseEntry('avatar-rocket', 'p1', localIso('2026-10-01')),
+      purchaseEntry('frame-gold', 'p2', localIso('2026-10-01')),
+    );
+    renderDashboard(data, TODAY);
+    const link = screen.getByRole('link', { name: 'Profile, level 2' });
     const ring = link.querySelector<HTMLElement>('[role="img"]');
-    expect(ring).toHaveStyle({ width: '40px', height: '40px' });
+    expect(ring).toHaveStyle({ width: '44px', height: '44px' });
     const arc = [...(ring?.querySelectorAll('circle') ?? [])].at(-1);
     expect(arc).toHaveAttribute('stroke', 'var(--color-xp)');
+    expect(arc).toHaveAttribute('stroke-width', '3');
     // 150 of 264 XP.
-    const circumference = 2 * Math.PI * ((40 - 3.5) / 2);
+    const circumference = 2 * Math.PI * ((44 - 3) / 2);
     expect(Number(arc?.getAttribute('stroke-dashoffset'))).toBeCloseTo(
       circumference * (1 - 150 / 264),
       3,
     );
+    // The avatar they wear, in the frame they wear.
+    const face = link.querySelector<HTMLElement>('svg.lucide-rocket')?.parentElement;
+    expect(face).toHaveStyle({ width: '36px', height: '36px' });
+    expect(face).toHaveClass('ring-[#d4a017]');
+  });
+
+  it('opens Profile from the avatar and Quests from the streak and coins', async () => {
+    const router = renderRouted(monthData(), TODAY);
+    await userEvent.click(screen.getByRole('link', { name: 'Profile, level 2' }));
+    expect(router.state.location.pathname).toBe('/profile');
+    expect(screen.getByRole('heading', { level: 1, name: 'Profile' })).toBeInTheDocument();
+    cleanup();
+
+    const again = renderRouted(monthData(), TODAY);
+    await userEvent.click(
+      screen.getByRole('link', { name: '3-day streak, 40 coins. Open quests' }),
+    );
+    expect(again.state.location.pathname).toBe('/quests');
+    expect(screen.getByRole('heading', { level: 1, name: 'Quests' })).toBeInTheDocument();
   });
 
   it('says Hi there without a name', () => {
@@ -217,22 +279,22 @@ describe('DashboardScreen top line', () => {
     expect(screen.getAllByText('Hi there')).toHaveLength(2);
   });
 
-  it('says Max level at the top of the curve, shows no coin below 0 and says 1 coin', () => {
+  it('names the top level, shows no coin below 0 and says 1 coin', () => {
     const data = emptySnapshot();
     data.tables.ledger = [makeLedgerEntry({ key: 'seed', xp: levelStart(50) + 10, coins: 1 })];
     const { unmount } = renderDashboard(data, TODAY);
+    expect(screen.getByRole('link', { name: 'Profile, level 50' })).toBeInTheDocument();
     expect(
-      screen.getByRole('link', { name: 'Level 50, Max level, 0-day streak, 1 coin. Open quests' }),
+      screen.getByRole('link', { name: '0-day streak, 1 coin. Open quests' }),
     ).toBeInTheDocument();
     unmount();
 
     const owing = emptySnapshot();
     owing.tables.ledger = [makeLedgerEntry({ key: 'seed', xp: 0, coins: -30, kind: 'purchase' })];
     renderDashboard(owing, TODAY);
+    expect(screen.getByRole('link', { name: 'Profile, level 1' })).toBeInTheDocument();
     expect(
-      screen.getByRole('link', {
-        name: 'Level 1, 0 of 100 XP, 0-day streak, 0 coins. Open quests',
-      }),
+      screen.getByRole('link', { name: '0-day streak, 0 coins. Open quests' }),
     ).toBeInTheDocument();
     expect(screen.queryByText(/-30/)).not.toBeInTheDocument();
   });
@@ -244,7 +306,7 @@ describe('DashboardScreen top line', () => {
     const coins = (12_345).toLocaleString();
     expect(coins).not.toBe('12345');
     const link = screen.getByRole('link', {
-      name: `Level 1, 0 of 100 XP, 0-day streak, ${coins} coins. Open quests`,
+      name: `0-day streak, ${coins} coins. Open quests`,
     });
     expect(within(link).getByText(coins)).toBeInTheDocument();
   });

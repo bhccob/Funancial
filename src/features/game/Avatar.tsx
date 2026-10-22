@@ -19,16 +19,19 @@ export interface AvatarProps {
   frame: string;
   /** Width and height in pixels. */
   size?: number;
+  /** `hero` is a glass chip, for the dark header; the page's light chip would wash out there. */
+  tone?: 'page' | 'hero';
 }
 
 /** The person's avatar: a lucide icon in a round chip, in the frame they wear. Decorative. */
-export function Avatar({ item, frame, size = 32 }: AvatarProps) {
+export function Avatar({ item, frame, size = 32, tone = 'page' }: AvatarProps) {
   const Icon = ICONS[item] ?? Sprout;
   return (
     <span
       aria-hidden="true"
       className={cn(
-        'bg-surface-2 text-text grid shrink-0 place-items-center rounded-full',
+        'grid shrink-0 place-items-center rounded-full',
+        tone === 'hero' ? 'text-hero-text bg-white/15' : 'bg-surface-2 text-text',
         frameRing(frame),
       )}
       style={{ width: size, height: size }}

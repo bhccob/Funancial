@@ -102,7 +102,8 @@ test('mobile: the Menu has no Buy it?, no About you and no Salary freeze', async
     .getByRole('button', { name: 'Menu' })
     .click();
   const menu = page.getByRole('dialog', { name: 'Menu' });
-  await expect(menu.getByRole('heading', { level: 3 })).toHaveText(['Your money', 'You']);
+  // The sheet's own name (not drawn), then its two groups.
+  await expect(menu.getByRole('heading', { level: 2 })).toHaveText(['Menu', 'Your money', 'You']);
   await expect(menu.getByRole('link', { name: /^Buy it\?/ })).toHaveCount(0);
   await expect(menu.getByRole('link', { name: /^About you/ })).toHaveCount(0);
   await expect(menu.getByRole('link', { name: /^Salary freeze/ })).toHaveCount(0);

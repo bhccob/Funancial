@@ -11,6 +11,7 @@ import { InboxScreen } from '@/features/inbox/InboxScreen';
 import { HoldingPage } from '@/features/invest/HoldingPage';
 import { IncomeScreen } from '@/features/income/IncomeScreen';
 import { InvestScreen } from '@/features/invest/InvestScreen';
+import { ProfileScreen } from '@/features/profile/ProfileScreen';
 import { QuestsScreen } from '@/features/quests/QuestsScreen';
 import { ShopScreen } from '@/features/shop/ShopScreen';
 import { SubscriptionsScreen } from '@/features/subscriptions/SubscriptionsScreen';
@@ -30,6 +31,7 @@ export const APP_ROUTES: AppRoute[] = [
   { path: '/budget', element: <BudgetScreen /> },
   { path: '/invest', element: <InvestScreen /> },
   { path: '/invest/holding/:id', element: <HoldingPage /> },
+  { path: '/profile', element: <ProfileScreen /> },
   { path: '/quests', element: <QuestsScreen /> },
   { path: '/subscriptions', element: <SubscriptionsScreen /> },
   { path: '/goals', element: <GoalsScreen /> },

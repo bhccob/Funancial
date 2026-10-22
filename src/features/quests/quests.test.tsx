@@ -92,6 +92,7 @@ describe('Quests screen: header', () => {
     expect(screen.getByText('150 / 264 XP')).toBeInTheDocument();
     const bar = screen.getByRole('progressbar', { name: 'Level progress' });
     expect(bar).toHaveAttribute('aria-valuetext', '150 of 264 XP');
+    expect(bar).toHaveClass('bg-track');
     expect(bar.firstElementChild).toHaveClass('bg-xp');
     expect(bar.firstElementChild).toHaveStyle({ width: `${(150 / 264) * 100}%` });
     expect(screen.getByText('120 coins')).toBeInTheDocument();

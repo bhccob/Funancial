@@ -5,6 +5,7 @@ import { Section } from '@/components/ui/Section';
 import type { GameView } from '@/domain/game/engine';
 import type { QuestView } from '@/domain/game/quests';
 import { Avatar } from '@/features/game/Avatar';
+import { LevelProgress } from '@/features/game/LevelProgress';
 import { QuestList } from '@/features/game/QuestList';
 import { useGameView } from '@/store/useGame';
 import { BadgesSection } from './BadgesSection';
@@ -24,11 +25,6 @@ const QUEST_GROUPS: readonly { cadence: QuestView['cadence']; title: string }[] 
 function LevelHeader({ game }: { game: GameView }) {
   const { level, totals, cosmetics } = game;
   const coins = Math.max(0, totals.coins);
-  const needed = level.xpForNext;
-  const into = level.xpIntoLevel.toLocaleString();
-  const xpText = needed === null ? 'Max level' : `${into} / ${needed.toLocaleString()} XP`;
-  const xpSpoken = needed === null ? 'Max level' : `${into} of ${needed.toLocaleString()} XP`;
-
   return (
     <Section>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
@@ -49,22 +45,8 @@ function LevelHeader({ game }: { game: GameView }) {
           </ButtonLink>
         </span>
       </div>
-      <div className="mt-4 flex items-center gap-3">
-        <div
-          role="progressbar"
-          aria-label="Level progress"
-          aria-valuemin={0}
-          aria-valuemax={needed ?? 1}
-          aria-valuenow={needed === null ? 1 : level.xpIntoLevel}
-          aria-valuetext={xpSpoken}
-          className="bg-track h-1.5 min-w-0 flex-1 overflow-hidden rounded-full"
-        >
-          <div
-            className="bg-xp h-full rounded-full motion-safe:transition-[width]"
-            style={{ width: `${level.progress * 100}%` }}
-          />
-        </div>
-        <span className="text-muted shrink-0 text-xs font-semibold tabular-nums">{xpText}</span>
+      <div className="mt-4">
+        <LevelProgress level={level} />
       </div>
     </Section>
   );

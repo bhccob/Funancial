@@ -1,5 +1,6 @@
 import { cleanup, fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { CircleUser } from 'lucide-react';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Account } from '@/domain/entities';
@@ -20,7 +21,7 @@ import {
   makeProfile,
   makeSubscription,
 } from '@/test/fixtures';
-import { MENU_GROUPS } from './menu';
+import { MENU_GROUPS, PROFILE } from './menu';
 import { appRouteObjects } from './router';
 
 const usd = (minor: number) => formatMoney(minor, 'USD');
@@ -105,7 +106,7 @@ describe('bottom bar', () => {
     expect(within(bar).queryByRole('link', { name: /add|quests/i })).not.toBeInTheDocument();
 
     const sheet = await openMenu();
-    const you = within(sheet).getByRole('heading', { level: 3, name: 'You' }).parentElement!;
+    const you = within(sheet).getByRole('heading', { level: 2, name: 'You' }).parentElement!;
     const first = within(you).getAllByRole('link')[0]!;
     expect(first).toHaveAttribute('href', '/quests');
     expect(first).toHaveTextContent('Level 1');
@@ -153,11 +154,12 @@ describe('Menu sheet', () => {
     renderAt('/', liveData());
     const sheet = await openMenu();
 
+    // The sheet's own name (not drawn) and then the two groups.
     expect(
       within(sheet)
-        .getAllByRole('heading', { level: 3 })
+        .getAllByRole('heading', { level: 2 })
         .map((h) => h.textContent),
-    ).toEqual(['Your money', 'You']);
+    ).toEqual(['Menu', 'Your money', 'You']);
     expect(
       within(sheet)
         .getAllByRole('link')
@@ -391,7 +393,7 @@ describe('Menu sheet', () => {
     renderAt('/');
     const sheet = await openMenu();
     const money = within(sheet).getByRole('heading', {
-      level: 3,
+      level: 2,
       name: 'Your money',
     }).parentElement!;
     expect(
@@ -399,7 +401,7 @@ describe('Menu sheet', () => {
         .getAllByRole('link')
         .map((a) => a.getAttribute('href')),
     ).toEqual(['/subscriptions', '/goals', '/debts', '/income', '/history']);
-    const you = within(sheet).getByRole('heading', { level: 3, name: 'You' }).parentElement!;
+    const you = within(sheet).getByRole('heading', { level: 2, name: 'You' }).parentElement!;
     expect(
       within(you)
         .getAllByRole('link')
@@ -434,7 +436,7 @@ describe('Menu sheet', () => {
   it('closes when the dimmed page behind it is tapped, but not when the sheet is', async () => {
     renderAt('/');
     const sheet = await openMenu();
-    await userEvent.click(within(sheet).getByRole('heading', { level: 3, name: 'You' }));
+    await userEvent.click(within(sheet).getByRole('heading', { level: 2, name: 'You' }));
     expect(screen.getByRole('dialog', { name: 'Menu' })).toBeInTheDocument();
     // A tap on the backdrop is delivered to the dialog element itself.
     await userEvent.click(sheet);
@@ -494,6 +496,11 @@ describe('sidebar', () => {
 });
 
 describe('menu items', () => {
+  it('names the Profile page', () => {
+    expect(PROFILE).toMatchObject({ path: '/profile', label: 'Profile' });
+    expect(PROFILE.icon).toBe(CircleUser);
+  });
+
   it('has the two groups in order, with a fixed chip colour that holds 3:1 against a white icon', () => {
     expect(MENU_GROUPS.map((g) => [g.title, g.items.length])).toEqual([
       ['Your money', 5],
