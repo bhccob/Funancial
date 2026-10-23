@@ -1,12 +1,14 @@
+import { UserRound } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import { Banner } from '@/components/ui/Banner';
 import { Button } from '@/components/ui/Button';
 import { Dialog } from '@/components/ui/Dialog';
-import { Section } from '@/components/ui/Section';
 import { TextField } from '@/components/ui/TextField';
 import { ForgotForm } from '@/features/account/ForgotScreen';
 import { PasswordField, Problem } from '@/features/account/parts';
 import { errorMessage, FORGOT_LEAD, SAVE_NOTE, useBusy } from '@/features/account/shared';
+import { IconRow, ROW_SUB, ROW_TITLE } from '@/features/shared/IconRow';
+import { PlainSection, ROWS } from '@/features/shared/PlainSection';
 import { toast } from '@/lib/toast';
 import { useAction } from '@/lib/useAction';
 import { emailProblem, passwordProblem, usernameProblem } from '@/store/accountActions';
@@ -64,6 +66,7 @@ function CreateAccountDialog({ open, onClose }: { open: boolean; onClose(): void
     >
       {open && (
         <form className="flex flex-col gap-5" onSubmit={submit} noValidate>
+          {/* The line fields, not rows: a row has the label take what it needs, and the email's is long. */}
           <TextField
             variant="line"
             label="Username"
@@ -176,21 +179,24 @@ function LogInDialog({
             </p>
           ) : (
             <>
-              <TextField
-                variant="line"
-                label="Username"
-                autoComplete="username"
-                autoCapitalize="none"
-                spellCheck={false}
-                autoFocus
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-              />
-              <PasswordField
-                autoComplete="current-password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
+              <div>
+                <TextField
+                  variant="row"
+                  label="Username"
+                  autoComplete="username"
+                  autoCapitalize="none"
+                  spellCheck={false}
+                  autoFocus
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                />
+                <PasswordField
+                  variant="row"
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                />
+              </div>
               <button
                 type="button"
                 onClick={() => {
@@ -262,28 +268,33 @@ function ChangePasswordDialog({ open, onClose }: { open: boolean; onClose(): voi
     >
       {open && (
         <form className="flex flex-col gap-5" onSubmit={submit} noValidate>
-          <PasswordField
-            label="Current password"
-            autoComplete="current-password"
-            autoFocus
-            value={current}
-            onChange={(e) => setCurrent(e.target.value)}
-          />
-          <PasswordField
-            label="New password"
-            autoComplete="new-password"
-            hint="At least 10 characters"
-            value={next}
-            error={errors.next}
-            onChange={(e) => setNext(e.target.value)}
-          />
-          <PasswordField
-            label="Confirm new password"
-            autoComplete="new-password"
-            value={again}
-            error={errors.again}
-            onChange={(e) => setAgain(e.target.value)}
-          />
+          <div>
+            <PasswordField
+              variant="row"
+              label="Current password"
+              autoComplete="current-password"
+              autoFocus
+              value={current}
+              onChange={(e) => setCurrent(e.target.value)}
+            />
+            <PasswordField
+              variant="row"
+              label="New password"
+              autoComplete="new-password"
+              hint="At least 10 characters"
+              value={next}
+              error={errors.next}
+              onChange={(e) => setNext(e.target.value)}
+            />
+            <PasswordField
+              variant="row"
+              label="Confirm new password"
+              autoComplete="new-password"
+              value={again}
+              error={errors.again}
+              onChange={(e) => setAgain(e.target.value)}
+            />
+          </div>
           <Problem>{errors.other}</Problem>
           <div className="flex justify-end gap-2">
             <Button variant="secondary" onClick={close}>
@@ -414,11 +425,11 @@ function Loaded() {
       )}
 
       {status === 'linked' && (
-        <>
-          <div className="flex flex-col gap-1">
-            <p className="font-bold">{username}</p>
-            {email && <p className="text-muted text-sm">{email}</p>}
-            <p className="text-muted text-sm">
+        <div className={ROWS}>
+          <IconRow icon={UserRound}>
+            <p className={ROW_TITLE}>{username}</p>
+            {email && <p className={ROW_SUB}>{email}</p>}
+            <p className={ROW_SUB}>
               {savedAt
                 ? `Last copy saved ${dateTime.format(new Date(savedAt))}`
                 : 'No copy saved yet.'}
@@ -428,8 +439,8 @@ function Loaded() {
                 Your copy is too big to save. Ask the app&apos;s owner for help.
               </p>
             )}
-          </div>
-          <div className="flex flex-wrap gap-3">
+          </IconRow>
+          <div className="flex flex-wrap gap-3 py-3">
             <Button variant="secondary" onClick={() => setOpened('password')}>
               Change password
             </Button>
@@ -440,7 +451,7 @@ function Loaded() {
               Turn off and delete my copy
             </Button>
           </div>
-        </>
+        </div>
       )}
 
       {status === 'moved' && (
@@ -481,8 +492,8 @@ export function AccountSection() {
   const { loaded } = useAccount();
   if (!loaded) return null;
   return (
-    <Section title="Account">
+    <PlainSection title="Account">
       <Loaded />
-    </Section>
+    </PlainSection>
   );
 }

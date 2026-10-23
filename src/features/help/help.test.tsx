@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
@@ -13,6 +13,7 @@ import { HelpScreen } from './HelpScreen';
 function renderHelp(path = '/help') {
   const router = createMemoryRouter(
     [
+      { path: '/', element: <p>Home</p> },
       { path: '/help', element: <HelpScreen /> },
       { path: '/help/:id', element: <HelpPage /> },
     ],
@@ -132,7 +133,8 @@ describe('a help page', () => {
       const example = EXAMPLES.find((e) => e.id === exampleId)!;
       expect(screen.getByRole('heading', { level: 2, name: example.title })).toBeInTheDocument();
     }
-    expect(screen.getByRole('link', { name: 'Back to Help' })).toHaveAttribute('href', '/help');
+    expect(screen.getByRole('button', { name: 'Back' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Back to Help' })).not.toBeInTheDocument();
   });
 
   it('sends an unknown page back to the index', () => {
@@ -280,5 +282,99 @@ describe('ExampleTable', () => {
     const row = (label: string) => screen.getByText(label).parentElement!;
     expect(row(RESULT_ROWS.levelRank!.label)).toHaveTextContent('Warning');
     expect(row(RESULT_ROWS.levelRankAfterLunch!.label)).toHaveTextContent('Over the limit');
+  });
+});
+
+describe('the Help headers', () => {
+  const back = () => screen.getByRole('button', { name: 'Back' });
+  const before = (a: Element, b: Element) =>
+    Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+
+  it('has a round Back button before the title on the index and goes back in history', async () => {
+    const router = renderHelp('/help');
+    expect(back()).toHaveClass('glass', 'rounded-full', 'size-11');
+    expect(before(back(), screen.getByRole('heading', { level: 1, name: 'Help' }))).toBe(true);
+    // The index was opened first thing, so there is nothing before it: Back goes to Home.
+    await userEvent.click(back());
+    expect(router.state.location.pathname).toBe('/');
+  });
+
+  it('has the same Back button on a page, and it goes back to the index the page was opened from', async () => {
+    renderHelp('/help');
+    await userEvent.click(screen.getByRole('link', { name: /^Available to spend/ }));
+    const title = screen.getByRole('heading', { level: 1, name: 'Available to spend' });
+    expect(before(back(), title)).toBe(true);
+    // The summary hangs under the title, not under the button.
+    expect(screen.getByText(HELP_PAGES.find((p) => p.id === 'available')!.summary)).toHaveClass(
+      'ml-14',
+    );
+    await userEvent.click(back());
+    expect(screen.getByRole('heading', { level: 1, name: 'Help' })).toBeInTheDocument();
+  });
+
+  it('goes Home from a page opened first thing', async () => {
+    const router = renderHelp('/help/available');
+    await userEvent.click(back());
+    expect(router.state.location.pathname).toBe('/');
+  });
+});
+
+describe('Help in glass', () => {
+  it('lists the pages of a group as plain rows with hairlines and a chevron', () => {
+    renderHelp('/help');
+    const region = screen.getByRole('region', { name: 'How it works' });
+    const list = within(region).getAllByRole('link')[0]!.closest('ul')!;
+    expect(list).toHaveClass('divide-y', 'divide-black/7', 'dark:divide-white/8');
+    expect(list).not.toHaveClass('glass', 'border');
+    for (const row of within(region).getAllByRole('link')) {
+      expect(row.closest('li')).not.toHaveClass('border-t');
+      expect(row.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
+    }
+  });
+
+  it('has a search field that is a glass pill, still named Search help', () => {
+    renderHelp('/help');
+    const search = screen.getByRole('searchbox', { name: 'Search help' });
+    expect(search).toHaveClass('glass', 'rounded-full', 'h-11');
+    expect(search).toHaveClass('placeholder:text-muted');
+    // The magnifying glass is for the eye only.
+    expect(search.parentElement!.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
+  });
+
+  it('sets the prose of a page as plain text on the page, in no box', () => {
+    renderHelp('/help/available');
+    const page = HELP_PAGES.find((p) => p.id === 'available')!;
+    const paragraph = screen.getByText(page.body[0]!);
+    expect(paragraph.closest('.glass')).toBeNull();
+    expect(paragraph.closest('[class*="border"]')).toBeNull();
+  });
+
+  it('sets each worked example in a glass tile', () => {
+    renderHelp('/help/cards');
+    for (const id of ['EXP-1', 'BAL-1']) {
+      const example = EXAMPLES.find((e) => e.id === id)!;
+      const tile = screen.getByRole('heading', { level: 2, name: example.title }).closest('.glass');
+      expect(tile).not.toBeNull();
+      expect(tile).toHaveClass('rounded-[24px]', 'p-4');
+      // Its steps and its result are inside it, the result as plain rows.
+      expect(tile).toContainElement(
+        screen.getAllByRole('list', { name: 'Steps' })[id === 'EXP-1' ? 0 : 1]!,
+      );
+      expect(tile!.querySelector('dl')).toHaveClass('divide-y');
+    }
+  });
+
+  it('sets the glossary, the FAQ and the disclaimers as plain rows', () => {
+    for (const [page, first] of [
+      ['glossary', GLOSSARY[0]!.term],
+      ['faq', FAQ[0]!.q],
+      ['terms', LEGAL.disclaimers[0]!.title],
+    ] as const) {
+      renderHelp(`/help/${page}`);
+      const list = screen.getByText(first).closest('dl')!;
+      expect(list, page).toHaveClass('divide-y', 'divide-black/7', 'dark:divide-white/8');
+      expect(screen.getByText(first).parentElement, page).not.toHaveClass('border-t');
+      cleanup();
+    }
   });
 });

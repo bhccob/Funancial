@@ -1,8 +1,10 @@
+import { CalendarDays, TriangleAlert } from 'lucide-react';
 import { RadioGroup } from '@/components/ui/RadioGroup';
-import { Section } from '@/components/ui/Section';
 import { limitMessage } from '@/domain/alerts';
 import type { LimitStatus } from '@/domain/budget';
 import type { Settings } from '@/domain/entities';
+import { IconRow, ROW_SUB } from '@/features/shared/IconRow';
+import { PlainSection, ROWS } from '@/features/shared/PlainSection';
 import { useAction } from '@/lib/useAction';
 import { useApp } from '@/store/AppStoreProvider';
 import { useFinanceActions } from '@/store/useFinance';
@@ -38,38 +40,42 @@ export function PreferencesSection() {
   const weekStartsOn = settings?.weekStartsOn ?? 1;
 
   return (
-    <Section title="Preferences">
-      <div className="flex max-w-xl flex-col gap-5">
-        <RadioGroup<'1' | '0'>
-          variant="underline"
-          legend="Week starts on"
-          value={weekStartsOn === 0 ? '0' : '1'}
-          onChange={(v) => void run(() => updateSettings({ weekStartsOn: v === '0' ? 0 : 1 }))}
-          options={[
-            { value: '1', label: 'Monday' },
-            { value: '0', label: 'Sunday' },
-          ]}
-        />
-        <div className="flex flex-col gap-2">
-          <RadioGroup<Tone>
-            variant="underline"
-            legend="Warning style"
-            value={tone}
-            onChange={(v) => void run(() => updateSettings({ warningTone: v }))}
+    <PlainSection title="Preferences">
+      <div className={ROWS}>
+        <IconRow icon={CalendarDays} top>
+          <RadioGroup<'1' | '0'>
+            variant="pills"
+            legend="Week starts on"
+            value={weekStartsOn === 0 ? '0' : '1'}
+            onChange={(v) => void run(() => updateSettings({ weekStartsOn: v === '0' ? 0 : 1 }))}
             options={[
-              { value: 'gentle', label: 'Gentle' },
-              { value: 'motivational', label: 'Motivational' },
-              { value: 'strict', label: 'Strict' },
+              { value: '1', label: 'Monday' },
+              { value: '0', label: 'Sunday' },
             ]}
           />
-          <div className="text-sm">
-            <p className="text-muted text-xs font-semibold">
-              Example{tone === 'strict' ? ' (strict also asks before you go over)' : ''}
-            </p>
-            <p className="font-semibold">{limitMessage(tone, EXAMPLE)}</p>
+        </IconRow>
+        <IconRow icon={TriangleAlert} top>
+          <div className="flex flex-col gap-2">
+            <RadioGroup<Tone>
+              variant="pills"
+              legend="Warning style"
+              value={tone}
+              onChange={(v) => void run(() => updateSettings({ warningTone: v }))}
+              options={[
+                { value: 'gentle', label: 'Gentle' },
+                { value: 'motivational', label: 'Motivational' },
+                { value: 'strict', label: 'Strict' },
+              ]}
+            />
+            <div>
+              <p className={ROW_SUB}>
+                Example{tone === 'strict' ? ' (strict also asks before you go over)' : ''}
+              </p>
+              <p className="text-sm font-semibold">{limitMessage(tone, EXAMPLE)}</p>
+            </div>
           </div>
-        </div>
+        </IconRow>
       </div>
-    </Section>
+    </PlainSection>
   );
 }

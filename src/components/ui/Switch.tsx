@@ -1,5 +1,7 @@
+import type { LucideIcon } from 'lucide-react';
 import { useId } from 'react';
 import { cn } from '@/lib/cn';
+import { IconChip } from './IconChip';
 
 export interface SwitchProps {
   label: string;
@@ -8,19 +10,49 @@ export interface SwitchProps {
   hint?: string;
   /** Dimmed and inert, but still on screen: it shows what a master switch would turn on. */
   disabled?: boolean;
+  /**
+   * `row` is a plain row of a list: a 54px row with the title and its line on the left and the
+   * switch on the right, as the wireframe's Settings draws one. The default is the line a form has.
+   */
+  variant?: 'default' | 'row';
+  /** Drawn in a round glass chip before the title of a `row`, for the eye only. */
+  icon?: LucideIcon;
+  /** Added to the row (the switch, its title and its line), e.g. room to line up under a chip. */
+  className?: string;
 }
 
-export function Switch({ label, checked, onChange, hint, disabled }: SwitchProps) {
+export function Switch({
+  label,
+  checked,
+  onChange,
+  hint,
+  disabled,
+  variant = 'default',
+  icon,
+  className,
+}: SwitchProps) {
   const id = useId();
   const hintId = hint ? `${id}-hint` : undefined;
+  const row = variant === 'row';
   return (
-    <div className={cn('flex items-start justify-between gap-4', disabled && 'opacity-45')}>
-      <div className="flex flex-col gap-0.5">
-        <label htmlFor={id} className="text-sm font-bold">
+    <div
+      className={cn(
+        'flex justify-between',
+        row ? 'min-h-[54px] items-center gap-3 py-2' : 'items-start gap-4',
+        disabled && 'opacity-45',
+        className,
+      )}
+    >
+      {row && icon && <IconChip icon={icon} />}
+      <div className={cn('flex flex-col gap-0.5', row && 'min-w-0 flex-1')}>
+        <label htmlFor={id} className={row ? 'text-[15px] font-extrabold' : 'text-sm font-bold'}>
           {label}
         </label>
         {hint && (
-          <p id={hintId} className="text-muted text-sm">
+          <p
+            id={hintId}
+            className={cn('text-muted', row ? 'text-[13px] font-semibold' : 'text-sm')}
+          >
             {hint}
           </p>
         )}

@@ -1,12 +1,14 @@
 import { act, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MemoryRouter, Route, Routes } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Toaster } from '@/components/ui/Toaster';
 import type { ReminderSettings } from '@/domain/entities';
 import { currencyOptions } from '@/features/shared/currencies';
+import { ROWS } from '@/features/shared/PlainSection';
 import { emptySnapshot } from '@/domain/snapshot';
 import { toastStore } from '@/lib/toast';
-import { createStubStore, renderWithStore } from '@/test/appStoreStub';
+import { createStubStore, renderWithStore as renderStore } from '@/test/appStoreStub';
 import { fakeAccount, linkedAccount, withAccount } from '@/test/fakeAccount';
 import { fakeNotifier, onPhone, type FakeNotifier } from '@/test/fakeNotifier';
 import {
@@ -34,6 +36,10 @@ vi.mock('@/store/useInvest', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/store/useInvest')>()),
   useInvestActions: () => invest,
 }));
+
+/** The screen has a Back button in its header, which needs a router. */
+const renderWithStore: typeof renderStore = (ui, store) =>
+  renderStore(<MemoryRouter>{ui}</MemoryRouter>, store);
 
 beforeEach(() => {
   toastStore.setState({ toasts: [] });
@@ -744,48 +750,95 @@ describe('Security: failures are visible', () => {
   });
 });
 
-describe('Settings in the line style', () => {
+describe('the Settings header', () => {
+  it('has a round Back button before the title', () => {
+    renderWithStore(<SettingsScreen />, createStubStore({ data: snapshotWith() }));
+    const back = screen.getByRole('button', { name: 'Back' });
+    expect(back).toHaveClass('glass', 'rounded-full', 'size-11');
+    const title = screen.getByRole('heading', { level: 1, name: 'Settings' });
+    expect(back.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('goes back to the screen Settings was opened from', async () => {
+    renderStore(
+      <MemoryRouter initialEntries={['/profile', '/settings']} initialIndex={1}>
+        <Routes>
+          <Route path="/settings" element={<SettingsScreen />} />
+          <Route path="/profile" element={<p>The Profile page</p>} />
+        </Routes>
+      </MemoryRouter>,
+      createStubStore({ data: snapshotWith() }),
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Back' }));
+    expect(screen.getByText('The Profile page')).toBeInTheDocument();
+  });
+});
+
+describe('Settings in glass', () => {
+  /** A plain row: the value on the right, the hairline on the row, and no box or line field. */
+  const isRow = (el: HTMLElement, label: string) => {
+    expect(el, label).toHaveClass('text-right', 'h-11');
+    expect(el, label).not.toHaveClass('border-b', 'font-extrabold', 'rounded-md');
+    expect(el.closest('.border-b'), label).toHaveClass('border-black/7', 'dark:border-white/8');
+  };
+  /** The line field the create dialog and the erase dialog keep. */
   const isLine = (el: HTMLElement, label: string) => {
     expect(el, label).toHaveClass('border-b', 'font-extrabold');
     expect(el, label).not.toHaveClass('rounded-md');
   };
-  const isTab = (name: string, on: boolean) =>
-    expect(screen.getByText(name)).toHaveClass(on ? 'border-text' : 'border-transparent');
+  /** One choice of a group: a glass pill, solid when it is the choice. */
+  const isPill = (name: string, on: boolean) => {
+    const pill = screen.getByText(name);
+    expect(pill, name).toHaveClass('h-8', 'rounded-full');
+    if (on) expect(pill, name).toHaveClass('bg-primary', 'text-primary-contrast');
+    else expect(pill, name).toHaveClass('glass');
+  };
   const tabsOf = (legend: string) =>
     within(screen.getByRole('group', { name: legend }))
       .getAllByRole('radio')
       .map((r) => r.closest('label')?.textContent);
+  /** The round glass chips of a section, each holding its icon for the eye only. */
+  const chipsIn = (section: string) =>
+    Array.from(
+      screen
+        .getByRole('region', { name: section })
+        .querySelectorAll('span.glass.rounded-full[aria-hidden="true"]'),
+    ).filter((chip) => chip.querySelector('svg'));
+  /** The list of plain rows a section holds: hairlines between rows, no box. */
+  const rowsOf = (section: string) =>
+    screen.getByRole('region', { name: section }).querySelector<HTMLElement>('.divide-y');
 
-  it('has line fields in the profile', () => {
+  it('has row fields in the profile', () => {
     const data = snapshotWith();
     data.tables.profile.push(makeProfile({ name: 'Sam', salary: null }));
     renderWithStore(<SettingsScreen />, createStubStore({ data }));
     for (const label of ['Name', 'Monthly take-home pay', 'Pay day']) {
-      isLine(screen.getByLabelText(label), label);
+      isRow(screen.getByLabelText(label), label);
     }
   });
 
-  it('has underline tabs for the week, warning style, theme and lock method', () => {
+  it('has pills for the week, warning style, theme and lock method', () => {
     renderWithStore(
       <SettingsScreen />,
       createStubStore({ lockMode: 'device', data: snapshotWith() }),
     );
-    // Two choices are tabs, not a select, and still radios.
+    // Two choices are pills, not a select, and still radios.
     expect(screen.queryByLabelText('Week starts on')).not.toBeInTheDocument();
     expect(tabsOf('Week starts on')).toEqual(['Monday', 'Sunday']);
     expect(tabsOf('Warning style')).toEqual(['Gentle', 'Motivational', 'Strict']);
     expect(tabsOf('Theme')).toEqual(['System', 'Light', 'Dark']);
     expect(tabsOf('Lock method')).toEqual(['No lock', 'PIN', 'Passphrase']);
-    isTab('Monday', true);
-    isTab('Sunday', false);
-    isTab('Motivational', true);
-    isTab('Gentle', false);
-    isTab('No lock', true);
-    // Not the boxed well.
+    isPill('Monday', true);
+    isPill('Sunday', false);
+    isPill('Motivational', true);
+    isPill('Gentle', false);
+    isPill('No lock', true);
+    // Not the boxed well, and not underline tabs.
     expect(screen.getByText('Monday').closest('div')).not.toHaveClass('bg-surface-2');
+    expect(screen.getByText('Monday')).not.toHaveClass('border-b-2');
   });
 
-  it('has the auto-lock as a line select', () => {
+  it('has the auto-lock as a row select', () => {
     renderWithStore(
       <SettingsScreen />,
       createStubStore({
@@ -793,11 +846,11 @@ describe('Settings in the line style', () => {
         data: snapshotWith(makeSettings({ autoLockMinutes: 5 })),
       }),
     );
-    isLine(screen.getByLabelText('Auto-lock'), 'Auto-lock');
+    isRow(screen.getByLabelText('Auto-lock'), 'Auto-lock');
     expect(screen.getByLabelText('Auto-lock')).toHaveValue('5');
   });
 
-  it('has a line select for the reminder time', () => {
+  it('has a row select for the reminder time', () => {
     const fresh = makeSettings().reminders;
     renderWithStore(
       onPhone(fakeNotifier(), <SettingsScreen />),
@@ -805,31 +858,112 @@ describe('Settings in the line style', () => {
         data: snapshotWith(makeSettings({ reminders: { ...fresh, enabled: true } })),
       }),
     );
-    isLine(screen.getByLabelText('At'), 'At');
+    isRow(screen.getByLabelText('At'), 'At');
   });
 
-  it('has line fields in the currency, PIN and erase dialogs', async () => {
+  it('has row fields in the PIN dialog, and the erase dialog keeps its line field', async () => {
     renderWithStore(<SettingsScreen />, createStubStore({ lockMode: 'pin', data: snapshotWith() }));
 
     await userEvent.click(screen.getByRole('button', { name: 'Change PIN' }));
     let dialog = screen.getByRole('dialog', { name: 'Change PIN' });
     for (const label of ['Current PIN', 'New PIN', 'Confirm PIN']) {
-      isLine(within(dialog).getByLabelText(label), label);
+      isRow(within(dialog).getByLabelText(label), label);
     }
     await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
 
+    // Shared with the lock screen, which keeps the line look until it is rebuilt.
     await userEvent.click(screen.getByRole('button', { name: 'Delete all data' }));
     dialog = screen.getByRole('dialog', { name: 'Delete all data?' });
     isLine(within(dialog).getByLabelText('Type DELETE to confirm'), 'Type DELETE to confirm');
   });
 
-  it('has a line select in the currency picker', async () => {
+  it('has a row select in the currency picker', async () => {
     const data = snapshotWith();
     data.tables.profile.push(makeProfile({ currency: 'USD' }));
     renderWithStore(<SettingsScreen />, createStubStore({ data }));
     await userEvent.click(screen.getByRole('button', { name: 'Change currency' }));
     const picker = screen.getByRole('dialog', { name: 'Change currency' });
-    isLine(within(picker).getByLabelText('New currency'), 'New currency');
+    isRow(within(picker).getByLabelText('New currency'), 'New currency');
+  });
+
+  it('has row fields in the log-in dialog, and the create dialog keeps its line fields', async () => {
+    renderWithStore(withAccount(fakeAccount(), <SettingsScreen />), createStubStore());
+    await userEvent.click(screen.getByRole('button', { name: 'Log in' }));
+    let dialog = screen.getByRole('dialog', { name: 'Log in' });
+    for (const label of ['Username', 'Password']) {
+      isRow(within(dialog).getByLabelText(label), label);
+    }
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+
+    // The email's label is too long to share a row with its value on a phone.
+    await userEvent.click(screen.getByRole('button', { name: 'Create account' }));
+    dialog = screen.getByRole('dialog', { name: 'Create your account' });
+    for (const label of ['Username', 'Email (for "forgot password")', 'Password']) {
+      isLine(within(dialog).getByLabelText(label), label);
+    }
+  });
+
+  it('has row fields in the change-password dialog', async () => {
+    renderWithStore(
+      withAccount(fakeAccount(linkedAccount()), <SettingsScreen />),
+      createStubStore(),
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Change password' }));
+    const dialog = screen.getByRole('dialog', { name: 'Change password' });
+    for (const label of ['Current password', 'New password', 'Confirm new password']) {
+      isRow(within(dialog).getByLabelText(label), label);
+    }
+  });
+
+  it('draws a round glass chip before the rows that have an icon', () => {
+    const data = snapshotWith();
+    data.tables.profile.push(makeProfile({ name: 'Sam' }));
+    const reminders = { ...makeSettings().reminders, enabled: true };
+    data.tables.settings = [makeSettings({ reminders })];
+    renderWithStore(
+      withAccount(fakeAccount(linkedAccount()), onPhone(fakeNotifier(), <SettingsScreen />)),
+      createStubStore({ lockMode: 'pin', biometric: 'off', data }),
+    );
+    // Currency, the person's account, the week and the warning style, reminders, the theme, the
+    // lock method and fingerprint, and what is stored.
+    expect(chipsIn('Profile & salary')).toHaveLength(1);
+    expect(chipsIn('Account')).toHaveLength(1);
+    expect(chipsIn('Preferences')).toHaveLength(2);
+    expect(chipsIn('Reminders')).toHaveLength(1);
+    expect(chipsIn('Appearance')).toHaveLength(1);
+    expect(chipsIn('Security')).toHaveLength(2);
+    expect(chipsIn('Data')).toHaveLength(1);
+  });
+
+  it('lists the rows of a section plain, with hairlines between them and no box', () => {
+    renderWithStore(
+      <SettingsScreen />,
+      createStubStore({ lockMode: 'pin', biometric: 'off', data: snapshotWith() }),
+    );
+    for (const section of ['Preferences', 'Appearance', 'Security', 'Data']) {
+      const list = rowsOf(section);
+      expect(list, section).toBeInTheDocument();
+      expect(list, section).toHaveClass(...ROWS.split(' '));
+      expect(list, section).not.toHaveClass('glass', 'border', 'rounded-[24px]');
+    }
+  });
+
+  it('puts the switches of reminders under the title of the first, as plain rows', () => {
+    const fresh = makeSettings().reminders;
+    renderWithStore(
+      onPhone(fakeNotifier(), <SettingsScreen />),
+      createStubStore({
+        data: snapshotWith(makeSettings({ reminders: { ...fresh, enabled: true } })),
+      }),
+    );
+    const list = rowsOf('Reminders')!;
+    expect(list).toBeInTheDocument();
+    expect(list).toContainElement(screen.getByRole('switch', { name: 'Reminders on this phone' }));
+    // The rows after the first have no chip of their own and line up with its title (38 + 12px).
+    for (const name of ['Daily nudge to log spending', 'Bills and renewals', 'Dividends']) {
+      expect(screen.getByRole('switch', { name }).closest('.pl-\\[50px\\]')).not.toBeNull();
+    }
+    expect(screen.getByLabelText('At').closest('.border-b')).toHaveClass('pl-[50px]');
   });
 });
 

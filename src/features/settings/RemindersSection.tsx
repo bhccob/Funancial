@@ -1,6 +1,6 @@
+import { Bell } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/Button';
-import { Section } from '@/components/ui/Section';
 import { Select } from '@/components/ui/Select';
 import { Switch } from '@/components/ui/Switch';
 import type { ReminderSettings } from '@/domain/entities';
@@ -10,6 +10,9 @@ import {
   useReminderSettings,
   useTurnOnReminders,
 } from '@/features/shared/reminders';
+import { UNDER_TITLE } from '@/features/shared/IconRow';
+import { PlainSection, ROWS } from '@/features/shared/PlainSection';
+import { cn } from '@/lib/cn';
 import { useAction } from '@/lib/useAction';
 import { useFinanceActions } from '@/store/useFinance';
 
@@ -70,22 +73,33 @@ export function RemindersSection({ notifier }: { notifier: Notifier }) {
   const off = !r.enabled;
 
   return (
-    <Section title="Reminders">
-      <div className="flex max-w-xl flex-col gap-5">
-        <Switch label="Reminders on this phone" checked={r.enabled} onChange={toggleMaster} />
-        {blocked && (
-          <p role="alert" className="text-danger text-sm font-semibold">
-            {REMINDERS_BLOCKED}
-          </p>
-        )}
+    <PlainSection title="Reminders">
+      <div className={ROWS}>
+        <div>
+          <Switch
+            variant="row"
+            icon={Bell}
+            label="Reminders on this phone"
+            checked={r.enabled}
+            onChange={toggleMaster}
+          />
+          {blocked && (
+            <p role="alert" className={cn('text-danger pb-3 text-sm font-semibold', UNDER_TITLE)}>
+              {REMINDERS_BLOCKED}
+            </p>
+          )}
+        </div>
         <Switch
+          variant="row"
+          className={UNDER_TITLE}
           label="Daily nudge to log spending"
           checked={r.dailyLog}
           disabled={off}
           onChange={(v) => save({ dailyLog: v })}
         />
         <Select
-          variant="line"
+          variant="row"
+          className={UNDER_TITLE}
           label="At"
           value={r.dailyTime}
           options={times.map((t) => ({ value: t, label: t }))}
@@ -95,13 +109,15 @@ export function RemindersSection({ notifier }: { notifier: Notifier }) {
         {RULES.map(({ key, label }) => (
           <Switch
             key={key}
+            variant="row"
+            className={UNDER_TITLE}
             label={label}
             checked={r[key]}
             disabled={off}
             onChange={(v) => save({ [key]: v })}
           />
         ))}
-        <div>
+        <div className={cn('py-3', UNDER_TITLE)}>
           <Button
             variant="secondary"
             disabled={off}
@@ -115,6 +131,6 @@ export function RemindersSection({ notifier }: { notifier: Notifier }) {
           </Button>
         </div>
       </div>
-    </Section>
+    </PlainSection>
   );
 }

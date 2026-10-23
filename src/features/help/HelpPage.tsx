@@ -4,14 +4,15 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { Section } from '@/components/ui/Section';
 import { FAQ, GLOSSARY, LEGAL, helpPage } from '@/content/help';
 import { EXAMPLES } from '@/domain/examples';
+import { ROWS } from '@/features/shared/PlainSection';
 import { ExampleTable } from './ExampleTable';
 
-/** A term over its meaning, one row each. */
+/** A term over its meaning, one plain row each, with hairlines between them. */
 function Definitions({ items }: { items: Array<{ term: string; meaning: string }> }) {
   return (
-    <dl>
+    <dl className={ROWS}>
       {items.map(({ term, meaning }) => (
-        <div key={term} className="border-border border-t py-3 first:border-t-0">
+        <div key={term} className="py-3">
           <dt className="text-[15.5px] font-extrabold">{term}</dt>
           <dd className="text-muted mt-0.5 text-sm font-semibold">{meaning}</dd>
         </div>
@@ -51,7 +52,10 @@ const EXTRA: Record<string, () => ReactNode> = {
   ),
 };
 
-/** One Help page: its text, anything extra, then its worked examples, as the app's own rules compute them. */
+/**
+ * One Help page: its text, anything extra, then its worked examples, as the app's own rules compute
+ * them. The text is plain on the page; only the examples sit in glass.
+ */
 export function HelpPage() {
   const { id = '' } = useParams();
   const page = helpPage(id);
@@ -59,14 +63,9 @@ export function HelpPage() {
 
   return (
     <div className="max-w-xl">
-      <Link
-        to="/help"
-        aria-label="Back to Help"
-        className="text-muted -mb-1 inline-flex min-h-11 items-center text-[15px] font-extrabold"
-      >
-        ‹ Help
-      </Link>
-      <PageHeader title={page.title}>{page.summary}</PageHeader>
+      <PageHeader title={page.title} back>
+        {page.summary}
+      </PageHeader>
       <Section>
         <div className="flex flex-col gap-3.5 text-[15.5px] leading-relaxed font-semibold">
           {page.body.map((paragraph) => (

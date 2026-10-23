@@ -1,7 +1,9 @@
+import { SunMoon } from 'lucide-react';
 import { useState } from 'react';
 import { PageHeader } from '@/components/ui/PageHeader';
-import { Section } from '@/components/ui/Section';
 import { RadioGroup } from '@/components/ui/RadioGroup';
+import { IconRow } from '@/features/shared/IconRow';
+import { PlainSection, ROWS } from '@/features/shared/PlainSection';
 import { getThemePreference, setThemePreference, type ThemePreference } from '@/lib/theme';
 import { usePlatform } from '@/platform/PlatformProvider';
 import { useApp } from '@/store/AppStoreProvider';
@@ -21,18 +23,22 @@ const THEMES: Array<{ value: ThemePreference; label: string }> = [
 function AppearanceSection() {
   const [theme, setTheme] = useState(getThemePreference);
   return (
-    <Section title="Appearance">
-      <RadioGroup
-        variant="underline"
-        legend="Theme"
-        value={theme}
-        options={THEMES}
-        onChange={(t) => {
-          setTheme(t);
-          setThemePreference(t);
-        }}
-      />
-    </Section>
+    <PlainSection title="Appearance">
+      <div className={ROWS}>
+        <IconRow icon={SunMoon} top>
+          <RadioGroup
+            variant="pills"
+            legend="Theme"
+            value={theme}
+            options={THEMES}
+            onChange={(t) => {
+              setTheme(t);
+              setThemePreference(t);
+            }}
+          />
+        </IconRow>
+      </div>
+    </PlainSection>
   );
 }
 
@@ -40,8 +46,8 @@ export function SettingsScreen() {
   const demo = useApp((s) => s.namespace === 'demo');
   const { notifier } = usePlatform();
   return (
-    <div className="max-w-3xl">
-      <PageHeader title="Settings" />
+    <div className="max-w-xl">
+      <PageHeader title="Settings" back />
       {!demo && <ProfileSection />}
       {!demo && <AccountSection />}
       <PreferencesSection />

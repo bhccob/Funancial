@@ -63,45 +63,47 @@ function SecretForm({ target, current, onDone }: FormProps) {
 
   return (
     <form className="flex flex-col gap-5" onSubmit={submit} noValidate>
-      {needsCurrent && (
-        <TextField
-          variant="line"
-          label={`Current ${NAMES[current as SecretKind]}`}
-          type="password"
-          inputMode={numeric(current)}
-          autoComplete="current-password"
-          autoFocus
-          value={currentSecret}
-          error={errors.current}
-          onChange={(e) => setCurrentSecret(e.target.value)}
-        />
-      )}
-      {target !== 'none' && (
-        <>
+      <div>
+        {needsCurrent && (
           <TextField
-            variant="line"
-            label={`New ${NAMES[target]}`}
+            variant="row"
+            label={`Current ${NAMES[current as SecretKind]}`}
             type="password"
-            inputMode={numeric(target)}
-            autoComplete="new-password"
-            autoFocus={!needsCurrent}
-            hint={target === 'pin' ? '4 to 8 digits' : 'At least 8 characters'}
-            value={next}
-            error={errors.next}
-            onChange={(e) => setNext(e.target.value)}
+            inputMode={numeric(current)}
+            autoComplete="current-password"
+            autoFocus
+            value={currentSecret}
+            error={errors.current}
+            onChange={(e) => setCurrentSecret(e.target.value)}
           />
-          <TextField
-            variant="line"
-            label={`Confirm ${NAMES[target]}`}
-            type="password"
-            inputMode={numeric(target)}
-            autoComplete="new-password"
-            value={confirm}
-            error={errors.confirm}
-            onChange={(e) => setConfirm(e.target.value)}
-          />
-        </>
-      )}
+        )}
+        {target !== 'none' && (
+          <>
+            <TextField
+              variant="row"
+              label={`New ${NAMES[target]}`}
+              type="password"
+              inputMode={numeric(target)}
+              autoComplete="new-password"
+              autoFocus={!needsCurrent}
+              hint={target === 'pin' ? '4 to 8 digits' : 'At least 8 characters'}
+              value={next}
+              error={errors.next}
+              onChange={(e) => setNext(e.target.value)}
+            />
+            <TextField
+              variant="row"
+              label={`Confirm ${NAMES[target]}`}
+              type="password"
+              inputMode={numeric(target)}
+              autoComplete="new-password"
+              value={confirm}
+              error={errors.confirm}
+              onChange={(e) => setConfirm(e.target.value)}
+            />
+          </>
+        )}
+      </div>
       <div className="flex justify-end gap-2">
         <Button variant="secondary" onClick={onDone}>
           Cancel

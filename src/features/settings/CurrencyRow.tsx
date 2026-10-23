@@ -1,10 +1,11 @@
+import { Globe } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Dialog } from '@/components/ui/Dialog';
 import { Select } from '@/components/ui/Select';
-import { lineLabel } from '@/components/ui/lineField';
 import { minorDigits } from '@/domain/money';
 import { currencyOptions } from '@/features/shared/currencies';
+import { IconRow, ROW_SUB, ROW_TITLE } from '@/features/shared/IconRow';
 import { useAction } from '@/lib/useAction';
 import { useFinanceActions } from '@/store/useFinance';
 import { useInvestActions } from '@/store/useInvest';
@@ -56,20 +57,24 @@ export function CurrencyRow({ current }: { current: string }) {
   }
 
   return (
-    <div className="border-border flex items-center justify-between gap-4 border-b">
-      <div className="flex min-w-0 flex-col gap-0.5">
-        <p className={lineLabel}>Currency</p>
-        <p className="truncate text-base font-extrabold">{currentLabel}</p>
-      </div>
-      <Button
-        ref={changeButton}
-        variant="secondary"
-        size="sm"
-        aria-label="Change currency"
-        onClick={() => setPicking(true)}
+    <div>
+      <IconRow
+        icon={Globe}
+        end={
+          <Button
+            ref={changeButton}
+            variant="secondary"
+            size="sm"
+            aria-label="Change currency"
+            onClick={() => setPicking(true)}
+          >
+            Change
+          </Button>
+        }
       >
-        Change
-      </Button>
+        <p className={ROW_TITLE}>Currency</p>
+        <p className={`${ROW_SUB} truncate`}>{currentLabel}</p>
+      </IconRow>
       <Dialog
         open={picking}
         title="Change currency"
@@ -81,7 +86,7 @@ export function CurrencyRow({ current }: { current: string }) {
         }
       >
         <Select
-          variant="line"
+          variant="row"
           label="New currency"
           value=""
           onChange={(code) => code && setNext(code)}

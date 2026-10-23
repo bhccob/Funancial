@@ -14,7 +14,8 @@ test('Help: search the index, open a page and read its worked example', async ({
   await expect(steps.getByRole('listitem')).toHaveCount(4);
   await expect(page.getByLabel('Result')).toContainText('$85.00');
 
-  await page.getByRole('link', { name: 'Back to Help' }).click();
+  // Back in history: the page was opened from the index.
+  await page.getByRole('button', { name: 'Back' }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Help' })).toBeVisible();
 });
 

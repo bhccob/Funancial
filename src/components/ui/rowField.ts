@@ -30,13 +30,18 @@ export const ROW_LAYOUT = 'flex min-h-[46px] items-center gap-3';
 export const rowLabel = 'text-text flex shrink-0 items-center self-stretch text-[15px] font-bold';
 
 /**
- * The value of a row, whether an input or a select: muted 15px, right-aligned, filling the rest of
- * the row on 44px. It turns ink while it has focus. It keeps the page-wide focus ring (there is no
- * `focus:outline-none` here), which is what shows focus on a row. The last two classes right-align the
+ * What a row's value looks like, whether it is an input, a select or an amount: muted 15px,
+ * right-aligned on 44px, turning ink while it has focus. It keeps the page-wide focus ring (there is no
+ * `focus:outline-none` here), which is what shows focus on a row.
+ */
+export const rowValue =
+  'text-muted placeholder:text-muted focus:text-text h-11 min-w-0 bg-transparent text-right text-[15px] font-semibold';
+
+/**
+ * The value of a row that fills the rest of it, an input or a select. The last two classes right-align the
  * fields of a date or time input, which `text-right` does not move (Chrome and the Android WebView).
  */
-export const rowControl =
-  'text-muted placeholder:text-muted focus:text-text h-11 min-w-0 flex-1 bg-transparent text-right text-[15px] font-semibold [&::-webkit-datetime-edit]:flex [&::-webkit-datetime-edit]:justify-end';
+export const rowControl = `${rowValue} flex-1 [&::-webkit-datetime-edit]:flex [&::-webkit-datetime-edit]:justify-end`;
 
 /** A hint or an error under a row has 8px under it, before the hairline. */
 export const ROW_MESSAGE = 'pb-2';

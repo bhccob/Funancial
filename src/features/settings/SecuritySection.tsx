@@ -1,11 +1,14 @@
+import { Fingerprint, Lock } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/Button';
-import { Section } from '@/components/ui/Section';
 import { RadioGroup } from '@/components/ui/RadioGroup';
 import { Select } from '@/components/ui/Select';
 import { Switch } from '@/components/ui/Switch';
 import { defaultSettings, type AutoLockMinutes } from '@/domain/entities';
 import { nowIso } from '@/domain/ids';
+import { IconRow, UNDER_TITLE } from '@/features/shared/IconRow';
+import { EmptyRows, PlainSection, ROWS } from '@/features/shared/PlainSection';
+import { cn } from '@/lib/cn';
 import { useAction } from '@/lib/useAction';
 import { useApp } from '@/store/AppStoreProvider';
 import { SecretDialog, type LockTarget } from './SecretDialog';
@@ -39,9 +42,9 @@ export function SecuritySection() {
 
   if (namespace === 'demo') {
     return (
-      <Section title="Security">
-        <p className="text-muted">Demo data isn't locked.</p>
-      </Section>
+      <PlainSection title="Security">
+        <EmptyRows>Demo data isn't locked.</EmptyRows>
+      </PlainSection>
     );
   }
 
@@ -55,37 +58,43 @@ export function SecuritySection() {
   };
 
   return (
-    <Section title="Security">
-      <div className="flex max-w-xl flex-col gap-5">
-        <RadioGroup
-          variant="underline"
-          legend="Lock method"
-          value={current}
-          options={LOCK_OPTIONS}
-          onChange={(v) => v !== current && setTarget(v)}
-        />
-        {lockMode === 'pin' && (
-          <p className="text-muted text-sm">
-            A PIN keeps casual snoopers out. For stronger protection, use a passphrase.
-          </p>
-        )}
+    <PlainSection title="Security">
+      <div className={ROWS}>
+        <IconRow icon={Lock} top>
+          <RadioGroup
+            variant="pills"
+            legend="Lock method"
+            value={current}
+            options={LOCK_OPTIONS}
+            onChange={(v) => v !== current && setTarget(v)}
+          />
+          {lockMode === 'pin' && (
+            <p className="text-muted mt-2 text-sm">
+              A PIN keeps casual snoopers out. For stronger protection, use a passphrase.
+            </p>
+          )}
+        </IconRow>
         {lockMode !== 'device' && (
-          <div className="flex flex-wrap items-end gap-x-6 gap-y-5">
-            <Button variant="secondary" size="sm" onClick={() => setTarget(lockMode)}>
-              {lockMode === 'pin' ? 'Change PIN' : 'Change passphrase'}
-            </Button>
+          <>
+            <div className={cn('py-3', UNDER_TITLE)}>
+              <Button variant="secondary" size="sm" onClick={() => setTarget(lockMode)}>
+                {lockMode === 'pin' ? 'Change PIN' : 'Change passphrase'}
+              </Button>
+            </div>
             <Select
-              variant="line"
-              className="min-w-40 flex-1"
+              variant="row"
+              className={UNDER_TITLE}
               label="Auto-lock"
               value={String(settings?.autoLockMinutes ?? 5)}
               onChange={(v) => saveAutoLock(Number(v) as AutoLockMinutes)}
               options={AUTO_LOCK.map((o) => ({ value: String(o.value), label: o.label }))}
             />
-          </div>
+          </>
         )}
         {lockMode !== 'device' && biometric !== 'unavailable' && (
           <Switch
+            variant="row"
+            icon={Fingerprint}
             label="Unlock with fingerprint or face"
             hint={`Your ${lockMode === 'pin' ? 'PIN' : 'passphrase'} still works if this fails.`}
             checked={biometric === 'on'}
@@ -94,6 +103,6 @@ export function SecuritySection() {
         )}
       </div>
       <SecretDialog target={target} current={lockMode} onClose={() => setTarget(null)} />
-    </Section>
+    </PlainSection>
   );
 }

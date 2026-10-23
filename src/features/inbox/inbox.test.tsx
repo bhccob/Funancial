@@ -67,7 +67,7 @@ describe('InboxScreen', () => {
     expect(rows()[2]).toHaveAttribute('href', '/');
   });
 
-  it('has New and All underline tabs, with the count of what is new', async () => {
+  it('has New and All, with the count of what is new', async () => {
     renderInbox(inboxData({ readBefore: null, read: ['week:2026-10-11', 'week:2026-10-04'] }));
     const group = screen.getByRole('group', { name: 'Show' });
     const fresh = within(group).getByRole('button', { name: 'New (5)' });
@@ -144,5 +144,54 @@ describe('InboxScreen', () => {
     expect(screen.queryByRole('button', { name: 'Mark all as read' })).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'All' }));
     expect(screen.getByText(text)).toBeInTheDocument();
+  });
+});
+
+describe('the Inbox header', () => {
+  it('has a round Back button before the title, and goes back to the screen before', async () => {
+    renderWithStore(
+      <MemoryRouter initialEntries={['/profile', '/inbox']} initialIndex={1}>
+        <Routes>
+          <Route path="/inbox" element={<InboxScreen />} />
+          <Route path="/profile" element={<p>The Profile page</p>} />
+        </Routes>
+      </MemoryRouter>,
+      createStubStore({ data: inboxData(), today: '2026-10-14' }),
+    );
+    const back = screen.getByRole('button', { name: 'Back' });
+    expect(back).toHaveClass('glass', 'rounded-full', 'size-11');
+    const title = screen.getByRole('heading', { level: 1, name: 'Inbox' });
+    expect(back.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    await userEvent.click(back);
+    expect(screen.getByText('The Profile page')).toBeInTheDocument();
+  });
+});
+
+describe('the Inbox in glass', () => {
+  it('shows New and All as the pressed pair of a segmented control', () => {
+    renderInbox();
+    const group = screen.getByRole('group', { name: 'Show' });
+    expect(group).toHaveClass('rounded-full', 'bg-surface-2');
+    const buttons = within(group).getAllByRole('button');
+    expect(buttons.map((b) => b.textContent)).toEqual(['New (7)', 'All']);
+    // Not underline tabs.
+    for (const b of buttons) expect(b).not.toHaveClass('border-b-2');
+  });
+
+  it('lists the reminders as plain rows with hairlines between them and a tap that presses', () => {
+    renderInbox();
+    const list = rows()[0]!.closest('ul')!;
+    expect(list).toHaveClass('divide-y', 'divide-black/7', 'dark:divide-white/8');
+    expect(list).not.toHaveClass('glass', 'border', 'rounded-[24px]');
+    for (const row of rows()) {
+      expect(row.closest('li')).not.toHaveClass('border-t', 'border-border');
+      expect(row).toHaveClass('press');
+    }
+  });
+
+  it('draws Mark all as read as a glass pill', () => {
+    renderInbox();
+    expect(screen.getByRole('button', { name: 'Mark all as read' })).toHaveClass('glass');
   });
 });

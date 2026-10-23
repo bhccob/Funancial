@@ -25,16 +25,23 @@ export function BackButton({ onClick, disabled }: { onClick(): void; disabled?: 
   );
 }
 
-/** A password line field with a Show toggle under it, to check what was typed on a small keyboard. */
+/**
+ * A password field with a Show toggle under it, to check what was typed on a small keyboard: the line
+ * field of the setup and log-in screens, or with `variant="row"` the plain row of Settings.
+ */
 export function PasswordField({
   label = 'Password',
+  variant = 'line',
   ...rest
-}: Omit<TextFieldProps, 'variant' | 'type' | 'label'> & { label?: string }) {
+}: Omit<TextFieldProps, 'variant' | 'type' | 'label'> & {
+  label?: string;
+  variant?: 'line' | 'row';
+}) {
   const [shown, setShown] = useState(false);
   return (
     <div className="flex flex-col">
       <TextField
-        variant="line"
+        variant={variant}
         label={label}
         type={shown ? 'text' : 'password'}
         autoCapitalize="none"

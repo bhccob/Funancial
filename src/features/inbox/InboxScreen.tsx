@@ -4,8 +4,9 @@ import { Link } from 'react-router';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { PageHeader } from '@/components/ui/PageHeader';
-import { underlineTab } from '@/components/ui/underlineTab';
+import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { REMINDER_AREA } from '@/domain/notifications';
+import { ROWS } from '@/features/shared/PlainSection';
 import { cn } from '@/lib/cn';
 import { formatDay } from '@/lib/format';
 import { useAction } from '@/lib/useAction';
@@ -18,7 +19,8 @@ const when = (at: string) => `${formatDay(at.slice(0, 10))}, ${at.slice(11)}`;
 
 /**
  * The reminders of the last 30 days, newest first, for someone who swiped one away: New or All, a
- * dot on those not read yet. A tap opens the screen it is about and reads it.
+ * dot on those not read yet. A tap opens the screen it is about and reads it. The rows are plain,
+ * with hairlines between them, as Profile's menu draws its own.
  */
 export function InboxScreen() {
   const items = useInboxItems();
@@ -28,28 +30,22 @@ export function InboxScreen() {
 
   const fresh = items.filter((i) => !i.read);
   const shown = show === 'new' ? fresh : items;
-  const tabs: Array<{ id: Show; label: string }> = [
-    { id: 'new', label: `New (${fresh.length})` },
-    { id: 'all', label: 'All' },
+  const tabs: Array<{ value: Show; label: string }> = [
+    { value: 'new', label: `New (${fresh.length})` },
+    { value: 'all', label: 'All' },
   ];
 
   return (
     <div className="max-w-3xl">
-      <PageHeader title="Inbox" />
+      <PageHeader title="Inbox" back />
 
-      <div role="group" aria-label="Show" className="flex gap-6">
-        {tabs.map(({ id, label }) => (
-          <button
-            key={id}
-            type="button"
-            aria-pressed={show === id}
-            onClick={() => setShow(id)}
-            className={underlineTab(show === id)}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+      <SegmentedControl<Show>
+        label="Show"
+        value={show}
+        options={tabs}
+        onChange={setShow}
+        className="mt-3"
+      />
 
       {shown.length === 0 ? (
         <div className="mt-4">
@@ -63,16 +59,16 @@ export function InboxScreen() {
           />
         </div>
       ) : (
-        <ul className="mt-2">
+        <ul className={cn('mt-2', ROWS)}>
           {shown.map((item) => (
-            <li key={item.key} className="border-border border-t first:border-t-0">
+            <li key={item.key}>
               <Link
                 to={item.route}
                 // The tap goes on to the screen; a failure to remember it is told, not blocking.
                 onClick={() => {
                   if (!item.read) void run(() => actions.markRead(item.key));
                 }}
-                className="text-text flex min-h-14 items-center gap-3 py-2.5"
+                className="text-text press flex min-h-14 items-center gap-3 py-2.5"
               >
                 <span
                   aria-hidden="true"

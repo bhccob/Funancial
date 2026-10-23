@@ -1,5 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { Bell } from 'lucide-react';
 import { describe, expect, it, vi } from 'vitest';
 import { EmptyState } from './EmptyState';
 import { Menu } from './Menu';
@@ -40,6 +41,76 @@ describe('Switch', () => {
     await userEvent.click(sw);
     await userEvent.click(screen.getByText('Bills'));
     expect(onChange).not.toHaveBeenCalled();
+  });
+});
+
+describe('Switch as a row', () => {
+  it('has the title on the left with its line under it, the switch on the right', () => {
+    render(
+      <Switch
+        variant="row"
+        label="Unlock with fingerprint or face"
+        hint="Your PIN still works if this fails."
+        checked
+        onChange={() => {}}
+      />,
+    );
+    const sw = screen.getByRole('switch', { name: 'Unlock with fingerprint or face' });
+    expect(sw).toHaveAccessibleDescription('Your PIN still works if this fails.');
+    expect(screen.getByText('Unlock with fingerprint or face')).toHaveClass(
+      'text-[15px]',
+      'font-extrabold',
+    );
+    expect(screen.getByText('Your PIN still works if this fails.')).toHaveClass(
+      'text-muted',
+      'text-[13px]',
+    );
+    // A row at least as tall as the rows of a list, its parts centred and the switch last.
+    const row = sw.parentElement!;
+    expect(row).toHaveClass('min-h-[54px]', 'items-center');
+    expect(row.lastElementChild).toBe(sw);
+  });
+
+  it('draws a round glass chip with its icon before the title, for the eye only', () => {
+    render(
+      <Switch variant="row" icon={Bell} label="Reminders" checked={false} onChange={() => {}} />,
+    );
+    const chip = screen.getByRole('switch', { name: 'Reminders' }).parentElement!
+      .firstElementChild!;
+    expect(chip).toHaveAttribute('aria-hidden', 'true');
+    expect(chip).toHaveClass('glass', 'rounded-full', 'size-[38px]');
+    expect(chip.querySelector('svg')).not.toBeNull();
+    // The name of the switch is its label alone.
+    expect(screen.getAllByRole('switch')).toHaveLength(1);
+  });
+
+  it('takes a class for the row, and keeps toggling and dimming as the others do', async () => {
+    const onChange = vi.fn();
+    const { rerender } = render(
+      <Switch
+        variant="row"
+        className="pl-[50px]"
+        label="Bills"
+        checked={false}
+        onChange={onChange}
+      />,
+    );
+    const sw = screen.getByRole('switch', { name: 'Bills' });
+    expect(sw.parentElement).toHaveClass('pl-[50px]');
+    await userEvent.click(sw);
+    expect(onChange).toHaveBeenCalledWith(true);
+
+    rerender(<Switch variant="row" label="Bills" checked={false} onChange={onChange} disabled />);
+    expect(screen.getByRole('switch', { name: 'Bills' }).parentElement).toHaveClass('opacity-45');
+  });
+
+  it('leaves the plain switch as it was', () => {
+    render(<Switch label="Plain" hint="A hint." checked={false} onChange={() => {}} />);
+    expect(screen.getByText('Plain')).toHaveClass('text-sm', 'font-bold');
+    expect(screen.getByText('A hint.')).toHaveClass('text-muted', 'text-sm');
+    expect(screen.getByRole('switch', { name: 'Plain' }).parentElement).not.toHaveClass(
+      'min-h-[54px]',
+    );
   });
 });
 

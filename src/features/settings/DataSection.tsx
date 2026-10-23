@@ -1,8 +1,10 @@
+import { Database } from 'lucide-react';
 import { useState } from 'react';
 import { LeaveDemoButton } from '@/app/LeaveDemoButton';
 import { Banner } from '@/components/ui/Banner';
 import { Button } from '@/components/ui/Button';
-import { Section } from '@/components/ui/Section';
+import { IconRow, ROW_SUB, ROW_TITLE } from '@/features/shared/IconRow';
+import { PlainSection, ROWS } from '@/features/shared/PlainSection';
 import { EraseDialog } from '@/features/system/EraseDialog';
 import type { DataSnapshot, TableName } from '@/domain/snapshot';
 import { useApp } from '@/store/AppStoreProvider';
@@ -65,34 +67,34 @@ export function DataSection() {
   const skipped = useApp((s) => s.skipped);
 
   return (
-    <Section title="Data">
-      <div className="flex flex-col gap-5">
-        {skipped.length > 0 && (
-          <Banner tone="warning">
-            {skipped.length} saved items couldn't be read and are hidden. They're still kept on this
-            device.
-          </Banner>
-        )}
-        <div className="flex flex-col gap-1">
-          <p className="font-bold">{summarize(data)}</p>
-          <p className="text-muted text-sm">
+    <PlainSection title="Data">
+      {skipped.length > 0 && (
+        <Banner tone="warning" className="mb-2">
+          {skipped.length} saved items couldn't be read and are hidden. They're still kept on this
+          device.
+        </Banner>
+      )}
+      <div className={ROWS}>
+        <IconRow icon={Database}>
+          <p className={ROW_TITLE}>{summarize(data)}</p>
+          <p className={ROW_SUB}>
             {persisted
               ? 'Storage: protected from automatic clearing'
               : 'Storage: the browser may clear it if space runs low'}
           </p>
-        </div>
+        </IconRow>
 
         {namespace === 'demo' ? (
-          <div className="flex flex-col items-start gap-2">
+          <div className="flex flex-col items-start gap-2 py-3">
             <p className="text-muted text-sm">This is demo money. Leaving demo deletes it.</p>
             <LeaveDemoButton size="md" />
           </div>
         ) : (
-          <div className="flex flex-col items-start">
+          <div className="flex flex-col items-start py-3">
             <DeleteAllButton />
           </div>
         )}
       </div>
-    </Section>
+    </PlainSection>
   );
 }

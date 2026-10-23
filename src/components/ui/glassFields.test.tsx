@@ -264,6 +264,98 @@ describe('MoneyField as the hero amount', () => {
   });
 });
 
+describe('MoneyField as a row', () => {
+  function Harness({
+    onValue = () => {},
+    error,
+  }: {
+    onValue?(v: number | null): void;
+    error?: string;
+  }) {
+    const [value, setValue] = useState<number | null>(null);
+    return (
+      <MoneyField
+        variant="row"
+        label="Monthly take-home pay"
+        currency="USD"
+        value={value}
+        error={error}
+        hint="Leave empty if you don't have a regular salary."
+        onChange={(v) => {
+          setValue(v);
+          onValue(v);
+        }}
+      />
+    );
+  }
+
+  it('is the label on the left and the amount on the right, a hairline under them and no box', () => {
+    render(<Harness />);
+    const input = screen.getByLabelText('Monthly take-home pay');
+    expect(input.tagName).toBe('INPUT');
+    expect(input).toHaveAttribute('inputmode', 'decimal');
+    const label = screen.getByText('Monthly take-home pay');
+    expect(label).toHaveClass('text-text', 'font-bold', 'shrink-0', 'self-stretch');
+    expect(input).toHaveClass('text-right', 'h-11', 'text-muted', 'bg-transparent');
+    expect(input).not.toHaveClass('border', 'border-b', 'rounded-md', 'font-extrabold');
+    expect(hairlineOf(input)).toHaveClass('border-black/7', 'dark:border-white/8');
+    expect(hairlineOf(input)).toContainElement(label);
+  });
+
+  it('puts the currency in front of the amount, small and dimmed, and reads it to no one', () => {
+    render(<Harness />);
+    const symbol = screen.getByText(currencySymbol('USD'));
+    expect(symbol).toHaveClass('text-muted', 'text-[15px]');
+    expect(symbol).toHaveAttribute('aria-hidden', 'true');
+    // Beside the amount in one row, so a long symbol never needs its width worked out.
+    expect(symbol.parentElement).toBe(screen.getByLabelText('Monthly take-home pay').parentElement);
+    expect(symbol.parentElement).toHaveClass('flex', 'justify-end');
+  });
+
+  it('shows what an empty amount looks like, as a muted placeholder', () => {
+    render(<Harness />);
+    expect(screen.getByLabelText('Monthly take-home pay')).toHaveAttribute('placeholder', '0.00');
+  });
+
+  it('keeps its parsing and its tidying on blur', async () => {
+    const onValue = vi.fn();
+    render(<Harness onValue={onValue} />);
+    const input = screen.getByLabelText('Monthly take-home pay');
+    await userEvent.type(input, '4.200,5');
+    await userEvent.tab();
+    expect(onValue).toHaveBeenLastCalledWith(420050);
+    expect(input).toHaveValue('4,200.50');
+  });
+
+  it('says a hint and an error under the row, inside its hairline, and turns the hairline danger', async () => {
+    const { rerender } = render(<Harness />);
+    const input = screen.getByLabelText('Monthly take-home pay');
+    expect(input).toHaveAccessibleDescription("Leave empty if you don't have a regular salary.");
+    expect(hairlineOf(input)).toContainElement(
+      screen.getByText("Leave empty if you don't have a regular salary."),
+    );
+
+    await userEvent.type(input, 'abc');
+    await userEvent.tab();
+    const unreadable = screen.getByRole('alert');
+    expect(unreadable).toHaveTextContent('Enter an amount like 12.50');
+    expect(input).toBeInvalid();
+    expect(hairlineOf(input)).toContainElement(unreadable);
+    expect(hairlineOf(input)).toHaveClass('border-danger');
+
+    rerender(<Harness error="Enter your pay." />);
+    expect(screen.getByRole('alert')).toHaveTextContent('Enter your pay.');
+  });
+
+  it('leaves the line look as it was', () => {
+    render(
+      <MoneyField variant="line" label="Line" currency="USD" value={null} onChange={() => {}} />,
+    );
+    expect(screen.getByLabelText('Line')).toHaveClass('border-b', 'font-extrabold');
+    expect(screen.getByLabelText('Line')).not.toHaveClass('text-right');
+  });
+});
+
 describe('RadioGroup as pills', () => {
   const options = [
     { value: 'food', label: 'Food', icon: Utensils },

@@ -1,10 +1,10 @@
 import { useState, type FormEvent } from 'react';
 import { Button } from '@/components/ui/Button';
 import { MoneyField } from '@/components/ui/MoneyField';
-import { Section } from '@/components/ui/Section';
 import { Select } from '@/components/ui/Select';
 import { TextField } from '@/components/ui/TextField';
 import type { Profile } from '@/domain/entities';
+import { PlainSection, ROWS } from '@/features/shared/PlainSection';
 import { useAction } from '@/lib/useAction';
 import { useApp } from '@/store/AppStoreProvider';
 import { useFinanceActions } from '@/store/useFinance';
@@ -39,17 +39,17 @@ function ProfileForm({ profile }: { profile: Profile }) {
 
   return (
     <form className="flex max-w-xl flex-col gap-5" onSubmit={submit} noValidate>
-      <TextField
-        variant="line"
-        label="Name"
-        autoComplete="given-name"
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-      />
-      <CurrencyRow current={profile.currency} />
-      <div className="grid gap-5 sm:grid-cols-[1fr_8rem]">
+      <div className={ROWS}>
+        <TextField
+          variant="row"
+          label="Name"
+          autoComplete="given-name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+        />
+        <CurrencyRow current={profile.currency} />
         <MoneyField
-          variant="line"
+          variant="row"
           label="Monthly take-home pay"
           currency={profile.currency}
           value={salary}
@@ -57,7 +57,7 @@ function ProfileForm({ profile }: { profile: Profile }) {
           hint="Leave empty if you don't have a regular salary."
         />
         <Select
-          variant="line"
+          variant="row"
           label="Pay day"
           value={payDay}
           onChange={setPayDay}
@@ -75,8 +75,8 @@ export function ProfileSection() {
   const profile = useApp((s) => s.data.tables.profile[0]);
   if (!profile) return null;
   return (
-    <Section title="Profile & salary">
+    <PlainSection title="Profile & salary">
       <ProfileForm profile={profile} />
-    </Section>
+    </PlainSection>
   );
 }
