@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Invest pie labels</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400..800&display=swap" rel="stylesheet" />
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Inter Tight', system-ui, sans-serif; background: #e6e6e9; color: #0b0b0c; -webkit-font-smoothing: antialiased; padding: 28px 16px 60px; }
+  h1 { font-size: 26px; font-weight: 800; letter-spacing: -.02em; }
+  .lead { color: #55555c; margin-top: 8px; max-width: 80ch; line-height: 1.5; font-size: 15px; }
+  .row { display: flex; flex-wrap: wrap; gap: 26px; margin-top: 22px; align-items: flex-start; }
+  .opt { display: flex; flex-direction: column; gap: 10px; align-items: center; cursor: pointer; }
+  .opt > b { font-size: 14px; font-weight: 800; }
+  .opt > small { font-size: 12.5px; color: #55555c; max-width: 330px; text-align: center; line-height: 1.4; }
+  .opt.selected .page { box-shadow: 0 0 0 4px #7c5cff; }
+  .page { width: 360px; padding: 18px 14px 22px; border-radius: 28px; background: #eeeef0; position: relative; overflow: hidden; isolation: isolate; }
+  .page::before { content: ''; position: absolute; inset: 0; z-index: -1; background: radial-gradient(40% 30% at 88% 30%, rgba(20,20,26,.07), transparent 70%), radial-gradient(42% 28% at 8% 70%, rgba(255,255,255,.95), transparent 70%); }
+  .h { font-size: 22px; font-weight: 800; letter-spacing: -.03em; margin: 0 4px 12px; }
+  .tile { background: rgba(255,255,255,.48); border: 1px solid rgba(255,255,255,.85); backdrop-filter: blur(22px) saturate(180%); box-shadow: inset 0 1px 0 #fff, 0 12px 28px -18px rgba(0,0,0,.35); border-radius: 24px; padding: 14px; }
+  .tile h3 { font-size: 15px; font-weight: 800; margin: 0 2px 4px; display: flex; justify-content: space-between; }
+  .tile h3 small { font-size: 12px; font-weight: 700; color: #5a5a6c; }
+  .stage { position: relative; width: 330px; height: 300px; margin: 0 auto; }
+  .stage svg { position: absolute; left: 0; top: 0; }
+  .centre { position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%); text-align: center; }
+  .centre b { display: block; font-size: 22px; font-weight: 800; letter-spacing: -.03em; }
+  .centre small { font-size: 12px; font-weight: 700; color: #5a5a6c; }
+  .centre .chg { display: inline-block; margin-top: 4px; padding: 2px 9px; border-radius: 99px; background: #e3f2e8; color: #116a33; font-size: 12px; font-weight: 800; }
+  .lab { position: absolute; transform: translate(-50%,-50%); display: inline-flex; align-items: center; gap: 5px; white-space: nowrap;
+    background: rgba(255,255,255,.82); border: 1px solid #fff; backdrop-filter: blur(14px); box-shadow: 0 6px 14px -8px rgba(0,0,0,.35); border-radius: 99px; padding: 3px 9px 3px 3px; font-size: 12px; font-weight: 800; }
+  .lab .logo { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; color: #fff; font-size: 7.5px; font-weight: 900; letter-spacing: .02em; }
+  .lab .dot { width: 10px; height: 10px; border-radius: 50%; margin-left: 5px; }
+  .lab .t { font-weight: 800; }
+  .lab .p { color: #5a5a6c; font-weight: 700; }
+  .legend { margin-top: 6px; padding: 0 2px; font-size: 12.5px; color: #5a5a6c; font-weight: 600; text-align: center; }
+</style>
+</head>
+<body>
+  <h1>How should the Invest pie show each holding?</h1>
+  <p class="lead">Like your screenshot: small labels floating just outside the pie, at each slice, with no lines. Each slice is the company's own colour. Two styles of label; tap the one you like (or tell me in the chat).</p>
+  <div class="row" id="row"></div>
+<script>
+// Demo-like holdings: ticker, brand colour, share of the portfolio.
+const H = [
+  ['VWRL', '#c8102e', 34], ['AAPL', '#111111', 22], ['ASML', '#0f3e99', 16], ['KO', '#e41e2b', 11], ['MSFT', '#00a4ef', 9], ['NVDA', '#76b900', 5], ['Other', '#868b96', 3],
+];
+const size = 300, cx = 165, cy = 150, r = 82, th = 26;
+
+function pie(style) {
+  const C = 2 * Math.PI * r, gap = 3;
+  let acc = 0;
+  const arcs = [], labels = [], placed = [];
+  H.forEach(([t, c, p]) => {
+    const len = (p / 100) * C;
+    arcs.push(`<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${c}" stroke-width="${th}" stroke-dasharray="${Math.max(len - gap, 1)} ${C}" stroke-dashoffset="${-acc}" transform="rotate(-90 ${cx} ${cy})"/>`);
+    const mid = ((acc + len / 2) / C) * 2 * Math.PI - Math.PI / 2;
+    const R = r + th / 2 + (style === 'a' ? 26 : 34);
+    let x = cx + Math.cos(mid) * R * (style === 'b' ? 1.12 : 1.05), y = cy + Math.sin(mid) * R;
+    // Small slices side by side: nudge a label clear of the one before it (the app does the same).
+    const prev = placed.at(-1);
+    if (prev && Math.abs(prev.y - y) < 28 && Math.abs(prev.x - x) < (style === 'b' ? 80 : 46)) x = prev.x - (style === 'b' ? 84 : 50);
+    placed.push({ x, y });
+    const logo = t === 'Other' ? `<span class="logo" style="background:${c}">···</span>` : `<span class="logo" style="background:${c}">${t}</span>`;
+    labels.push(style === 'a'
+      ? `<span class="lab" style="left:${x}px;top:${y}px">${logo}<span class="p" style="color:#0b0b0c">${p}%</span></span>`
+      : `<span class="lab" style="left:${x}px;top:${y}px;padding:4px 9px"><span class="dot" style="background:${c};margin:0"></span><span class="t">${t}</span><span class="p">${p}%</span></span>`);
+    acc += len;
+  });
+  return `<div class="stage"><svg width="330" height="${size}" aria-hidden="true">${arcs.join('')}</svg>
+    <div class="centre"><small>Portfolio</small><b>Afl. 18,240</b><span class="chg">+0.55% today</span></div>${labels.join('')}</div>`;
+}
+
+const OPTS = [
+  ['a', 'A · Logo disc and percent', 'Like your screenshot: the company logo (here its ticker in its colour) in a small round badge, with the share next to it.', 'a'],
+  ['b', 'B · Colour dot, ticker and percent', 'A small glass pill with a dot in the company colour, the ticker and the share. Easier to read when there is no logo yet.', 'b'],
+];
+document.getElementById('row').innerHTML = OPTS.map(([k, t, d, s]) => `<div class="opt" data-choice="${k}" onclick="(window.toggleSelect||function(e){document.querySelectorAll('.opt').forEach(x=>x.classList.remove('selected'));e.classList.add('selected')})(this)"><b>${t}</b>
+  <div class="page"><div class="h">Invest</div><div class="tile"><h3>Holdings <small>by value</small></h3>${pie(s)}<p class="legend">Tap a slice for its amount</p></div></div><small>${d}</small></div>`).join('');
+</script>
+</body>
+</html>

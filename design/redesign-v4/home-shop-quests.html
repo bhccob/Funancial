@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Shop and Quests on Home</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400..800&display=swap" rel="stylesheet" />
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  button { font: inherit; color: inherit; background: none; border: 0; text-align: inherit; }
+  body { font-family: 'Inter Tight', system-ui, sans-serif; background: #e6e6e9; color: #111; -webkit-font-smoothing: antialiased; padding: 28px 16px 60px; }
+  h1 { font-size: 26px; font-weight: 800; letter-spacing: -.02em; }
+  .lead { color: #55555c; margin-top: 8px; max-width: 80ch; line-height: 1.5; font-size: 15px; }
+  .row { display: flex; flex-wrap: wrap; gap: 26px; margin-top: 22px; align-items: flex-start; }
+  .opt { display: flex; flex-direction: column; gap: 10px; align-items: center; cursor: pointer; }
+  .opt > b { font-size: 14px; font-weight: 800; }
+  .opt > small { font-size: 12.5px; color: #55555c; max-width: 300px; text-align: center; line-height: 1.4; }
+  .opt.selected .phone { box-shadow: 0 0 0 9px #0d0d10, 0 0 0 13px #7c5cff, 0 30px 50px -30px rgba(0,0,0,.5); }
+
+  .phone { position: relative; width: 340px; height: 700px; border-radius: 46px; overflow: hidden; isolation: isolate; background: #eeeef0; color: #0b0b0c;
+    box-shadow: 0 0 0 9px #0d0d10, 0 0 0 10px #2a2a30, 0 30px 50px -30px rgba(0,0,0,.5); }
+  .phone::before { content: ''; position: absolute; inset: 0; z-index: -1; background: radial-gradient(40% 18% at 88% 46%, rgba(20,20,26,.07), transparent 70%), radial-gradient(42% 18% at 8% 66%, rgba(255,255,255,.95), transparent 70%); }
+  .scroll { position: absolute; inset: 0; overflow: hidden; }
+  svg.ic { width: var(--s, 20px); height: var(--s, 20px); flex: none; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .status { height: 42px; display: flex; justify-content: space-between; align-items: center; padding: 6px 28px 0; font-weight: 700; font-size: 13px; }
+  .status i { width: 90px; height: 26px; border-radius: 20px; background: #000; display: block; }
+  .head { position: relative; border-radius: 0 0 36px 36px; padding-bottom: 54px; color: #fff; overflow: hidden;
+    background: radial-gradient(38% 30% at 18% 18%, rgba(255,255,255,.28), transparent 70%), radial-gradient(42% 38% at 92% 46%, rgba(170,170,185,.32), transparent 70%), radial-gradient(34% 28% at 42% 96%, rgba(255,255,255,.16), transparent 70%), linear-gradient(180deg,#141416,#050506); }
+  .hg { background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.2); backdrop-filter: blur(22px) saturate(180%); box-shadow: inset 0 1px 0 rgba(255,255,255,.22); }
+  .pg { background: rgba(255,255,255,.48); border: 1px solid rgba(255,255,255,.85); backdrop-filter: blur(22px) saturate(180%); box-shadow: inset 0 1px 0 #fff, 0 12px 28px -18px rgba(0,0,0,.35); }
+  .pgs { background: rgba(255,255,255,.66); border: 1px solid rgba(255,255,255,.85); backdrop-filter: blur(22px) saturate(180%); box-shadow: inset 0 1px 0 #fff, 0 12px 28px -18px rgba(0,0,0,.35); }
+  .top { display: flex; align-items: center; gap: 9px; padding: 4px 18px 0; }
+  .av { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: #fff; color: #0b0b0c; font-weight: 800; box-shadow: 0 0 0 3px rgba(255,255,255,.35); }
+  .hello { font-size: 15px; font-weight: 800; }
+  .right { margin-left: auto; display: flex; align-items: center; gap: 4px; }
+  .cur { display: inline-flex; align-items: center; gap: 5px; min-height: 30px; padding: 0 10px; border-radius: 99px; font-size: 12px; font-weight: 700; }
+  .chip { display: inline-flex; align-items: center; gap: 4px; min-height: 30px; padding: 0 9px; border-radius: 99px; font-size: 12px; font-weight: 800; }
+  .bell { width: 36px; height: 36px; display: grid; place-items: center; }
+  .bal-lab { text-align: center; font-size: 13px; font-weight: 600; opacity: .84; margin-top: 20px; }
+  .bal { display: flex; justify-content: center; align-items: baseline; font-weight: 700; font-size: 40px; letter-spacing: -.04em; margin-top: 4px; }
+  .bal .c { font-size: .38em; margin-right: 5px; align-self: flex-start; margin-top: .45em; opacity: .84; } .bal .d { opacity: .59; }
+  .acct { display: flex; justify-content: center; align-items: center; gap: 5px; font-size: 12.5px; font-weight: 600; opacity: .84; margin-top: 4px; }
+  .acts { display: flex; justify-content: center; gap: 8px; margin-top: 12px; }
+  .pill { display: inline-flex; align-items: center; gap: 5px; min-height: 34px; padding: 0 14px; border-radius: 99px; font-weight: 700; font-size: 13px; }
+  .pill.main { background: #fff; color: #0b0b0c; }
+  .pill.sq { width: 34px; padding: 0; justify-content: center; }
+  .lbl2 { padding: 16px 20px 0; font-size: 12.5px; font-weight: 800; opacity: .84; }
+  .bubs { display: flex; gap: 12px; padding: 0 18px 4px; margin-top: -40px; position: relative; }
+  .bub { width: 58px; display: flex; flex-direction: column; align-items: center; gap: 3px; }
+  .bub span { width: 54px; height: 54px; border-radius: 50%; display: grid; place-items: center; }
+  .bub b { font-size: 11.5px; font-weight: 800; } .bub small { font-size: 10.5px; font-weight: 700; color: #5a5a6c; }
+  .sec { padding: 18px 16px 0; }
+  .sec-h { display: flex; justify-content: space-between; align-items: center; margin: 0 4px 10px; }
+  .sec-h h3 { font-size: 16px; font-weight: 800; }
+  .sec-h a { font-size: 12px; font-weight: 800; padding: 6px 10px; border-radius: 99px; }
+  .duo { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+  .tile { padding: 12px; border-radius: 20px; }
+  .tile .t { font-size: 12px; font-weight: 700; color: #5a5a6c; }
+  .tile .v { font-size: 18px; font-weight: 800; margin-top: 6px; letter-spacing: -.02em; }
+  .pos { color: #116a33; } .neg { color: #af242b; }
+  .mini { display: flex; align-items: center; gap: 10px; padding: 11px 12px; border-radius: 18px; }
+  .mini .ico { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; background: rgba(255,255,255,.75); border: 1px solid #fff; flex: none; }
+  .mini b { display: block; font-size: 13.5px; font-weight: 800; } .mini small { font-size: 11.5px; font-weight: 700; color: #5a5a6c; }
+  .bar { height: 5px; border-radius: 99px; background: rgba(0,0,0,.08); margin-top: 5px; overflow: hidden; } .bar i { display: block; height: 100%; width: 66%; background: #0b0b0c; border-radius: 99px; }
+  .strip { display: flex; align-items: center; gap: 0; border-radius: 18px; overflow: hidden; }
+  .strip > div { flex: 1; display: flex; align-items: center; gap: 9px; padding: 10px 12px; }
+  .strip > div + div { border-left: 1px solid rgba(0,0,0,.07); }
+  .tabbar { position: absolute; left: 0; right: 0; bottom: 0; height: 80px; padding: 6px 4px 24px; display: flex; background: rgba(255,255,255,.78); border-top: 1px solid rgba(0,0,0,.07); backdrop-filter: blur(20px) saturate(180%); }
+  .tab { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 10.5px; font-weight: 700; color: #5a5a6c; padding-top: 4px; }
+  .tab.on { color: #0b0b0c; font-weight: 800; }
+  .hl { outline: 2.5px dashed #7c5cff; outline-offset: 3px; border-radius: 99px; }
+  .hlr { outline: 2.5px dashed #7c5cff; outline-offset: 3px; }
+</style>
+</head>
+<body>
+  <h1>Where should Shop and Quests sit on Home?</h1>
+  <p class="lead">Three small placements, all in Black &amp; White. The new bits have a dashed purple outline. Tap the one you like (or tell me in the chat).</p>
+  <div class="row" id="row"></div>
+<script>
+const I = {
+  bell:'<path d="M10.268 21a2 2 0 0 0 3.464 0"/><path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326"/>',
+  eye:'<path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/>',
+  down:'<path d="m6 9 6 6 6-6"/>', right:'<path d="m9 18 6-6-6-6"/>', card:'<rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/>',
+  nfc:'<path d="M6 8.32a7.43 7.43 0 0 1 0 7.36"/><path d="M9.46 6.21a11.76 11.76 0 0 1 0 11.58"/><path d="M12.91 4.1a15.91 15.91 0 0 1 .01 15.8"/>',
+  dots:'<circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>',
+  coins:'<circle cx="8" cy="8" r="6"/><path d="M18.09 10.37A6 6 0 1 1 10.34 18"/><path d="M7 6h1v4"/><path d="m16.71 13.88.7.71-2.82 2.82"/>',
+  trophy:'<path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/>',
+  bag:'<path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/>',
+  tv:'<rect width="20" height="15" x="2" y="7" rx="2"/><polyline points="17 2 12 7 7 2"/>', phone:'<rect width="14" height="20" x="5" y="2" rx="2"/><path d="M12 18h.01"/>',
+  music:'<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>', house:'<path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+  pie:'<path d="M21 12c.552 0 1.005-.449.95-.998a10 10 0 0 0-8.953-8.951c-.55-.055-.998.398-.998.95v8a1 1 0 0 0 1 1z"/><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/>',
+  trend:'<polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/>', user:'<circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/>',
+};
+const ic = (n, s = 18) => `<svg class="ic" viewBox="0 0 24 24" style="--s:${s}px">${I[n]}</svg>`;
+
+function home({ topChips = false, miniRow = false, strip = false }) {
+  const chips = topChips ? `<span class="chip hg hl">${ic('coins', 14)}520</span><span class="chip hg hl">${ic('trophy', 14)}2/3</span>` : `<span class="cur hg">AWG ${ic('down', 12)}</span>`;
+  const mini = miniRow ? `<section class="sec"><div class="duo hlr" style="border-radius:20px">
+      <div class="mini pg"><span class="ico">${ic('trophy', 17)}</span><div style="flex:1;min-width:0"><b>Quests</b><small>2 of 3 today</small><div class="bar"><i></i></div></div></div>
+      <div class="mini pg"><span class="ico">${ic('bag', 17)}</span><div><b>Shop</b><small>520 coins</small></div></div></div></section>` : '';
+  const strp = strip ? `<section class="sec" style="padding-top:14px"><div class="strip pg hlr">
+      <div><span style="display:grid;place-items:center">${ic('trophy', 17)}</span><div style="flex:1"><b style="font-size:13px;font-weight:800">Quests 2/3</b><div class="bar" style="margin-top:4px"><i></i></div></div></div>
+      <div><span style="display:grid;place-items:center">${ic('coins', 17)}</span><div><b style="font-size:13px;font-weight:800">520</b> <small style="font-size:11.5px;font-weight:700;color:#5a5a6c">coins · Shop</small></div>${ic('right', 15)}</div></div></section>` : '';
+  return `<div class="scroll"><div class="head"><div class="status"><span>9:41</span><i></i><span>100%</span></div>
+    <div class="top"><span class="av">A</span><span class="hello">Hi, Alex</span><div class="right">${chips}${topChips ? '' : ''}<span class="bell">${ic('bell', 19)}</span></div></div>
+    <div class="bal-lab">Available balance ${ic('eye', 13)}</div>
+    <div class="bal"><span class="c">Afl.</span>2,617<span class="d">.75</span></div>
+    <div class="acct">${ic('card', 14)}Main account ·· 4312 ${ic('down', 12)}</div>
+    <div class="acts"><span class="pill main">${ic('nfc', 14)}Pay</span><span class="pill sq hg">${ic('dots', 15)}</span></div>
+    <div class="lbl2">Coming up</div></div>
+    <div class="bubs">${[['tv','#e50914','Netflix','2 days'],['phone','#2563eb','Phone','5 days'],['music','#16a34a','Spotify','9 days'],['house','#475569','Rent','12 days']].map(([i,c,n,w]) => `<div class="bub"><span class="pgs" style="color:${c}">${ic(i, 21)}</span><b>${n}</b><small>${w}</small></div>`).join('')}</div>
+    ${strp}
+    <section class="sec"><div class="sec-h"><h3>Overview</h3><a class="pg">View all</a></div><div class="duo">
+      <div class="tile pg"><div class="t">Income</div><div class="v pos">+Afl. 4,250</div></div>
+      <div class="tile pg"><div class="t">Expenses</div><div class="v neg">−Afl. 2,830</div></div></div></section>
+    ${mini}
+    <section class="sec"><div class="sec-h"><h3>Net worth</h3><a class="pg">Details</a></div><div class="tile pg" style="height:70px"></div></section>
+    </div>
+    <nav class="tabbar">${[['house','Home',1],['card','Cards'],['pie','Spending'],['trend','Invest'],['user','Profile']].map(([i,l,on]) => `<div class="tab ${on ? 'on' : ''}">${ic(i, 20)}<span>${l}</span></div>`).join('')}</nav>`;
+}
+
+const OPTS = [
+  ['a', 'A · Two small chips in the top line', 'Coins (opens the Shop) and today’s quests (opens Quests) sit next to the bell. Always visible, takes no space. The AWG pill moves into Settings until the currency switcher works.', { topChips: true }],
+  ['b', 'B · Two small tiles under Overview', 'A Quests tile with today’s progress bar and a Shop tile with your coins, side by side, the same size as half an Overview tile.', { miniRow: true }],
+  ['c', 'C · One slim strip under Coming up', 'One glass strip split in two: quest progress on the left, coins and Shop on the right. The smallest option that still shows progress.', { strip: true }],
+];
+document.getElementById('row').innerHTML = OPTS.map(([k, t, d, o]) => `<div class="opt" data-choice="${k}" onclick="(window.toggleSelect||function(e){document.querySelectorAll('.opt').forEach(x=>x.classList.remove('selected'));e.classList.add('selected')})(this)"><b>${t}</b><div class="phone">${home(o)}</div><small>${d}</small></div>`).join('');
+</script>
+</body>
+</html>
