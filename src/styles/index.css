@@ -87,16 +87,16 @@
 /*
  * The surface of a sheet and a dialog, as the wireframe's add sheet draws it: the overlay colour at
  * 90%, a lit 1px line along the top and a blur of what is behind it. Nothing here names a colour, so
- * dark mode and every theme follow the tokens; the sheet's shadow is part of it, so the shell needs
- * no shadow class of its own. Its text is checked over black and white behind it for every theme in
- * both modes in tests/unit/tokens.test.ts.
+ * dark mode and every theme follow the tokens. It goes on the box inside the <dialog>, never on the
+ * <dialog> itself: a backdrop-filter makes its element the containing block of `fixed` descendants,
+ * and the toasts, which are `fixed` to the screen, render inside the open <dialog>. The shadow stays
+ * on the <dialog>, which is rounded and clear, so it is drawn only outside it. Its text is checked
+ * over black and white behind it for every theme in both modes in tests/unit/tokens.test.ts.
  */
 @utility glass-sheet {
   background: var(--color-glass-sheet);
   backdrop-filter: blur(24px) saturate(180%);
-  box-shadow:
-    inset 0 1px 0 var(--color-glass-hi),
-    var(--shadow-overlay);
+  box-shadow: inset 0 1px 0 var(--color-glass-hi);
 }
 
 /*

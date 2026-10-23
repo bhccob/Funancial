@@ -196,23 +196,48 @@ describe('Dialog', () => {
 });
 
 describe('Sheet and Dialog shells', () => {
-  it('draws the sheet as frosted glass with rounded top corners, and no flat overlay fill', () => {
+  it('frosts the box inside the sheet, with rounded top corners; the <dialog> is a clear frame with the shadow', () => {
     render(<Sheet open title="Details" onClose={() => {}} />);
     const sheet = screen.getByRole('dialog', { name: 'Details' });
-    expect(sheet).toHaveClass('glass-sheet', 'rounded-t-sheet', 'text-text');
-    expect(sheet.className).not.toMatch(/bg-overlay|shadow-/);
+    expect(sheet).toHaveClass('bg-transparent', 'rounded-t-sheet', 'text-text');
+    expect(sheet).toHaveClass('shadow-(--shadow-overlay)', 'overflow-y-auto');
+    expect(sheet.firstElementChild).toHaveClass('glass-sheet', 'rounded-t-sheet');
+    expect(sheet.className).not.toMatch(/bg-overlay/);
   });
 
-  it('draws the dialog as frosted glass with 24px corners, and no flat overlay fill', () => {
+  it('frosts the box inside the dialog, with 24px corners; the <dialog> is a clear frame with the shadow', () => {
     render(
       <Dialog open title="Leave demo?" onClose={() => {}}>
         body
       </Dialog>,
     );
     const dialog = screen.getByRole('dialog', { name: 'Leave demo?' });
-    expect(dialog).toHaveClass('glass-sheet', 'rounded-[24px]', 'text-text');
-    expect(dialog.className).not.toMatch(/bg-overlay|rounded-lg|shadow-/);
+    expect(dialog).toHaveClass('bg-transparent', 'rounded-[24px]', 'text-text');
+    expect(dialog).toHaveClass('shadow-(--shadow-overlay)');
+    expect(dialog.firstElementChild).toHaveClass('glass-sheet', 'rounded-[24px]');
+    expect(dialog.className).not.toMatch(/bg-overlay|rounded-lg/);
   });
+
+  it.each([
+    ['Sheet', <Sheet key="s" open title="Details" onClose={() => {}} />],
+    [
+      'Dialog',
+      <Dialog key="d" open title="Details" onClose={() => {}}>
+        body
+      </Dialog>,
+    ],
+  ])(
+    'keeps any filter off the <dialog> of a %s, which would make it the containing block of the fixed toasts inside it',
+    (_name, overlay) => {
+      render(overlay);
+      const dialog = screen.getByRole('dialog', { name: 'Details' });
+      // Anything that filters what is behind it (or the element) makes it the containing block of
+      // `fixed` descendants: the Toaster's region, portaled into the open dialog, would sit on it.
+      expect(dialog.className).not.toMatch(
+        /glass|backdrop-(blur|filter)|(^|\s)(blur|filter)|will-change|(^|\s)(translate|scale|rotate|transform)/,
+      );
+    },
+  );
 });
 
 describe('Sheet and Dialog focus', () => {

@@ -439,9 +439,10 @@ it('defines the glass recipes of the wireframe', () => {
 it('defines the frosted surface of a sheet and a dialog, whose dark colour comes from the token', () => {
   // The inner-screens wireframe's .sheet: the surface at 90%, a 1px lit top edge, blur(24px).
   expect(utility('glass-sheet')).toContain('background: var(--color-glass-sheet)');
-  expect(utility('glass-sheet')).toContain('inset 0 1px 0 var(--color-glass-hi)');
-  expect(utility('glass-sheet')).toContain('var(--shadow-overlay)');
+  expect(utility('glass-sheet')).toContain('box-shadow: inset 0 1px 0 var(--color-glass-hi)');
   expect(utility('glass-sheet')).toContain('backdrop-filter: blur(24px) saturate(180%)');
+  // The shadow is the <dialog>'s, which is clear: the frost sits on the box inside it.
+  expect(utility('glass-sheet')).not.toContain('var(--shadow-overlay)');
   // Nothing in it names a colour: both modes come from the tokens.
   expect(utility('glass-sheet')).not.toMatch(/#[0-9a-f]{3,6}|rgba?\(/);
   // The token is the overlay colour at 90% in each mode, so the sheet reads as the page's overlay.
@@ -450,9 +451,7 @@ it('defines the frosted surface of a sheet and a dialog, whose dark colour comes
     ['dark', declarations(":root[data-theme='dark']")],
   ] as const) {
     const [r, g, b, alpha] = parseColor(vars['--color-glass-sheet']!);
-    const [or, og, ob] = parseColor(
-      vars['--color-overlay'] ?? declarations('@theme static')['--color-overlay']!,
-    );
+    const [or, og, ob] = parseColor(vars['--color-overlay']!);
     expect([r, g, b], mode).toEqual([or, og, ob]);
     expect(alpha, mode).toBe(0.9);
   }

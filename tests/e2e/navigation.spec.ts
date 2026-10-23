@@ -138,6 +138,39 @@ test('mobile: a toast from a save sits above the tab bar', async ({ page }, test
   }
 });
 
+test('mobile: a toast raised while a dialog is open stays on the screen, not on the dialog', async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== 'mobile-chromium', 'mobile layout only');
+  await startDemo(page);
+  await page.goto('/add');
+  await page.getByLabel('Amount', { exact: true }).fill('4.20');
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.getByText('Expense saved.')).toBeVisible();
+  // The toast lives six seconds: the dialog opens while it is still up, and the toast moves into it.
+  await page.getByRole('button', { name: 'Start for real' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Leave demo?' });
+  await expect(dialog).toBeVisible();
+  const shown = dialog.locator('[aria-live] > [role]').filter({ hasText: 'Expense saved.' });
+  await expect(shown).toBeVisible();
+
+  // A frosted dialog (a backdrop-filter on the <dialog> itself) becomes the containing block of the
+  // toast's `fixed` region, which then sits against the dialog, clipped by it. It must sit against
+  // the screen: across its width, 12px above the tab bar, and clear of the dialog.
+  const toast = (await shown.boundingBox())!;
+  const box = (await dialog.boundingBox())!;
+  const tabBar = (await bar(page).boundingBox())!;
+  const viewport = page.viewportSize()!;
+  expect(toast.x, 'its left gutter is 12px from the screen edge').toBeCloseTo(12, 0);
+  expect(toast.x + toast.width, 'its right gutter is 12px from the screen edge').toBeCloseTo(
+    viewport.width - 12,
+    0,
+  );
+  expect(toast.y + toast.height, 'it ends 12px above the tab bar').toBeCloseTo(tabBar.y - 12, 0);
+  expect(toast.y, 'it is below the dialog, not on it').toBeGreaterThanOrEqual(box.y + box.height);
+  await expect(shown).toBeInViewport({ ratio: 1 });
+});
+
 test('mobile: the bottom of Settings clears the tab bar', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'mobile-chromium', 'mobile layout only');
   await startFresh(page, '/settings');

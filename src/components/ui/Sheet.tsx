@@ -14,7 +14,10 @@ export interface SheetProps {
 /**
  * A tall sheet that slides up from the bottom edge, on the same native <dialog> mechanics as
  * `Dialog` (`useModalDialog`): showModal() traps focus and makes the page inert, and the dialog
- * stack lets the Android back gesture close it.
+ * stack lets the Android back gesture close it. The <dialog> itself is a clear, rounded frame that
+ * scrolls and casts the shadow; the frost (`glass-sheet`) is on the box inside it. A backdrop-filter
+ * on the <dialog> would make it the containing block of the toasts, which render inside it while it
+ * is open and are `fixed` to the screen.
  */
 export function Sheet({ open, title, showTitle = false, onClose, children }: SheetProps) {
   const modal = useModalDialog(open, onClose);
@@ -30,9 +33,9 @@ export function Sheet({ open, title, showTitle = false, onClose, children }: She
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
-      className="glass-sheet text-text motion-safe:animate-sheet-up rounded-t-sheet fixed inset-x-0 top-auto bottom-0 m-0 max-h-[calc(100dvh-64px)] w-full max-w-none overflow-y-auto border-0 p-0 backdrop:bg-black/40"
+      className="text-text motion-safe:animate-sheet-up rounded-t-sheet fixed inset-x-0 top-auto bottom-0 m-0 max-h-[calc(100dvh-64px)] w-full max-w-none overflow-y-auto border-0 bg-transparent p-0 shadow-(--shadow-overlay) backdrop:bg-black/40"
     >
-      <div className="px-[22px] pt-2.5 pb-[calc(10px+env(safe-area-inset-bottom))]">
+      <div className="glass-sheet rounded-t-sheet px-[22px] pt-2.5 pb-[calc(10px+env(safe-area-inset-bottom))]">
         {/* The grab handle: the ink at 20%, as the wireframe draws it on the frosted sheet. */}
         <div aria-hidden className="bg-text/20 mx-auto mb-[18px] h-[5px] w-10 rounded-full" />
         <h2 id={titleId} className={showTitle ? 'text-section mb-4' : 'sr-only'}>

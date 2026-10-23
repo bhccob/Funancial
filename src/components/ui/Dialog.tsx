@@ -10,7 +10,12 @@ export interface DialogProps {
   actions?: ReactNode;
 }
 
-/** Modal built on native <dialog>: focus trapping and inert background come from showModal(). */
+/**
+ * Modal built on native <dialog>: focus trapping and inert background come from showModal(). The
+ * <dialog> is a clear, rounded frame with the shadow; the frost (`glass-sheet`) is on the box inside
+ * it, since a backdrop-filter on the <dialog> would make it the containing block of the toasts that
+ * render inside it while it is open (`Sheet` does the same).
+ */
 export function Dialog({ open, title, description, onClose, children, actions }: DialogProps) {
   const modal = useModalDialog(open, onClose);
   const titleId = useId();
@@ -22,9 +27,9 @@ export function Dialog({ open, title, description, onClose, children, actions }:
       tabIndex={-1}
       aria-labelledby={titleId}
       aria-describedby={description ? descriptionId : undefined}
-      className="glass-sheet text-text m-auto w-[min(92vw,440px)] rounded-[24px] border-0 p-0 backdrop:bg-black/40"
+      className="text-text m-auto w-[min(92vw,440px)] rounded-[24px] border-0 bg-transparent p-0 shadow-(--shadow-overlay) backdrop:bg-black/40"
     >
-      <div className="flex flex-col gap-4 p-6">
+      <div className="glass-sheet flex flex-col gap-4 rounded-[24px] p-6">
         <div className="flex flex-col gap-1">
           <h2 id={titleId} className="text-xl font-extrabold tracking-tight">
             {title}
