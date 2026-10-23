@@ -19,6 +19,15 @@ test('Help: search the index, open a page and read its worked example', async ({
   await expect(page.getByRole('heading', { level: 1, name: 'Help' })).toBeVisible();
 });
 
+test('Help: a page opened first thing has Back go to the Help index', async ({ page }) => {
+  // `startFresh` loads the page itself, so the app has no history to go back through.
+  await startFresh(page, '/help/limits');
+  await expect(page.getByRole('heading', { level: 1, name: 'Limits and warnings' })).toBeVisible();
+  await page.getByRole('button', { name: 'Back' }).click();
+  await expect(page).toHaveURL(/\/help$/);
+  await expect(page.getByRole('heading', { level: 1, name: 'Help' })).toBeVisible();
+});
+
 test('mobile: Profile lists Help, no longer marked Soon, and opens it', async ({
   page,
 }, testInfo) => {

@@ -312,10 +312,11 @@ describe('the Help headers', () => {
     expect(screen.getByRole('heading', { level: 1, name: 'Help' })).toBeInTheDocument();
   });
 
-  it('goes Home from a page opened first thing', async () => {
+  it('goes to the Help index from a page opened first thing, with no history of the app', async () => {
     const router = renderHelp('/help/available');
     await userEvent.click(back());
-    expect(router.state.location.pathname).toBe('/');
+    expect(router.state.location.pathname).toBe('/help');
+    expect(screen.getByRole('heading', { level: 1, name: 'Help' })).toBeInTheDocument();
   });
 });
 

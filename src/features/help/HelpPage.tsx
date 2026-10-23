@@ -63,7 +63,7 @@ export function HelpPage() {
 
   return (
     <div className="max-w-xl">
-      <PageHeader title={page.title} back>
+      <PageHeader title={page.title} back backTo="/help">
         {page.summary}
       </PageHeader>
       <Section>

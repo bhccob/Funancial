@@ -529,6 +529,42 @@ describe('PageHeader back button', () => {
   });
 });
 
+describe('PageHeader back button with a place to fall back to', () => {
+  function Where() {
+    return <p data-testid="where">{useLocation().pathname}</p>;
+  }
+  const page = (
+    <Routes>
+      <Route
+        path="*"
+        element={
+          <>
+            <Where />
+            <PageHeader title="Limits" back backTo="/help" />
+          </>
+        }
+      />
+    </Routes>
+  );
+
+  it('goes back in history first, whatever it could fall back to', async () => {
+    render(
+      <MemoryRouter initialEntries={['/budget', '/help/limits']} initialIndex={1}>
+        {page}
+      </MemoryRouter>,
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Back' }));
+    expect(screen.getByTestId('where')).toHaveTextContent('/budget');
+  });
+
+  it('goes to that place when the screen was opened first thing, with no history of the app', async () => {
+    render(<MemoryRouter initialEntries={['/help/limits']}>{page}</MemoryRouter>);
+    expect(screen.getByTestId('where')).toHaveTextContent('/help/limits');
+    await userEvent.click(screen.getByRole('button', { name: 'Back' }));
+    expect(screen.getByTestId('where')).toHaveTextContent(/^\/help$/);
+  });
+});
+
 describe('Card and EmptyState', () => {
   it('draws a card as a tile of page glass with 24px corners', () => {
     render(<Card data-testid="card">Welcome</Card>);

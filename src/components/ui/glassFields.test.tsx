@@ -317,6 +317,14 @@ describe('MoneyField as a row', () => {
     expect(screen.getByLabelText('Monthly take-home pay')).toHaveAttribute('placeholder', '0.00');
   });
 
+  it('is as wide as its figures, with one minimum width', () => {
+    render(<Harness />);
+    const input = screen.getByLabelText('Monthly take-home pay');
+    expect(input).toHaveClass('field-sizing-content', 'min-w-[4ch]');
+    // Not also `min-w-0`: two minimum widths would leave the one that wins to the order of the CSS.
+    expect(input).not.toHaveClass('min-w-0');
+  });
+
   it('keeps its parsing and its tidying on blur', async () => {
     const onValue = vi.fn();
     render(<Harness onValue={onValue} />);
