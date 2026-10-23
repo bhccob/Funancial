@@ -31,7 +31,7 @@ export function Banner({ tone, title, children, action, className }: BannerProps
     <div
       role={tone === 'danger' ? 'alert' : 'status'}
       className={cn(
-        'flex flex-wrap items-center gap-x-2.5 gap-y-2 rounded-lg bg-linear-120/srgb px-3.5 py-3',
+        'flex flex-wrap items-center gap-x-2.5 gap-y-2 rounded-[24px] bg-linear-120/srgb px-3.5 py-3',
         card,
         className,
       )}

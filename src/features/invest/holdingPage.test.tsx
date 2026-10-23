@@ -229,12 +229,12 @@ describe('Holding page', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
-  it('has Edit as an outline button and Sell as the primary one, at least 48px tall', () => {
+  it('has Edit as a glass button and Sell as the primary one, at least 48px tall', () => {
     renderPage();
     for (const name of ['Edit', 'Sell']) {
       expect(screen.getByRole('button', { name })).toHaveClass('h-12');
     }
-    expect(screen.getByRole('button', { name: 'Edit' })).toHaveClass('border');
+    expect(screen.getByRole('button', { name: 'Edit' })).toHaveClass('glass');
     expect(screen.getByRole('button', { name: 'Edit' })).not.toHaveClass('bg-primary');
     expect(screen.getByRole('button', { name: 'Sell' })).toHaveClass('bg-primary');
   });

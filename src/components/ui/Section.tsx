@@ -14,19 +14,16 @@ export interface SectionProps {
 }
 
 /**
- * A page section: a 17px title row, content, and a hairline below (none under the last section).
- * No box: the padding above and below is the space between sections. A page's first section
- * supplies its own top space under the header.
+ * A page section, as `PlainSection` draws one: a 17px title row, then content, with 22px above. No
+ * box, no hairline and no padding below: the space above the next section is the space between them.
+ * A page's first section supplies its own top space under the header.
  */
 export function Section({ title, help, action, children, className }: SectionProps) {
   const headingId = useId();
   return (
-    <section
-      aria-labelledby={title ? headingId : undefined}
-      className={cn('border-border border-b py-7 last-of-type:border-b-0', className)}
-    >
+    <section aria-labelledby={title ? headingId : undefined} className={cn('pt-[22px]', className)}>
       {(title || action) && (
-        <div className="mb-[18px] flex items-center justify-between gap-3">
+        <div className="mx-1 mb-3 flex items-center justify-between gap-3">
           {title && (
             <h2 id={headingId} className="text-section">
               {title}

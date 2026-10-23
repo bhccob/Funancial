@@ -1,11 +1,13 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState, type ComponentType } from 'react';
-import { MemoryRouter } from 'react-router';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
 import { describe, expect, it, vi } from 'vitest';
 import { Banner } from './Banner';
 import { Button, ButtonLink } from './Button';
+import { Card } from './Card';
 import { Dialog } from './Dialog';
+import { EmptyState } from './EmptyState';
 import { ErrorBoundary } from './ErrorBoundary';
 import { PageHeader } from './PageHeader';
 import { ProgressBar } from './ProgressBar';
@@ -32,6 +34,25 @@ describe('Button', () => {
     const button = screen.getByRole('button', { name: 'Delete' });
     expect(button).toHaveClass('bg-danger', 'text-danger-contrast');
     expect(button).not.toHaveClass('text-white');
+  });
+
+  it('draws secondary and ghost buttons as glass pills, and keeps primary solid ink', () => {
+    render(
+      <>
+        <Button variant="secondary">Cancel</Button>
+        <Button variant="ghost">Skip</Button>
+        <Button>Save</Button>
+      </>,
+    );
+    for (const name of ['Cancel', 'Skip']) {
+      const button = screen.getByRole('button', { name });
+      expect(button, name).toHaveClass('glass', 'text-text', 'rounded-full');
+      // The old outline and the old hover wash are gone: the glass is the surface.
+      expect(button.className, name).not.toMatch(/border-border-strong|bg-transparent|hover:bg-/);
+    }
+    const save = screen.getByRole('button', { name: 'Save' });
+    expect(save).toHaveClass('bg-primary', 'text-primary-contrast');
+    expect(save).not.toHaveClass('glass');
   });
 
   it('gives the banner button a see-through page-colour surface, so its edge shows on a gradient', () => {
@@ -171,6 +192,26 @@ describe('Dialog', () => {
       </Dialog>,
     );
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+});
+
+describe('Sheet and Dialog shells', () => {
+  it('draws the sheet as frosted glass with rounded top corners, and no flat overlay fill', () => {
+    render(<Sheet open title="Details" onClose={() => {}} />);
+    const sheet = screen.getByRole('dialog', { name: 'Details' });
+    expect(sheet).toHaveClass('glass-sheet', 'rounded-t-sheet', 'text-text');
+    expect(sheet.className).not.toMatch(/bg-overlay|shadow-/);
+  });
+
+  it('draws the dialog as frosted glass with 24px corners, and no flat overlay fill', () => {
+    render(
+      <Dialog open title="Leave demo?" onClose={() => {}}>
+        body
+      </Dialog>,
+    );
+    const dialog = screen.getByRole('dialog', { name: 'Leave demo?' });
+    expect(dialog).toHaveClass('glass-sheet', 'rounded-[24px]', 'text-text');
+    expect(dialog.className).not.toMatch(/bg-overlay|rounded-lg|shadow-/);
   });
 });
 
@@ -370,7 +411,7 @@ describe('Banner', () => {
       );
       const banner = screen.getByRole(tone === 'danger' ? 'alert' : 'status');
       expect(banner).toHaveClass(
-        'rounded-lg',
+        'rounded-[24px]',
         'px-3.5',
         'py-3',
         'bg-linear-120/srgb',
@@ -406,6 +447,81 @@ describe('PageHeader', () => {
     expect(header).toHaveClass('pb-2');
     expect(header.className).not.toMatch(/(^|\s)border-/);
   });
+
+  it('has no back button unless asked for one, and then needs no router', () => {
+    render(<PageHeader title="Goals" />);
+    expect(screen.queryByRole('button', { name: 'Back' })).not.toBeInTheDocument();
+  });
+});
+
+describe('PageHeader back button', () => {
+  function Where() {
+    return <p data-testid="where">{useLocation().pathname}</p>;
+  }
+  const page = (
+    <Routes>
+      <Route
+        path="*"
+        element={
+          <>
+            <Where />
+            <PageHeader title="Settings" back>
+              Preferences
+            </PageHeader>
+          </>
+        }
+      />
+    </Routes>
+  );
+
+  it('is a 44px round glass button with a chevron, before the title', () => {
+    render(<MemoryRouter initialEntries={['/settings']}>{page}</MemoryRouter>);
+    const back = screen.getByRole('button', { name: 'Back' });
+    expect(back).toHaveClass('glass', 'rounded-full', 'size-11');
+    expect(back.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
+    const title = screen.getByRole('heading', { level: 1, name: 'Settings' });
+    expect(back.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // The line under the title stays in line with the title, past the button.
+    expect(screen.getByText('Preferences')).toHaveClass('ml-14');
+  });
+
+  it('goes back in history when there is somewhere in the app to go back to', async () => {
+    render(
+      <MemoryRouter initialEntries={['/profile', '/settings']} initialIndex={1}>
+        {page}
+      </MemoryRouter>,
+    );
+    expect(screen.getByTestId('where')).toHaveTextContent('/settings');
+    await userEvent.click(screen.getByRole('button', { name: 'Back' }));
+    expect(screen.getByTestId('where')).toHaveTextContent('/profile');
+  });
+
+  it('goes to Home when the screen was opened first thing, with no history of the app', async () => {
+    render(<MemoryRouter initialEntries={['/settings']}>{page}</MemoryRouter>);
+    expect(screen.getByTestId('where')).toHaveTextContent('/settings');
+    await userEvent.click(screen.getByRole('button', { name: 'Back' }));
+    expect(screen.getByTestId('where')).toHaveTextContent(/^\/$/);
+  });
+});
+
+describe('Card and EmptyState', () => {
+  it('draws a card as a tile of page glass with 24px corners', () => {
+    render(<Card data-testid="card">Welcome</Card>);
+    const card = screen.getByTestId('card');
+    expect(card).toHaveClass('glass', 'rounded-[24px]', 'p-5');
+    expect(card.className).not.toMatch(/bg-surface-2|rounded-lg/);
+  });
+
+  it('keeps an empty state in line with the plain rows it stands in for', () => {
+    render(
+      <EmptyState title="No goals yet" action={<button>Add a goal</button>}>
+        Goals show your progress.
+      </EmptyState>,
+    );
+    expect(screen.getByText('No goals yet').parentElement).toHaveClass('mx-1');
+    expect(screen.getByText('Goals show your progress.')).toHaveClass('text-muted');
+    expect(screen.getByRole('button', { name: 'Add a goal' })).toBeInTheDocument();
+  });
 });
 
 describe('ProgressBar', () => {
@@ -424,14 +540,12 @@ describe('Section', () => {
     expect(title).toHaveClass('text-section');
   });
 
-  it('is padded 28px above and below, with a hairline under it', () => {
+  it('is padded 22px above and has no box, no hairline and no padding below', () => {
     render(<Section title="Limits">body</Section>);
-    expect(screen.getByRole('region', { name: 'Limits' })).toHaveClass(
-      'py-7',
-      'border-b',
-      'border-border',
-      'last-of-type:border-b-0',
-    );
+    const section = screen.getByRole('region', { name: 'Limits' });
+    expect(section).toHaveClass('pt-[22px]');
+    expect(section.className).not.toMatch(/(^|\s)(py-|pb-|border|bg-|rounded)/);
+    expect(screen.getByRole('heading', { level: 2, name: 'Limits' })).toHaveClass('text-section');
   });
 
   it('keeps the action slot 13.5px, bold and muted', () => {

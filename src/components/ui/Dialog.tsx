@@ -22,7 +22,7 @@ export function Dialog({ open, title, description, onClose, children, actions }:
       tabIndex={-1}
       aria-labelledby={titleId}
       aria-describedby={description ? descriptionId : undefined}
-      className="bg-overlay text-text m-auto w-[min(92vw,440px)] rounded-lg border-0 p-0 shadow-(--shadow-overlay) backdrop:bg-black/40"
+      className="glass-sheet text-text m-auto w-[min(92vw,440px)] rounded-[24px] border-0 p-0 backdrop:bg-black/40"
     >
       <div className="flex flex-col gap-4 p-6">
         <div className="flex flex-col gap-1">

@@ -30,10 +30,11 @@ export function Sheet({ open, title, showTitle = false, onClose, children }: She
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
-      className="bg-overlay text-text motion-safe:animate-sheet-up rounded-t-sheet fixed inset-x-0 top-auto bottom-0 m-0 max-h-[calc(100dvh-64px)] w-full max-w-none overflow-y-auto border-0 p-0 shadow-(--shadow-overlay) backdrop:bg-black/40"
+      className="glass-sheet text-text motion-safe:animate-sheet-up rounded-t-sheet fixed inset-x-0 top-auto bottom-0 m-0 max-h-[calc(100dvh-64px)] w-full max-w-none overflow-y-auto border-0 p-0 backdrop:bg-black/40"
     >
       <div className="px-[22px] pt-2.5 pb-[calc(10px+env(safe-area-inset-bottom))]">
-        <div aria-hidden className="bg-track mx-auto mb-[18px] h-[5px] w-10 rounded-full" />
+        {/* The grab handle: the ink at 20%, as the wireframe draws it on the frosted sheet. */}
+        <div aria-hidden className="bg-text/20 mx-auto mb-[18px] h-[5px] w-10 rounded-full" />
         <h2 id={titleId} className={showTitle ? 'text-section mb-4' : 'sr-only'}>
           {title}
         </h2>

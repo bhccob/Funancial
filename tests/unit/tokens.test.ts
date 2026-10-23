@@ -167,6 +167,8 @@ it('defines the glass colors and the dark page', () => {
     '--color-glass-strong': 'rgb(255 255 255 / 0.66)',
     '--color-glass-bar': 'rgb(255 255 255 / 0.78)',
     '--color-glass-bar-line': 'rgb(0 0 0 / 0.07)',
+    // The frosted surface of a sheet and a dialog: the overlay colour at 90%.
+    '--color-glass-sheet': 'rgb(255 255 255 / 0.9)',
     '--color-scrim': 'rgb(11 11 18 / 0.35)',
   });
   expect(dark).toMatchObject({
@@ -177,6 +179,7 @@ it('defines the glass colors and the dark page', () => {
     '--color-glass-strong': 'rgb(28 28 38 / 0.82)',
     '--color-glass-bar': 'rgb(28 28 38 / 0.78)',
     '--color-glass-bar-line': 'rgb(255 255 255 / 0.08)',
+    '--color-glass-sheet': 'rgb(21 21 29 / 0.9)',
   });
   // The shapes behind the page are 40% as strong on the dark page.
   expect(declarations(':root')).toMatchObject({ '--page-blobs-strength': '1' });
@@ -433,6 +436,28 @@ it('defines the glass recipes of the wireframe', () => {
   expect(utility('glass-bar')).toContain('blur(20px) saturate(180%)');
 });
 
+it('defines the frosted surface of a sheet and a dialog, whose dark colour comes from the token', () => {
+  // The inner-screens wireframe's .sheet: the surface at 90%, a 1px lit top edge, blur(24px).
+  expect(utility('glass-sheet')).toContain('background: var(--color-glass-sheet)');
+  expect(utility('glass-sheet')).toContain('inset 0 1px 0 var(--color-glass-hi)');
+  expect(utility('glass-sheet')).toContain('var(--shadow-overlay)');
+  expect(utility('glass-sheet')).toContain('backdrop-filter: blur(24px) saturate(180%)');
+  // Nothing in it names a colour: both modes come from the tokens.
+  expect(utility('glass-sheet')).not.toMatch(/#[0-9a-f]{3,6}|rgba?\(/);
+  // The token is the overlay colour at 90% in each mode, so the sheet reads as the page's overlay.
+  for (const [mode, vars] of [
+    ['light', declarations('@theme static')],
+    ['dark', declarations(":root[data-theme='dark']")],
+  ] as const) {
+    const [r, g, b, alpha] = parseColor(vars['--color-glass-sheet']!);
+    const [or, og, ob] = parseColor(
+      vars['--color-overlay'] ?? declarations('@theme static')['--color-overlay']!,
+    );
+    expect([r, g, b], mode).toEqual([or, og, ob]);
+    expect(alpha, mode).toBe(0.9);
+  }
+});
+
 it("gives back the page's ink to a page surface drawn inside the block (a menu opened from it)", () => {
   // Inside the block the text tokens are its ink; primary is not taken over, and it is the page's
   // ink in both modes.
@@ -607,6 +632,29 @@ describe.each(CASES)('the $id theme in $mode mode', ({ id, mode }) => {
     for (const fg of ['--color-text', '--color-text-muted', '--color-success', '--color-danger']) {
       expect(contrast(t(fg), page), `${fg} on the page`).toBeGreaterThanOrEqual(4.5);
       expect(contrast(t(fg), glass), `${fg} on the glass`).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  it('keeps the text, muted, accent and status colours at 4.5:1 or better on a sheet or dialog, over anything the page can show behind it', () => {
+    // The sheet is the surface at 90%, so a tenth of what is behind it shows through: the page and
+    // its shapes, the dimmed block, or a dark or white card. Black and white bound all of those.
+    const page = t('--color-bg');
+    const strength = Number(t('--page-blobs-strength'));
+    const peaks = t('--page-blobs').match(/rgba?\([^)]*\)/g)!;
+    const behind = [
+      '#000000',
+      '#ffffff',
+      page,
+      ...peaks.map((peak) => composite(peak, page, strength)),
+    ];
+    for (const fg of ROW_TEXT) {
+      for (const backdrop of behind) {
+        const sheet = composite(t('--color-glass-sheet'), backdrop);
+        expect(
+          contrast(t(fg), sheet),
+          `${fg} on the sheet over ${backdrop}`,
+        ).toBeGreaterThanOrEqual(4.5);
+      }
     }
   });
 

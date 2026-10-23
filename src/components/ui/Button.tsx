@@ -17,14 +17,16 @@ const base =
   'motion-safe:transition-[transform,background-color,opacity] motion-safe:duration-(--duration-press) motion-safe:ease-glass ' +
   'disabled:pointer-events-none disabled:opacity-45';
 
+/** The glass pill of a button that is not the main one: a piece of the page's glass, so its shapes show through. */
+const GLASS = 'glass text-text';
+
 const variants: Record<ButtonVariant, string> = {
   primary: 'bg-primary text-primary-contrast hover:opacity-90',
-  secondary: 'border border-border-strong bg-transparent text-text hover:bg-surface-2',
-  // A secondary button as a piece of the page's glass, so the page's shapes show through it.
-  glass: 'glass text-text',
+  secondary: GLASS,
+  glass: GLASS,
   // A secondary button for a gradient card: the page colour, part see-through, so its edge shows.
   banner: 'border border-border-strong bg-bg/60 text-text hover:bg-bg',
-  ghost: 'bg-transparent text-text hover:bg-surface-2',
+  ghost: GLASS,
   danger: 'bg-danger text-danger-contrast hover:opacity-90',
   'danger-ghost': 'bg-transparent text-danger hover:bg-surface-2',
 };

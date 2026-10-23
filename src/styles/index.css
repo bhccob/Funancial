@@ -85,6 +85,21 @@
 }
 
 /*
+ * The surface of a sheet and a dialog, as the wireframe's add sheet draws it: the overlay colour at
+ * 90%, a lit 1px line along the top and a blur of what is behind it. Nothing here names a colour, so
+ * dark mode and every theme follow the tokens; the sheet's shadow is part of it, so the shell needs
+ * no shadow class of its own. Its text is checked over black and white behind it for every theme in
+ * both modes in tests/unit/tokens.test.ts.
+ */
+@utility glass-sheet {
+  background: var(--color-glass-sheet);
+  backdrop-filter: blur(24px) saturate(180%);
+  box-shadow:
+    inset 0 1px 0 var(--color-glass-hi),
+    var(--shadow-overlay);
+}
+
+/*
  * A card in the Cards carousel: the block's glass in the theme's card tint (--tint picks the second
  * or third one), lit along a corner by a sheen. On a dark block a veil darkens it and the sheen is
  * fainter, so its white text holds 4.5:1 over the brightest glow of the block; a light block needs
