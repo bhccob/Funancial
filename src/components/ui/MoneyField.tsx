@@ -28,13 +28,16 @@ const UNREADABLE = 'Enter an amount like 12.50';
 
 /**
  * The `hero` size: the currency and the figure (40px bold on a 56px row) in one row with no box.
- * The line under the row is always 2px (clear at rest, danger with an error) so it turns ink while
- * the figure has focus, which is what shows focus here, without anything moving.
+ * The line under the row is always 2px (clear at rest) so it turns ink while the figure has focus,
+ * which is what shows focus here, without anything moving. With an error the line is danger and
+ * stays danger, so the row takes the page's focus ring instead while the figure has focus.
  */
 const heroRow = (error: boolean) =>
   cn(
     'flex items-start gap-1.5 border-b-2',
-    error ? 'border-danger' : 'border-transparent focus-within:border-text',
+    error
+      ? 'border-danger focus-within:outline-focus focus-within:outline-2 focus-within:outline-offset-2'
+      : 'border-transparent focus-within:border-text',
   );
 
 const heroInput =

@@ -165,7 +165,7 @@ it('defines the glass colors and the dark page', () => {
     '--color-glass-line': 'rgb(255 255 255 / 0.85)',
     '--color-glass-hi': '#ffffff',
     '--color-glass-strong': 'rgb(255 255 255 / 0.66)',
-    '--color-glass-bar': 'rgb(255 255 255 / 0.78)',
+    '--color-glass-bar': 'rgb(255 255 255 / 0.92)',
     '--color-glass-bar-line': 'rgb(0 0 0 / 0.07)',
     // The frosted surface of a sheet and a dialog: the overlay colour at 90%.
     '--color-glass-sheet': 'rgb(255 255 255 / 0.9)',
@@ -177,7 +177,7 @@ it('defines the glass colors and the dark page', () => {
     '--color-glass-line': 'rgb(255 255 255 / 0.08)',
     '--color-glass-hi': 'rgb(255 255 255 / 0.08)',
     '--color-glass-strong': 'rgb(28 28 38 / 0.82)',
-    '--color-glass-bar': 'rgb(28 28 38 / 0.78)',
+    '--color-glass-bar': 'rgb(28 28 38 / 0.92)',
     '--color-glass-bar-line': 'rgb(255 255 255 / 0.08)',
     '--color-glass-sheet': 'rgb(21 21 29 / 0.9)',
   });
@@ -670,6 +670,30 @@ describe.each(CASES)('the $id theme in $mode mode', ({ id, mode }) => {
         contrast(t('--color-text'), pill),
         `ink on a pill on the sheet over ${backdrop}`,
       ).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  it('keeps the ink of a glass pill on the page at 4.5:1 or better, on the page glass over the page and each shape behind it', () => {
+    // The Category and Source pills of the /add page sit on the page's own glass, so the shapes behind
+    // the page show through it: the glass over the page and over the peak of each shape.
+    for (const glass of glassOnPage(t)) {
+      expect(
+        contrast(t('--color-text'), glass),
+        `ink on a pill on the page over ${glass}`,
+      ).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  it('keeps the idle and the current tab label at 4.5:1 or better on the tab bar, over anything that can scroll under it', () => {
+    // The bar is translucent, so a solid button or a dark card scrolling under it shows through. Black
+    // and white bound whatever that is: the label is the muted ink when idle, the accent when current.
+    for (const backdrop of ['#000000', '#ffffff']) {
+      const bar = composite(t('--color-glass-bar'), backdrop);
+      for (const fg of ['--color-text-muted', '--color-accent']) {
+        expect(contrast(t(fg), bar), `${fg} on the bar over ${backdrop}`).toBeGreaterThanOrEqual(
+          4.5,
+        );
+      }
     }
   });
 

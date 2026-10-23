@@ -54,7 +54,8 @@
   --color-glass-line: rgb(255 255 255 / 0.85);
   --color-glass-hi: #ffffff;
   --color-glass-strong: rgb(255 255 255 / 0.66);
-  --color-glass-bar: rgb(255 255 255 / 0.78);
+  /* The bar's labels hold 4.5:1 over black or white behind it (a button or a card scrolling under it): 0.92 is the least that does for every theme (tests/unit/tokens.test.ts). */
+  --color-glass-bar: rgb(255 255 255 / 0.92);
   --color-glass-bar-line: rgb(0 0 0 / 0.07);
   --color-glass-sheet: rgb(255 255 255 / 0.9);
   --color-scrim: rgb(11 11 18 / 0.35);
@@ -209,7 +210,7 @@
   --color-glass-line: rgb(255 255 255 / 0.08);
   --color-glass-hi: rgb(255 255 255 / 0.08);
   --color-glass-strong: rgb(28 28 38 / 0.82);
-  --color-glass-bar: rgb(28 28 38 / 0.78);
+  --color-glass-bar: rgb(28 28 38 / 0.92);
   --color-glass-bar-line: rgb(255 255 255 / 0.08);
   --color-glass-sheet: rgb(21 21 29 / 0.9);
   /* The shapes behind the page are 40% as strong on the dark page. */

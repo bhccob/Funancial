@@ -216,6 +216,14 @@ describe('MoneyField as the hero amount', () => {
     // The line under the currency and the figure turns danger.
     expect(input.parentElement).toHaveClass('border-b-2', 'border-danger');
     expect(input.parentElement).not.toHaveClass('focus-within:border-text');
+    // The danger line cannot also show focus (it would stay danger), so the row takes the page's ring
+    // while the figure has focus: the figure has no outline of its own.
+    expect(input.parentElement).toHaveClass(
+      'focus-within:outline-2',
+      'focus-within:outline-offset-2',
+      'focus-within:outline-focus',
+    );
+    expect(input).toHaveClass('focus:outline-none');
   });
 
   it('keeps focus on open when asked, and shows it as a 2px ink line under the amount', () => {
@@ -235,6 +243,8 @@ describe('MoneyField as the hero amount', () => {
     // when it turns ink while the figure has focus; the figure has no ring of its own.
     const row = input.parentElement!;
     expect(row).toHaveClass('border-b-2', 'border-transparent', 'focus-within:border-text');
+    // Without an error the ink line is the cue; no ring round the row.
+    expect(row).not.toHaveClass('focus-within:outline-2');
     expect(input).toHaveClass('focus:outline-none');
     expect(input).not.toHaveClass('border-b-2');
   });
