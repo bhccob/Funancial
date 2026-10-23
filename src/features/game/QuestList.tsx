@@ -12,6 +12,9 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import type { QuestView } from '@/domain/game/quests';
 import type { QuestId } from '@/domain/game/types';
+import { IconRow, ROW_SUB, ROW_TITLE } from '@/features/shared/IconRow';
+import { ROWS } from '@/features/shared/PlainSection';
+import { cn } from '@/lib/cn';
 import { useAction } from '@/lib/useAction';
 import { useGameActions } from '@/store/useGame';
 import { WeeklyCheckInDialog } from './WeeklyCheckInDialog';
@@ -50,13 +53,25 @@ function QuestRow({ quest, onCheckIn }: { quest: QuestView; onCheckIn(): void })
   }
 
   return (
-    <li className="flex items-start gap-3 py-3">
-      <span className="bg-surface-2 grid size-9 shrink-0 place-items-center rounded-xl">
-        <Icon aria-hidden="true" className="size-[18px]" />
-      </span>
-      <div className="min-w-0 flex-1">
-        <p className="text-sm font-semibold">{quest.title}</p>
-        <p className="text-muted text-[12.5px]">{quest.detail}</p>
+    <li>
+      <IconRow
+        icon={Icon}
+        top
+        end={
+          quest.done ? (
+            <span className="text-muted flex shrink-0 items-center gap-1 text-[13px] font-bold">
+              <Check aria-hidden="true" className="size-3.5" />
+              Done
+            </span>
+          ) : (
+            <span className="text-xp-text shrink-0 text-[13px] font-extrabold tabular-nums">
+              +{quest.reward.xp} XP
+            </span>
+          )
+        }
+      >
+        <p className={ROW_TITLE}>{quest.title}</p>
+        <p className={ROW_SUB}>{quest.detail}</p>
         <div
           role="progressbar"
           aria-label={quest.title}
@@ -64,7 +79,7 @@ function QuestRow({ quest, onCheckIn }: { quest: QuestView; onCheckIn(): void })
           aria-valuemax={max}
           aria-valuenow={now}
           aria-valuetext={quest.detail}
-          className="bg-track mt-2 h-1 overflow-hidden rounded-full"
+          className="bg-track mt-2.5 h-1.5 overflow-hidden rounded-full"
         >
           <div
             className="bg-xp h-full rounded-full motion-safe:transition-[width]"
@@ -87,17 +102,7 @@ function QuestRow({ quest, onCheckIn }: { quest: QuestView; onCheckIn(): void })
             Check in
           </Button>
         )}
-      </div>
-      {quest.done ? (
-        <span className="text-muted flex shrink-0 items-center gap-1 text-xs font-bold">
-          <Check aria-hidden="true" className="size-3.5" />
-          Done
-        </span>
-      ) : (
-        <span className="text-xp-text shrink-0 text-xs font-extrabold tabular-nums">
-          +{quest.reward.xp} XP
-        </span>
-      )}
+      </IconRow>
     </li>
   );
 }
@@ -112,7 +117,7 @@ export function QuestList({ quests, limit }: { quests: readonly QuestView[]; lim
 
   return (
     <>
-      <ul className="divide-border divide-y">
+      <ul className={cn('px-1', ROWS)}>
         {shown.map((quest) => (
           <QuestRow key={quest.id} quest={quest} onCheckIn={() => setCheckingIn(true)} />
         ))}

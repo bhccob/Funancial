@@ -1,6 +1,6 @@
 import { act, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router';
+import { MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Toaster } from '@/components/ui/Toaster';
 import { levelStart } from '@/domain/game/levels';
@@ -705,5 +705,178 @@ describe('Quests screen: recent XP', () => {
     renderQuests();
     expect(within(region('Recent XP')).getByText('No XP yet')).toBeInTheDocument();
     expect(within(region('Recent XP')).queryByRole('listitem')).not.toBeInTheDocument();
+  });
+});
+
+describe('the Quests header', () => {
+  /** Quests inside a router that has the places Back can go to. */
+  function renderRouted(initialEntries: string[], initialIndex?: number) {
+    return renderWithStore(
+      <MemoryRouter initialEntries={initialEntries} initialIndex={initialIndex}>
+        <Routes>
+          <Route path="/quests" element={<QuestsScreen />} />
+          <Route path="/profile" element={<p>The Profile page</p>} />
+          <Route path="/shop" element={<p>The Shop page</p>} />
+          <Route path="/" element={<p>The Home page</p>} />
+        </Routes>
+      </MemoryRouter>,
+      createStubStore({ data: emptySnapshot(), today: TODAY }),
+    );
+  }
+
+  it('has a round Back button before the title', () => {
+    renderQuests();
+    const back = screen.getByRole('button', { name: 'Back' });
+    expect(back).toHaveClass('glass', 'rounded-full', 'size-11');
+    const title = screen.getByRole('heading', { level: 1, name: 'Quests' });
+    expect(back.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('goes back to the screen Quests was opened from', async () => {
+    renderRouted(['/shop', '/quests'], 1);
+    await userEvent.click(screen.getByRole('button', { name: 'Back' }));
+    expect(screen.getByText('The Shop page')).toBeInTheDocument();
+  });
+
+  it('goes to Profile, where Quests is listed, when it was the first screen', async () => {
+    renderRouted(['/quests']);
+    await userEvent.click(screen.getByRole('button', { name: 'Back' }));
+    expect(screen.getByText('The Profile page')).toBeInTheDocument();
+  });
+});
+
+describe('Quests in glass', () => {
+  /** A plain list: hairlines between its rows, in the colours of `ROWS`. */
+  const expectPlainList = (list: Element | null) => {
+    expect(list).toHaveClass('divide-y', 'divide-black/7', 'dark:divide-white/8');
+    expect(list).not.toHaveClass('divide-border');
+  };
+
+  it('puts the level in a glass tile, with the Shop pill and the XP bar in it', () => {
+    renderQuests();
+    const tile = screen.getByText('LV 1').closest('.glass') as HTMLElement;
+    expect(tile).toHaveClass('rounded-[24px]', 'p-4');
+    expect(within(tile).getByRole('link', { name: 'Shop' })).toBeInTheDocument();
+    expect(within(tile).getByRole('progressbar', { name: 'Level progress' })).toBeInTheDocument();
+  });
+
+  it('boxes nothing else: the lists are plain rows', () => {
+    const { container } = renderQuests((d) => {
+      d.tables.budgetLimit = [aLimit()];
+    });
+    // The level tile is the one glass tile (24px corners); the rest of the glass is pills and chips.
+    expect(container.querySelectorAll('.glass.rounded-\\[24px\\]')).toHaveLength(1);
+    expect(container.querySelector('.bg-surface-2.rounded-xl')).not.toBeInTheDocument();
+  });
+
+  it('draws each streak as a plain row with a glass chip', () => {
+    renderQuests();
+    const section = region('Streaks');
+    expectPlainList(section.querySelector('ul'));
+    const rows = within(section).getAllByRole('listitem');
+    const icons = ['flame', 'shield-check', 'calendar-check', 'coins'];
+    rows.forEach((row, i) => {
+      const chip = row.querySelector('.glass');
+      expect(chip, `chip ${i}`).toHaveClass('size-[38px]', 'rounded-full');
+      expect(chip).toHaveAttribute('aria-hidden', 'true');
+      expect(chip!.querySelector(`svg.lucide-${icons[i]}`)).toBeInTheDocument();
+    });
+  });
+
+  it('draws each quest as a plain row with a glass chip', () => {
+    renderQuests();
+    expectPlainList(group('Today').querySelector('ul'));
+    const row = within(group('Today')).getByText("Log today's spending").closest('li')!;
+    expect(row.querySelector('.glass svg.lucide-receipt')).toBeInTheDocument();
+  });
+
+  it('has Give up as a quiet red text button flush with the text above it, not a pill', () => {
+    renderQuests((d) => {
+      d.tables.budgetLimit = [aLimit()];
+      d.tables.challenge = [
+        makeChallenge({ id: 'c1', kind: 'budget-30', start: TODAY, end: '2026-11-12' }),
+      ];
+    });
+    const giveUp = within(group('Active')).getByRole('button', { name: 'Give up' });
+    expect(giveUp).toHaveClass('text-danger', 'underline', 'min-h-11');
+    // Nothing pulls it out of the row, it has no padding of its own and it is not glass.
+    expect(giveUp).not.toHaveClass('glass', '-ml-3', 'px-4', 'bg-surface-2');
+    // Start is still the glass pill.
+    expect(within(group('Available')).getAllByRole('button', { name: 'Start' })[0]).toHaveClass(
+      'glass',
+    );
+  });
+
+  it('draws the challenge lists as plain rows', () => {
+    renderQuests((d) => {
+      d.tables.budgetLimit = [aLimit()];
+      d.tables.challenge = [
+        makeChallenge({ id: 'c1', kind: 'budget-30', start: TODAY, end: '2026-11-12' }),
+        makeChallenge({ id: 'a1', kind: 'no-spend-weekend', status: 'abandoned' }),
+      ];
+    });
+    for (const name of ['Active', 'Available', 'Finished']) {
+      expectPlainList(group(name).querySelector('ul'));
+    }
+  });
+
+  it('draws the badges as plain rows, one under the other, each with a glass chip', () => {
+    renderQuests((d) => {
+      d.tables.ledger = [
+        makeLedgerEntry({
+          key: 'badge:first-expense',
+          xp: 50,
+          coins: 10,
+          createdAt: AT('2026-10-10'),
+        }),
+      ];
+    });
+    const list = region('Badges').querySelector('ul');
+    expectPlainList(list);
+    expect(list).not.toHaveClass('grid', 'sm:grid-cols-2');
+    const rows = within(region('Badges')).getAllByRole('listitem');
+    expect(rows).toHaveLength(8);
+    for (const row of rows) {
+      expect(row.querySelector('.glass.size-\\[38px\\].rounded-full')).toBeInTheDocument();
+    }
+    // An earned badge's chip is in the accent, a locked one's is muted.
+    expect(rows[0]!.querySelector('.glass')).toHaveClass('text-accent');
+    expect(rows[1]!.querySelector('.glass')).toHaveClass('text-muted');
+  });
+
+  it('wears the frame round the chip of an earned badge, not on the glass itself', () => {
+    renderQuests((d) => {
+      d.tables.ledger = [
+        makeLedgerEntry({
+          key: 'badge:first-expense',
+          xp: 50,
+          coins: 10,
+          createdAt: AT('2026-10-10'),
+        }),
+        makeLegacyPurchase('frame-gold', 200, 'p1'),
+      ];
+      d.tables.settings = [
+        makeSettings({
+          cosmetics: { theme: 'theme-violet', avatar: 'avatar-sprout', frame: 'frame-gold' },
+        }),
+      ];
+    });
+    // The person's own avatar wears the frame too: look in the badge's row.
+    const row = within(region('Badges')).getByText('First Expense Logged').closest('li')!;
+    const ring = row.querySelector('[class*="ring-[#d4a017]"]')!;
+    expect(ring).toHaveClass('rounded-full');
+    // The ring and the glass are two elements: both set a box-shadow, so one would undo the other.
+    expect(ring).not.toHaveClass('glass');
+    expect(ring.querySelector('.glass')).toBeInTheDocument();
+  });
+
+  it('draws How to earn and Recent XP as plain rows', () => {
+    renderQuests((d) => {
+      d.tables.ledger = [
+        makeLedgerEntry({ key: 'log:expense:e1', label: 'Logged an expense', xp: 10, coins: 0 }),
+      ];
+    });
+    for (const list of region('How to earn').querySelectorAll('ul')) expectPlainList(list);
+    expectPlainList(region('Recent XP').querySelector('ul'));
   });
 });

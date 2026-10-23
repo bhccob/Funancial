@@ -94,6 +94,15 @@ test('the shop refuses a purchase without enough coins', async ({ page }) => {
   await expect(sky.getByText('Not enough coins.')).toBeVisible();
 });
 
+test('Quests has a Back button, which goes to Profile when it was the first page', async ({
+  page,
+}) => {
+  await startFresh(page, '/quests');
+  await expect(page.getByRole('heading', { level: 1, name: 'Quests' })).toBeVisible();
+  await page.getByRole('button', { name: 'Back' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Profile' })).toBeVisible();
+});
+
 test('the shop has Themes, Avatars and Freezes, and Back goes to Profile when it was the first page', async ({
   page,
 }) => {

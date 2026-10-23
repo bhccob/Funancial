@@ -1,7 +1,6 @@
 import { useId, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Dialog } from '@/components/ui/Dialog';
-import { Section } from '@/components/ui/Section';
 import type { ChallengeKind } from '@/domain/entities';
 import {
   CHALLENGES,
@@ -10,6 +9,8 @@ import {
   type ChallengeView,
 } from '@/domain/game/challenges';
 import { CHALLENGE_REWARDS } from '@/domain/game/rules';
+import { ROW_SUB, ROW_TITLE } from '@/features/shared/IconRow';
+import { PlainSection, ROWS } from '@/features/shared/PlainSection';
 import { cn } from '@/lib/cn';
 import { daysUntil } from '@/lib/format';
 import { useAction } from '@/lib/useAction';
@@ -48,14 +49,14 @@ function ActiveRow({ view, onGiveUp }: { view: ChallengeView; onGiveUp(): void }
     <li className="py-3">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-sm font-semibold">{view.title}</p>
-          <p className="text-muted text-[12.5px]">{view.detail}</p>
+          <p className={ROW_TITLE}>{view.title}</p>
+          <p className={ROW_SUB}>{view.detail}</p>
         </div>
-        <p className="text-muted shrink-0 text-xs font-semibold">
+        <p className="text-muted shrink-0 text-[13px] font-bold">
           {`${daysLeft} ${daysLeft === 1 ? 'day' : 'days'} left`}
         </p>
       </div>
-      <div className="mt-2 flex items-center gap-3">
+      <div className="mt-2.5 flex items-center gap-3">
         <div
           role="progressbar"
           aria-label={view.title}
@@ -63,18 +64,26 @@ function ActiveRow({ view, onGiveUp }: { view: ChallengeView; onGiveUp(): void }
           aria-valuemax={max}
           aria-valuenow={now}
           aria-valuetext={view.detail}
-          className="bg-track h-1 min-w-0 flex-1 overflow-hidden rounded-full"
+          className="bg-track h-1.5 min-w-0 flex-1 overflow-hidden rounded-full"
         >
           <div
             className="bg-xp h-full rounded-full motion-safe:transition-[width]"
             style={{ width: `${(now / max) * 100}%` }}
           />
         </div>
-        <span className="text-muted shrink-0 text-xs font-semibold tabular-nums">{progress}</span>
+        <span className="text-muted shrink-0 text-[13px] font-bold tabular-nums">{progress}</span>
       </div>
-      <Button size="sm" variant="ghost" className="mt-2 -ml-3" onClick={onGiveUp}>
+      {/*
+        Giving up is quiet: red text on the row, as the app's other text buttons are drawn (no padding
+        of its own, so it lines up with the words above it), 44px tall to tap. The dialog asks first.
+      */}
+      <button
+        type="button"
+        onClick={onGiveUp}
+        className="text-danger -mb-1 inline-flex min-h-11 items-center text-[13px] font-bold underline underline-offset-4"
+      >
         Give up
-      </Button>
+      </button>
     </li>
   );
 }
@@ -96,9 +105,9 @@ function AvailableRow({ challenge }: { challenge: Available }) {
 
   return (
     <li className="py-3">
-      <p className="text-sm font-semibold">{challenge.title}</p>
-      <p className="text-muted text-[12.5px]">{challenge.description}</p>
-      <p className="text-xp-text mt-1 text-xs font-extrabold tabular-nums">
+      <p className={ROW_TITLE}>{challenge.title}</p>
+      <p className={ROW_SUB}>{challenge.description}</p>
+      <p className="text-xp-text mt-1 text-[13px] font-extrabold tabular-nums">
         {rewardText(CHALLENGE_REWARDS[kind])}
       </p>
       <Button
@@ -112,7 +121,7 @@ function AvailableRow({ challenge }: { challenge: Available }) {
         Start
       </Button>
       {reason !== null && (
-        <p id={reasonId} className="text-muted mt-1.5 text-[12.5px]">
+        <p id={reasonId} className={cn(ROW_SUB, 'mt-1.5')}>
           {reason}
         </p>
       )}
@@ -124,12 +133,12 @@ function FinishedRow({ view }: { view: Finished }) {
   return (
     <li className="flex items-start justify-between gap-3 py-3">
       <div className="min-w-0">
-        <p className="text-sm font-semibold">{view.title}</p>
-        <p className="text-muted text-[12.5px]">{view.detail}</p>
+        <p className={ROW_TITLE}>{view.title}</p>
+        <p className={ROW_SUB}>{view.detail}</p>
       </div>
       <span
         className={cn(
-          'shrink-0 text-xs font-extrabold',
+          'shrink-0 text-[13px] font-extrabold',
           view.outcome === 'won' ? 'text-xp-text' : 'text-muted',
         )}
       >
@@ -194,11 +203,11 @@ export function ChallengesSection({ challenges }: { challenges: readonly Challen
   }, [challenges, data, ctx]);
 
   return (
-    <Section title="Challenges">
+    <PlainSection title="Challenges">
       <div className="flex flex-col gap-5">
         {active.length > 0 && (
           <Group title="Active">
-            <ul className="divide-border divide-y">
+            <ul className={cn('px-1', ROWS)}>
               {active.map((view) => (
                 <ActiveRow key={view.challenge.id} view={view} onGiveUp={() => setGiving(view)} />
               ))}
@@ -207,7 +216,7 @@ export function ChallengesSection({ challenges }: { challenges: readonly Challen
         )}
         {available.length > 0 && (
           <Group title="Available">
-            <ul className="divide-border divide-y">
+            <ul className={cn('px-1', ROWS)}>
               {available.map((challenge) => (
                 <AvailableRow key={challenge.kind} challenge={challenge} />
               ))}
@@ -216,7 +225,7 @@ export function ChallengesSection({ challenges }: { challenges: readonly Challen
         )}
         {finished.length > 0 && (
           <Group title="Finished">
-            <ul className="divide-border divide-y">
+            <ul className={cn('px-1', ROWS)}>
               {finished.map((view) => (
                 <FinishedRow key={view.challenge.id} view={view} />
               ))}
@@ -225,6 +234,6 @@ export function ChallengesSection({ challenges }: { challenges: readonly Challen
         )}
       </div>
       <GiveUpDialog view={giving} onClose={() => setGiving(null)} />
-    </Section>
+    </PlainSection>
   );
 }

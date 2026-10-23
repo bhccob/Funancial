@@ -325,6 +325,23 @@ describe('QuestList', () => {
     }
   });
 
+  it('draws the quests as plain rows, a glass chip before each, with hairlines between them', () => {
+    renderIn(
+      <QuestList quests={[quest('log-today'), quest('week-limits', { cadence: 'weekly' })]} />,
+    );
+    const list = screen.getAllByRole('listitem')[0]!.closest('ul');
+    expect(list).toHaveClass('divide-y', 'divide-black/7', 'dark:divide-white/8');
+    expect(list).not.toHaveClass('divide-border');
+    for (const row of screen.getAllByRole('listitem')) {
+      const chip = row.querySelector('.glass');
+      expect(chip).toHaveClass('size-[38px]', 'rounded-full');
+      expect(chip).toHaveAttribute('aria-hidden', 'true');
+      expect(chip!.querySelector('svg')).toBeInTheDocument();
+    }
+    // No square well any more.
+    expect(list!.querySelector('.bg-surface-2')).not.toBeInTheDocument();
+  });
+
   it('shows Done in place of the reward for a finished quest', () => {
     renderIn(
       <QuestList
@@ -483,6 +500,18 @@ describe('WeeklyCheckInDialog', () => {
 
     expect(within(dialog).getByText('Bills in the next 7 days')).toBeInTheDocument();
     expect(within(dialog).getByText(`1 bill · ${usd(15_99)}`)).toBeInTheDocument();
+  });
+
+  it('draws the look back as plain rows, in the hairlines of every other list', () => {
+    renderIn(
+      <WeeklyCheckInDialog open onClose={() => {}} />,
+      createStubStore({ data: weekData(), today: TODAY }),
+    );
+    const rows = within(screen.getByRole('dialog', { name: 'Weekly check-in' }))
+      .getByText('Spent this week')
+      .closest('.divide-y');
+    expect(rows).toHaveClass('divide-black/7', 'dark:divide-white/8');
+    expect(rows).not.toHaveClass('divide-border');
   });
 
   it('counts a renewal in the first days of next month when the week runs past month end', () => {

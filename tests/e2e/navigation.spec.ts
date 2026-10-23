@@ -371,6 +371,28 @@ test('mobile: Goals and Debts are two pages', async ({ page }, testInfo) => {
   await expect(page.getByRole('button', { name: 'Add goal' })).toHaveCount(0);
 });
 
+test('mobile: Goals and Debts have Back, which goes to Spending and to Cards when they were the first page', async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== 'mobile-chromium', 'mobile layout only');
+  await startFresh(page, '/goals');
+  await page.getByRole('button', { name: 'Back' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Budget' })).toBeVisible();
+
+  // A page reached from another one goes back in history: here, to Spending.
+  await page
+    .getByRole('region', { name: 'Goals' })
+    .getByRole('link', { name: 'Set a goal' })
+    .click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Goals' })).toBeVisible();
+  await page.getByRole('button', { name: 'Back' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Budget' })).toBeVisible();
+
+  await page.goto('/debts');
+  await page.getByRole('button', { name: 'Back' }).click();
+  await expect(page).toHaveURL(/\/cards$/);
+});
+
 test("mobile: Spending's Goals section leads to the Goals page with View all", async ({
   page,
 }, testInfo) => {

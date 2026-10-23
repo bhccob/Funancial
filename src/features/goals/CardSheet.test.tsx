@@ -104,6 +104,26 @@ describe('CardSheet', () => {
     expect(fact('Limit used')).toHaveTextContent(`Limit used21% of ${usd(1_500_00)}`);
   });
 
+  it('draws the facts as plain rows: the label left, the figure right, a hairline between', () => {
+    renderSheet();
+    const facts = within(sheet()).getByText('You owe').closest('dl')!;
+    expect(facts).toHaveClass('divide-y', 'divide-black/7', 'dark:divide-white/8');
+    expect(facts.children).toHaveLength(4);
+    for (const label of ['You owe', 'Payment due', 'You pay', 'Limit used']) {
+      const row = fact(label)!;
+      expect(row, label).toHaveClass('flex', 'justify-between');
+      expect(within(sheet()).getByText(label), label).toHaveClass('text-muted');
+      expect(row.querySelector('dd'), label).toHaveClass('font-extrabold', 'tabular-nums');
+    }
+  });
+
+  it('says why cash stays put in plain words, not in a box', () => {
+    renderSheet();
+    const note = within(sheet()).getByText(/Buying with this card/);
+    expect(note).not.toHaveClass('bg-surface-2', 'rounded-xl');
+    expect(note).toHaveClass('text-muted');
+  });
+
   it('explains why cash stays put, with the same amount and date as the Coming-up row', () => {
     renderSheet();
     expect(

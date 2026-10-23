@@ -1,7 +1,7 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactElement } from 'react';
-import { MemoryRouter } from 'react-router';
+import { MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Toaster } from '@/components/ui/Toaster';
 import type { Account, CreditTerms } from '@/domain/entities';
@@ -697,7 +697,210 @@ describe('with amounts hidden', () => {
   });
 });
 
-describe('the goal and debt dialogs in the line style', () => {
+describe('the Goals and Debts headers', () => {
+  /** A page inside a router that has the places Back can go to. */
+  function renderRouted(page: ReactElement, path: string, entries: string[], index?: number) {
+    renderWithStore(
+      <MemoryRouter initialEntries={entries} initialIndex={index}>
+        <Routes>
+          <Route path={path} element={page} />
+          <Route path="/budget" element={<p>The Spending page</p>} />
+          <Route path="/cards" element={<p>The Cards page</p>} />
+          <Route path="/profile" element={<p>The Profile page</p>} />
+          <Route path="/" element={<p>The Home page</p>} />
+        </Routes>
+      </MemoryRouter>,
+      createStubStore({ data: filledData(), today: TODAY }),
+    );
+  }
+
+  it.each([
+    ['Goals', renderGoals],
+    ['Debts', renderDebts],
+  ])('has a round Back button before the %s title', (title, render) => {
+    render();
+    const back = screen.getByRole('button', { name: 'Back' });
+    expect(back).toHaveClass('glass', 'rounded-full', 'size-11');
+    const heading = screen.getByRole('heading', { level: 1, name: title });
+    expect(back.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('goes back to the screen Goals was opened from', async () => {
+    renderRouted(<GoalsScreen />, '/goals', ['/profile', '/goals'], 1);
+    await userEvent.click(screen.getByRole('button', { name: 'Back' }));
+    expect(screen.getByText('The Profile page')).toBeInTheDocument();
+  });
+
+  it('goes to Spending, which lists the goals, when Goals was the first screen', async () => {
+    renderRouted(<GoalsScreen />, '/goals', ['/goals']);
+    await userEvent.click(screen.getByRole('button', { name: 'Back' }));
+    expect(screen.getByText('The Spending page')).toBeInTheDocument();
+  });
+
+  it('goes back to the screen Debts was opened from', async () => {
+    renderRouted(<DebtsScreen />, '/debts', ['/profile', '/debts'], 1);
+    await userEvent.click(screen.getByRole('button', { name: 'Back' }));
+    expect(screen.getByText('The Profile page')).toBeInTheDocument();
+  });
+
+  it('goes to Cards, which lists the loans, when Debts was the first screen', async () => {
+    renderRouted(<DebtsScreen />, '/debts', ['/debts']);
+    await userEvent.click(screen.getByRole('button', { name: 'Back' }));
+    expect(screen.getByText('The Cards page')).toBeInTheDocument();
+  });
+});
+
+describe('Goals and Debts in glass', () => {
+  const expectPlainList = (list: Element | null) => {
+    expect(list).toHaveClass('divide-y', 'divide-black/7', 'dark:divide-white/8');
+    expect(list).not.toHaveClass('divide-border');
+  };
+
+  /** An Edit button is a round glass icon: 44px, a pencil, no words. */
+  const expectEditIcon = (button: HTMLElement) => {
+    expect(button).toHaveClass('glass', 'rounded-full', 'size-11');
+    expect(button).not.toHaveClass('px-4');
+    expect(button).toHaveTextContent('');
+    expect(button.querySelector('svg.lucide-pencil')).toHaveAttribute('aria-hidden', 'true');
+  };
+
+  it('draws the goals as plain rows, each with a glass chip and its progress bar', () => {
+    renderGoals();
+    expectPlainList(screen.getByRole('list'));
+    const item = screen.getByText('New bike').closest('li')!;
+    expect(
+      item.querySelector('.glass.size-\\[38px\\].rounded-full svg.lucide-target'),
+    ).toBeTruthy();
+    expect(row('New bike').getByRole('progressbar', { name: 'New bike' })).toHaveClass('bg-track');
+  });
+
+  it('gives a goal a glass Add money pill and a round pencil for Edit', () => {
+    renderGoals();
+    const bike = row('New bike');
+    const add = bike.getByRole('button', { name: 'Add money' });
+    const edit = bike.getByRole('button', { name: 'Edit New bike' });
+    expect(add).toHaveClass('glass', 'rounded-full', 'h-11', 'px-4');
+    expectEditIcon(edit);
+    // The pill is the main action, first; the pencil is beside it.
+    expect(add.compareDocumentPosition(edit) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(add.parentElement).toBe(edit.parentElement);
+  });
+
+  it('draws the cards and loans as plain rows with a chip, a pill to pay and a round pencil', () => {
+    renderDebts();
+    expectPlainList(screen.getByRole('list'));
+    const visa = screen.getByText('Visa').closest('li')!;
+    const loan = screen.getByText('Car loan').closest('li')!;
+    expect(visa.querySelector('.glass.size-\\[38px\\] svg.lucide-credit-card')).toBeTruthy();
+    expect(loan.querySelector('.glass.size-\\[38px\\] svg.lucide-car')).toBeTruthy();
+    for (const [name, pay] of [
+      ['Visa', 'Pay card'],
+      ['Car loan', 'Make a payment'],
+    ] as const) {
+      expect(row(name).getByRole('button', { name: pay })).toHaveClass('glass', 'h-11', 'px-4');
+      expectEditIcon(row(name).getByRole('button', { name: `Edit ${name}` }));
+    }
+  });
+
+  it('keeps the pay pill off for a card with nothing owed, and Edit on', () => {
+    renderDebts(filledData(visaCard({ openingBalance: 0 })));
+    expect(row('Visa').getByRole('button', { name: 'Pay card' })).toBeDisabled();
+    expect(row('Visa').getByRole('button', { name: 'Edit Visa' })).toBeEnabled();
+  });
+});
+
+describe('the goal and debt dialogs in glass', () => {
+  /** A `row` field: the label on the left, the value on the right, a hairline under it. */
+  const rowFields = (dialog: HTMLElement, labels: string[]) => {
+    for (const label of labels) {
+      const field = within(dialog).getByLabelText(label);
+      expect(field, label).toHaveClass('text-right', 'h-11');
+      expect(field, label).not.toHaveClass('rounded-md', 'border', 'border-b', 'font-extrabold');
+      expect(field.closest('.border-b'), label).toHaveClass(
+        'border-black/7',
+        'dark:border-white/8',
+      );
+    }
+  };
+  /** A `hero` amount: 40px bold, no box. */
+  const heroAmount = (dialog: HTMLElement) =>
+    expect(within(dialog).getByLabelText('Amount')).toHaveClass('text-[40px]', 'font-bold');
+
+  it('has row fields and kind pills for a goal', async () => {
+    renderGoals();
+    await userEvent.click(screen.getByRole('button', { name: 'Add goal' }));
+    const dialog = screen.getByRole('dialog', { name: 'Add a goal' });
+    rowFields(dialog, ['Name', 'Target', 'Saved so far', 'Deadline']);
+    // Kind is three short choices: pills, the chosen one solid, still radios.
+    expect(within(dialog).getByText('Savings')).toHaveClass(
+      'bg-primary',
+      'text-primary-contrast',
+      'h-8',
+    );
+    expect(within(dialog).getByText('Emergency fund')).toHaveClass('glass', 'rounded-full');
+    expect(within(dialog).getByText('Emergency fund')).not.toHaveClass('bg-primary');
+    expect(within(dialog).getAllByRole('radio')).toHaveLength(3);
+  });
+
+  it('has the same rows when editing a goal, with Delete in danger', async () => {
+    renderGoals();
+    await userEvent.click(row('New bike').getByRole('button', { name: 'Edit New bike' }));
+    const dialog = screen.getByRole('dialog', { name: 'Edit goal' });
+    rowFields(dialog, ['Name', 'Target', 'Saved so far', 'Deadline']);
+    expect(within(dialog).getByRole('button', { name: 'Delete' })).toHaveClass('text-danger');
+    expect(within(dialog).getByRole('button', { name: 'Save' })).toHaveClass('bg-primary');
+  });
+
+  it('has a hero amount and row selects when adding to a goal', async () => {
+    renderGoals();
+    await userEvent.click(row('New bike').getByRole('button', { name: 'Add money' }));
+    const dialog = screen.getByRole('dialog', { name: 'Add to goal' });
+    heroAmount(dialog);
+    rowFields(dialog, ['From', 'To']);
+    expect(within(dialog).getByRole('button', { name: 'Add' })).toHaveClass('bg-primary');
+  });
+
+  it('has a hero amount and a row select when paying a card', async () => {
+    renderDebts();
+    await userEvent.click(row('Visa').getByRole('button', { name: 'Pay card' }));
+    const dialog = screen.getByRole('dialog', { name: 'Pay Visa' });
+    heroAmount(dialog);
+    rowFields(dialog, ['From']);
+    expect(within(dialog).getByLabelText('Amount')).toHaveAccessibleDescription(
+      `You owe ${usd(230_00)}.`,
+    );
+  });
+
+  it('has a hero amount and a row select when paying a loan', async () => {
+    renderDebts();
+    await userEvent.click(row('Car loan').getByRole('button', { name: 'Make a payment' }));
+    const dialog = screen.getByRole('dialog', { name: 'Pay Car loan' });
+    heroAmount(dialog);
+    rowFields(dialog, ['From']);
+  });
+
+  it('has row fields for a loan', async () => {
+    renderDebts();
+    await userEvent.click(screen.getByRole('button', { name: 'Add loan' }));
+    rowFields(screen.getByRole('dialog', { name: 'Add a loan' }), [
+      'Name',
+      'Current balance',
+      'Interest rate %',
+      'Minimum payment',
+    ]);
+  });
+
+  it('has row fields for a loan being edited, with Delete in danger', async () => {
+    renderDebts();
+    await userEvent.click(row('Car loan').getByRole('button', { name: 'Edit Car loan' }));
+    const dialog = screen.getByRole('dialog', { name: 'Edit loan' });
+    rowFields(dialog, ['Name', 'Balance when added', 'Interest rate %', 'Minimum payment']);
+    expect(within(dialog).getByRole('button', { name: 'Delete' })).toHaveClass('text-danger');
+  });
+});
+
+// A card is an account: its dialogs are `AccountDialog`'s, in the line style until the Cards pass.
+describe('the card dialogs in the line style', () => {
   const LINE = ['border-b', 'font-extrabold'];
   const lineFields = (dialog: HTMLElement, labels: string[]) => {
     for (const label of labels) {
@@ -705,15 +908,6 @@ describe('the goal and debt dialogs in the line style', () => {
       expect(within(dialog).getByLabelText(label), label).not.toHaveClass('rounded-md');
     }
   };
-
-  it('has line fields and underline tabs for a goal', async () => {
-    renderGoals();
-    await userEvent.click(screen.getByRole('button', { name: 'Add goal' }));
-    const dialog = screen.getByRole('dialog', { name: 'Add a goal' });
-    lineFields(dialog, ['Name', 'Target', 'Saved so far', 'Deadline']);
-    expect(within(dialog).getByText('Savings')).toHaveClass('border-b-2', 'border-text');
-    expect(within(dialog).getByText('Emergency fund')).toHaveClass('border-transparent');
-  });
 
   it('has line fields and a line select for a card', async () => {
     renderDebts();
@@ -727,29 +921,6 @@ describe('the goal and debt dialogs in the line style', () => {
       'Credit limit',
       'Due day',
     ]);
-  });
-
-  it('has line fields for a loan', async () => {
-    renderDebts();
-    await userEvent.click(screen.getByRole('button', { name: 'Add loan' }));
-    lineFields(screen.getByRole('dialog', { name: 'Add a loan' }), [
-      'Name',
-      'Current balance',
-      'Interest rate %',
-      'Minimum payment',
-    ]);
-  });
-
-  it('has a line amount and line selects when adding to a goal', async () => {
-    renderGoals();
-    await userEvent.click(row('New bike').getByRole('button', { name: 'Add money' }));
-    lineFields(screen.getByRole('dialog', { name: 'Add to goal' }), ['Amount', 'From', 'To']);
-  });
-
-  it('has a line amount and a line select when paying a card', async () => {
-    renderDebts();
-    await userEvent.click(row('Visa').getByRole('button', { name: 'Pay card' }));
-    lineFields(screen.getByRole('dialog', { name: 'Pay Visa' }), ['Amount', 'From']);
   });
 
   it('has a line select for where a deleted card sends its subscriptions', async () => {

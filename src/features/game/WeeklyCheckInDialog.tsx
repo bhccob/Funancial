@@ -4,6 +4,7 @@ import { Dialog } from '@/components/ui/Dialog';
 import { limitLabel, upcomingBills } from '@/domain/budget';
 import { addDays } from '@/domain/dates';
 import { monthKey } from '@/domain/periods';
+import { ROWS } from '@/features/shared/PlainSection';
 import { formatMonth } from '@/lib/format';
 import { useAction } from '@/lib/useAction';
 import { useApp } from '@/store/AppStoreProvider';
@@ -41,7 +42,7 @@ function CheckInForm({ onDone }: { onDone(): void }) {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="divide-border divide-y">
+      <div className={ROWS}>
         <div className="flex items-baseline justify-between gap-3 pb-3">
           <p className="text-muted text-sm font-semibold">Spent this week</p>
           <p className="text-lg font-extrabold tabular-nums">{money(view.spending.week)}</p>

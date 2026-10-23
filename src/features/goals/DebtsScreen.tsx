@@ -1,3 +1,4 @@
+import { Car, CreditCard, type LucideIcon } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -5,13 +6,18 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { ProgressBar } from '@/components/ui/ProgressBar';
 import { Section } from '@/components/ui/Section';
 import { AccountDialog, type AccountTarget } from '@/features/cards/AccountDialog';
+import { IconRow, ROW_SUB, ROW_TITLE } from '@/features/shared/IconRow';
+import { ROWS } from '@/features/shared/PlainSection';
+import { cn } from '@/lib/cn';
 import { ordinal } from '@/lib/format';
 import { useFinanceView, useMoney } from '@/store/useFinance';
+import { EditButton } from './EditButton';
 import { LoanDialog, type LoanTarget } from './LoanDialog';
 import { PayDialog, type PayTarget } from './PayDialog';
 
-/** A card or a loan: what it is called, what it owes, and Pay and Edit. */
+/** A card or a loan: what it is called, what it owes, and Pay (the pill) and Edit (the pencil). */
 function DebtRow({
+  icon,
   name,
   details,
   balance,
@@ -20,6 +26,7 @@ function DebtRow({
   onPay,
   onEdit,
 }: {
+  icon: LucideIcon;
   name: string;
   /** The line under the name. */
   details: string;
@@ -32,23 +39,22 @@ function DebtRow({
 }) {
   const money = useMoney();
   return (
-    <li className="py-4">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="truncate font-bold">{name}</p>
-          <p className="text-muted text-sm font-semibold">{details}</p>
+    <li>
+      <IconRow
+        icon={icon}
+        top
+        end={<p className="shrink-0 text-lg font-extrabold tabular-nums">{money(balance)}</p>}
+      >
+        <p className={cn(ROW_TITLE, 'truncate')}>{name}</p>
+        <p className={ROW_SUB}>{details}</p>
+        {progress}
+        <div className="mt-3 flex items-center gap-2">
+          <Button size="sm" variant="secondary" disabled={balance <= 0} onClick={onPay}>
+            {payLabel}
+          </Button>
+          <EditButton name={name} onClick={onEdit} />
         </div>
-        <p className="shrink-0 text-lg font-extrabold tabular-nums">{money(balance)}</p>
-      </div>
-      {progress}
-      <div className="mt-3 flex gap-2">
-        <Button size="sm" variant="secondary" disabled={balance <= 0} onClick={onPay}>
-          {payLabel}
-        </Button>
-        <Button size="sm" variant="ghost" aria-label={`Edit ${name}`} onClick={onEdit}>
-          Edit
-        </Button>
-      </div>
+      </IconRow>
     </li>
   );
 }
@@ -67,9 +73,12 @@ export function DebtsScreen() {
   const sortedLoans = [...loans].sort((a, b) => a.debt.name.localeCompare(b.debt.name));
 
   return (
-    <div>
+    <div className="max-w-3xl">
+      {/* The loans are listed on Cards: where Back goes when the app has no history to go back through. */}
       <PageHeader
         title="Debts"
+        back
+        backTo="/cards"
         action={
           <div className="flex gap-2">
             <Button
@@ -87,7 +96,7 @@ export function DebtsScreen() {
       />
       <Section>
         {cards.length + sortedLoans.length > 0 ? (
-          <ul className="divide-border -my-4 divide-y">
+          <ul className={cn('px-1', ROWS)}>
             {cards.map(({ account: card, balance }) => {
               const details: string[] = [];
               const limit = card.credit?.limit ?? null;
@@ -97,6 +106,7 @@ export function DebtsScreen() {
               return (
                 <DebtRow
                   key={card.id}
+                  icon={CreditCard}
                   name={card.name}
                   details={details.length > 0 ? details.join(' · ') : 'Credit card'}
                   balance={balance}
@@ -117,6 +127,7 @@ export function DebtsScreen() {
               return (
                 <DebtRow
                   key={loan.id}
+                  icon={Car}
                   name={loan.name}
                   details={
                     loan.minimumPayment > 0
@@ -126,7 +137,7 @@ export function DebtsScreen() {
                   balance={balance}
                   progress={
                     <ProgressBar
-                      className="mt-3"
+                      className="mt-2.5"
                       label={`${loan.name} paid off`}
                       value={paidPct}
                       level="ok"

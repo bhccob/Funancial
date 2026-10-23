@@ -684,6 +684,16 @@ describe.each(CASES)('the $id theme in $mode mode', ({ id, mode }) => {
     }
   });
 
+  it('keeps the accent at 4.5:1 or better on the page glass, over the page and each shape behind it', () => {
+    // An earned badge on Quests (and on Profile): the accent icon on a glass chip. The icon is the
+    // chip's whole content, a mark that says "earned" next to the words "Earned <date>".
+    for (const glass of glassOnPage(t)) {
+      expect(contrast(t('--color-accent'), glass), `accent on ${glass}`).toBeGreaterThanOrEqual(
+        4.5,
+      );
+    }
+  });
+
   it('keeps the idle and the current tab label at 4.5:1 or better on the tab bar, over anything that can scroll under it', () => {
     // The bar is translucent, so a solid button or a dark card scrolling under it shows through. Black
     // and white bound whatever that is: the label is the muted ink when idle, the accent when current.

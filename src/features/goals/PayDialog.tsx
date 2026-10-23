@@ -67,8 +67,9 @@ function GoalForm({ goal, onDone }: { goal: Goal; onDone(): void }) {
 
   return (
     <form className="flex flex-col gap-5" onSubmit={submit} noValidate>
+      {/* The dialog is about one amount: the big figure, then the two accounts as plain rows. */}
       <MoneyField
-        variant="line"
+        size="hero"
         label="Amount"
         currency={currency}
         value={amount}
@@ -80,26 +81,30 @@ function GoalForm({ goal, onDone }: { goal: Goal; onDone(): void }) {
         hint="Moves it between your accounts and counts it toward this goal."
         autoFocus
       />
-      <AccountField
-        label="From"
-        value={from}
-        onChange={(id) => {
-          setFrom(id);
-          setErrors((e) => ({ ...e, from: undefined, to: undefined }));
-        }}
-        filter={NOT_CREDIT}
-        error={errors.from}
-      />
-      <AccountField
-        label="To"
-        value={to}
-        onChange={(id) => {
-          setTo(id);
-          setErrors((e) => ({ ...e, to: undefined }));
-        }}
-        filter={NOT_CREDIT}
-        error={errors.to}
-      />
+      <div>
+        <AccountField
+          variant="row"
+          label="From"
+          value={from}
+          onChange={(id) => {
+            setFrom(id);
+            setErrors((e) => ({ ...e, from: undefined, to: undefined }));
+          }}
+          filter={NOT_CREDIT}
+          error={errors.from}
+        />
+        <AccountField
+          variant="row"
+          label="To"
+          value={to}
+          onChange={(id) => {
+            setTo(id);
+            setErrors((e) => ({ ...e, to: undefined }));
+          }}
+          filter={NOT_CREDIT}
+          error={errors.to}
+        />
+      </div>
       <div className="flex justify-end gap-2">
         <Button variant="secondary" onClick={onDone}>
           Cancel
@@ -160,8 +165,9 @@ function PayForm({
 
   return (
     <form className="flex flex-col gap-5" onSubmit={submit} noValidate>
+      {/* The dialog is about one amount: the big figure, then the account that pays as a plain row. */}
       <MoneyField
-        variant="line"
+        size="hero"
         label="Amount"
         currency={currency}
         value={amount}
@@ -173,6 +179,7 @@ function PayForm({
         hint={`You owe ${money(balance)}.`}
       />
       <AccountField
+        variant="row"
         label="From"
         value={from}
         onChange={(id) => {

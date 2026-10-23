@@ -1,3 +1,4 @@
+import { Target } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -6,12 +7,17 @@ import { ProgressBar } from '@/components/ui/ProgressBar';
 import { Section } from '@/components/ui/Section';
 import type { Goal } from '@/domain/entities';
 import { monthlyToReach } from '@/domain/goals';
+import { IconRow, ROW_SUB, ROW_TITLE } from '@/features/shared/IconRow';
+import { ROWS } from '@/features/shared/PlainSection';
+import { cn } from '@/lib/cn';
 import { formatDate } from '@/lib/format';
 import { useApp } from '@/store/AppStoreProvider';
 import { useMoney, useToday } from '@/store/useFinance';
+import { EditButton } from './EditButton';
 import { GoalDialog } from './GoalDialog';
 import { PayDialog, type PayTarget } from './PayDialog';
 
+/** A goal: what it is, how much of it is saved, and Add money (the pill) and Edit (the pencil). */
 function GoalRow({ goal, onAdd, onEdit }: { goal: Goal; onAdd(): void; onEdit(): void }) {
   const money = useMoney();
   const today = useToday();
@@ -25,23 +31,27 @@ function GoalRow({ goal, onAdd, onEdit }: { goal: Goal; onAdd(): void; onEdit():
     line = `${money(monthly)} a month to reach it by ${formatDate(goal.deadline)}`;
 
   return (
-    <li className="py-4">
-      <div className="mb-2 flex items-baseline justify-between gap-3">
-        <p className="truncate font-bold">{goal.name}</p>
-        <p className="text-muted shrink-0 text-sm font-semibold tabular-nums">
+    <li>
+      <IconRow icon={Target} top>
+        <p className={cn(ROW_TITLE, 'truncate')}>{goal.name}</p>
+        <p className={cn(ROW_SUB, 'tabular-nums')}>
           {`${money(goal.current)} of ${money(goal.target)}`}
         </p>
-      </div>
-      <ProgressBar label={goal.name} value={pct} level="ok" valueText={`${pct}% saved`} />
-      {line && <p className="text-muted mt-1.5 text-sm font-semibold tabular-nums">{line}</p>}
-      <div className="mt-3 flex gap-2">
-        <Button size="sm" variant="secondary" onClick={onAdd}>
-          Add money
-        </Button>
-        <Button size="sm" variant="ghost" aria-label={`Edit ${goal.name}`} onClick={onEdit}>
-          Edit
-        </Button>
-      </div>
+        <ProgressBar
+          className="mt-2.5"
+          label={goal.name}
+          value={pct}
+          level="ok"
+          valueText={`${pct}% saved`}
+        />
+        {line && <p className={cn(ROW_SUB, 'mt-1.5 tabular-nums')}>{line}</p>}
+        <div className="mt-3 flex items-center gap-2">
+          <Button size="sm" variant="secondary" onClick={onAdd}>
+            Add money
+          </Button>
+          <EditButton name={goal.name} onClick={onEdit} />
+        </div>
+      </IconRow>
     </li>
   );
 }
@@ -58,9 +68,12 @@ export function GoalsScreen() {
   );
 
   return (
-    <div>
+    <div className="max-w-3xl">
+      {/* Goals are listed on Spending: where Back goes when the app has no history to go back through. */}
       <PageHeader
         title="Goals"
+        back
+        backTo="/budget"
         action={
           <Button size="sm" variant="secondary" onClick={() => setGoalEdit(null)}>
             Add goal
@@ -69,7 +82,7 @@ export function GoalsScreen() {
       />
       <Section>
         {sortedGoals.length > 0 ? (
-          <ul className="divide-border -my-4 divide-y">
+          <ul className={cn('px-1', ROWS)}>
             {sortedGoals.map((g) => (
               <GoalRow
                 key={g.id}

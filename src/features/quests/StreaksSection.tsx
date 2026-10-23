@@ -1,8 +1,10 @@
 import { CalendarCheck, Coins, Flame, ShieldCheck, type LucideIcon } from 'lucide-react';
 import { Link } from 'react-router';
-import { Section } from '@/components/ui/Section';
 import type { StreakView } from '@/domain/game/streaks';
 import type { StreakKind } from '@/domain/game/types';
+import { IconRow, ROW_SUB, ROW_TITLE } from '@/features/shared/IconRow';
+import { PlainSection, ROWS } from '@/features/shared/PlainSection';
+import { cn } from '@/lib/cn';
 
 const ICONS: Record<StreakKind, LucideIcon> = {
   logging: Flame,
@@ -27,34 +29,34 @@ function hintOf(streak: StreakView): string | null {
 }
 
 function StreakRow({ streak }: { streak: StreakView }) {
-  const Icon = ICONS[streak.kind];
   const hint = hintOf(streak);
 
   return (
-    <li className="py-3">
-      <div className="flex items-center justify-between gap-3">
-        <p className="flex items-center gap-2 text-sm font-semibold">
-          <Icon aria-hidden="true" className="text-muted size-4 shrink-0" />
-          {streak.title}
-        </p>
-        {hint === null && (
-          <p className="shrink-0 text-sm font-extrabold tabular-nums">
-            {`${streak.count} ${streak.unit}${streak.count === 1 ? '' : 's'}`}
+    <li>
+      <IconRow
+        icon={ICONS[streak.kind]}
+        end={
+          hint === null && (
+            <p className="shrink-0 text-[15px] font-extrabold tabular-nums">
+              {`${streak.count} ${streak.unit}${streak.count === 1 ? '' : 's'}`}
+            </p>
+          )
+        }
+      >
+        <p className={ROW_TITLE}>{streak.title}</p>
+        {hint !== null && <p className={ROW_SUB}>{hint}</p>}
+        {streak.tokens !== null && (
+          <p className={cn(ROW_SUB, 'flex items-center gap-3')}>
+            <span>{`Freezes: ${streak.tokens}`}</span>
+            <Link
+              to="/shop?tab=freezes"
+              className="text-accent-text -my-3 inline-flex min-h-11 items-center font-bold underline underline-offset-4"
+            >
+              Get freezes
+            </Link>
           </p>
         )}
-      </div>
-      {hint !== null && <p className="text-muted mt-1 text-[12.5px]">{hint}</p>}
-      {streak.tokens !== null && (
-        <p className="text-muted mt-1 flex items-center gap-3 text-[12.5px]">
-          <span>{`Freezes: ${streak.tokens}`}</span>
-          <Link
-            to="/shop?tab=freezes"
-            className="text-accent-text -my-3 inline-flex min-h-11 items-center font-semibold underline-offset-4 hover:underline"
-          >
-            Get freezes
-          </Link>
-        </p>
-      )}
+      </IconRow>
     </li>
   );
 }
@@ -62,12 +64,12 @@ function StreakRow({ streak }: { streak: StreakView }) {
 /** Daily logging, no overspending, the weekly check-in and dividends: how long each has been kept. */
 export function StreaksSection({ streaks }: { streaks: readonly StreakView[] }) {
   return (
-    <Section title="Streaks">
-      <ul className="divide-border -my-3 divide-y">
+    <PlainSection title="Streaks">
+      <ul className={cn('px-1', ROWS)}>
         {streaks.map((streak) => (
           <StreakRow key={streak.kind} streak={streak} />
         ))}
       </ul>
-    </Section>
+    </PlainSection>
   );
 }

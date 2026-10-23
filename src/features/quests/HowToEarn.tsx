@@ -1,4 +1,3 @@
-import { Section } from '@/components/ui/Section';
 import { BADGES } from '@/domain/game/badges';
 import { CHALLENGES } from '@/domain/game/challenges';
 import { QUEST_TITLES } from '@/domain/game/quests';
@@ -12,6 +11,8 @@ import {
 } from '@/domain/game/rules';
 import type { StreakView } from '@/domain/game/streaks';
 import type { QuestId } from '@/domain/game/types';
+import { PlainSection, ROWS } from '@/features/shared/PlainSection';
+import { cn } from '@/lib/cn';
 import { Group } from './Group';
 import { rewardText } from './rewardText';
 
@@ -30,9 +31,9 @@ const streakGroupTitle = (title: string) => (title.endsWith('streak') ? title : 
 
 function Rows({ lines }: { lines: readonly string[] }) {
   return (
-    <ul className="divide-border divide-y">
+    <ul className={cn('px-1', ROWS)}>
       {lines.map((line) => (
-        <li key={line} className="py-2 text-sm font-semibold">
+        <li key={line} className="py-2.5 text-sm font-semibold">
           {line}
         </li>
       ))}
@@ -46,7 +47,7 @@ function Rows({ lines }: { lines: readonly string[] }) {
  */
 export function HowToEarn({ streaks }: { streaks: readonly StreakView[] }) {
   return (
-    <Section title="How to earn">
+    <PlainSection title="How to earn">
       <div className="flex flex-col gap-5">
         <Group title="Logging">
           <Rows
@@ -80,6 +81,6 @@ export function HowToEarn({ streaks }: { streaks: readonly StreakView[] }) {
           />
         </Group>
       </div>
-    </Section>
+    </PlainSection>
   );
 }

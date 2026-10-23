@@ -59,15 +59,16 @@ function GoalForm({ goal, onDone }: { goal: Goal | null; onDone(): void }) {
   return (
     <form className="flex flex-col gap-5" onSubmit={submit} noValidate>
       <TextField
-        variant="line"
+        variant="row"
         label="Name"
         autoComplete="off"
         value={name}
         error={errors.name}
         onChange={(e) => setName(e.target.value)}
       />
+      {/* Three short choices, one tap each: pills, as in the add forms. */}
       <RadioGroup<Kind>
-        variant="underline"
+        variant="pills"
         legend="Kind"
         value={kind}
         onChange={setKind}
@@ -77,30 +78,33 @@ function GoalForm({ goal, onDone }: { goal: Goal | null; onDone(): void }) {
           { value: 'custom', label: 'Other' },
         ]}
       />
-      <MoneyField
-        variant="line"
-        label="Target"
-        currency={currency}
-        value={target}
-        onChange={setTarget}
-        error={errors.target}
-      />
-      <MoneyField
-        variant="line"
-        label="Saved so far"
-        currency={currency}
-        value={saved}
-        onChange={setSaved}
-        hint="Already in your savings. Changing it doesn't move money."
-      />
-      <TextField
-        variant="line"
-        label="Deadline"
-        type="date"
-        hint="Optional."
-        value={deadline}
-        onChange={(e) => setDeadline(e.target.value)}
-      />
+      {/* Plain rows, one hairline under each: the label on the left, the value on the right. */}
+      <div>
+        <MoneyField
+          variant="row"
+          label="Target"
+          currency={currency}
+          value={target}
+          onChange={setTarget}
+          error={errors.target}
+        />
+        <MoneyField
+          variant="row"
+          label="Saved so far"
+          currency={currency}
+          value={saved}
+          onChange={setSaved}
+          hint="Already in your savings. Changing it doesn't move money."
+        />
+        <TextField
+          variant="row"
+          label="Deadline"
+          type="date"
+          hint="Optional."
+          value={deadline}
+          onChange={(e) => setDeadline(e.target.value)}
+        />
+      </div>
       <div className="flex flex-wrap items-center justify-between gap-2">
         {goal ? (
           <Button variant="danger-ghost" disabled={busy} onClick={remove}>

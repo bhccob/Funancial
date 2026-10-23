@@ -67,43 +67,46 @@ function LoanForm({
 
   return (
     <form className="flex flex-col gap-5" onSubmit={submit} noValidate>
-      <TextField
-        variant="line"
-        label="Name"
-        autoComplete="off"
-        value={name}
-        error={errors.name}
-        onChange={(e) => setName(e.target.value)}
-      />
-      <MoneyField
-        variant="line"
-        label={loan ? 'Balance when added' : 'Current balance'}
-        currency={currency}
-        value={balance}
-        onChange={setBalance}
-        error={errors.balance}
-        hint={
-          loan
-            ? `On ${formatDate(loan.openingDate)}. Payments since then are taken off.`
-            : undefined
-        }
-      />
-      <TextField
-        variant="line"
-        label="Interest rate %"
-        inputMode="decimal"
-        autoComplete="off"
-        value={rate}
-        error={errors.rate}
-        onChange={(e) => setRate(e.target.value)}
-      />
-      <MoneyField
-        variant="line"
-        label="Minimum payment"
-        currency={currency}
-        value={minimum}
-        onChange={setMinimum}
-      />
+      {/* Plain rows, one hairline under each: the label on the left, the value on the right. */}
+      <div>
+        <TextField
+          variant="row"
+          label="Name"
+          autoComplete="off"
+          value={name}
+          error={errors.name}
+          onChange={(e) => setName(e.target.value)}
+        />
+        <MoneyField
+          variant="row"
+          label={loan ? 'Balance when added' : 'Current balance'}
+          currency={currency}
+          value={balance}
+          onChange={setBalance}
+          error={errors.balance}
+          hint={
+            loan
+              ? `On ${formatDate(loan.openingDate)}. Payments since then are taken off.`
+              : undefined
+          }
+        />
+        <TextField
+          variant="row"
+          label="Interest rate %"
+          inputMode="decimal"
+          autoComplete="off"
+          value={rate}
+          error={errors.rate}
+          onChange={(e) => setRate(e.target.value)}
+        />
+        <MoneyField
+          variant="row"
+          label="Minimum payment"
+          currency={currency}
+          value={minimum}
+          onChange={setMinimum}
+        />
+      </div>
       <div className="flex flex-wrap items-center justify-between gap-2">
         {loan ? (
           <Button variant="danger-ghost" disabled={busy} onClick={onDelete}>

@@ -6,16 +6,19 @@ import { accountBalance } from '@/domain/balances';
 import { cardPayment, nextDueDate } from '@/domain/budget';
 import type { Account } from '@/domain/entities';
 import { AccountDialog, type AccountTarget } from '@/features/cards/AccountDialog';
+import { ROWS } from '@/features/shared/PlainSection';
+import { cn } from '@/lib/cn';
 import { formatDay } from '@/lib/format';
 import { useApp } from '@/store/AppStoreProvider';
 import { useMoney, useToday } from '@/store/useFinance';
 import { PayDialog, type PayTarget } from './PayDialog';
 
+/** One fact as a plain row: the label on the left, the figure on the right. */
 function Fact({ label, value }: { label: string; value: string }) {
   return (
-    <div>
-      <dt className="text-muted text-[13px] font-bold">{label}</dt>
-      <dd className="mt-0.5 text-[15px] font-extrabold tabular-nums">{value}</dd>
+    <div className="flex min-h-[46px] items-center justify-between gap-3 py-2">
+      <dt className="text-muted text-sm font-bold">{label}</dt>
+      <dd className="text-right text-[15px] font-extrabold tabular-nums">{value}</dd>
     </div>
   );
 }
@@ -102,7 +105,7 @@ export function CardFacts({ card, balance }: { card: Account; balance: number })
 
   return (
     <>
-      <dl className="my-4 grid grid-cols-2 gap-x-3 gap-y-3">
+      <dl className={cn('my-3', ROWS)}>
         <Fact label="You owe" value={money(balance)} />
         <Fact label="Payment due" value={due} />
         <Fact
@@ -119,7 +122,7 @@ export function CardFacts({ card, balance }: { card: Account; balance: number })
         ) : null}
       </dl>
       {balance > 0 && (
-        <p className="bg-surface-2 text-muted rounded-xl px-3.5 py-3 text-[13px] leading-snug font-semibold">
+        <p className="text-muted text-[13px] leading-snug font-semibold">
           {amount === 0
             ? `Buying with this card adds to what you owe. Your cash only drops when you pay the card, and the minimum due ${due} is paid, so Funcial keeps nothing aside.`
             : `Buying with this card adds to what you owe. Your cash only drops when you pay the card, so Funcial keeps ${money(amount)} aside for ${due}.`}

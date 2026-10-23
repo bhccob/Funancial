@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
 export function Group({ title, children }: { title: string; children: ReactNode }) {
   return (
     <div role="group" aria-label={title}>
-      <h3 className="text-muted mb-1 text-[13px] font-semibold">{title}</h3>
+      <h3 className="text-muted mx-1 mb-1 text-[13px] font-bold">{title}</h3>
       {children}
     </div>
   );
