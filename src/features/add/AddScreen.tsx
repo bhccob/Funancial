@@ -17,7 +17,7 @@ export function AddScreen() {
 
   return (
     <div className="flex max-w-xl flex-col">
-      <PageHeader title="Add" />
+      <PageHeader title="Add" back />
       <div className="flex flex-col gap-6 pt-6">
         <RadioGroup<Kind>
           variant="underline"

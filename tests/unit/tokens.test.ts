@@ -551,6 +551,18 @@ function heroIdleInk(t: (name: string) => string): string {
   return value.startsWith('color-mix(') ? mutedInk(t, `--color-${name}`) : value;
 }
 
+/**
+ * What can show through the 10% of a sheet or dialog that is not its own colour: black and white
+ * bound a dark or white card and the dimmed page, and between them sit the page and the peak of each
+ * shape behind it at the mode's strength.
+ */
+function sheetBackdrops(t: (name: string) => string): string[] {
+  const page = t('--color-bg');
+  const strength = Number(t('--page-blobs-strength'));
+  const peaks = t('--page-blobs').match(/rgba?\([^)]*\)/g)!;
+  return ['#000000', '#ffffff', page, ...peaks.map((peak) => composite(peak, page, strength))];
+}
+
 describe.each(CASES)('the $id theme in $mode mode', ({ id, mode }) => {
   const t = tokensFor(id, mode);
 
@@ -637,23 +649,27 @@ describe.each(CASES)('the $id theme in $mode mode', ({ id, mode }) => {
   it('keeps the text, muted, accent and status colours at 4.5:1 or better on a sheet or dialog, over anything the page can show behind it', () => {
     // The sheet is the surface at 90%, so a tenth of what is behind it shows through: the page and
     // its shapes, the dimmed block, or a dark or white card. Black and white bound all of those.
-    const page = t('--color-bg');
-    const strength = Number(t('--page-blobs-strength'));
-    const peaks = t('--page-blobs').match(/rgba?\([^)]*\)/g)!;
-    const behind = [
-      '#000000',
-      '#ffffff',
-      page,
-      ...peaks.map((peak) => composite(peak, page, strength)),
-    ];
     for (const fg of ROW_TEXT) {
-      for (const backdrop of behind) {
+      for (const backdrop of sheetBackdrops(t)) {
         const sheet = composite(t('--color-glass-sheet'), backdrop);
         expect(
           contrast(t(fg), sheet),
           `${fg} on the sheet over ${backdrop}`,
         ).toBeGreaterThanOrEqual(4.5);
       }
+    }
+  });
+
+  it('keeps the ink of a glass pill on a sheet or dialog at 4.5:1 or better, over anything the page can show behind it', () => {
+    // The Category and Source pills of the add forms: the page's glass laid on the sheet's frost, in
+    // the ink, the chosen one in a primary button's pair (checked with the other buttons' below).
+    for (const backdrop of sheetBackdrops(t)) {
+      const sheet = composite(t('--color-glass-sheet'), backdrop);
+      const pill = composite(t('--color-glass'), sheet);
+      expect(
+        contrast(t('--color-text'), pill),
+        `ink on a pill on the sheet over ${backdrop}`,
+      ).toBeGreaterThanOrEqual(4.5);
     }
   });
 

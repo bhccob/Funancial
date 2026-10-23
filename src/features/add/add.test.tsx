@@ -4,6 +4,7 @@ import { MemoryRouter, Route, Routes, type InitialEntry } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { CATEGORY_OPTIONS } from '@/features/shared/categories';
 import { Toaster } from '@/components/ui/Toaster';
+import { currencySymbol } from '@/domain/money';
 import { periodRange } from '@/domain/periods';
 import type { LimitStatus } from '@/domain/budget';
 import type { Account, Settings } from '@/domain/entities';
@@ -445,48 +446,182 @@ describe('Add income', () => {
   });
 });
 
-describe('the Add forms in the line style', () => {
-  const LINE = ['border-b', 'font-extrabold'];
-  const tab = (name: string) => screen.getByText(name);
-  const tabsOf = (legend: string) =>
+describe('the Add forms in glass', () => {
+  const pill = (name: string) => screen.getByText(name);
+  const pillsOf = (legend: string) =>
     within(screen.getByRole('group', { name: legend }))
       .getAllByRole('radio')
       .map((r) => r.closest('label')?.textContent);
+  /** The hairline of the row a field sits in. */
+  const rowOf = (label: string) => screen.getByLabelText(label).closest('.border-b');
 
-  it('has line fields, a larger amount and underline tabs for an expense', async () => {
+  it('has a hero amount, category pills and plain rows for an expense', () => {
     renderAdd();
-    for (const label of ['Amount', 'Date', 'Paid with', 'Note', 'Repeats']) {
+    // The amount: 40px, bold, the currency dimmed beside it, and it has the focus on open.
+    expect(screen.getByLabelText('Amount')).toHaveClass('text-[40px]', 'font-bold');
+    expect(screen.getByLabelText('Amount')).toHaveFocus();
+    expect(screen.getByText(currencySymbol('USD'))).toHaveClass('text-muted');
+    // The four rows: a label and a value, a hairline, no box and no line field.
+    for (const label of ['Paid with', 'Date', 'Note', 'Repeats']) {
       const field = screen.getByLabelText(label);
-      expect(field, label).toHaveClass(...LINE);
-      expect(field, label).not.toHaveClass('rounded-md');
+      expect(field, label).toHaveClass('text-right', 'h-11');
+      expect(field, label).not.toHaveClass('rounded-md', 'border', 'border-b', 'font-extrabold');
+      expect(rowOf(label), label).toHaveClass('border-black/7', 'dark:border-white/8');
     }
-    expect(screen.getByLabelText('Amount')).toHaveClass('text-[20px]');
-    expect(screen.getByLabelText('Date')).toHaveClass('text-base');
-    // The type switch is underline tabs, still radios; Paid with is a select.
-    expect(tab('Expense')).toHaveClass('border-b-2', 'border-text');
-    expect(tab('Income')).toHaveClass('border-transparent');
+    // The type switch stays underline tabs, still radios; Paid with stays a select.
+    expect(pill('Expense')).toHaveClass('border-b-2', 'border-text');
+    expect(pill('Income')).toHaveClass('border-transparent');
     expect(screen.queryByRole('group', { name: 'Paid with' })).not.toBeInTheDocument();
   });
 
-  it('has Category as one-tap chips, not a select and not underline tabs', () => {
+  it('lists the rows in the order of the mockup: Paid with, Date, Note, Repeats', () => {
     renderAdd();
-    // All eight at once, as before: one tap, nothing to open.
-    expect(tabsOf('Category')).toEqual(CATEGORY_OPTIONS.map((o) => o.label));
-    expect(screen.queryByLabelText('Category')).not.toBeInTheDocument();
-    // Chips in a well, the chosen one raised; eight underline tabs would wrap badly.
-    expect(tab('Food')).toHaveClass('bg-overlay', 'rounded-[10px]', 'min-h-11');
-    expect(tab('Food')).not.toHaveClass('border-b-2');
-    expect(tab('Fun')).not.toHaveClass('bg-overlay');
+    const after = (a: Element, b: Element) =>
+      Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+    const order = ['Paid with', 'Date', 'Note', 'Repeats'].map((l) => screen.getByLabelText(l));
+    expect(after(order[0]!, order[1]!)).toBe(true);
+    expect(after(order[1]!, order[2]!)).toBe(true);
+    expect(after(order[2]!, order[3]!)).toBe(true);
+    // They come after the category pills and before the buttons.
+    expect(after(screen.getByRole('radio', { name: 'Food' }), order[0]!)).toBe(true);
+    expect(after(order[3]!, screen.getByRole('button', { name: 'Save' }))).toBe(true);
   });
 
-  it('has line fields and underline tabs for income', () => {
-    renderAdd('/add?type=income');
-    for (const label of ['Amount', 'Label', 'Date', 'Goes to', 'Note']) {
-      expect(screen.getByLabelText(label), label).toHaveClass(...LINE);
+  it('has Category as one-tap pills, not a select and not underline tabs', async () => {
+    renderAdd();
+    // All eight at once, as before: one tap, nothing to open.
+    expect(pillsOf('Category')).toEqual(CATEGORY_OPTIONS.map((o) => o.label));
+    expect(screen.queryByLabelText('Category')).not.toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: 'Food' })).toBeChecked();
+    // The chosen pill is solid; the others are glass; each is 32px with a 44px tap area.
+    expect(pill('Food')).toHaveClass('bg-primary', 'text-primary-contrast', 'h-8');
+    expect(pill('Food')).not.toHaveClass('border-b-2', 'bg-overlay', 'glass');
+    expect(pill('Fun')).toHaveClass('glass', 'h-8', 'rounded-full');
+    expect(screen.getByRole('radio', { name: 'Fun' })).toHaveClass('h-11');
+    expect(pill('Fun')).not.toHaveClass('bg-primary');
+
+    await userEvent.click(screen.getByRole('radio', { name: 'Fun' }));
+    expect(pill('Fun')).toHaveClass('bg-primary', 'text-primary-contrast');
+    expect(pill('Food')).toHaveClass('glass');
+    expect(pill('Food')).not.toHaveClass('bg-primary');
+  });
+
+  it('draws each category with its icon, for the eye only', () => {
+    renderAdd();
+    const radios = within(screen.getByRole('group', { name: 'Category' })).getAllByRole('radio');
+    expect(radios).toHaveLength(CATEGORY_OPTIONS.length);
+    for (const radio of radios) {
+      expect(radio.closest('label')!.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
     }
-    expect(screen.getByLabelText('Amount')).toHaveClass('text-base');
-    expect(tabsOf('Source')).toEqual(['Salary', 'Extra']);
+  });
+
+  it('has a solid Save, the glass Cancel and no Delete on a new expense', async () => {
+    renderAdd();
+    const saveButton = screen.getByRole('button', { name: 'Save' });
+    expect(saveButton).toHaveClass('bg-primary', 'text-primary-contrast');
+    expect(saveButton).toHaveAttribute('type', 'submit');
+    expect(screen.getByRole('button', { name: 'Cancel' })).toHaveClass('glass');
+    expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.getByText('Home page')).toBeInTheDocument();
+    expect(actions.addExpense).not.toHaveBeenCalled();
+  });
+
+  it('has Save, Cancel and Delete on an expense being edited, Delete in danger', async () => {
+    const expense = makeExpense({ id: 'exp-1', amount: 8_00, date: TODAY, accountId: 'acct-main' });
+    const onDone = vi.fn();
+    renderWithStore(
+      <ExpenseForm expense={expense} onDone={onDone} />,
+      createStubStore({ data: dataWith([MAIN, SAVINGS, VISA]), today: TODAY }),
+    );
+    // The amount is the hero here too, but only a new expense starts with the focus.
+    expect(screen.getByLabelText('Amount')).toHaveClass('text-[40px]');
+    expect(screen.getByLabelText('Amount')).not.toHaveFocus();
+    expect(screen.getByRole('button', { name: 'Save' })).toHaveClass('bg-primary');
+    expect(screen.getByRole('button', { name: 'Cancel' })).toHaveClass('glass');
+    const remove = screen.getByRole('button', { name: 'Delete' });
+    expect(remove).toHaveClass('text-danger');
+    // An edit has no Repeats row.
+    expect(screen.queryByLabelText('Repeats')).not.toBeInTheDocument();
+    await userEvent.click(remove);
+    expect(actions.deleteExpense).toHaveBeenCalledWith('exp-1');
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(onDone).toHaveBeenCalled();
+  });
+
+  it('has a hero amount, source pills and plain rows for income', () => {
+    renderAdd('/add?type=income');
+    expect(screen.getByLabelText('Amount')).toHaveClass('text-[40px]', 'font-bold');
+    expect(screen.getByLabelText('Amount')).toHaveFocus();
+    for (const label of ['Label', 'Goes to', 'Date', 'Note']) {
+      const field = screen.getByLabelText(label);
+      expect(field, label).toHaveClass('text-right', 'h-11');
+      expect(field, label).not.toHaveClass('border-b', 'font-extrabold');
+      expect(rowOf(label), label).toHaveClass('border-black/7', 'dark:border-white/8');
+    }
+    expect(pillsOf('Source')).toEqual(['Salary', 'Extra']);
     expect(screen.queryByRole('group', { name: 'Goes to' })).not.toBeInTheDocument();
-    expect(tab('Salary')).toHaveClass('border-b-2', 'border-text');
+    expect(pill('Salary')).toHaveClass('bg-primary', 'text-primary-contrast');
+    expect(pill('Extra')).toHaveClass('glass');
+    // The type switch is still underline tabs.
+    expect(pill('Income')).toHaveClass('border-b-2', 'border-text');
+    expect(screen.getByRole('button', { name: 'Save' })).toHaveClass('bg-primary');
+    expect(screen.getByRole('button', { name: 'Cancel' })).toHaveClass('glass');
+  });
+
+  it('shows an error under its row', async () => {
+    renderAdd();
+    await userEvent.type(screen.getByLabelText('Amount'), '5');
+    fireEvent.change(screen.getByLabelText('Date'), { target: { value: '2026-10-15' } });
+    await save();
+    const error = screen.getByText('Use today or an earlier date.');
+    expect(error).toHaveClass('text-danger');
+    expect(rowOf('Date')).toContainElement(error);
+    expect(rowOf('Date')).toHaveClass('border-danger');
+    expect(screen.getByLabelText('Date')).toHaveAccessibleDescription(
+      'Use today or an earlier date.',
+    );
+  });
+
+  it('shows the amount error under the hero amount', async () => {
+    renderAdd();
+    await save();
+    expect(screen.getByLabelText('Amount')).toHaveAccessibleDescription(
+      'Enter an amount like 12.50',
+    );
+    expect(screen.getByLabelText('Amount').parentElement).toHaveClass('border-danger');
+  });
+});
+
+describe('the Add screen header', () => {
+  it('has a round Back button before a plain page title', () => {
+    renderAdd();
+    const back = screen.getByRole('button', { name: 'Back' });
+    const title = screen.getByRole('heading', { level: 1, name: 'Add' });
+    expect(back).toHaveClass('glass', 'size-11', 'rounded-full');
+    expect(title).toHaveClass('text-page');
+    expect(back.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('goes Home from Back when the screen was opened first', async () => {
+    renderAdd();
+    await userEvent.click(screen.getByRole('button', { name: 'Back' }));
+    expect(screen.getByText('Home page')).toBeInTheDocument();
+    expect(actions.addExpense).not.toHaveBeenCalled();
+  });
+
+  it('goes back in history from Back when the screen was opened from another', async () => {
+    const data = dataWith([MAIN, SAVINGS, VISA]);
+    renderWithStore(
+      <MemoryRouter initialEntries={['/other', '/add']} initialIndex={1}>
+        <Routes>
+          <Route path="/add" element={<AddScreen />} />
+          <Route path="/other" element={<p>Other page</p>} />
+        </Routes>
+      </MemoryRouter>,
+      createStubStore({ data, today: TODAY }),
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Back' }));
+    expect(screen.getByText('Other page')).toBeInTheDocument();
   });
 });

@@ -1,5 +1,5 @@
 import { TextField } from '@/components/ui/TextField';
-import type { FieldVariant } from '@/components/ui/lineField';
+import type { RowVariant } from '@/components/ui/rowField';
 import type { LocalDate } from '@/domain/dates';
 
 export function DateField({
@@ -15,7 +15,7 @@ export function DateField({
   today: LocalDate;
   error?: string;
   label?: string;
-  variant?: FieldVariant;
+  variant?: RowVariant;
 }) {
   return (
     <TextField

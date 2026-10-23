@@ -64,7 +64,7 @@ export function IncomeForm({ onDone }: { onDone(): void }) {
   return (
     <form className="flex flex-col gap-5" onSubmit={submit} noValidate>
       <MoneyField
-        variant="line"
+        size="hero"
         label="Amount"
         currency={currency}
         value={amount}
@@ -76,7 +76,7 @@ export function IncomeForm({ onDone }: { onDone(): void }) {
         autoFocus
       />
       <RadioGroup<Source>
-        variant="underline"
+        variant="pills"
         legend="Source"
         value={source}
         onChange={changeSource}
@@ -85,42 +85,47 @@ export function IncomeForm({ onDone }: { onDone(): void }) {
           { value: 'extra', label: 'Extra' },
         ]}
       />
-      <TextField
-        variant="line"
-        label="Label"
-        autoComplete="off"
-        value={label}
-        onChange={(e) => setLabel(e.target.value)}
-      />
-      <DateField
-        variant="line"
-        value={date}
-        today={today}
-        error={errors.date}
-        onChange={(v) => {
-          setDate(v);
-          setErrors((x) => ({ ...x, date: undefined }));
-        }}
-      />
-      <AccountField
-        label="Goes to"
-        value={accountId}
-        onChange={(id) => {
-          setAccountId(id);
-          setErrors((x) => ({ ...x, account: undefined }));
-        }}
-        filter={NOT_CREDIT}
-        error={errors.account}
-      />
-      <TextField
-        variant="line"
-        label="Note"
-        autoComplete="off"
-        value={note}
-        onChange={(e) => setNote(e.target.value)}
-      />
+      {/* Plain rows, one hairline under each: the label on the left, the value on the right. */}
+      <div>
+        <TextField
+          variant="row"
+          label="Label"
+          autoComplete="off"
+          value={label}
+          onChange={(e) => setLabel(e.target.value)}
+        />
+        <AccountField
+          variant="row"
+          label="Goes to"
+          value={accountId}
+          onChange={(id) => {
+            setAccountId(id);
+            setErrors((x) => ({ ...x, account: undefined }));
+          }}
+          filter={NOT_CREDIT}
+          error={errors.account}
+        />
+        <DateField
+          variant="row"
+          value={date}
+          today={today}
+          error={errors.date}
+          onChange={(v) => {
+            setDate(v);
+            setErrors((x) => ({ ...x, date: undefined }));
+          }}
+        />
+        <TextField
+          variant="row"
+          label="Note"
+          autoComplete="off"
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+        />
+      </div>
       <div className="flex gap-2 pt-2">
-        <Button type="submit" size="lg" disabled={busy}>
+        {/* The one solid button: it takes the room Cancel leaves. */}
+        <Button type="submit" size="lg" className="flex-1" disabled={busy}>
           Save
         </Button>
         <Button variant="ghost" size="lg" onClick={onDone}>

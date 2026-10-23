@@ -13,10 +13,13 @@ import { useAction } from '@/lib/useAction';
 import { useApp } from '@/store/AppStoreProvider';
 import type { ExpenseInput } from '@/store/financeActions';
 import { useCurrency, useFinanceActions, useToday } from '@/store/useFinance';
-import { CATEGORY_OPTIONS } from '@/features/shared/categories';
+import { CATEGORY_ICONS, CATEGORY_OPTIONS } from '@/features/shared/categories';
 import { AccountField, NOT_FROZEN, useStartAccountId } from '@/features/shared/AccountField';
 import { DateField } from './DateField';
 import { pastDateProblem } from './pastDate';
+
+/** The categories as pills: each with the icon it has in a list row. */
+const CATEGORY_PILLS = CATEGORY_OPTIONS.map((o) => ({ ...o, icon: CATEGORY_ICONS[o.value] }));
 
 const REPEAT_OPTIONS = [
   { value: 'none', label: "Doesn't repeat" },
@@ -115,8 +118,7 @@ export function ExpenseForm({ onDone, expense }: { onDone(): void; expense?: Exp
   return (
     <form className="flex flex-col gap-5" onSubmit={submit} noValidate>
       <MoneyField
-        variant="line"
-        large
+        size="hero"
         label="Amount"
         currency={currency}
         value={amount}
@@ -127,56 +129,69 @@ export function ExpenseForm({ onDone, expense }: { onDone(): void; expense?: Exp
         error={errors.amount}
         autoFocus={!expense}
       />
-      {/* Chips, one tap each, as before: eight underline tabs would wrap badly. */}
+      {/* Pills, one tap each, as before: eight underline tabs would wrap badly. */}
       <RadioGroup<Category>
+        variant="pills"
         legend="Category"
         value={category}
         onChange={setCategory}
-        options={CATEGORY_OPTIONS}
+        options={CATEGORY_PILLS}
       />
-      <DateField
-        variant="line"
-        value={date}
-        today={today}
-        error={errors.date}
-        onChange={(v) => {
-          setDate(v);
-          setErrors((x) => ({ ...x, date: undefined }));
-        }}
-      />
-      <AccountField
-        label="Paid with"
-        value={accountId}
-        onChange={(id) => {
-          setAccountId(id);
-          setErrors((x) => ({ ...x, account: undefined }));
-        }}
-        filter={NOT_FROZEN}
-        keepId={expense?.accountId}
-        error={errors.account}
-        hint={
-          paidOnCard ? 'Adds to the card balance. Paying the card later moves the cash.' : undefined
-        }
-      />
-      <TextField
-        variant="line"
-        label="Note"
-        autoComplete="off"
-        value={note}
-        onChange={(e) => setNote(e.target.value)}
-      />
-      {!expense && (
-        <Select
-          variant="line"
-          label="Repeats"
-          value={repeat}
-          onChange={setRepeat}
-          options={REPEAT_OPTIONS}
-          hint={repeat === 'none' ? undefined : 'Also adds it to your subscriptions.'}
+      {/* Plain rows, one hairline under each: the label on the left, the value on the right. */}
+      <div>
+        <AccountField
+          variant="row"
+          label="Paid with"
+          value={accountId}
+          onChange={(id) => {
+            setAccountId(id);
+            setErrors((x) => ({ ...x, account: undefined }));
+          }}
+          filter={NOT_FROZEN}
+          keepId={expense?.accountId}
+          error={errors.account}
+          hint={
+            paidOnCard
+              ? 'Adds to the card balance. Paying the card later moves the cash.'
+              : undefined
+          }
         />
-      )}
+        <DateField
+          variant="row"
+          value={date}
+          today={today}
+          error={errors.date}
+          onChange={(v) => {
+            setDate(v);
+            setErrors((x) => ({ ...x, date: undefined }));
+          }}
+        />
+        <TextField
+          variant="row"
+          label="Note"
+          autoComplete="off"
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+        />
+        {!expense && (
+          <Select
+            variant="row"
+            label="Repeats"
+            value={repeat}
+            onChange={setRepeat}
+            options={REPEAT_OPTIONS}
+            hint={repeat === 'none' ? undefined : 'Also adds it to your subscriptions.'}
+          />
+        )}
+      </div>
       <div className="flex flex-wrap items-center gap-2 pt-2">
-        <Button type="submit" size={expense ? 'md' : 'lg'} disabled={busy}>
+        {/* The one solid button: it takes the room Cancel leaves, as the wireframe's Save does. */}
+        <Button
+          type="submit"
+          size={expense ? 'md' : 'lg'}
+          className={expense ? undefined : 'flex-1'}
+          disabled={busy}
+        >
           Save
         </Button>
         <Button variant="ghost" size={expense ? 'md' : 'lg'} onClick={onDone}>

@@ -1,5 +1,6 @@
 /* eslint-disable react-refresh/only-export-components -- the hooks sit with the field they feed */
 import { useMemo } from 'react';
+import type { RowVariant } from '@/components/ui/rowField';
 import { Select } from '@/components/ui/Select';
 import { activeAccounts, defaultAccount } from '@/domain/accounts';
 import type { Account } from '@/domain/entities';
@@ -69,7 +70,10 @@ export function useStartAccountId(filter?: (a: Account) => boolean): string {
     : (options[0]?.value ?? '');
 }
 
-/** Which account a row is paid with or goes to, as a select in the line style. */
+/**
+ * Which account a row is paid with or goes to, as a select: in the line style, or `row` in the
+ * plain rows of the glass look (the add forms).
+ */
 export function AccountField({
   label,
   value,
@@ -78,6 +82,7 @@ export function AccountField({
   error,
   hint,
   keepId,
+  variant = 'line',
 }: {
   label: string;
   value: string;
@@ -87,11 +92,12 @@ export function AccountField({
   hint?: string;
   /** An account to offer still, archived or filtered out: the one a row being edited was already on. */
   keepId?: string | null;
+  variant?: RowVariant;
 }) {
   const options = useAccountOptions(filter, keepId);
   return (
     <Select
-      variant="line"
+      variant={variant}
       label={label}
       value={value}
       options={options}
