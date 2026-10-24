@@ -7,7 +7,13 @@ import { Select } from '@/components/ui/Select';
 import { TextField } from '@/components/ui/TextField';
 import type { Category, Cycle, Subscription } from '@/domain/entities';
 import { CATEGORY_OPTIONS } from '@/features/shared/categories';
-import { AccountField, NOT_FROZEN, useStartAccountId } from '@/features/shared/AccountField';
+import {
+  AccountField,
+  NEW_CARD,
+  NOT_FROZEN,
+  useStartAccountId,
+} from '@/features/shared/AccountField';
+import { LAST4_HINT, last4Problem } from '@/features/shared/last4';
 import { useAction } from '@/lib/useAction';
 import { useCurrency, useFinanceActions, useToday } from '@/store/useFinance';
 
@@ -18,7 +24,20 @@ const CYCLE_OPTIONS: Array<{ value: Cycle; label: string }> = [
   { value: 'yearly', label: 'Yearly' },
 ];
 
-type Errors = { name?: string; amount?: string; nextRenewal?: string; account?: string };
+const CARD_KINDS: Array<{ value: CardKind; label: string }> = [
+  { value: 'debit', label: 'Debit' },
+  { value: 'credit', label: 'Credit' },
+];
+
+type CardKind = 'debit' | 'credit';
+type Errors = {
+  name?: string;
+  amount?: string;
+  nextRenewal?: string;
+  account?: string;
+  cardName?: string;
+  last4?: string;
+};
 
 function SubscriptionForm({ sub, onDone }: { sub: Subscription | null; onDone(): void }) {
   const { saveSubscription, deleteSubscription } = useFinanceActions();
@@ -33,8 +52,14 @@ function SubscriptionForm({ sub, onDone }: { sub: Subscription | null; onDone():
   const [category, setCategory] = useState<Category>(sub?.category ?? 'entertainment');
   const startAccountId = useStartAccountId(NOT_FROZEN);
   const [accountId, setAccountId] = useState(sub?.accountId ?? startAccountId);
+  // The card "+ New card" makes; Debit unless asked, as a credit card with no due day shows all it
+  // owes as due today.
+  const [cardName, setCardName] = useState('');
+  const [last4, setLast4] = useState('');
+  const [cardKind, setCardKind] = useState<CardKind>('debit');
   const [errors, setErrors] = useState<Errors>({});
   const [busy, setBusy] = useState(false);
+  const makingCard = accountId === NEW_CARD;
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -48,9 +73,11 @@ function SubscriptionForm({ sub, onDone }: { sub: Subscription | null; onDone():
           ? 'Use today or a later date.'
           : undefined,
       account: accountId ? undefined : 'Pick an account.',
+      cardName: makingCard && !cardName.trim() ? 'Name the card.' : undefined,
+      last4: makingCard ? last4Problem(last4) : undefined,
     };
     setErrors(found);
-    if (found.name || found.amount || found.nextRenewal || found.account) return;
+    if (Object.values(found).some(Boolean)) return;
 
     setBusy(true);
     const saved = await run(
@@ -63,6 +90,10 @@ function SubscriptionForm({ sub, onDone }: { sub: Subscription | null; onDone():
           nextRenewal,
           category,
           accountId,
+          // The card is made with the subscription, in one write, and not before.
+          ...(makingCard
+            ? { newCard: { name: cardName.trim(), last4: last4.trim() || null, kind: cardKind } }
+            : {}),
         }),
       { success: sub ? 'Subscription updated.' : 'Subscription added.' },
     );
@@ -134,13 +165,53 @@ function SubscriptionForm({ sub, onDone }: { sub: Subscription | null; onDone():
           value={accountId}
           onChange={(id) => {
             setAccountId(id);
-            setErrors((x) => ({ ...x, account: undefined }));
+            setErrors((x) => ({ ...x, account: undefined, cardName: undefined, last4: undefined }));
           }}
           filter={NOT_FROZEN}
           keepId={sub?.accountId}
           error={errors.account}
+          newCard
         />
+        {/* A card that does not exist yet: made when the subscription is saved, not before. */}
+        {makingCard && (
+          <>
+            <TextField
+              variant="row"
+              label="Card name"
+              autoComplete="off"
+              value={cardName}
+              error={errors.cardName}
+              onChange={(e) => {
+                setCardName(e.target.value);
+                setErrors((x) => ({ ...x, cardName: undefined }));
+              }}
+            />
+            <TextField
+              variant="row"
+              label="Last 4 digits"
+              inputMode="numeric"
+              autoComplete="off"
+              maxLength={4}
+              value={last4}
+              error={errors.last4}
+              hint={errors.last4 ? undefined : LAST4_HINT}
+              onChange={(e) => {
+                setLast4(e.target.value);
+                setErrors((x) => ({ ...x, last4: undefined }));
+              }}
+            />
+          </>
+        )}
       </div>
+      {makingCard && (
+        <RadioGroup<CardKind>
+          variant="pills"
+          legend="Kind"
+          value={cardKind}
+          options={CARD_KINDS}
+          onChange={setCardKind}
+        />
+      )}
       {sub && (
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
           <Button variant="danger-ghost" size="sm" disabled={busy} onClick={remove}>

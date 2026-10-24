@@ -815,6 +815,143 @@ describe('subscriptions', () => {
   });
 });
 
+describe('a subscription can make its card', () => {
+  const gym = {
+    name: 'Gym',
+    amount: 30_00,
+    cycle: 'monthly' as const,
+    nextRenewal: '2026-11-05',
+    category: 'health' as const,
+    accountId: MAIN,
+  };
+  const visa = { name: 'Visa', last4: '4312', kind: 'debit' as const };
+
+  it('writes the account and the subscription on it, as a new account is made', async () => {
+    const { store, actions } = await setup();
+    const saved = await actions.saveSubscription({ ...gym, newCard: visa });
+    const { account, subscription } = store.getState().data.tables;
+    expect(account).toHaveLength(3);
+    const card = account.find((a) => a.id === saved.accountId)!;
+    // The same rules as `saveAccount`: its kind's look and Available choice, nothing in it, opened
+    // today, last in the carousel.
+    expect(card).toMatchObject({
+      name: 'Visa',
+      kind: 'debit',
+      skin: 'midnight',
+      inAvailable: true,
+      last4: '4312',
+      openingBalance: 0,
+      openingDate: TODAY,
+      order: 2,
+      frozen: false,
+      credit: null,
+    });
+    expect(card.archivedOn).toBeUndefined();
+    expect(subscription).toHaveLength(1);
+    expect(subscription[0]).toMatchObject({ id: saved.id, name: 'Gym', accountId: card.id });
+  });
+
+  it('ignores the account the input names, which is not looked at', async () => {
+    const { store, actions } = await setup();
+    const saved = await actions.saveSubscription({ ...gym, accountId: 'new-card', newCard: visa });
+    const { account } = store.getState().data.tables;
+    expect(saved.accountId).not.toBe('new-card');
+    expect(account.some((a) => a.id === saved.accountId)).toBe(true);
+  });
+
+  it('makes the account and the subscription in one write, or neither', async () => {
+    const { store, actions } = await setup();
+    const putMany = vi.spyOn(store.getState(), 'putMany');
+    await actions.saveSubscription({ ...gym, newCard: visa });
+    expect(putMany).toHaveBeenCalledTimes(1);
+    expect(putMany.mock.calls[0]![0].map((r) => r.table)).toEqual(['account', 'subscription']);
+
+    // A subscription that cannot be saved leaves no card behind.
+    await expect(
+      actions.saveSubscription({ ...gym, amount: 0, newCard: { ...visa, name: 'Mastercard' } }),
+    ).rejects.toThrow();
+    const names = store.getState().data.tables.account.map((a) => a.name);
+    expect(names).toEqual(['Main account', 'Savings', 'Visa']);
+    expect(store.getState().data.tables.subscription).toHaveLength(1);
+  });
+
+  it('places the card after the last, archived ones included, and keeps no last 4 when there is none', async () => {
+    const { store, actions } = await setup();
+    await store.getState().put('account', makeCard({ order: 7, archivedOn: '2026-10-02' }));
+    const saved = await actions.saveSubscription({
+      ...gym,
+      newCard: { ...visa, last4: null },
+    });
+    const card = store.getState().data.tables.account.find((a) => a.id === saved.accountId)!;
+    expect(card).toMatchObject({ order: 8, last4: null });
+  });
+
+  it('a new credit card has no limit and no due day, and never counts in Available', async () => {
+    const { store, actions } = await setup();
+    const saved = await actions.saveSubscription({
+      ...gym,
+      newCard: { name: 'Amex', last4: null, kind: 'credit' },
+    });
+    const card = store.getState().data.tables.account.find((a) => a.id === saved.accountId)!;
+    expect(card).toMatchObject({
+      kind: 'credit',
+      skin: 'violet',
+      inAvailable: false,
+      openingBalance: 0,
+      credit: {
+        limit: null,
+        statementDay: null,
+        dueDay: null,
+        payInFull: false,
+        minimumPayment: 0,
+        interestRate: 0,
+      },
+    });
+    // The subscription is on it, and the card owes nothing until it renews.
+    expect(saved.accountId).toBe(card.id);
+    expect(balanceOf(store.getState().data, card.id)).toBe(0);
+  });
+
+  it('is not stopped by the frozen or archived accounts around it', async () => {
+    const { store, actions } = await setup();
+    await store.getState().putMany([
+      { table: 'account', record: makeCard({ id: 'card-frozen', frozen: true }) },
+      {
+        table: 'account',
+        record: makeCard({ id: 'card-old', order: 3, archivedOn: '2026-10-02' }),
+      },
+    ]);
+    const saved = await actions.saveSubscription({
+      ...gym,
+      accountId: 'card-frozen',
+      newCard: visa,
+    });
+    expect(saved.accountId).not.toBe('card-frozen');
+  });
+
+  it('moves an edited subscription onto the card it makes', async () => {
+    const { store, actions } = await setup();
+    const first = await actions.saveSubscription(gym);
+    const edited = await actions.saveSubscription({
+      ...gym,
+      id: first.id,
+      amount: 35_00,
+      newCard: visa,
+    });
+    const { account, subscription } = store.getState().data.tables;
+    expect(edited.id).toBe(first.id);
+    expect(subscription).toHaveLength(1);
+    expect(subscription[0]).toMatchObject({ amount: 35_00, accountId: account[2]!.id });
+    expect(account[2]).toMatchObject({ name: 'Visa', id: edited.accountId });
+  });
+
+  it('without a card in the input, saves as before', async () => {
+    const { store, actions } = await setup();
+    await actions.saveSubscription(gym);
+    expect(store.getState().data.tables.account).toHaveLength(2);
+  });
+});
+
 describe('changing the currency', () => {
   const quote = (price: number, fxRate: number | null) => ({
     price,

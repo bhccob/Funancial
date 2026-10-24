@@ -275,3 +275,35 @@ test("Home's first-time cards hand the focus on, and Delete all data brings them
   await expect(balance).toBeVisible();
   await expect(subscriptions).toBeVisible();
 });
+
+test('a subscription makes its card right in the form, and the card is on the Cards tab', async ({
+  page,
+}) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Create an account' }).click();
+  await onboard(page);
+  await page.goto('/subscriptions');
+  await page.getByRole('button', { name: 'Add', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Add a subscription' });
+  await dialog.getByLabel('Name', { exact: true }).fill('Netflix');
+  await dialog.getByLabel('Amount').fill('27');
+  const renews = new Date(Date.now() + 7 * 24 * 3600 * 1000).toLocaleDateString('en-CA');
+  await dialog.getByLabel('Next renewal').fill(renews);
+
+  // The card's fields are not there until "+ New card" is picked, and then they are right in the form.
+  await expect(dialog.getByLabel('Card name')).toHaveCount(0);
+  await dialog.getByLabel('Paid with').selectOption({ label: '+ New card' });
+  await dialog.getByLabel('Card name').fill('Visa');
+  await dialog.getByLabel('Last 4 digits').fill('4312');
+  await expect(dialog.getByRole('radio', { name: 'Debit' })).toBeChecked();
+  await dialog.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.getByText('Subscription added.')).toBeVisible();
+  await expect(dialog).toBeHidden();
+  await expect(page.getByRole('listitem').filter({ hasText: 'Netflix' })).toContainText('Visa');
+
+  // The card shows on the Cards tab like any other, with nothing in it.
+  await page.goto('/cards');
+  await expect(
+    page.getByRole('button', { name: /^Visa, debit ending 4312, \$0\.00/ }),
+  ).toBeVisible();
+});

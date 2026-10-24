@@ -65,8 +65,15 @@ export interface SubscriptionInput {
   cycle: Cycle;
   nextRenewal: LocalDate;
   category: Category;
-  /** The account each renewal is paid with. */
+  /** The account each renewal is paid with. Ignored when `newCard` is set. */
   accountId: string;
+  /**
+   * A card to make with the subscription, which is then paid with it: the subscription form's
+   * "+ New card". Made as `saveAccount` makes a new account (its kind's look and Available choice,
+   * nothing in it, opened today, last in the carousel), and written in the same write as the
+   * subscription. A credit card has no limit, statement day or due day yet; Settings asks later.
+   */
+  newCard?: { name: string; last4: string | null; kind: 'debit' | 'credit' };
 }
 /** A new account takes its kind's look and Available choice (`defaultsFor`) where these leave them out. */
 export interface AccountInput {
@@ -113,6 +120,16 @@ export interface OnboardingInput {
   currency: string;
 }
 
+/** A credit card made inside a subscription knows nothing yet of its limit, statement day or due day. */
+const NEW_CARD_TERMS: CreditTerms = {
+  limit: null,
+  statementDay: null,
+  dueDay: null,
+  payInFull: false,
+  minimumPayment: 0,
+  interestRate: 0,
+};
+
 export const FUTURE = 'Use today or an earlier date.';
 /** Deleting an account that pays subscriptions needs another account in use for them. */
 export const PICK_SUBSCRIPTIONS_TARGET = 'Pick where its subscriptions go.';
@@ -140,6 +157,37 @@ export function createFinanceActions(store: StoreApi<AppState>) {
   const notFuture = (d: LocalDate) => {
     if (d > today()) throw new Error(FUTURE);
   };
+  /**
+   * The record `saveAccount` writes for an account: an existing one keeps its id, opening date,
+   * place and look (unless it changes kind, when it takes the new kind's); a new one opens today,
+   * after every other one in the carousel (archived ones included), unfrozen, with its kind's look
+   * and Available choice where the input leaves them out. A credit card never counts toward
+   * Available, whatever the input says. Not written: the caller writes it, alone or with whatever
+   * it was made for.
+   */
+  function accountRecord(input: AccountInput, existing: Account | null): Account {
+    const defaults = defaultsFor(input.kind);
+    const kept = existing?.kind === input.kind ? existing : null;
+    const orders = state().data.tables.account.map((a) => a.order);
+    return {
+      ...(existing ?? {
+        id: newId(),
+        ...stamp(),
+        openingDate: today(),
+        frozen: false,
+        order: Math.max(-1, ...orders) + 1,
+      }),
+      name: input.name,
+      kind: input.kind,
+      skin: input.skin ?? kept?.skin ?? defaults.skin,
+      last4: input.last4,
+      openingBalance: input.openingBalance,
+      inAvailable:
+        input.kind !== 'credit' && (input.inAvailable ?? kept?.inAvailable ?? defaults.inAvailable),
+      credit: input.credit,
+      updatedAt: nowIso(),
+    };
+  }
   /** A transfer between two different accounts, neither of them a credit card. */
   function transferBetween(
     fromAccountId: string,
@@ -297,10 +345,25 @@ export function createFinanceActions(store: StoreApi<AppState>) {
 
     async saveSubscription(input: SubscriptionInput) {
       const existing = input.id ? find('subscription', input.id) : null;
+      const { newCard } = input;
+      // A card made here is a new account, so it is in use and not frozen; it is not in the store
+      // yet, so it is not looked up, and `input.accountId` is not looked at either.
+      const card = newCard
+        ? accountRecord(
+            {
+              name: newCard.name,
+              kind: newCard.kind,
+              last4: newCard.last4,
+              openingBalance: 0,
+              credit: newCard.kind === 'credit' ? { ...NEW_CARD_TERMS } : null,
+            },
+            null,
+          )
+        : null;
       // Only an account the subscription moves to has to be in use and not frozen: one kept on an
       // archived or frozen account, as its history, can still be edited (as `updateExpense` does).
       // Its renewals are not checked at all: a frozen account's subscriptions still renew.
-      if (!existing || input.accountId !== existing.accountId) {
+      if (!card && (!existing || input.accountId !== existing.accountId)) {
         spendingAccount(state().data, input.accountId, today());
       }
       const sub: Subscription = {
@@ -321,10 +384,18 @@ export function createFinanceActions(store: StoreApi<AppState>) {
             ? existing.anchorDay
             : dayOfMonth(input.nextRenewal),
         category: input.category,
-        accountId: input.accountId,
+        accountId: card?.id ?? input.accountId,
         updatedAt: nowIso(),
       };
-      await state().put('subscription', sub);
+      // The card and the subscription on it are one write: neither is kept without the other.
+      if (card) {
+        await state().putMany([
+          { table: 'account', record: card },
+          { table: 'subscription', record: sub },
+        ]);
+      } else {
+        await state().put('subscription', sub);
+      }
       await state().sync();
       return sub;
     },
@@ -432,28 +503,7 @@ export function createFinanceActions(store: StoreApi<AppState>) {
       ) {
         throw new Error(CREDIT_SWITCH);
       }
-      const defaults = defaultsFor(input.kind);
-      const kept = existing?.kind === input.kind ? existing : null;
-      const orders = state().data.tables.account.map((a) => a.order);
-      const account: Account = {
-        ...(existing ?? {
-          id: newId(),
-          ...stamp(),
-          openingDate: today(),
-          frozen: false,
-          order: Math.max(-1, ...orders) + 1,
-        }),
-        name: input.name,
-        kind: input.kind,
-        skin: input.skin ?? kept?.skin ?? defaults.skin,
-        last4: input.last4,
-        openingBalance: input.openingBalance,
-        inAvailable:
-          input.kind !== 'credit' &&
-          (input.inAvailable ?? kept?.inAvailable ?? defaults.inAvailable),
-        credit: input.credit,
-        updatedAt: nowIso(),
-      };
+      const account = accountRecord(input, existing);
       await state().put('account', account);
       return account;
     },

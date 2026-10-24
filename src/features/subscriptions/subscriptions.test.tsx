@@ -1,18 +1,21 @@
-import { fireEvent, screen, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Account, Subscription } from '@/domain/entities';
 import { formatMoney } from '@/domain/money';
 import { emptySnapshot } from '@/domain/snapshot';
+import { ExpenseForm } from '@/features/add/ExpenseForm';
 import { DashboardScreen } from '@/features/dashboard/DashboardScreen';
 import { formatDay, formatMonthShort } from '@/lib/format';
+import { createFinanceActions, type SubscriptionInput } from '@/store/financeActions';
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
-import { localIso, makeAccount, makeSubscription } from '@/test/fixtures';
+import { localIso, makeAccount, makeProfile, makeSubscription } from '@/test/fixtures';
+import { freshRealStore } from '@/test/realStore';
 import { SubscriptionsScreen } from './SubscriptionsScreen';
 
 const actions = vi.hoisted(() => ({
-  saveSubscription: vi.fn(async () => ({})),
+  saveSubscription: vi.fn<(input: SubscriptionInput) => Promise<unknown>>(async () => ({})),
   setSubscriptionStatus: vi.fn(async () => {}),
   setSubscriptionAudit: vi.fn(async () => {}),
   deleteSubscription: vi.fn(async () => {}),
@@ -322,7 +325,12 @@ describe('Paid with in the subscription dialog', () => {
 
   it('lists the accounts in use, a credit card as one, and starts on the default account', async () => {
     const dialog = await openNew();
-    expect(optionsOf(dialog)).toEqual(['Main account', 'Savings', 'Visa (credit card)']);
+    expect(optionsOf(dialog)).toEqual([
+      'Main account',
+      'Savings',
+      'Visa (credit card)',
+      '+ New card',
+    ]);
     expect(within(dialog).getByLabelText('Paid with')).toHaveValue('acct-main');
   });
 
@@ -339,7 +347,12 @@ describe('Paid with in the subscription dialog', () => {
     );
     await userEvent.click(screen.getByRole('button', { name: 'Add' }));
     const dialog = screen.getByRole('dialog', { name: 'Add a subscription' });
-    expect(optionsOf(dialog)).toEqual(['Main account', 'Savings', 'Visa (credit card)']);
+    expect(optionsOf(dialog)).toEqual([
+      'Main account',
+      'Savings',
+      'Visa (credit card)',
+      '+ New card',
+    ]);
   });
 
   it('lists no frozen account, and does not start on one', async () => {
@@ -355,7 +368,7 @@ describe('Paid with in the subscription dialog', () => {
     );
     await userEvent.click(screen.getByRole('button', { name: 'Add' }));
     const dialog = screen.getByRole('dialog', { name: 'Add a subscription' });
-    expect(optionsOf(dialog)).toEqual(['Savings']);
+    expect(optionsOf(dialog)).toEqual(['Savings', '+ New card']);
     expect(within(dialog).getByLabelText('Paid with')).toHaveValue('acct-savings');
   });
 
@@ -374,7 +387,12 @@ describe('Paid with in the subscription dialog', () => {
     await userEvent.click(screen.getByRole('menuitem', { name: 'Edit' }));
     const dialog = screen.getByRole('dialog', { name: 'Edit subscription' });
     expect(within(dialog).getByLabelText('Paid with')).toHaveValue('card-1');
-    expect(optionsOf(dialog)).toEqual(['Main account', 'Savings', 'Visa (credit card)']);
+    expect(optionsOf(dialog)).toEqual([
+      'Main account',
+      'Savings',
+      'Visa (credit card)',
+      '+ New card',
+    ]);
     await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
     expect(actions.saveSubscription).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'sub-cloud', accountId: 'card-1' }),
@@ -417,6 +435,36 @@ describe('Paid with in the subscription dialog', () => {
       'Pick an account.',
     );
     expect(actions.saveSubscription).not.toHaveBeenCalled();
+  });
+
+  it('is the way out when there is no account to pay from: nothing shows as picked until a card is', async () => {
+    const data = monthData();
+    data.tables.account = data.tables.account.map((a) => ({ ...a, frozen: true }));
+    renderWithStore(
+      <MemoryRouter>
+        <SubscriptionsScreen />
+      </MemoryRouter>,
+      createStubStore({ data, today: TODAY }),
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Add' }));
+    const dialog = screen.getByRole('dialog', { name: 'Add a subscription' });
+    await fillIn(dialog);
+    const paidWith = within(dialog).getByLabelText('Paid with');
+    // Not "+ New card" looking chosen when it is not, which picking could not then change.
+    expect(paidWith).toHaveValue('');
+    expect(optionsOf(dialog)).toEqual(['', '+ New card']);
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+    expect(paidWith).toHaveAccessibleDescription('Pick an account.');
+    expect(actions.saveSubscription).not.toHaveBeenCalled();
+
+    await userEvent.selectOptions(paidWith, '+ New card');
+    expect(paidWith).toHaveValue('new-card');
+    expect(paidWith).not.toHaveAccessibleDescription('Pick an account.');
+    await userEvent.type(within(dialog).getByLabelText('Card name'), 'Visa');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+    expect(actions.saveSubscription).toHaveBeenCalledWith(
+      expect.objectContaining({ newCard: { name: 'Visa', last4: null, kind: 'debit' } }),
+    );
   });
 
   it('moves a subscription to the account that was picked when it is edited', async () => {
@@ -601,5 +649,232 @@ describe('the subscription dialog in glass', () => {
     expect(actions.saveSubscription).toHaveBeenCalledWith(
       expect.objectContaining({ name: 'Newsletter', cycle: 'yearly' }),
     );
+  });
+});
+
+describe('a card inside a subscription', () => {
+  afterEach(() => actions.saveSubscription.mockImplementation(async () => ({})));
+
+  /** A real store under the form, and the form's save going through the store's own action. */
+  async function openReal() {
+    const { store } = await freshRealStore();
+    await store.getState().putMany([
+      { table: 'profile', record: makeProfile({ openingDate: '2026-10-01', salary: null }) },
+      { table: 'account', record: { ...MAIN, openingDate: '2026-10-01' } },
+      { table: 'account', record: { ...SAVINGS, openingDate: '2026-10-01' } },
+    ]);
+    actions.saveSubscription.mockImplementation(createFinanceActions(store).saveSubscription);
+    renderWithStore(
+      <MemoryRouter>
+        <SubscriptionsScreen />
+      </MemoryRouter>,
+      store,
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Add' }));
+    const dialog = screen.getByRole('dialog', { name: 'Add a subscription' });
+    await userEvent.type(within(dialog).getByLabelText('Name'), 'Newsletter');
+    await userEvent.type(within(dialog).getByLabelText('Amount'), '5');
+    fireEvent.change(within(dialog).getByLabelText('Next renewal'), {
+      target: { value: '2026-11-02' },
+    });
+    return { store, dialog };
+  }
+
+  const pickNewCard = (dialog: HTMLElement) =>
+    userEvent.selectOptions(within(dialog).getByLabelText('Paid with'), '+ New card');
+  const accountNames = (store: Awaited<ReturnType<typeof openReal>>['store']) =>
+    store.getState().data.tables.account.map((a) => a.name);
+
+  it('keeps its fields away until "+ New card" is picked, then shows them right under Paid with', async () => {
+    const { dialog } = await openReal();
+    expect(within(dialog).queryByLabelText('Card name')).not.toBeInTheDocument();
+    expect(within(dialog).queryByRole('group', { name: 'Kind' })).not.toBeInTheDocument();
+
+    await pickNewCard(dialog);
+    const paidWith = within(dialog).getByLabelText('Paid with');
+    const name = within(dialog).getByLabelText('Card name');
+    const last4 = within(dialog).getByLabelText('Last 4 digits');
+    // Row fields, as the rest of the form's.
+    for (const field of [name, last4]) {
+      expect(field).toHaveClass('text-right', 'h-11');
+      expect(field.closest('.border-b')).toHaveClass('border-black/7', 'dark:border-white/8');
+    }
+    // Kind is two pills, Debit chosen, still radios.
+    const kind = within(dialog).getByRole('group', { name: 'Kind' });
+    expect(
+      within(kind)
+        .getAllByRole('radio')
+        .map((r) => r.closest('label')?.textContent),
+    ).toEqual(['Debit', 'Credit']);
+    expect(within(dialog).getByRole('radio', { name: 'Debit' })).toBeChecked();
+    expect(within(dialog).getByText('Debit')).toHaveClass('bg-primary', 'rounded-full');
+    expect(within(dialog).getByText('Credit')).toHaveClass('glass', 'rounded-full');
+    // In the order: Paid with, the card's two fields, then its Kind, before the buttons.
+    const follows = (a: HTMLElement, b: HTMLElement) =>
+      Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(follows(paidWith, name)).toBe(true);
+    expect(follows(name, last4)).toBe(true);
+    expect(follows(last4, kind)).toBe(true);
+    expect(follows(kind, within(dialog).getByRole('button', { name: 'Save' }))).toBe(true);
+
+    // Going back to an account takes them away again.
+    await userEvent.selectOptions(within(dialog).getByLabelText('Paid with'), 'Savings');
+    expect(within(dialog).queryByLabelText('Card name')).not.toBeInTheDocument();
+    expect(within(dialog).queryByRole('group', { name: 'Kind' })).not.toBeInTheDocument();
+  });
+
+  it('a subscription can make its card', async () => {
+    const { store, dialog } = await openReal();
+    await pickNewCard(dialog);
+    await userEvent.type(within(dialog).getByLabelText('Card name'), '  Visa ');
+    await userEvent.type(within(dialog).getByLabelText('Last 4 digits'), '4312');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(store.getState().data.tables.subscription).toHaveLength(1));
+    expect(actions.saveSubscription).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'Newsletter',
+        newCard: { name: 'Visa', last4: '4312', kind: 'debit' },
+      }),
+    );
+    const { account, subscription } = store.getState().data.tables;
+    const card = account.find((a) => a.name === 'Visa')!;
+    expect(account).toHaveLength(3);
+    expect(card).toMatchObject({ kind: 'debit', last4: '4312', openingBalance: 0, order: 2 });
+    expect(subscription[0]).toMatchObject({ name: 'Newsletter', accountId: card.id });
+  });
+
+  it('a card with no last 4 is made with none', async () => {
+    const { store, dialog } = await openReal();
+    await pickNewCard(dialog);
+    await userEvent.type(within(dialog).getByLabelText('Card name'), 'Wallet');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(store.getState().data.tables.subscription).toHaveLength(1));
+    expect(actions.saveSubscription).toHaveBeenCalledWith(
+      expect.objectContaining({ newCard: { name: 'Wallet', last4: null, kind: 'debit' } }),
+    );
+  });
+
+  it('a new credit card has no limit and no due day', async () => {
+    const { store, dialog } = await openReal();
+    await pickNewCard(dialog);
+    await userEvent.type(within(dialog).getByLabelText('Card name'), 'Amex');
+    await userEvent.click(within(dialog).getByRole('radio', { name: 'Credit' }));
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(store.getState().data.tables.subscription).toHaveLength(1));
+    const card = store.getState().data.tables.account.find((a) => a.name === 'Amex')!;
+    expect(card).toMatchObject({
+      kind: 'credit',
+      skin: 'violet',
+      inAvailable: false,
+      credit: {
+        limit: null,
+        statementDay: null,
+        dueDay: null,
+        payInFull: false,
+        minimumPayment: 0,
+        interestRate: 0,
+      },
+    });
+  });
+
+  it('no card without the subscription', async () => {
+    const { store, dialog } = await openReal();
+    await pickNewCard(dialog);
+    await userEvent.type(within(dialog).getByLabelText('Card name'), 'Visa');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    expect(actions.saveSubscription).not.toHaveBeenCalled();
+    expect(accountNames(store)).toEqual(['Main account', 'Savings']);
+    expect(store.getState().data.tables.subscription).toEqual([]);
+  });
+
+  it('no card either when the picker was changed back to an account before saving', async () => {
+    const { store, dialog } = await openReal();
+    await pickNewCard(dialog);
+    await userEvent.type(within(dialog).getByLabelText('Card name'), 'Visa');
+    await userEvent.selectOptions(within(dialog).getByLabelText('Paid with'), 'Savings');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(store.getState().data.tables.subscription).toHaveLength(1));
+    expect(actions.saveSubscription.mock.calls[0]![0]).not.toHaveProperty('newCard');
+    expect(accountNames(store)).toEqual(['Main account', 'Savings']);
+    expect(store.getState().data.tables.subscription[0]).toMatchObject({
+      accountId: 'acct-savings',
+    });
+  });
+
+  it('the card needs a name', async () => {
+    const { store, dialog } = await openReal();
+    await pickNewCard(dialog);
+    await userEvent.type(within(dialog).getByLabelText('Last 4 digits'), '4312');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+    expect(within(dialog).getByLabelText('Card name')).toHaveAccessibleDescription(
+      'Name the card.',
+    );
+    expect(actions.saveSubscription).not.toHaveBeenCalled();
+    expect(accountNames(store)).toEqual(['Main account', 'Savings']);
+
+    // A name of spaces is no name.
+    await userEvent.type(within(dialog).getByLabelText('Card name'), '   ');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+    expect(actions.saveSubscription).not.toHaveBeenCalled();
+  });
+
+  it('asks for the last 4 digits as the Cards tab does, or none', async () => {
+    const { dialog } = await openReal();
+    await pickNewCard(dialog);
+    await userEvent.type(within(dialog).getByLabelText('Card name'), 'Visa');
+    await userEvent.type(within(dialog).getByLabelText('Last 4 digits'), '43a');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+    expect(within(dialog).getByLabelText('Last 4 digits')).toHaveAccessibleDescription(
+      'Use the last 4 digits.',
+    );
+    expect(actions.saveSubscription).not.toHaveBeenCalled();
+    // Typing again takes the message away.
+    await userEvent.type(within(dialog).getByLabelText('Last 4 digits'), '2');
+    expect(within(dialog).getByLabelText('Last 4 digits')).not.toHaveAccessibleDescription(
+      'Use the last 4 digits.',
+    );
+  });
+
+  it('can be picked when a subscription is edited, and moves it onto the new card', async () => {
+    const { store } = await freshRealStore();
+    await store.getState().putMany([
+      { table: 'profile', record: makeProfile({ openingDate: '2026-10-01', salary: null }) },
+      { table: 'account', record: { ...MAIN, openingDate: '2026-10-01' } },
+      {
+        table: 'subscription',
+        record: makeSubscription({ id: 'sub-tv', name: 'Streamflix', nextRenewal: '2026-10-17' }),
+      },
+    ]);
+    actions.saveSubscription.mockImplementation(createFinanceActions(store).saveSubscription);
+    renderWithStore(
+      <MemoryRouter>
+        <SubscriptionsScreen />
+      </MemoryRouter>,
+      store,
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Actions for Streamflix' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Edit' }));
+    const dialog = screen.getByRole('dialog', { name: 'Edit subscription' });
+    await pickNewCard(dialog);
+    await userEvent.type(within(dialog).getByLabelText('Card name'), 'Visa');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(store.getState().data.tables.account).toHaveLength(2));
+    const { account, subscription } = store.getState().data.tables;
+    expect(subscription).toHaveLength(1);
+    expect(subscription[0]).toMatchObject({ id: 'sub-tv', accountId: account[1]!.id });
+    expect(account[1]).toMatchObject({ name: 'Visa', kind: 'debit' });
+  });
+
+  it('only the subscription form offers + New card', () => {
+    renderWithStore(
+      <ExpenseForm onDone={() => {}} />,
+      createStubStore({ data: monthData(), today: TODAY }),
+    );
+    const options = within(screen.getByLabelText('Paid with'))
+      .getAllByRole('option')
+      .map((o) => o.textContent);
+    expect(options).toEqual(['Main account', 'Savings', 'Visa (credit card)']);
+    expect(screen.queryByRole('option', { name: '+ New card' })).not.toBeInTheDocument();
   });
 });

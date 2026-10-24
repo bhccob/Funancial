@@ -71,6 +71,12 @@ export function useStartAccountId(filter?: (a: Account) => boolean): string {
 }
 
 /**
+ * What a picker with `newCard` picks to say "a card that does not exist yet": not an account's id,
+ * so the form holding it makes the card when it is saved.
+ */
+export const NEW_CARD = 'new-card';
+
+/**
  * Which account a row is paid with or goes to, as a select: in the line style, or `row` in the
  * plain rows of the glass look (the add forms).
  */
@@ -82,6 +88,7 @@ export function AccountField({
   error,
   hint,
   keepId,
+  newCard = false,
   variant = 'line',
 }: {
   label: string;
@@ -92,15 +99,29 @@ export function AccountField({
   hint?: string;
   /** An account to offer still, archived or filtered out: the one a row being edited was already on. */
   keepId?: string | null;
+  /**
+   * Ends the list with "+ New card", which picks `NEW_CARD`. Only for a form that makes the card
+   * itself (the subscription's); every other form picks among the accounts that exist.
+   */
+  newCard?: boolean;
   variant?: RowVariant;
 }) {
   const options = useAccountOptions(filter, keepId);
+  const listed = newCard
+    ? [
+        // Nothing picked and nothing to pick (every account archived or frozen): the select would
+        // otherwise show "+ New card" as if it were chosen, and picking it would change nothing.
+        ...(value === '' ? [{ value: '', label: '' }] : []),
+        ...options,
+        { value: NEW_CARD, label: '+ New card' },
+      ]
+    : options;
   return (
     <Select
       variant={variant}
       label={label}
       value={value}
-      options={options}
+      options={listed}
       onChange={onChange}
       hint={hint}
       error={error}

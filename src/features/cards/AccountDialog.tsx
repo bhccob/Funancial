@@ -10,6 +10,7 @@ import { accountRemoval, defaultsFor } from '@/domain/accounts';
 import { accountBalance } from '@/domain/balances';
 import type { Account, AccountKind } from '@/domain/entities';
 import { AccountField, useStartAccountId } from '@/features/shared/AccountField';
+import { LAST4_HINT, last4Problem } from '@/features/shared/last4';
 import { formatDate } from '@/lib/format';
 import { useAction } from '@/lib/useAction';
 import { useApp } from '@/store/AppStoreProvider';
@@ -83,7 +84,7 @@ function AccountForm({
     const digits = last4.trim();
     const found: Errors = {
       name: name.trim() ? undefined : 'Give it a name.',
-      last4: digits === '' || /^\d{4}$/.test(digits) ? undefined : 'Use the last 4 digits.',
+      last4: last4Problem(digits),
       balance: balance === null || balance < 0 ? 'Enter an amount like 12.50' : undefined,
       rate:
         !isCredit || (Number.isFinite(interest) && interest >= 0)
@@ -156,7 +157,7 @@ function AccountForm({
           maxLength={4}
           value={last4}
           error={errors.last4}
-          hint={errors.last4 ? undefined : 'Optional. Only to tell your cards apart.'}
+          hint={errors.last4 ? undefined : LAST4_HINT}
           onChange={(e) => {
             setLast4(e.target.value);
             setErrors((x) => ({ ...x, last4: undefined }));
