@@ -906,7 +906,7 @@ describe('Home Recent transactions', () => {
     // Written as History writes them (the card by its name and last 4), with the day after History's
     // line, and what is left on the card after the newest row's amount.
     expect(rows.map((r) => r.textContent)).toEqual([
-      `FoodFood · Main account ·· 4312 · Today−${usd(20_00)}${usd(5_680_00)} left`,
+      `FoodFood · Main account ·· 4312 · Today−${usd(20_00)}${usdWhole(5_680_00)} left`,
       `FoodFood · Main account ·· 4312 · Yesterday−${usd(50_00)}`,
       `FoodFood · Main account ·· 4312 · ${formatDay('2026-10-12')}−${usd(20_00)}`,
       `FunFun · Main account ·· 4312 · ${formatDay('2026-10-05')}−${usd(30_00)}`,
@@ -974,8 +974,28 @@ describe('Home Recent transactions name the card', () => {
   it('says what is left on the card on the newest row only', () => {
     renderHome(monthData());
     const rows = within(recent()).getAllByRole('listitem');
-    expect(rows[0]).toHaveTextContent(`${usd(3_680_00)} left`);
+    expect(rows[0]).toHaveTextContent(`${usdWhole(3_680_00)} left`);
     for (const row of rows.slice(1)) expect(row).not.toHaveTextContent(/ left| owed/);
+  });
+
+  it('writes the figure in whole units, as "Afl. 2,605 left" does, so the row keeps its room', () => {
+    const data = monthData();
+    data.tables.expense.push(
+      makeExpense({
+        id: 'cents',
+        note: 'Cents',
+        accountId: 'acct-main',
+        amount: 12_75,
+        date: TODAY,
+        createdAt: `${TODAY}T16:00:00.000Z`,
+      }),
+    );
+    renderHome(data);
+    const figure = rowOf('Cents').querySelector('small')!;
+    // 3,680.00 less 12.75 is 3,667.25, said as 3,667; the amount in the row's own words keeps its cents.
+    expect(figure.textContent).toBe(`${usdWhole(3_667_25)} left`);
+    expect(figure.textContent).not.toBe(`${usd(3_667_25)} left`);
+    expect(rowOf('Cents')).toHaveTextContent(`−${usd(12_75)}`);
   });
 
   it('says what a card owes, or what is left to spend on one, from the same figure as Home', () => {
@@ -992,11 +1012,11 @@ describe('Home Recent transactions name the card', () => {
       );
     // No limit: it owes 230 and now 25 more.
     const { unmount } = renderHome(withNewest(spend));
-    expect(rowOf('Visa spend')).toHaveTextContent(`${usd(255_00)} owed`);
+    expect(rowOf('Visa spend')).toHaveTextContent(`${usdWhole(255_00)} owed`);
     unmount();
     // A 1,000 limit: 1,000 less the 255 owed.
     renderHome(withNewest(spend, 1_000_00));
-    expect(rowOf('Visa spend')).toHaveTextContent(`${usd(745_00)} left`);
+    expect(rowOf('Visa spend')).toHaveTextContent(`${usdWhole(745_00)} left`);
     expect(rowOf('Visa spend')).not.toHaveTextContent('owed');
   });
 
@@ -1095,7 +1115,7 @@ describe('Home Recent transactions name the card', () => {
     expect(newest).toHaveTextContent(`${HIDDEN_AMOUNT} left`);
     expect(newest).not.toHaveTextContent('3,680');
     await userEvent.click(screen.getByRole('button', { name: 'Hide amounts' }));
-    expect(newest).toHaveTextContent(`${usd(3_680_00)} left`);
+    expect(newest).toHaveTextContent(`${usdWhole(3_680_00)} left`);
   });
 
   it('starts hidden when the amounts were hidden before', () => {

@@ -393,6 +393,18 @@ test('mobile: Goals and Debts have Back, which goes to Spending and to Cards whe
   await expect(page).toHaveURL(/\/cards$/);
 });
 
+test("mobile: Back from a page opened first takes its place in the history, so the phone's own Back does not return to it", async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== 'mobile-chromium', 'mobile layout only');
+  await startFresh(page, '/debts');
+  await page.getByRole('button', { name: 'Back' }).click();
+  await expect(page).toHaveURL(/\/cards$/);
+  // /debts is no longer in the history, so the phone's Back goes on past it.
+  await page.goBack();
+  await expect(page).not.toHaveURL(/\/debts$/);
+});
+
 test('mobile: Bills & cards, History and Income have Back, which goes to Cards, Profile and History when they were the first page', async ({
   page,
 }, testInfo) => {

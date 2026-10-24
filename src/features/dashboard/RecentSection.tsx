@@ -15,7 +15,8 @@ import { useMoney, useToday } from '@/store/useFinance';
  * with the day after the line under the title; View all opens History. An expense opens the edit
  * form History opens, and every other row offers History's delete, asked about the same way
  * (`useEntryActions`). The newest row also says what is left on the card it moved money on, when it
- * did move money: the same figure Home leads with for that account ("$2,605.25 left", or "owed").
+ * did move money: the figure Home leads with for that account, in whole units ("$2,605 left", or
+ * "owed"), so the row's words keep their room.
  */
 export function RecentSection({ entries }: { entries: Entry[] }) {
   const money = useMoney();
@@ -35,7 +36,7 @@ export function RecentSection({ entries }: { entries: Entry[] }) {
       account,
       balance: accountBalance(account, data, today),
     });
-    return `${money(amount)} ${label === 'Owed' ? 'owed' : 'left'}`;
+    return `${money(amount, { whole: true })} ${label === 'Owed' ? 'owed' : 'left'}`;
   }
 
   return (

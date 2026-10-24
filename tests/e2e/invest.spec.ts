@@ -281,6 +281,42 @@ test('mobile: the pie labels fit a 360px screen: none clipped, none over another
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(360);
 });
 
+test('a ticker on a pie badge is centred on its disc, and a squeezed one is not cut at either end', async ({
+  page,
+}) => {
+  // No logo comes, so each badge holds its ticker: KO is narrow, VWRL and ASML are squeezed to fit.
+  await page.route('**/api/**', (route) =>
+    route.fulfill({ status: 502, json: { error: 'upstream' } }),
+  );
+  await startDemo(page);
+  await page.goto('/invest');
+  const discs = page
+    .getByRole('group', { name: 'All holdings' })
+    .locator('[data-label] [data-logo]');
+  await expect(discs).toHaveCount(4);
+  await expect(discs.locator(':scope > span')).toHaveCount(4);
+  await page.evaluate(() => document.fonts.ready);
+  const sets = await discs.evaluateAll((els) =>
+    els.map((el) => {
+      const disc = el.getBoundingClientRect();
+      const text = el.querySelector(':scope > span')!.getBoundingClientRect();
+      return {
+        symbol: (el as HTMLElement).dataset.logo,
+        offset: text.left + text.width / 2 - (disc.left + disc.width / 2),
+        room: Math.min(text.left - disc.left, disc.right - text.right),
+      };
+    }),
+  );
+  for (const { symbol, offset, room } of sets) {
+    // Level with the middle of the disc (it was up to 2.4px to the right of it), and inside the disc.
+    expect(
+      Math.abs(offset),
+      `${symbol}: how far its middle is from the disc's`,
+    ).toBeLessThanOrEqual(0.5);
+    expect(room, `${symbol}: room between its ends and the disc's edge`).toBeGreaterThanOrEqual(1);
+  }
+});
+
 test("the pie's centre amount fits the hole when a holding is worth $10,000 or more", async ({
   page,
 }) => {
@@ -317,8 +353,8 @@ test('a slice takes its company colour from the logo once it has loaded, and not
     .locator('svg')
     .first()
     .locator('circle');
-  await expect(arcs.nth(1)).toHaveAttribute('stroke', '#0f3e99');
-  await expect(arcs.nth(2)).not.toHaveAttribute('stroke', '#0f3e99');
+  await expect(arcs.nth(0)).toHaveAttribute('stroke', '#0f3e99');
+  await expect(arcs.nth(1)).not.toHaveAttribute('stroke', '#0f3e99');
   // The badge's ring on the pie is the slice colour as well.
   await expect(
     page.getByRole('group', { name: 'All holdings' }).locator('[data-label] [data-logo]').first(),

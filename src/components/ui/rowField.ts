@@ -16,9 +16,20 @@ export type RowVariant = FieldVariant | 'row';
  */
 export const ROW_LINE = 'border-b border-black/7 dark:border-white/8';
 
-/** A row with an error has the hairline in danger, in both modes. */
+/**
+ * The row that closes a `ROWS` list (a parent with `divide-y`) has no hairline of its own: the list
+ * draws the lines between its rows and none after the last, so this row's own bottom border would be
+ * a line no other list has. A form's rows stand in a plain `div`, not under `divide-y`, so the last
+ * field there keeps its line, which is the one that closes the form.
+ */
+const CLOSING_ROW = '[.divide-y>&:last-child]:border-b-0';
+
+/**
+ * The hairline of a row: `ROW_LINE`, left to the list when the row closes a `ROWS` list. A row with an
+ * error has the hairline in danger, in both modes, and keeps it wherever it stands.
+ */
 export const rowLine = (error: boolean) =>
-  error ? 'border-b border-danger dark:border-danger' : ROW_LINE;
+  error ? 'border-b border-danger dark:border-danger' : `${ROW_LINE} ${CLOSING_ROW}`;
 
 /** The label and the control side by side. */
 export const ROW_LAYOUT = 'flex min-h-[46px] items-center gap-3';

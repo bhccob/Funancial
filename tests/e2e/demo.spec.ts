@@ -80,3 +80,66 @@ test('Home shows the card picked on the Cards tab, and Show on Home picks it for
     'true',
   );
 });
+
+// The room Home's Recent rows leave their words, at the two phone widths in use: with a long card name
+// and its last 4 digits, the line under a title needs two lines, and no more, to say all of it.
+for (const [width, room] of [
+  [360, 150],
+  [375, 165],
+] as const) {
+  test(`mobile: at ${width}px Home's Recent rows say the card's name and last 4 in two lines, uncut`, async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== 'mobile-chromium', 'mobile layout only');
+    await page.setViewportSize({ width, height: 780 });
+    await startDemo(page);
+    // Main account is the card the demo's rows are on: a long name and its last 4 digits.
+    await page.goto('/cards');
+    await page
+      .getByRole('group', { name: 'Card actions' })
+      .getByRole('button', { name: 'Settings' })
+      .click();
+    const dialog = page.getByRole('dialog');
+    await dialog.getByLabel('Name').fill('Everyday checking');
+    await dialog.getByLabel('Last 4 digits').fill('4312');
+    await dialog.getByRole('button', { name: /^Save/ }).click();
+    await expect(dialog).toBeHidden();
+
+    await page.goto('/');
+    const rows = page
+      .getByRole('region', { name: 'Recent transactions' })
+      .locator('li[data-entry]');
+    await expect(rows).toHaveCount(5);
+    await expect(rows.filter({ hasText: 'Everyday checking ·· 4312' }).first()).toBeVisible();
+    const measured = await rows.evaluateAll((els) =>
+      els.map((li) => {
+        const words = li.querySelector('b')!.closest('span.min-w-0.flex-1')!;
+        const line = words.querySelector<HTMLElement>('.line-clamp-2')!;
+        const button = li.querySelector('button')!;
+        return {
+          title: li.querySelector('b')!.textContent,
+          words: words.getBoundingClientRect().width,
+          // The line under the title is whole when what it holds fits what it shows.
+          cut: line.scrollHeight > line.clientHeight + 1,
+          lines: Math.round(
+            line.getBoundingClientRect().height / parseFloat(getComputedStyle(line).lineHeight),
+          ),
+          row: li.getBoundingClientRect().height,
+          // The chevron is the last thing in the row's button: a sign, not a target.
+          chevron: button.lastElementChild!.getBoundingClientRect().width,
+          scrolls: document.documentElement.scrollWidth,
+        };
+      }),
+    );
+    for (const row of measured) {
+      expect(row.words, `${row.title}: the room for its words`).toBeGreaterThanOrEqual(room);
+      expect(row.cut, `${row.title}: its second line is cut`).toBe(false);
+      expect(row.lines, `${row.title}: lines`).toBeLessThanOrEqual(2);
+      expect(row.row, `${row.title}: the row is a tap target tall`).toBeGreaterThanOrEqual(44);
+      expect(row.chevron, `${row.title}: the chevron's box`).toBe(16);
+      expect(row.scrolls, 'the page does not scroll sideways').toBeLessThanOrEqual(width);
+    }
+    // The newest row says what is left on its card in whole units, with no cents.
+    await expect(rows.first().locator('small')).toHaveText(/^\D*[\d,]+ (left|owed)$/);
+  });
+}

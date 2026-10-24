@@ -101,9 +101,9 @@ function renderTab(data: DataSnapshot, path = '/invest') {
 const pie = (name = 'All holdings') => screen.getByRole('group', { name });
 /** The arcs' colours, in slice order. */
 const arcs = (name?: string) =>
-  [...pie(name).querySelector('svg')!.querySelectorAll('circle')]
-    .slice(1)
-    .map((c) => c.getAttribute('stroke'));
+  [...pie(name).querySelector('svg')!.querySelectorAll('circle')].map((c) =>
+    c.getAttribute('stroke'),
+  );
 /** The badge of each pie label: its picture once the logo is in, else the ticker. */
 const badges = (name?: string) =>
   [...pie(name).querySelectorAll<HTMLElement>('[data-label]')].map(

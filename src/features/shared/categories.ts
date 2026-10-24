@@ -29,3 +29,12 @@ export const CATEGORY_ICONS: Record<Category, LucideIcon> = {
   shopping: ShoppingBag,
   other: Ellipsis,
 };
+
+/**
+ * The categories as pills, each with the icon it has in a list row: what the expense form and the
+ * Pay sheet choose a category with (`RadioGroup variant="pills"`).
+ */
+export const CATEGORY_PILLS = CATEGORY_OPTIONS.map((o) => ({
+  ...o,
+  icon: CATEGORY_ICONS[o.value],
+}));

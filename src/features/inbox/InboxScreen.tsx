@@ -44,6 +44,7 @@ export function InboxScreen() {
         value={show}
         options={tabs}
         onChange={setShow}
+        tone="glass"
         className="mt-3"
       />
 

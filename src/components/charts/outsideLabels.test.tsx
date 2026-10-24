@@ -312,7 +312,7 @@ describe('Donut outside labels', () => {
   it('colours the arcs from `colors` when given, and from the chart series when not', () => {
     const colors = ['#0f3e99', '#c8102e', '#22c55e', '#ec4899'];
     const arcs = (el: HTMLElement) =>
-      [...el.querySelectorAll('svg > circle')].slice(1).map((c) => c.getAttribute('stroke'));
+      [...el.querySelectorAll('svg > circle')].map((c) => c.getAttribute('stroke'));
     const given = donut(FOUR, { colors });
     expect(arcs(given.container)).toEqual(colors);
     given.unmount();

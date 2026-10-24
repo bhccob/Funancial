@@ -1,7 +1,14 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState, type ComponentType } from 'react';
-import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
+import {
+  createMemoryRouter,
+  MemoryRouter,
+  Route,
+  RouterProvider,
+  Routes,
+  useLocation,
+} from 'react-router';
 import { describe, expect, it, vi } from 'vitest';
 import { Banner } from './Banner';
 import { Button, ButtonLink } from './Button';
@@ -526,6 +533,57 @@ describe('PageHeader back button', () => {
     expect(screen.getByTestId('where')).toHaveTextContent('/settings');
     await userEvent.click(screen.getByRole('button', { name: 'Back' }));
     expect(screen.getByTestId('where')).toHaveTextContent(/^\/$/);
+  });
+});
+
+describe('PageHeader back button with no history', () => {
+  function pages(backTo?: string) {
+    return createMemoryRouter(
+      [
+        { path: '/', element: <p>Home page</p> },
+        { path: '/help', element: <p>Help index</p> },
+        {
+          path: '/settings',
+          element: (
+            <PageHeader title="Settings" back backTo={backTo}>
+              Preferences
+            </PageHeader>
+          ),
+        },
+      ],
+      { initialEntries: ['/settings'] },
+    );
+  }
+
+  it.each([
+    ['Home', undefined, '/'],
+    ['the place it names', '/help', '/help'],
+  ])(
+    'replaces the screen with %s, so the phone Back does not return to it',
+    async (_, backTo, path) => {
+      const router = pages(backTo);
+      render(<RouterProvider router={router} />);
+      await userEvent.click(screen.getByRole('button', { name: 'Back' }));
+      expect(router.state.location.pathname).toBe(path);
+      // A replace, not a push: there is no entry left behind it for a Back to land on.
+      expect(router.state.historyAction).toBe('REPLACE');
+      await act(() => router.navigate(-1));
+      expect(router.state.location.pathname).toBe(path);
+    },
+  );
+
+  it('still pushes nothing and replaces nothing when it goes back in history', async () => {
+    const router = createMemoryRouter(
+      [
+        { path: '/profile', element: <p>Profile page</p> },
+        { path: '/settings', element: <PageHeader title="Settings" back /> },
+      ],
+      { initialEntries: ['/profile', '/settings'], initialIndex: 1 },
+    );
+    render(<RouterProvider router={router} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Back' }));
+    expect(router.state.location.pathname).toBe('/profile');
+    expect(router.state.historyAction).toBe('POP');
   });
 });
 

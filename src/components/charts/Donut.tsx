@@ -154,14 +154,18 @@ export function Donut({
         focusable="false"
         className="-rotate-90 overflow-visible"
       >
-        <circle
-          cx={centre}
-          cy={centre}
-          r={r}
-          fill="none"
-          stroke="var(--color-track)"
-          strokeWidth={thickness}
-        />
+        {drawn.length === 0 && (
+          // The track is only for a donut with nothing in it: under slices, the `GAP` between arcs
+          // would show it as grey slivers, and a dimmed slice would blend with it.
+          <circle
+            cx={centre}
+            cy={centre}
+            r={r}
+            fill="none"
+            stroke="var(--color-track)"
+            strokeWidth={thickness}
+          />
+        )}
         {focusedArc && (
           // The arcs are tapped with a finger; the hidden buttons below are what a keyboard reaches.
           <circle

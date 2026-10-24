@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { createMemoryRouter, MemoryRouter, RouterProvider } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Toaster } from '@/components/ui/Toaster';
+import { CATEGORY_OPTIONS } from '@/features/shared/categories';
 import { accountBalance } from '@/domain/balances';
 import type { Account, CreditTerms } from '@/domain/entities';
 import { formatMoney } from '@/domain/money';
@@ -203,6 +204,15 @@ const card = (name: string) =>
 const action = (name: string) =>
   within(screen.getByRole('group', { name: 'Card actions' })).getByRole('button', { name });
 const toasted = (text: string) => waitFor(() => expect(screen.getByText(text)).toBeInTheDocument());
+/**
+ * The toasts on screen: the statuses with a Dismiss button. Pay's done step is a status too (it says the
+ * category), so a limit's toast is told from it by that button.
+ */
+const toastTexts = () =>
+  screen
+    .getAllByRole('status')
+    .filter((s) => within(s).queryByRole('button', { name: 'Dismiss' }))
+    .map((s) => s.textContent ?? '');
 
 describe('the block', () => {
   it('is titled Cards, with a ＋ that adds a debit, credit, savings or cash account', async () => {
@@ -387,7 +397,7 @@ describe('Pay', () => {
     await userEvent.click(pay.getByRole('radio', { name: 'Transport' }));
     await userEvent.type(pay.getByLabelText('Note'), 'Bus');
     await userEvent.click(pay.getByRole('button', { name: 'Pay' }));
-    expect(await pay.findByText(`Paid ${usd(12_50)}`)).toHaveAttribute('role', 'status');
+    expect((await pay.findByText(`Paid ${usd(12_50)}`)).closest('[role="status"]')).not.toBeNull();
     await waitFor(() =>
       expect(card('Main account')).toHaveAttribute(
         'aria-label',
@@ -406,6 +416,36 @@ describe('Pay', () => {
     ]);
     await userEvent.click(pay.getByRole('button', { name: 'Done' }));
     expect(screen.queryByRole('dialog', { name: 'Pay with Main account' })).toBeNull();
+  });
+
+  it('is the Add expense sheet in glass: a hero amount, category pills with icons, and a Note row', async () => {
+    await renderReal();
+    await userEvent.click(action('Pay'));
+    const pay = within(sheet('Main account'));
+    // The amount is the 40px hero, with the focus on open, and the accessible names are as before.
+    expect(pay.getByLabelText('Amount')).toHaveClass('text-[40px]', 'font-bold');
+    expect(pay.getByLabelText('Amount')).toHaveFocus();
+    // Category: all eight as pills (not the grey well), the chosen one solid, each with an icon.
+    const category = pay.getByRole('group', { name: 'Category' });
+    expect(
+      within(category)
+        .getAllByRole('radio')
+        .map((r) => r.closest('label')?.textContent),
+    ).toEqual(CATEGORY_OPTIONS.map((o) => o.label));
+    expect(category.querySelector('.bg-surface-2')).toBeNull();
+    expect(pay.getByText('Food')).toHaveClass('bg-primary', 'text-primary-contrast', 'h-8');
+    expect(pay.getByText('Transport')).toHaveClass('glass', 'h-8', 'rounded-full');
+    for (const radio of within(category).getAllByRole('radio')) {
+      expect(radio.closest('label')!.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
+    }
+    await userEvent.click(pay.getByRole('radio', { name: 'Transport' }));
+    expect(pay.getByText('Transport')).toHaveClass('bg-primary');
+    // Note: the plain row, a label on the left and the value on the right, with its hairline.
+    const note = pay.getByLabelText('Note');
+    expect(note).toHaveClass('text-right', 'h-11');
+    expect(note).not.toHaveClass('rounded-md', 'border', 'border-b');
+    expect(note.closest('.border-b')).toHaveClass('border-black/7', 'dark:border-white/8');
+    expect(pay.getByRole('button', { name: 'Pay' })).toBeEnabled();
   });
 
   it('says Paying… while it pays', async () => {
@@ -465,7 +505,7 @@ describe('Pay', () => {
     await userEvent.click(within(ask).getByRole('button', { name: 'Pay anyway' }));
     await pay.findByText(`Paid ${usd(12_50)}`);
     expect(store.getState().data.tables.expense).toHaveLength(1);
-    expect(screen.getAllByRole('status').some((s) => /Food/.test(s.textContent ?? ''))).toBe(true);
+    expect(toastTexts().some((text) => /Food/.test(text))).toBe(true);
   });
 
   it('pays nothing when the limit question is cancelled', async () => {
@@ -501,11 +541,7 @@ describe('Pay', () => {
     await userEvent.click(pay.getByRole('button', { name: 'Pay' }));
     await pay.findByText(`Paid ${usd(12_50)}`);
     expect(screen.queryByRole('dialog', { name: 'Over your limit?' })).toBeNull();
-    await waitFor(() =>
-      expect(screen.getAllByRole('status').some((s) => /Food/.test(s.textContent ?? ''))).toBe(
-        true,
-      ),
-    );
+    await waitFor(() => expect(toastTexts().some((text) => /Food/.test(text))).toBe(true));
   });
 });
 
@@ -533,7 +569,16 @@ describe('the done step of Pay', () => {
     });
     const pay = await payToTheEnd('Main account', '12.50');
     const paid = await pay.findByText(`Paid ${usd(12_50)}`);
-    expect(paid).toHaveAttribute('role', 'status');
+    // One status region holds the check and all three lines, so a screen reader hears which card
+    // paid; Done is outside it.
+    const status = pay.getByRole('status');
+    expect(status).toContainElement(paid);
+    expect(status).toHaveTextContent(
+      `Paid ${usd(12_50)}Bus · TransportPaid with Main account ·· 4312`,
+    );
+    expect(status.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
+    expect(within(status).queryByRole('button')).toBeNull();
+    expect(pay.getAllByRole('status')).toHaveLength(1);
     expect(pay.getByText('Bus · Transport')).toBeInTheDocument();
     expect(pay.getByText('Paid with Main account ·· 4312')).toBeInTheDocument();
     expect(pay.getByRole('button', { name: 'Done' })).toBeInTheDocument();
@@ -573,7 +618,7 @@ describe('the done step of Pay', () => {
     useAmountsHidden.setState({ hidden: true });
     await renderReal();
     const pay = await payToTheEnd('Main account', '12.50');
-    expect(await pay.findByText('Paid ••••')).toHaveAttribute('role', 'status');
+    expect((await pay.findByText('Paid ••••')).closest('[role="status"]')).not.toBeNull();
     expect(sheet('Main account').textContent).not.toMatch(/12[.,]50/);
   });
 
@@ -1150,6 +1195,41 @@ describe('View card', () => {
     ).toEqual(['Netflix']);
     await userEvent.click(main.getByRole('button', { name: 'Correct the balance' }));
     expect(screen.getByRole('dialog', { name: /balance/i })).toBeInTheDocument();
+  });
+
+  it('draws its latest entries as the very rows of On this card, one tap away, and only to look at', async () => {
+    const data = baseData();
+    data.tables.expense.push(
+      makeExpense({ amount: 7_00, note: 'Coffee 7', accountId: MAIN, date: TODAY }),
+      makeExpense({ amount: 9_00, note: 'Lunch', accountId: MAIN, date: '2026-10-09' }),
+    );
+    data.tables.transaction.push(
+      makeTransaction({
+        amount: 200_00,
+        fromAccountId: MAIN,
+        toAccountId: SAVINGS,
+        date: '2026-10-09',
+        note: 'Top up',
+      }),
+    );
+    renderCards(data);
+    const onCard = within(screen.getByRole('region', { name: 'On this card' }));
+    await userEvent.click(action('View card'));
+    const latest = within(
+      within(sheet('Main account')).getByRole('list', { name: 'Latest entries' }),
+    );
+    // The same row, markup and all: the icon in its glass chip, the day by name, the amount in danger.
+    for (const title of ['Coffee 7', 'Lunch', 'To Savings']) {
+      const here = latest.getByText(title, { selector: 'b' }).closest('li')!;
+      const there = onCard.getByText(title, { selector: 'b' }).closest('li')!;
+      expect(here.outerHTML, title).toBe(there.outerHTML);
+      expect(here.querySelector('.glass svg'), `${title}: its icon`).toBeInTheDocument();
+    }
+    expect(latest.getByText('Coffee 7', { selector: 'b' }).closest('li')).toHaveTextContent(
+      `Coffee 7Food · Today−${usd(7_00)}`,
+    );
+    // They are only to look at, as On this card's are.
+    expect(latest.queryAllByRole('button')).toHaveLength(0);
   });
 
   it('writes a bank account’s facts as plain rows, as a credit card’s are', async () => {

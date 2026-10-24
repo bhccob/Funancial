@@ -70,10 +70,11 @@ export interface EntryRowProps {
 }
 
 /**
- * One entry as a plain row (under `ROWS`): its words and its amount, then a 44px place for what
- * can be done with it. With `onOpen` the whole row is the button that does it and the place holds a
- * chevron; with `onDelete` the place holds a delete button. The row knows nothing of what opening
- * or deleting does: that is the caller's (`useEntryActions`, for History and Home's Recent).
+ * One entry as a plain row (under `ROWS`): its words and its amount, then a place for what can be
+ * done with it. With `onOpen` the whole row is the button that does it and the place holds a 16px
+ * chevron, a sign and not a target; with `onDelete` the place holds a 44px delete button. The row
+ * knows nothing of what opening or deleting does: that is the caller's (`useEntryActions`, for
+ * History and Home's Recent).
  */
 export function EntryRow({
   line,
@@ -105,11 +106,10 @@ export function EntryRow({
           {chip}
           <EntryText line={line} day={day} />
           <Amount line={line} danger={danger} left={left} />
-          <span
-            aria-hidden="true"
-            className="text-muted -mr-2 grid size-11 shrink-0 place-items-center"
-          >
-            <ChevronRight className="size-[18px]" />
+          {/* Only a sign that the row opens (the whole row is the tap target), so it is 16px wide:
+              the words and the amount keep the room a 44px box would take. */}
+          <span aria-hidden="true" className="text-muted grid h-11 w-4 shrink-0 place-items-center">
+            <ChevronRight className="size-4" />
           </span>
         </button>
       </li>

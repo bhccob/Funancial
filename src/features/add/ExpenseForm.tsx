@@ -14,13 +14,10 @@ import { useApp } from '@/store/AppStoreProvider';
 import type { ExpenseInput } from '@/store/financeActions';
 import { useLastSpend } from '@/store/useLastSpend';
 import { useCurrency, useFinanceActions, useToday } from '@/store/useFinance';
-import { CATEGORY_ICONS, CATEGORY_OPTIONS } from '@/features/shared/categories';
+import { CATEGORY_PILLS } from '@/features/shared/categories';
 import { AccountField, NOT_FROZEN, useStartAccountId } from '@/features/shared/AccountField';
 import { DateField } from './DateField';
 import { pastDateProblem } from './pastDate';
-
-/** The categories as pills: each with the icon it has in a list row. */
-const CATEGORY_PILLS = CATEGORY_OPTIONS.map((o) => ({ ...o, icon: CATEGORY_ICONS[o.value] }));
 
 const REPEAT_OPTIONS = [
   { value: 'none', label: "Doesn't repeat" },

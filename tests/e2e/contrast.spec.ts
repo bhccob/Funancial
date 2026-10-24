@@ -279,7 +279,7 @@ async function settle(page: Page) {
  * ratio. With a `look`, the theme and mode are proved on the page first; the welcome screen, which
  * wears no game theme (the app takes it off while locked), passes none. `settled: false` scans
  * without waiting for the page to hold still, for a state that goes away by itself within seconds
- * (the "just now" badge); the caller then holds that state still.
+ * (the "just now" badge); the caller then holds that state still, and for as long as the scan takes.
  */
 async function expectReadable(page: Page, where: string, look: Look | null, settled = true) {
   if (look) await expectWorn(page, look);
@@ -423,6 +423,15 @@ for (const theme of GAME_THEMES) {
       });
 
       test('the "just now" badge a card wears after a payment', async ({ page }) => {
+        // The badge leaves its card four seconds after it comes, and an axe scan of the whole page can
+        // take longer than that on a busy machine. So the app's own four-second timer (the badge's) is
+        // given a minute here, before the page loads; the badge is held at the middle of its animation
+        // as well, and the scan is the one every screen gets, with nothing let off.
+        await page.addInitScript(() => {
+          const set = window.setTimeout.bind(window);
+          window.setTimeout = ((handler: TimerHandler, timeout?: number, ...args: unknown[]) =>
+            set(handler, timeout === 4000 ? 60_000 : timeout, ...args)) as typeof window.setTimeout;
+        });
         await visit(page, '/cards');
         await page
           .getByRole('group', { name: 'Card actions' })
@@ -432,10 +441,12 @@ for (const theme of GAME_THEMES) {
         await sheet.getByLabel('Amount').fill('12.50');
         await sheet.getByRole('button', { name: 'Pay', exact: true }).click();
         await sheet.getByRole('button', { name: 'Done' }).click();
-        // The badge shows for four seconds and then leaves the page, so the scan is quick, and the
-        // badge is held at the middle of its animation, fully drawn, which is where it spends its time.
+        // The sheet is gone before the badge is held and scanned: the badge comes as it closes, and a
+        // sheet still fading would be in the scan, over the card, with it.
+        await expect(sheet).toBeHidden();
         const badge = page.getByText('−$12.50 just now');
         await expect(badge).toBeVisible();
+        // Held at the middle of its animation, fully drawn, which is where it spends its time.
         await badge.evaluate((el) => {
           for (const animation of el.getAnimations()) {
             animation.pause();

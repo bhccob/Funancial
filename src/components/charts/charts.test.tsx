@@ -65,7 +65,7 @@ describe('Donut', () => {
 
   it('draws one arc per slice and colours them by the slice order, Other last', () => {
     const { container } = donut();
-    const arcs = [...container.querySelectorAll('circle')].slice(1);
+    const arcs = [...container.querySelectorAll('circle')];
     expect(arcs.map((c) => c.getAttribute('stroke'))).toEqual([
       'var(--color-chart-1)',
       'var(--color-chart-2)',
@@ -77,7 +77,7 @@ describe('Donut', () => {
     const { container } = donut();
     const r = (150 - 18) / 2;
     const circumference = 2 * Math.PI * r;
-    const [rent, food] = [...container.querySelectorAll('circle')].slice(1);
+    const [rent, food] = [...container.querySelectorAll('circle')];
     const [dash, rest] = rent!.getAttribute('stroke-dasharray')!.split(' ').map(Number);
     expect(dash).toBeCloseTo((120000 / 187500) * circumference - 3, 5);
     // The pattern is one dash and a gap longer than the ring, so the dash never repeats.
@@ -92,7 +92,7 @@ describe('Donut', () => {
 
   it('selects an arc on tap as well', async () => {
     const { container, onSelect } = donut();
-    await userEvent.click([...container.querySelectorAll('circle')][2]!);
+    await userEvent.click([...container.querySelectorAll('circle')][1]!);
     expect(onSelect).toHaveBeenCalledWith(1);
   });
 
@@ -133,7 +133,7 @@ describe('Donut', () => {
     expect(screen.getByText('$500.00')).toBeInTheDocument();
     expect(screen.getByText('Food · 27%')).toBeInTheDocument();
     expect(screen.queryByText('$1,875')).not.toBeInTheDocument();
-    const arcs = [...container.querySelectorAll('circle')].slice(1);
+    const arcs = [...container.querySelectorAll('circle')];
     expect(arcs.map((c) => c.style.opacity)).toEqual(['0.25', '1', '0.25']);
     expect(screen.getByRole('button', { name: 'Food, $500.00, 27%' })).toHaveAttribute(
       'aria-pressed',
@@ -147,9 +147,20 @@ describe('Donut', () => {
     expect(onSelect).toHaveBeenCalledWith(null);
   });
 
+  it('draws no track under slices, so the gap between arcs shows the page and a dimmed slice is not blended with grey', () => {
+    for (const selected of [null, 1]) {
+      const { container, unmount } = donut({ selected });
+      const circles = [...container.querySelectorAll('circle')];
+      expect(circles, `selected ${selected}`).toHaveLength(SLICES.length);
+      expect(circles.map((c) => c.getAttribute('stroke'))).not.toContain('var(--color-track)');
+      unmount();
+    }
+  });
+
   it('shows the idle centre, and a track only, when there are no slices', () => {
     const { container } = donut({ slices: [] });
     expect(container.querySelectorAll('circle')).toHaveLength(1);
+    expect(container.querySelector('circle')).toHaveAttribute('stroke', 'var(--color-track)');
     expect(screen.getByText('$1,875')).toBeInTheDocument();
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
   });
@@ -157,6 +168,7 @@ describe('Donut', () => {
   it('draws the track only, without NaN, when every slice is zero', () => {
     const { container } = donut({ slices: [{ key: 'food', label: 'Food', amount: 0 }] });
     expect(container.querySelectorAll('circle')).toHaveLength(1);
+    expect(container.querySelector('circle')).toHaveAttribute('stroke', 'var(--color-track)');
     expect(container.innerHTML).not.toContain('NaN');
   });
 });

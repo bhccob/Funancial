@@ -172,7 +172,9 @@ describe('the Inbox in glass', () => {
   it('shows New and All as the pressed pair of a segmented control', () => {
     renderInbox();
     const group = screen.getByRole('group', { name: 'Show' });
-    expect(group).toHaveClass('rounded-full', 'bg-surface-2');
+    // On the page's glass, as Cards' and Invest's controls are, not the one grey well on the page.
+    expect(group).toHaveClass('rounded-full', 'glass');
+    expect(group).not.toHaveClass('bg-surface-2');
     const buttons = within(group).getAllByRole('button');
     expect(buttons.map((b) => b.textContent)).toEqual(['New (7)', 'All']);
     // Not underline tabs.

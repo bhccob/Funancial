@@ -19,7 +19,8 @@ export interface PageHeaderProps {
 /**
  * The round glass button before a title: back in history, or `to` (Home unless the header names
  * another place) when the app has none (a link opened first thing, or a reload: the router calls that
- * first entry `default`). Only a header that asks for it renders this, so the others need no router.
+ * first entry `default`), which takes the screen's place in the history and does not add to it. Only
+ * a header that asks for it renders this, so the others need no router.
  */
 function BackButton({ to = '/' }: { to?: string }) {
   const navigate = useNavigate();
@@ -28,7 +29,9 @@ function BackButton({ to = '/' }: { to?: string }) {
     <button
       type="button"
       aria-label="Back"
-      onClick={() => void (key === 'default' ? navigate(to) : navigate(-1))}
+      // With no history the fallback `replace`s the screen: a push would leave it behind Home, and the
+      // phone's own Back would return to the screen that was just left.
+      onClick={() => void (key === 'default' ? navigate(to, { replace: true }) : navigate(-1))}
       className="glass press text-text grid size-11 shrink-0 place-items-center rounded-full"
     >
       <ChevronLeft aria-hidden="true" className="size-5" />

@@ -177,6 +177,24 @@ describe('CompanyLogo as a badge', () => {
     measure.mockRestore();
   });
 
+  it('centres a squeezed ticker on its disc: one column as wide as the disc, scaled about its middle', () => {
+    load.mockReturnValue(new Promise(() => {}));
+    const measure = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect');
+    measure.mockReturnValue({ width: 23.6 } as DOMRect);
+    const { container } = render(badge({ symbol: 'VWRL' }));
+    const disc = container.querySelector<HTMLElement>('[data-logo]')!;
+    const text = container.querySelector<HTMLElement>('[data-logo] > span')!;
+    // An automatic column would grow to the ticker's 23.6px and leave it ~1.8px right of the middle of
+    // the disc's 20px inside; a column of the disc's own width (`minmax(0, 1fr)`) is centred on it, and the
+    // ticker, wider than the column, overflows both sides alike.
+    expect(disc).toHaveClass('inline-grid', 'grid-cols-[minmax(0,1fr)]', 'place-items-center');
+    expect(text.style.transform).toBe(`scaleX(${21 / 23.6})`);
+    // Scaled about its own middle (the default origin), so the squeeze keeps it centred.
+    expect(text.style.transformOrigin).toBe('');
+    expect(text.style.marginLeft).toBe('');
+    measure.mockRestore();
+  });
+
   it('falls back to the first letter of the name for a symbol with no letters', () => {
     load.mockReturnValue(new Promise(() => {}));
     const { container } = render(badge({ symbol: '^=', name: 'Dollar' }));

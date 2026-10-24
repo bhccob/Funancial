@@ -11,7 +11,7 @@ import { limitMessage } from '@/domain/alerts';
 import { categoryLabel, type LimitStatus } from '@/domain/budget';
 import { cardMark, markLabel } from '@/domain/cardMark';
 import type { Account, Category } from '@/domain/entities';
-import { CATEGORY_OPTIONS } from '@/features/shared/categories';
+import { CATEGORY_PILLS } from '@/features/shared/categories';
 import { toast } from '@/lib/toast';
 import { useAction } from '@/lib/useAction';
 import type { PaymentInput } from '@/services/payment';
@@ -89,8 +89,7 @@ function PayForm({ account, onPaid }: { account: Account; onPaid(paid: Paid): vo
   return (
     <form className="flex flex-col gap-5" onSubmit={submit} noValidate>
       <MoneyField
-        variant="line"
-        large
+        size="hero"
         label="Amount"
         currency={currency}
         value={amount}
@@ -102,19 +101,24 @@ function PayForm({ account, onPaid }: { account: Account; onPaid(paid: Paid): vo
         hint={account.kind === 'credit' ? 'Adds to what you owe on the card.' : undefined}
         autoFocus
       />
+      {/* Pills, one tap each, as the expense form has them: eight choices would wrap badly in a well. */}
       <RadioGroup<Category>
+        variant="pills"
         legend="Category"
         value={category}
         onChange={setCategory}
-        options={CATEGORY_OPTIONS}
+        options={CATEGORY_PILLS}
       />
-      <TextField
-        variant="line"
-        label="Note"
-        autoComplete="off"
-        value={note}
-        onChange={(e) => setNote(e.target.value)}
-      />
+      {/* A plain row with its hairline, as the expense form's Note is. */}
+      <div>
+        <TextField
+          variant="row"
+          label="Note"
+          autoComplete="off"
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+        />
+      </div>
       <Button type="submit" size="lg" disabled={busy}>
         {busy ? 'Paying…' : 'Pay'}
       </Button>
@@ -147,22 +151,24 @@ function PayForm({ account, onPaid }: { account: Account; onPaid(paid: Paid): vo
  * The step after a payment: a check, what was paid, the shop and the category, one line naming the
  * card it was paid with, and Done. There is no card picture and no balance line (what is left on
  * the card is on the card, and Home's Recent says it). The amount is hidden with the eye, as
- * everywhere; the card is named by its mark's words (`markLabel`), as Recent names it.
+ * everywhere; the card is named by its mark's words (`markLabel`), as Recent names it. The check and
+ * the three lines are one status region (Done is outside it), so a screen reader hears them together.
  */
 function PaidStep({ paid, account, onDone }: { paid: Paid; account: Account; onDone(): void }) {
   const money = useMoney();
   return (
     <div className="flex flex-col items-center gap-2 pt-2 pb-1 text-center">
-      <span className="btn-accent grid size-14 place-items-center rounded-full">
-        <Check aria-hidden="true" className="size-7" />
-      </span>
-      <p role="status" className="text-section mt-2">
-        {`Paid ${money(paid.amount)}`}
-      </p>
-      <p className="text-muted text-[15px] font-semibold">
-        {[paid.note, categoryLabel(paid.category)].filter(Boolean).join(' · ')}
-      </p>
-      <p className="text-[15px] font-semibold">{`Paid with ${markLabel(cardMark(account))}`}</p>
+      {/* One status region for all of it, so a screen reader hears which card paid, not only the sum. */}
+      <div role="status" className="flex flex-col items-center gap-2">
+        <span className="btn-accent grid size-14 place-items-center rounded-full">
+          <Check aria-hidden="true" className="size-7" />
+        </span>
+        <p className="text-section mt-2">{`Paid ${money(paid.amount)}`}</p>
+        <p className="text-muted text-[15px] font-semibold">
+          {[paid.note, categoryLabel(paid.category)].filter(Boolean).join(' · ')}
+        </p>
+        <p className="text-[15px] font-semibold">{`Paid with ${markLabel(cardMark(account))}`}</p>
+      </div>
       <Button size="lg" className="mt-4 w-full" onClick={onDone}>
         Done
       </Button>

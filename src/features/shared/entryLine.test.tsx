@@ -207,8 +207,8 @@ describe('one History entry, read alike in History, Home and the account sheet',
     const { history, recent, ...expected } = CASES[0]!;
     void history;
     void recent;
-    // The sheet is the account's own, so the line leaves its name out.
-    expectRow({ ...expected, detail: `Salary · ${formatDay('2026-10-13')}` });
+    // The sheet is the account's own, so the line leaves its name out, and it names the day as "On this card" does.
+    expectRow({ ...expected, detail: 'Salary · Yesterday' });
     const sheet = within(screen.getByRole('dialog', { name: 'Main account' }));
     expect(sheet.queryByText(usd(0))).toBeNull();
   });

@@ -23,6 +23,38 @@ test('set PIN → reload → locked → wrong → right → unlocked', async ({ 
   await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible();
 });
 
+test('a Settings list has no hairline under its last row, and a form keeps the line under its last field', async ({
+  page,
+}) => {
+  await startFresh(page, '/settings');
+  /** The width of the line under the row a field stands in (the `row` look draws it as the row's bottom border). */
+  const lineUnder = (field: ReturnType<typeof page.getByLabel>) =>
+    field
+      .locator('xpath=ancestor::div[contains(@class, "border-b")][1]')
+      .evaluate((row) => getComputedStyle(row).borderBottomWidth);
+
+  // Profile & salary: Name has the list's line under it, and Pay day closes the list, which has none.
+  const profile = page.getByRole('region', { name: 'Profile & salary' });
+  expect(await lineUnder(profile.getByLabel('Name'))).toBe('1px');
+  expect(await lineUnder(profile.getByLabel('Pay day'))).toBe('0px');
+
+  // A form's rows are not a list: its last field keeps the line that closes the form.
+  await page.goto('/add');
+  expect(await lineUnder(page.getByLabel('Repeats'))).toBe('1px');
+
+  // Security: with a PIN, Auto-lock is the last row (there is no fingerprint switch in a browser).
+  await page.goto('/settings');
+  await page.getByRole('radio', { name: 'PIN' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Set a PIN' });
+  await dialog.getByLabel('New PIN').fill('2468');
+  await dialog.getByLabel('Confirm PIN').fill('2468');
+  await dialog.getByRole('button', { name: 'Save' }).click();
+  await expect(dialog).toBeHidden();
+  const autoLock = page.getByRole('region', { name: 'Security' }).getByLabel('Auto-lock');
+  await expect(autoLock).toBeVisible();
+  expect(await lineUnder(autoLock)).toBe('0px');
+});
+
 test('a forgotten PIN points to the account, not to a backup', async ({ page }) => {
   await startFresh(page, '/settings');
   await page.getByRole('radio', { name: 'PIN' }).click();

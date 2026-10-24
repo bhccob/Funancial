@@ -41,7 +41,10 @@ export function LogoDisc({
     <span
       aria-hidden="true"
       data-logo={logo}
-      className="bg-surface-2 text-text inline-grid flex-none place-items-center overflow-hidden rounded-full leading-none font-extrabold"
+      // One column as wide as the disc's inside (`minmax(0, 1fr)`), not as wide as its content: a ticker
+      // wider than that (squeezed by `Ticker`, which scales it about its middle) is then centred on the
+      // disc, where an automatic column would grow to the ticker's width and leave it off to the right.
+      className="bg-surface-2 text-text inline-grid flex-none grid-cols-[minmax(0,1fr)] place-items-center overflow-hidden rounded-full leading-none font-extrabold"
       style={{
         width: size,
         height: size,

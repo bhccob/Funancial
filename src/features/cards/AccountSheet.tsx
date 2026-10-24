@@ -1,15 +1,16 @@
-import { useId, useMemo, useState, type ReactNode } from 'react';
+import { useId, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Sheet } from '@/components/ui/Sheet';
 import { archivedBy } from '@/domain/accounts';
 import { accountBalance } from '@/domain/balances';
-import type { Cycle } from '@/domain/entities';
+import type { Cycle, Subscription } from '@/domain/entities';
 import { entryDate, historyEntries, movesMoneyOn } from '@/domain/history';
 import { CardFacts, Fact } from '@/features/goals/CardSheet';
 import { PayDialog, type PayTarget } from '@/features/goals/PayDialog';
 import { ActualBalanceDialog } from '@/features/history/ActualBalanceDialog';
-import { EntryChip, EntryDetail } from '@/features/shared/EntryParts';
-import { entryLine } from '@/features/shared/entryLine';
+import { entryLine, type EntryLine } from '@/features/shared/entryLine';
+import { dayName, entryIcon } from '@/features/shared/entryLook';
+import { EntryRow } from '@/features/shared/EntryRow';
 import { ROWS } from '@/features/shared/PlainSection';
 import { cn } from '@/lib/cn';
 import { formatDate, formatDay } from '@/lib/format';
@@ -27,51 +28,23 @@ const PER: Record<Cycle, string> = {
   yearly: 'year',
 };
 
-const HEADING = 'text-muted mt-6 mb-1 text-[13px] font-bold';
+/** A subscription as the sheet's rows write it: its name, when it renews, and what it costs. */
+const subscriptionLine = (sub: Subscription): EntryLine => ({
+  title: sub.name,
+  detail: `Every ${PER[sub.cycle]} · next ${formatDay(sub.nextRenewal)}`,
+  amount: sub.amount,
+  sign: '',
+  tone: 'plain',
+});
 
-/**
- * A plain row of the sheet: what it is (with a chip beside it, for income not counted yet), a line
- * under it, and an amount, money in in the success color as History writes it.
- */
-function Row({
-  title,
-  chip,
-  detail,
-  amount,
-  moneyIn = false,
-}: {
-  title: string;
-  chip?: ReactNode;
-  detail: ReactNode;
-  amount: string;
-  moneyIn?: boolean;
-}) {
-  return (
-    <li className="flex min-h-[54px] items-center gap-3 py-2">
-      <span className="min-w-0 flex-1">
-        <span className="flex min-w-0 items-center gap-2">
-          <b className="truncate text-[14.5px] font-extrabold">{title}</b>
-          {chip}
-        </span>
-        <span className="text-muted block truncate text-[12px] font-semibold">{detail}</span>
-      </span>
-      <span
-        className={cn(
-          'shrink-0 text-[14.5px] font-extrabold tabular-nums',
-          moneyIn && 'text-success',
-        )}
-      >
-        {amount}
-      </span>
-    </li>
-  );
-}
+const HEADING = 'text-muted mt-6 mb-1 text-[13px] font-bold';
 
 /**
  * One account in full, from View card on the Cards tab: what it is and holds (a credit card: what it
  * owes and when, as its own sheet says), then Pay the card for a credit card, or Correct the balance
  * for the others; its latest ten History entries, in History's order and written as History writes
- * them, seen from the account (`entryLine`); and the subscriptions it pays.
+ * them, seen from the account (`entryLine`), in the rows of the Cards tab's "On this card"
+ * (`EntryRow`); and the subscriptions it pays.
  * Open while `accountId` names an account in use. The dialogs stack over the sheet, which updates
  * behind them.
  */
@@ -145,24 +118,22 @@ export function AccountSheet({
             </h3>
             {entries.length > 0 ? (
               <ul aria-labelledby={latestId} className={ROWS}>
-                {entries.map((entry) => {
-                  // Seen from this account: a transfer or a card payment is money in or out of it.
-                  const line = entryLine(entry, {
-                    accounts: data.tables.account,
-                    debts: data.tables.debt,
-                    perspective: account.id,
-                  });
-                  return (
-                    <Row
-                      key={entry.item.id}
-                      title={line.title}
-                      chip={<EntryChip line={line} />}
-                      detail={<EntryDetail line={line} day={formatDay(entryDate(entry))} />}
-                      amount={`${line.sign}${money(line.amount)}`}
-                      moneyIn={line.tone === 'in'}
-                    />
-                  );
-                })}
+                {entries.map((entry) => (
+                  // The rows of "On this card", one tap away on the Cards tab: seen from this account (a
+                  // transfer or a card payment is money in or out of it), with the icon and the day.
+                  <EntryRow
+                    key={entry.item.id}
+                    entryId={entry.item.id}
+                    line={entryLine(entry, {
+                      accounts: data.tables.account,
+                      debts: data.tables.debt,
+                      perspective: account.id,
+                    })}
+                    icon={entryIcon(entry)}
+                    day={dayName(entryDate(entry), today)}
+                    danger
+                  />
+                ))}
               </ul>
             ) : (
               <p className="text-muted py-2 text-[14px] font-semibold">Nothing yet.</p>
@@ -174,12 +145,7 @@ export function AccountSheet({
             {subscriptions.length > 0 ? (
               <ul aria-labelledby={subscriptionsId} className={ROWS}>
                 {subscriptions.map((sub) => (
-                  <Row
-                    key={sub.id}
-                    title={sub.name}
-                    detail={`Every ${PER[sub.cycle]} · next ${formatDay(sub.nextRenewal)}`}
-                    amount={money(sub.amount)}
-                  />
+                  <EntryRow key={sub.id} line={subscriptionLine(sub)} />
                 ))}
               </ul>
             ) : (
