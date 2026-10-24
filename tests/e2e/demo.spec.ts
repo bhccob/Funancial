@@ -180,6 +180,7 @@ function measureAmounts(rows: Locator) {
         kind: del ? 'delete' : 'open',
         // From the row's right edge, so the lists compare wherever each one stands.
         amountEnd: right(li) - right(li.querySelector('.tabular-nums')!),
+        amountRight: right(li.querySelector('.tabular-nums')!),
         target: box && { width: box.width, height: box.height, left: box.left, right: box.right },
         page: { width: window.innerWidth, scrolls: document.documentElement.scrollWidth },
       };
@@ -235,9 +236,14 @@ for (const [width, height] of [
           width,
         );
         if (!row.target) continue;
-        // The target stays a whole 44px box, on the screen.
+        // The target stays a whole 44px box, on the screen, and starts where its amount ends: the
+        // margins' split is pinned and not only their sum, so the box never covers the amount.
         expect(row.target.width, `${where}: ${row.title}: delete target`).toBe(44);
         expect(row.target.height, `${where}: ${row.title}: delete target`).toBe(44);
+        expect(
+          row.target.left,
+          `${where}: ${row.title}: the delete target starts after its amount`,
+        ).toBeGreaterThanOrEqual(row.amountRight - 0.5);
         expect(row.target.left, `${where}: ${row.title}: target on screen`).toBeGreaterThanOrEqual(
           0,
         );
@@ -254,9 +260,9 @@ for (const [width, height] of [
   });
 }
 
-// "Afl." (Aruban florin, in Dutch) is the widest amount the owner reads. The newest row also says
-// what is left on its card, so the amount column is as wide as "Afl. 2.605 left", and the words
-// have what is left of 360px: the card's name and last 4 digits must still be there whole.
+// "Afl." (Aruban florin, in Dutch) is the widest amount the owner reads: "−Afl. 1.234,50" sets the
+// amount column's width, and the words have what is left of 360px. The card's name and last 4
+// digits must still be there whole, in as many lines as it takes.
 test.describe('a long card name, with Afl. amounts', () => {
   test.use({ locale: 'nl-AW' });
   for (const width of [360, 375]) {
@@ -314,7 +320,10 @@ test.describe('a long card name, with Afl. amounts', () => {
           scrolls: document.documentElement.scrollWidth,
         };
       });
-      console.log(`${width}px: words ${shown.words.toFixed(1)}px wide, row ${shown.height}px tall`);
+      test.info().annotations.push({
+        type: 'measured',
+        description: `words ${shown.words.toFixed(1)}px wide, row ${shown.height}px tall`,
+      });
       expect(shown.text).toContain('Everyday checking ·· 4312');
       expect(shown.clipped, 'the line under the title is cut').toBe(false);
       expect(shown.outside, 'glyphs outside the words').toBe(0);
