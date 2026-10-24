@@ -34,6 +34,7 @@ import {
 } from '@/test/fixtures';
 import { INBOX_NOW, inboxData } from '@/test/inboxData';
 import { freshRealStore } from '@/test/realStore';
+import { safeStorage } from '@/lib/safeStorage';
 import { createFinanceActions } from '@/store/financeActions';
 import type { StoreApi } from 'zustand/vanilla';
 import { HistoryScreen } from '@/features/history/HistoryScreen';
@@ -639,10 +640,12 @@ describe('Home Move money', () => {
     return { store, dialog: screen.getByRole('dialog', { name: 'Move money' }) };
   }
 
-  it('Move money with one account explains why, in place of Pick an account, and Move stays off', async () => {
+  it('Move money with one account explains why, in place of the To picker, and Move stays off', async () => {
     const { store, dialog } = await openMoveMoney(onlyMain());
-    expect(within(dialog).getByLabelText('To')).toHaveAccessibleDescription(NOWHERE);
     expect(within(dialog).getByText(NOWHERE)).toBeInTheDocument();
+    // The sentence stands where the picker would: no "To: Main account" beside it.
+    expect(within(dialog).queryByLabelText('To')).not.toBeInTheDocument();
+    expect(within(dialog).getByLabelText('From')).toHaveValue('acct-main');
     const move = within(dialog).getByRole('button', { name: 'Move' });
     expect(move).toBeDisabled();
 
@@ -650,7 +653,7 @@ describe('Home Move money', () => {
     await userEvent.type(within(dialog).getByLabelText('Amount'), '50{Enter}');
     await userEvent.click(move);
     expect(within(dialog).queryByText('Pick an account.')).not.toBeInTheDocument();
-    expect(within(dialog).getByLabelText('To')).not.toBeInvalid();
+    expect(within(dialog).queryByText('Use two different accounts.')).not.toBeInTheDocument();
     expect(store.getState().put).not.toHaveBeenCalled();
     expect(store.getState().putMany).not.toHaveBeenCalled();
   });
@@ -659,7 +662,8 @@ describe('Home Move money', () => {
     const data = onlyMain();
     data.tables.account.push(visaCard(), { ...savingsAccount(), archivedOn: '2026-10-01' });
     const { dialog } = await openMoveMoney(data);
-    expect(within(dialog).getByLabelText('To')).toHaveAccessibleDescription(NOWHERE);
+    expect(within(dialog).getByText(NOWHERE)).toBeInTheDocument();
+    expect(within(dialog).queryByLabelText('To')).not.toBeInTheDocument();
     expect(within(dialog).getByRole('button', { name: 'Move' })).toBeDisabled();
   });
 
@@ -776,6 +780,64 @@ describe('Home first steps', () => {
     );
     expect(store.getState().data.tables.account[0]?.openingBalance).toBe(0);
     expect(balanceCard()).toBeInTheDocument();
+    expect(localStorage.getItem(BALANCE_KEY)).toBeNull();
+  });
+
+  it('a Save of 0 is an answer: the balance stays 0, the card is done and the sheet closes', async () => {
+    const store = await realAfterSetup();
+    const before = store.getState().data.tables.account[0];
+    await userEvent.click(within(balanceCard()!).getByRole('button', { name: 'Set balance' }));
+    const sheet = screen.getByRole('dialog', { name: BALANCE });
+    await userEvent.type(within(sheet).getByLabelText('Starting balance'), '0');
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Save' }));
+
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: BALANCE })).not.toBeInTheDocument(),
+    );
+    // Nothing was written to the account: it is as setup made it.
+    expect(store.getState().data.tables.account).toEqual([before]);
+    expect(localStorage.getItem(BALANCE_KEY)).toBe('1');
+    expect(balanceCard()).not.toBeInTheDocument();
+    expect(subscriptionsCard()).toBeInTheDocument();
+    expect(localStorage.getItem(SUBSCRIPTIONS_KEY)).toBeNull();
+  });
+
+  it('moves focus on when the card it was on goes: after Save, and after Not now', async () => {
+    const overview = () => screen.getByRole('heading', { level: 2, name: 'Overview' });
+    await realAfterSetup();
+
+    // Save: the sheet closes and the card's button is gone, so the page's next heading has it.
+    await userEvent.click(within(balanceCard()!).getByRole('button', { name: 'Set balance' }));
+    const sheet = screen.getByRole('dialog', { name: BALANCE });
+    await userEvent.type(within(sheet).getByLabelText('Starting balance'), '1250');
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(overview()).toHaveFocus());
+    expect(balanceCard()).not.toBeInTheDocument();
+
+    // Not now on the last card: the same heading.
+    await userEvent.click(within(subscriptionsCard()!).getByRole('button', { name: 'Not now' }));
+    expect(subscriptionsCard()).not.toBeInTheDocument();
+    expect(overview()).toHaveFocus();
+  });
+
+  it('moves focus to the other card when Not now takes one of two', async () => {
+    renderHome(afterSetup());
+    await userEvent.click(within(balanceCard()!).getByRole('button', { name: 'Not now' }));
+    expect(
+      within(subscriptionsCard()!).getByRole('button', { name: 'Add a subscription' }),
+    ).toHaveFocus();
+  });
+
+  it('leaves the focus where the sheet hands it back when it is only closed', async () => {
+    renderHome(afterSetup());
+    const set = within(balanceCard()!).getByRole('button', { name: 'Set balance' });
+    await userEvent.click(set);
+    await userEvent.keyboard('{Escape}');
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: BALANCE })).not.toBeInTheDocument(),
+    );
+    expect(balanceCard()).toBeInTheDocument();
+    expect(set).toHaveFocus();
   });
 
   it('shows the balance card only for Main account in use, opened at 0', () => {
@@ -832,6 +894,25 @@ describe('Home first steps', () => {
     }
   });
 
+  it('an income that is only expected, or did not arrive, does not hide the balance card', () => {
+    // A salary due today: expected, so it has not changed the balance.
+    const due = afterSetup();
+    due.tables.profile = [
+      makeProfile({ openingDate: OPENED, salary: { monthlyAmount: 3_000_00, payDay: 25 } }),
+    ];
+    const expected = applyRecords(due, dueGenerated(due, '2026-10-25'));
+    expect(expected.tables.income.length).toBeGreaterThan(0);
+    expect(expected.tables.income.every((i) => i.status === 'expected')).toBe(true);
+    const view = renderHome(expected, '2026-10-25');
+    expect(balanceCard()).toBeInTheDocument();
+    view.unmount();
+
+    const skipped = afterSetup();
+    skipped.tables.income = [makeIncome({ date: TODAY, status: 'skipped' })];
+    renderHome(skipped);
+    expect(balanceCard()).toBeInTheDocument();
+  });
+
   it('the subscriptions card goes once there is a subscription', () => {
     const data = afterSetup();
     data.tables.subscription = [makeSubscription()];
@@ -884,9 +965,35 @@ describe('Home first steps', () => {
     expect(store.getState().data.tables.subscription).toEqual([
       expect.objectContaining({ name: 'Streamflix', amount: 15_99, accountId: 'acct-main' }),
     ]);
-    // Done, so the card is gone without being dismissed.
+    // Done, so the card is gone without being dismissed, and the focus is on the next heading.
     expect(subscriptionsCard()).not.toBeInTheDocument();
     expect(localStorage.getItem(SUBSCRIPTIONS_KEY)).toBeNull();
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { level: 2, name: 'Overview' })).toHaveFocus(),
+    );
+  });
+
+  it('Delete all data brings the cards back once setup is done again', async () => {
+    // The store keeps its answers in the page's own storage, as the app's does.
+    const { store } = await freshRealStore({ safeStorage });
+    const setup = () =>
+      createFinanceActions(store).completeOnboarding({ name: 'Alex', currency: 'USD' });
+    await setup();
+    const first = renderHome(store);
+    await userEvent.click(within(balanceCard()!).getByRole('button', { name: 'Not now' }));
+    await userEvent.click(within(subscriptionsCard()!).getByRole('button', { name: 'Not now' }));
+    expect(localStorage.getItem(BALANCE_KEY)).toBe('1');
+    expect(localStorage.getItem(SUBSCRIPTIONS_KEY)).toBe('1');
+    first.unmount();
+
+    await store.getState().deleteAllData();
+    expect(localStorage.getItem(BALANCE_KEY)).toBeNull();
+    expect(localStorage.getItem(SUBSCRIPTIONS_KEY)).toBeNull();
+    await store.getState().startFresh();
+    await setup();
+    renderHome(store);
+    expect(balanceCard()).toBeInTheDocument();
+    expect(subscriptionsCard()).toBeInTheDocument();
   });
 
   it('the demo shows no first steps', () => {

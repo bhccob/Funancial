@@ -1,5 +1,5 @@
 import { ChevronRight } from 'lucide-react';
-import { useId, type HTMLAttributes, type ReactNode } from 'react';
+import { useId, type HTMLAttributes, type ReactNode, type Ref } from 'react';
 import { Link, type LinkProps } from 'react-router';
 import { cn } from '@/lib/cn';
 
@@ -42,26 +42,35 @@ export function SectionPillLink({
  * A section below the theme's block, as the glass wireframe draws them: a title, a "View all" pill
  * when it leads to a page (`to`) or another pill (`action`), then its content, which is plain rows or
  * glass tiles. No box round it, and no rule under it. `help` is a `HelpTip` for the title: 4px after
- * it (the row's 12px gap less 8px), with `action` staying on the right.
+ * it (the row's 12px gap less 8px), with `action` staying on the right. `headingRef` makes the title
+ * something the page can move the focus to (a heading nothing else can reach with Tab, and with no
+ * ring of its own, as it is not a control): for where a control that held it has gone.
  */
 export function PlainSection({
   title,
   help,
   to,
   action,
+  headingRef,
   children,
 }: {
   title: string;
   help?: ReactNode;
   to?: LinkProps['to'];
   action?: ReactNode;
+  headingRef?: Ref<HTMLHeadingElement>;
   children: ReactNode;
 }) {
   const headingId = useId();
   return (
     <section aria-labelledby={headingId} className="pt-[22px]">
       <div className="mx-1 mb-3 flex items-center justify-between gap-3">
-        <h2 id={headingId} className="text-section">
+        <h2
+          id={headingId}
+          ref={headingRef}
+          tabIndex={headingRef ? -1 : undefined}
+          className={headingRef ? 'text-section outline-none' : 'text-section'}
+        >
           {title}
         </h2>
         {help && <div className="mr-auto -ml-2 flex">{help}</div>}

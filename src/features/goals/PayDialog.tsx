@@ -5,13 +5,8 @@ import { MoneyField } from '@/components/ui/MoneyField';
 import { activeAccounts } from '@/domain/accounts';
 import { cardPayment } from '@/domain/budget';
 import type { Account, Debt, Goal } from '@/domain/entities';
-import {
-  AccountField,
-  NO_OTHER_ACCOUNT,
-  NOT_CREDIT,
-  useAccountOptions,
-  useStartAccountId,
-} from '@/features/shared/AccountField';
+import { AccountField, NOT_CREDIT, useStartAccountId } from '@/features/shared/AccountField';
+import { MoveToField, useNowhereToMove } from '@/features/shared/MoveToField';
 import { useAction } from '@/lib/useAction';
 import { useApp } from '@/store/AppStoreProvider';
 import { SAME_ACCOUNT } from '@/store/financeActions';
@@ -49,7 +44,7 @@ function GoalForm({ goal, onDone }: { goal: Goal; onDone(): void }) {
   const startFrom = useStartAccountId(NOT_CREDIT);
   const startTo = useStartSavingsId(startFrom);
   // With one account that can hold money there is nowhere to move it: say so, and keep Add off.
-  const nowhere = useAccountOptions(NOT_CREDIT).length < 2;
+  const nowhere = useNowhereToMove();
   const [amount, setAmount] = useState<number | null>(null);
   const [from, setFrom] = useState(startFrom);
   const [to, setTo] = useState(startTo);
@@ -102,16 +97,13 @@ function GoalForm({ goal, onDone }: { goal: Goal; onDone(): void }) {
           filter={NOT_CREDIT}
           error={errors.from}
         />
-        <AccountField
+        <MoveToField
           variant="row"
-          label="To"
           value={to}
           onChange={(id) => {
             setTo(id);
             setErrors((e) => ({ ...e, to: undefined }));
           }}
-          filter={NOT_CREDIT}
-          hint={nowhere ? NO_OTHER_ACCOUNT : undefined}
           error={errors.to}
         />
       </div>

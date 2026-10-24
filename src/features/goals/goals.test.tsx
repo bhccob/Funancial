@@ -230,10 +230,12 @@ describe('Goals', () => {
     ];
     renderGoals(data);
     const dialog = await openAddMoney();
-    const to = within(dialog).getByLabelText('To');
-    expect(to).toHaveAccessibleDescription(
-      'Add another account on the Cards tab to move money between them.',
-    );
+    // The sentence stands where the To picker would: no "To: Main account" beside it.
+    expect(
+      within(dialog).getByText('Add another account on the Cards tab to move money between them.'),
+    ).toBeInTheDocument();
+    expect(within(dialog).queryByLabelText('To')).not.toBeInTheDocument();
+    expect(within(dialog).getByLabelText('From')).toHaveValue(MAIN);
     const add = within(dialog).getByRole('button', { name: 'Add' });
     expect(add).toBeDisabled();
 
@@ -241,7 +243,7 @@ describe('Goals', () => {
     await userEvent.type(within(dialog).getByLabelText('Amount'), '50{Enter}');
     await userEvent.click(add);
     expect(within(dialog).queryByText('Pick an account.')).not.toBeInTheDocument();
-    expect(to).not.toBeInvalid();
+    expect(within(dialog).queryByText('Use two different accounts.')).not.toBeInTheDocument();
     expect(actions.contributeToGoal).not.toHaveBeenCalled();
   });
 

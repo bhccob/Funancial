@@ -1,5 +1,5 @@
 import { ArrowDownLeft, ArrowUpRight, CreditCard, Plus } from 'lucide-react';
-import { useId, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { useAddSheet } from '@/app/useAddSheet';
 import { Sparkline } from '@/components/charts/Sparkline';
@@ -19,6 +19,7 @@ import { ActualBalanceDialog } from '@/features/history/ActualBalanceDialog';
 import { PlainSection, SectionPillButton } from '@/features/shared/PlainSection';
 import { SubscriptionDialog } from '@/features/subscriptions/SubscriptionDialog';
 import { cn } from '@/lib/cn';
+import { FIRST_BALANCE_KEY } from '@/lib/firstSteps';
 import { daysUntil, formatMonth, formatPercent } from '@/lib/format';
 import { useAction } from '@/lib/useAction';
 import { useApp } from '@/store/AppStoreProvider';
@@ -38,6 +39,7 @@ import { RecentSection } from './RecentSection';
 import { ReminderBanner } from './ReminderBanner';
 import { ShowOnHomeSheet } from './ShowOnHomeSheet';
 import { StartBalanceSheet } from './StartBalanceSheet';
+import { useFirstStepAnswers } from './useFirstStepAnswers';
 
 /** How many of the newest History entries Recent shows. */
 const RECENT = 5;
@@ -185,6 +187,20 @@ export function DashboardScreen() {
   const [worth, setWorth] = useState(false);
   const [settingBalance, setSettingBalance] = useState(false);
   const [addingSubscription, setAddingSubscription] = useState(false);
+  const firstSteps = useFirstStepAnswers();
+  // Where the focus goes when a first-time card's button is gone: the heading after the cards.
+  const overviewHeading = useRef<HTMLHeadingElement>(null);
+  const firstStepOpen = settingBalance || addingSubscription;
+  const wasFirstStepOpen = useRef(false);
+  useEffect(() => {
+    // The sheet or the form closed. Closing hands the focus back to the button that opened it; once
+    // that button is gone (the card was done with) nothing has it, so the heading after the cards does.
+    if (wasFirstStepOpen.current && !firstStepOpen) {
+      const active = document.activeElement;
+      if (!active || active === document.body) overviewHeading.current?.focus();
+    }
+    wasFirstStepOpen.current = firstStepOpen;
+  }, [firstStepOpen]);
 
   const overview = useMemo(() => monthToDate(data, today), [data, today]);
   const summary = useMemo(() => netWorthSummary(data, today, view), [data, today, view]);
@@ -275,14 +291,16 @@ export function DashboardScreen() {
             <ReminderBanner />
             <AccountReminder />
             <FirstSteps
+              answers={firstSteps}
               onSetBalance={() => setSettingBalance(true)}
               onAddSubscription={() => setAddingSubscription(true)}
+              after={overviewHeading}
             />
           </div>
         </Rise>
 
         <Rise index={3}>
-          <PlainSection title="Overview" to="/history">
+          <PlainSection title="Overview" to="/history" headingRef={overviewHeading}>
             <div className="grid grid-cols-2 gap-2.5">
               <FlowTile
                 kind="income"
@@ -330,7 +348,11 @@ export function DashboardScreen() {
       />
       <NetWorthSheet open={worth} view={view} onClose={() => setWorth(false)} />
       <ConfirmSalaryDialog income={confirming} onClose={() => setConfirming(null)} />
-      <StartBalanceSheet open={settingBalance} onClose={() => setSettingBalance(false)} />
+      <StartBalanceSheet
+        open={settingBalance}
+        onClose={() => setSettingBalance(false)}
+        onZero={() => firstSteps.answer(FIRST_BALANCE_KEY)}
+      />
       {/* null is a new one: the form Bills & cards opens from its own Add. */}
       <SubscriptionDialog
         sub={addingSubscription ? null : undefined}

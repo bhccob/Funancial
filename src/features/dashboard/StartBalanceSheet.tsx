@@ -8,8 +8,11 @@ import { useCurrency, useFinanceActions } from '@/store/useFinance';
 
 const ENTER = 'Enter an amount like 12.50';
 
-/** The form: one big amount, then Save. */
-function StartBalanceForm({ onDone }: { onDone(): void }) {
+/**
+ * The form: one big amount, then Save. A balance of 0 is an answer too, and the account already
+ * says it: nothing is written, and `onZero` lets Home answer the card.
+ */
+function StartBalanceForm({ onDone, onZero }: { onDone(): void; onZero(): void }) {
   const { setOpeningBalance } = useFinanceActions();
   const currency = useCurrency();
   const run = useAction();
@@ -20,8 +23,11 @@ function StartBalanceForm({ onDone }: { onDone(): void }) {
   async function submit(e: FormEvent) {
     e.preventDefault();
     if (busy) return;
-    // A balance that really is 0 is the account as it stands: that is "Not now", not a save.
-    if (amount === null || amount <= 0) return setError(ENTER);
+    if (amount === null || amount < 0) return setError(ENTER);
+    if (amount === 0) {
+      onZero();
+      return onDone();
+    }
     setBusy(true);
     const saved = await run(() => setOpeningBalance(MAIN_ACCOUNT_ID, amount), {
       success: 'Starting balance saved.',
@@ -56,10 +62,19 @@ function StartBalanceForm({ onDone }: { onDone(): void }) {
  * Sets what Main account holds, from Home's first-time card: its opening balance, the hero amount
  * of the add forms and Save. The form is mounted only while the sheet is open, so it starts empty.
  */
-export function StartBalanceSheet({ open, onClose }: { open: boolean; onClose(): void }) {
+export function StartBalanceSheet({
+  open,
+  onClose,
+  onZero,
+}: {
+  open: boolean;
+  onClose(): void;
+  /** A balance of 0 was saved: nothing is written, and the question is answered. */
+  onZero(): void;
+}) {
   return (
     <Sheet open={open} title="What's in your Main account?" showTitle onClose={onClose}>
-      {open && <StartBalanceForm onDone={onClose} />}
+      {open && <StartBalanceForm onDone={onClose} onZero={onZero} />}
     </Sheet>
   );
 }

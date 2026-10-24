@@ -237,3 +237,41 @@ test('a monthly expense also becomes a subscription renewing next month', async 
   const rent = page.getByRole('listitem').filter({ hasText: 'Rent' });
   await expect(rent).toContainText(`$1,200.00 / month · Renews ${nextMonth}`);
 });
+
+test("Home's first-time cards hand the focus on, and Delete all data brings them back", async ({
+  page,
+}) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Create an account' }).click();
+  await onboard(page);
+  const balance = page.getByRole('group', { name: "What's in your Main account?" });
+  const subscriptions = page.getByRole('group', { name: 'Got subscriptions?' });
+  const overview = page.getByRole('heading', { level: 2, name: 'Overview' });
+  await expect(balance).toBeVisible();
+  await expect(subscriptions).toBeVisible();
+
+  // A balance saved takes its card, and the sheet's way back, so the next heading has the focus.
+  await setStartingBalance(page, '250');
+  await expect(balance).toBeHidden();
+  await expect(hero(page)).toContainText('$250.00');
+  await expect(overview).toBeFocused();
+
+  // Not now takes the last card, and the focus goes to the same heading. It is kept on the phone.
+  await subscriptions.getByRole('button', { name: 'Not now' }).click();
+  await expect(subscriptions).toBeHidden();
+  await expect(overview).toBeFocused();
+  await page.reload();
+  await expect(page.getByRole('heading', { level: 1, name: 'Home' })).toBeVisible();
+  await expect(subscriptions).toBeHidden();
+
+  // Delete all data forgets the answers with the data: set up again, and both are asked.
+  await page.goto('/settings');
+  await page.getByRole('button', { name: 'Delete all data' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Delete all data?' });
+  await dialog.getByLabel('Type DELETE to confirm').fill('DELETE');
+  await dialog.getByRole('button', { name: 'Delete everything' }).click();
+  await page.getByRole('button', { name: 'Create an account' }).click();
+  await onboard(page);
+  await expect(balance).toBeVisible();
+  await expect(subscriptions).toBeVisible();
+});

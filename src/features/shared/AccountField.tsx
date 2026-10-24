@@ -15,13 +15,6 @@ import { useToday } from '@/store/useFinance';
 export const NOT_CREDIT = (a: Account): boolean => a.kind !== 'credit';
 
 /**
- * What a form that moves money between two accounts says, in place of "Pick an account.", while
- * there is only one that can hold it: the "To" picker has nothing else to choose, so it points to
- * where a second one is made. The form's Save stays off.
- */
-export const NO_OTHER_ACCOUNT = 'Add another account on the Cards tab to move money between them.';
-
-/**
  * Narrows an account picker to the accounts that can take a new charge: not a frozen one. For the
  * pickers of an expense or a subscription; income, transfers and payments are not stopped by a
  * freeze. Module-level, as `useAccountOptions` wants a filter that keeps its identity. A row being

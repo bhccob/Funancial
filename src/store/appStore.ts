@@ -44,6 +44,7 @@ import {
   type TableRecord,
 } from '@/domain/snapshot';
 import type { SyncMessage } from '@/lib/broadcast';
+import { FIRST_STEP_KEYS } from '@/lib/firstSteps';
 import type { SafeStorage } from '@/lib/safeStorage';
 import type { BiometricVault } from '@/platform/types';
 
@@ -127,10 +128,12 @@ export interface AppState {
   getPrivate<T>(name: string): Promise<T | null>;
   putPrivate(name: string, value: unknown): Promise<void>;
   deletePrivate(name: string): Promise<void>;
+  /** Wipes this device, and the answers to Home's first-time cards that it kept, so setup asks again. */
   deleteAllData(): Promise<void>;
   /**
    * Delete all data for a phone with an account: what was added goes (`freshStart`), and the lock,
-   * the account link and the settings stay. Through the restore path, so the account uploads it.
+   * the account link and the settings stay, but not the answers to Home's first-time cards, so
+   * setup asks again. Through the restore path, so the account uploads it.
    */
   startOver(): Promise<void>;
 }
@@ -676,6 +679,7 @@ export function createAppStore(deps: AppDeps): StoreApi<AppState> {
         await closeSession();
         await deps.storage.remove(ns);
         deps.safeStorage.remove(NAMESPACE_KEY);
+        for (const key of FIRST_STEP_KEYS) deps.safeStorage.remove(key);
         deps.channel.post({ type: 'reload', reason: 'delete' });
         await get().boot();
       },
@@ -683,6 +687,7 @@ export function createAppStore(deps: AppDeps): StoreApi<AppState> {
       async startOver() {
         const { data } = get();
         await get().restoreSnapshot(freshStart(data, deps.today(), nowIsoString()));
+        for (const key of FIRST_STEP_KEYS) deps.safeStorage.remove(key);
       },
     };
   });

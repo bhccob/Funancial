@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { dexieStorage } from '@/data/db';
 import { browserKeyring } from '@/data/keyring';
 import type { SyncMessage } from '@/lib/broadcast';
+import { FIRST_STEP_KEYS } from '@/lib/firstSteps';
 import type { SafeStorage } from '@/lib/safeStorage';
 import { buildDemoSnapshot } from '@/data/demoSeed';
 import { CURRENT_SCHEMA_VERSION } from '@/domain/snapshot';
@@ -299,6 +300,16 @@ describe('delete all data', () => {
     expect(posts).toContainEqual({ type: 'reload', reason: 'delete' });
     expect((await reboot(deps)).getState().phase).toBe('welcome');
   });
+
+  it("forgets the answers to Home's first-time cards, so starting over asks again", async () => {
+    const { deps, store } = await freshStore();
+    for (const key of FIRST_STEP_KEYS) deps.safeStorage.set(key, '1');
+    deps.safeStorage.set('funancial.theme', 'dark');
+    await store.getState().deleteAllData();
+    for (const key of FIRST_STEP_KEYS) expect(deps.safeStorage.get(key), key).toBeNull();
+    // Only those: the rest of what the phone keeps for itself is not Delete all data's.
+    expect(deps.safeStorage.get('funancial.theme')).toBe('dark');
+  });
 });
 
 describe('starting over', () => {
@@ -373,6 +384,13 @@ describe('starting over', () => {
         }),
       ]);
     }
+  });
+
+  it("forgets the answers to Home's first-time cards, so setup asks again", async () => {
+    const { deps, store } = await filled();
+    for (const key of FIRST_STEP_KEYS) deps.safeStorage.set(key, '1');
+    await store.getState().startOver();
+    for (const key of FIRST_STEP_KEYS) expect(deps.safeStorage.get(key), key).toBeNull();
   });
 
   it('freshStart leaves no accounts, and no default account naming one', async () => {
