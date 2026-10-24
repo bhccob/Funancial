@@ -1,7 +1,6 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import type { FormEvent } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { Blobs } from './Blobs';
 import { StepMotion, type StepDirection } from './StepMotion';
 
 const NAMES = { a: 'First', b: 'Second', c: 'Third' } as const;
@@ -145,33 +144,5 @@ describe('StepMotion', () => {
     expect(leaving()).toHaveTextContent('Second');
     act(() => void vi.advanceTimersByTime(700));
     expect(leaving()).toBeNull();
-  });
-});
-
-describe('Blobs', () => {
-  it('are decoration, and drift only under motion-safe', () => {
-    const { container } = render(<Blobs />);
-    const blobs = container.querySelectorAll('[data-blob]');
-    expect(blobs.length).toBeGreaterThanOrEqual(2);
-    expect(container.firstElementChild).toHaveAttribute('aria-hidden', 'true');
-    for (const blob of blobs) {
-      expect(blob).toHaveClass('motion-safe:animate-blob-drift');
-      // Composited once, not repainted as it drifts, and only while it drifts.
-      expect(blob).toHaveClass('motion-safe:will-change-transform');
-      expect(blob.className).not.toMatch(/(^|\s)will-change/);
-      expect(blob.className).not.toMatch(/(^|\s)animate-/);
-    }
-  });
-
-  it('shift colour and position with the step', () => {
-    const { container, rerender } = render(<Blobs step={0} />);
-    const before = [...container.querySelectorAll<HTMLElement>('[data-blob]')].map((b) =>
-      b.getAttribute('style'),
-    );
-    rerender(<Blobs step={3} />);
-    const after = [...container.querySelectorAll<HTMLElement>('[data-blob]')].map((b) =>
-      b.getAttribute('style'),
-    );
-    expect(after).not.toEqual(before);
   });
 });

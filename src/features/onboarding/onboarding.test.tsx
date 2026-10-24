@@ -1240,10 +1240,9 @@ describe('OnboardingWizard in the glass look', () => {
     expect(rowOf(label), label).toHaveClass('border-black/7', 'dark:border-white/8');
   };
 
-  it('stands on the page with its still shapes, not the moving colours', () => {
+  it('stands on the page with its still shapes', () => {
     const { container } = renderWizard();
     expect(container.querySelector('main')).toHaveClass('page-blobs');
-    expect(container.querySelector('[data-blob]')).toBeNull();
   });
 
   it('has a round glass Back, a page title and a solid Continue', async () => {

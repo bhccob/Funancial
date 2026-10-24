@@ -344,8 +344,6 @@ main:has(> [data-shell-banners]:empty) [data-head-block] {
    */
   --animate-just-now: just-now var(--duration-just-now) var(--ease-glass) both;
   --animate-just-now-fade: just-now-fade var(--duration-just-now) var(--ease-glass) both;
-  /* The soft colour shapes behind the welcome screen and setup; only used as `motion-safe:animate-blob-drift`. */
-  --animate-blob-drift: blob-drift 18s ease-in-out infinite alternate;
 
   @keyframes step-in-up {
     from {
@@ -422,12 +420,6 @@ main:has(> [data-shell-banners]:empty) [data-head-block] {
     }
     100% {
       opacity: 0;
-    }
-  }
-
-  @keyframes blob-drift {
-    to {
-      translate: 28px 36px;
     }
   }
 

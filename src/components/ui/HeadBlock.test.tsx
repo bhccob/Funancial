@@ -4,6 +4,7 @@ import { purchaseEntry } from '@/domain/game/shop';
 import { emptySnapshot } from '@/domain/snapshot';
 import { onBarsBackground } from '@/lib/systemBars';
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
+import { lacksClasses } from '@/test/classes';
 import { makeSettings } from '@/test/fixtures';
 import { HeadBlock } from './HeadBlock';
 
@@ -87,6 +88,23 @@ describe('HeadBlock', () => {
     const { container } = renderWithStore(<HeadBlock compact>Hi</HeadBlock>);
     expect(block(container)).toHaveClass('pb-[22px]');
     expect(block(container)).not.toHaveClass('pb-[60px]');
+  });
+
+  it('reaches across main by default, and the lock and the welcome screen say how far theirs do', () => {
+    const reach = (value?: 'main' | 'screen' | 'column') =>
+      block(renderWithStore(<HeadBlock reach={value}>Hi</HeadBlock>).container);
+    expect(reach()).toHaveClass('-mx-5', 'px-5');
+    expect(reach('main')).toHaveClass('-mx-5', 'px-5');
+
+    // A direct child of a full-width screen: no margin to put out, the same room inside.
+    const full = reach('screen');
+    expect(full).toHaveClass('px-5');
+    lacksClasses(full, '-mx-5', 'mx-[calc(50%-50vw)]');
+
+    // In a narrower column, and out to the screen's edges: no room inside, what is in it brings the column's.
+    const column = reach('column');
+    expect(column).toHaveClass('mx-[calc(50%-50vw)]');
+    lacksClasses(column, '-mx-5', 'px-5');
   });
 
   it('is told apart from the dark body by a hairline, and only there', () => {

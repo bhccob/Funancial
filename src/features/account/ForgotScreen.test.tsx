@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { AccountError } from '@/store/accountActions';
 import { renderWithStore } from '@/test/appStoreStub';
 import { fakeAccount, withAccount } from '@/test/fakeAccount';
+import { lacksClasses } from '@/test/classes';
 import { ForgotScreen } from './ForgotScreen';
 
 const SENT = "If that account exists, we've emailed a link. It works for 30 minutes.";
@@ -25,7 +26,7 @@ describe('ForgotScreen', () => {
     // A row of the glass look: the label left, the value right, a hairline under it.
     const field = screen.getByLabelText('Username or email');
     expect(field).toHaveClass('text-right', 'h-11');
-    expect(field).not.toHaveClass('rounded-md', 'border-b', 'font-extrabold');
+    lacksClasses(field, 'rounded-md', 'border-b', 'font-extrabold');
     expect(field.closest('.border-b')).toHaveClass('border-black/7', 'dark:border-white/8');
     // The same page as Log in: a round glass Back, a page title and a solid main button.
     expect(screen.getByRole('button', { name: 'Back' })).toHaveClass('glass', 'rounded-full');

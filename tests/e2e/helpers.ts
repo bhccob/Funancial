@@ -1,4 +1,4 @@
-import { expect, type Page } from '@playwright/test';
+import { expect, type Locator, type Page } from '@playwright/test';
 
 export interface OnboardOptions {
   /**
@@ -183,6 +183,41 @@ export async function startLocked(page: Page, pin = '2468') {
   await expect(page.getByRole('radio', { name: 'PIN' })).toBeChecked();
   await page.reload();
   await expect(page.getByRole('heading', { level: 1, name: 'Welcome back' })).toBeVisible();
+}
+
+/**
+ * Every word and mark inside `block` (a theme's top block) that is drawn in a colour other than the
+ * block's own inks: its text and its dimmed text (`head-dim`), and, inside a main button (`btn-head`)
+ * only, that button's own ink. (That ink is the page's accent in Black & White, so it must not be
+ * allowed anywhere else: it is the very colour a stray `text-accent-text` would be.) Empty when the
+ * block is all in its ink. Axe cannot judge text over the block's gradient (it reports it as
+ * "incomplete", not as a fault), so a page colour that lands on the block (the accent, the danger red,
+ * the page's ink) would pass the contrast scans; this is what stops it. The ink on the block itself is
+ * held by tests/unit/tokens.test.ts.
+ */
+export function strayInks(block: Locator): Promise<string[]> {
+  return block.evaluate((root) => {
+    const colorOf = (value: string) => {
+      const probe = document.createElement('i');
+      probe.style.color = value;
+      document.body.append(probe);
+      const color = getComputedStyle(probe).color;
+      probe.remove();
+      return color;
+    };
+    const inks = new Set(['var(--head-ink)', 'var(--color-head-dim)'].map(colorOf));
+    const buttonInk = colorOf('var(--hmain-ink)');
+    const out: string[] = [];
+    for (const el of root.querySelectorAll('*')) {
+      // What has words of its own, and an icon (its colour is the `currentColor` it strokes with).
+      const words = [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent?.trim());
+      if (!words && el.tagName !== 'svg') continue;
+      const color = getComputedStyle(el).color;
+      if (!inks.has(color) && !(color === buttonInk && el.closest('.btn-head')))
+        out.push(`${el.tagName} ${el.textContent?.slice(0, 30)} ${color}`);
+    }
+    return out;
+  });
 }
 
 /**

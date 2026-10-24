@@ -159,13 +159,11 @@ export function LockScreen() {
     <main className="relative flex min-h-dvh flex-col overflow-hidden">
       {/*
         The whole screen is the theme's block, with its glowing shapes: the pad stands straight on it,
-        no panel between (glass on glass). It runs out to the screen's edges and up behind the status
-        bar (its own top padding holds the bar's height) and down to the bottom edge's safe area.
+        no panel between (glass on glass). It fills the screen, up behind the status bar (its own top
+        padding holds the bar's height); what is in it has 24px above and under it besides the block's
+        22px, which clears the bottom edge's safe area.
       */}
-      <HeadBlock
-        compact
-        className="mx-0 flex flex-1 flex-col justify-center px-[22px] pb-[max(1.75rem,env(safe-area-inset-bottom))]"
-      >
+      <HeadBlock compact reach="screen" className="flex flex-1 flex-col justify-center">
         <div className="mx-auto flex w-full max-w-sm flex-col items-center gap-6 py-6">
           <div className="flex flex-col items-center gap-1 text-center">
             <h1 className="text-[34px] leading-tight font-extrabold tracking-[-0.035em]">
@@ -196,7 +194,7 @@ export function LockScreen() {
             <button
               type="button"
               onClick={() => void askBiometric()}
-              className="glass-head press motion-safe:ease-glass inline-flex h-12 items-center justify-center gap-2 rounded-full px-5 font-bold motion-safe:transition-transform motion-safe:duration-(--duration-press)"
+              className="glass-head press inline-flex h-12 items-center justify-center gap-2 rounded-full px-5 font-bold"
             >
               <Fingerprint aria-hidden className="size-5" />
               Use fingerprint or face

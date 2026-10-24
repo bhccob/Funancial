@@ -151,10 +151,8 @@ The first screens are the one place the app moves more than a little. All of it 
   step comes down from above. The lines of a step come in one after another, 80ms apart. The progress
   bar glides over 700ms, empty on the first step and full on "You're all set". Focus moves to the new
   step's heading, so a screen reader announces it.
-- **Colour shapes** (`Blobs`): two blurred circles, pastel on the light page and dim on the dark one,
-  that drift slowly (18s and 23s, translate only) and move and change colour a little with each step
-  (900ms). `will-change: transform` keeps each blurred layer composited, so it is not repainted as it
-  drifts.
+- **Colour shapes**: the welcome, log-in and setup screens stand on the page's still shapes (`page-blobs`),
+  as every other screen does. The drifting circles (`Blobs`) of 0.11 went in 0.14.
 
 ## Charts
 

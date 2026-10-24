@@ -5,6 +5,7 @@ import { PlatformProvider } from '@/platform/PlatformProvider';
 import { AppStoreProvider } from '@/store/AppStoreProvider';
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
 import { fakeAppLifecycle } from '@/test/fakeAppLifecycle';
+import { lacksClasses } from '@/test/classes';
 import { LockScreen } from './LockScreen';
 import { useAutoLock } from './useAutoLock';
 
@@ -321,8 +322,11 @@ describe('LockScreen in the glass look', () => {
     ]) {
       expect(head).toContainElement(part);
     }
-    // The block runs out to the screen's edges and down the screen, as the lock fills it.
-    expect(head).toHaveClass('mx-0', 'flex-1');
+    // The block runs out to the screen's edges and down the screen, as the lock fills it, with the
+    // block's own room (a direct child of the screen, compact): none of the lock's classes fight it.
+    expect(head).toHaveClass('flex-1', 'px-5', 'pb-[22px]');
+    lacksClasses(head, '-mx-5', 'mx-0', 'px-[22px]', 'pb-[60px]');
+    expect(head!.className).not.toMatch(/pb-\[max/);
   });
 
   it('draws the keys 44px or more tall in the block glass, and the unlock key as the main button', () => {
@@ -337,7 +341,7 @@ describe('LockScreen in the glass look', () => {
         'rounded-key',
         'press',
       );
-      expect(key).not.toHaveClass('glass', 'bg-primary');
+      lacksClasses(key, 'glass', 'bg-primary');
     }
     expect(screen.getByRole('button', { name: 'Unlock' })).toHaveClass(
       'btn-head',
@@ -351,7 +355,7 @@ describe('LockScreen in the glass look', () => {
     renderWithStore(<LockScreen />, createStubStore({ phase: 'locked', lockMode: 'pin' }));
     const field = screen.getByLabelText('PIN');
     expect(field).toHaveClass('h-14', 'rounded-full', 'text-text');
-    expect(field).not.toHaveClass('bg-surface', 'border-border-strong', 'rounded-md');
+    lacksClasses(field, 'bg-surface', 'border-border-strong', 'rounded-md');
   });
 
   it('puts no glass inside glass', () => {
@@ -380,7 +384,7 @@ describe('LockScreen in the glass look', () => {
     // 0.13's R4: a text button, in the ink of the block; a glass pill under the pad would be glass on glass.
     const forgot = screen.getByRole('button', { name: 'Forgot your PIN?' });
     expect(forgot).toHaveClass('text-text', 'underline', 'min-h-11');
-    expect(forgot).not.toHaveClass('glass', 'glass-head', 'rounded-full', 'h-11');
+    lacksClasses(forgot, 'glass', 'glass-head', 'rounded-full', 'h-11');
   });
 
   it("says a wrong PIN in the block's ink with a mark, as the danger red would not hold on a dark block", async () => {
@@ -436,7 +440,7 @@ describe('LockScreen in the glass look', () => {
     expect(dialog.closest('[data-head-block]')).toBeNull();
     const field = within(dialog).getByLabelText('Type DELETE to confirm');
     expect(field).toHaveClass('text-right', 'h-11');
-    expect(field).not.toHaveClass('border-b', 'font-extrabold', 'rounded-md');
+    lacksClasses(field, 'border-b', 'font-extrabold', 'rounded-md');
     expect(field.closest('.border-b')).toHaveClass('border-black/7', 'dark:border-white/8');
   });
 
@@ -445,7 +449,7 @@ describe('LockScreen in the glass look', () => {
     const field = screen.getByLabelText('Passphrase');
     expect(blockOf()).toContainElement(field);
     expect(field).toHaveClass('h-14', 'rounded-full', 'text-text');
-    expect(field).not.toHaveClass('bg-surface', 'border-border-strong');
+    lacksClasses(field, 'bg-surface', 'border-border-strong');
     expect(screen.getByRole('button', { name: 'Unlock' })).toHaveClass('btn-head', 'h-14');
     expect(screen.getByRole('button', { name: 'Forgot your passphrase?' })).toHaveClass(
       'underline',

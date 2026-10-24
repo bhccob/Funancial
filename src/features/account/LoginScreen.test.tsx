@@ -7,6 +7,7 @@ import { KeyDerivationError } from '@/data/accountCrypto';
 import { AccountError } from '@/store/accountActions';
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
 import { fakeAccount, withAccount } from '@/test/fakeAccount';
+import { lacksClasses } from '@/test/classes';
 import { LoginScreen } from './LoginScreen';
 
 const PASSWORD = 'a long enough password';
@@ -41,7 +42,7 @@ async function fillIn(password = PASSWORD, username = 'Robin') {
 function isRow(label: string) {
   const field = screen.getByLabelText(label);
   expect(field, label).toHaveClass('text-right', 'h-11');
-  expect(field, label).not.toHaveClass('rounded-md', 'border-b', 'font-extrabold');
+  lacksClasses(field, 'rounded-md', 'border-b', 'font-extrabold');
   expect(field.closest('.border-b'), label).toHaveClass('border-black/7', 'dark:border-white/8');
 }
 const logIn = async () => {
@@ -220,7 +221,7 @@ describe('LoginScreen', () => {
       // 0.13's R4: Skip the lock was a glass pill, and is now the quiet text button.
       const skip = screen.getByRole('button', { name: 'Skip the lock' });
       expect(skip).toHaveClass('text-accent-text', 'underline', 'min-h-11');
-      expect(skip).not.toHaveClass('glass', 'rounded-full', 'h-11');
+      lacksClasses(skip, 'glass', 'rounded-full', 'h-11');
     });
 
     it('refuses a PIN that is too short, or that does not match', async () => {

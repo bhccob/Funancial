@@ -48,15 +48,17 @@ export function WelcomeScreen({ onHold }: { onHold?(held: boolean): void }) {
         return (
           <>
             {/*
-              The block runs out to the screen's edges (past this column, on a wide screen too) and up
-              behind the status bar, over the column's own top padding; the name stands in the middle
-              of what is left of the screen.
+              The block runs out to the screen's edges (past this column, on a wide screen too: `reach`)
+              and up behind the status bar, over the column's own top padding (the negative margin).
+              The name stands in the middle of what is left of the screen, at the column's side room,
+              which the block brings in the wrapper since it keeps none of its own.
             */}
             <HeadBlock
               compact
-              className="mx-[calc(50%-50vw)] -mt-[max(1.5rem,env(safe-area-inset-top))] flex flex-1 flex-col justify-center px-[22px] pb-12"
+              reach="column"
+              className="-mt-[max(1.5rem,env(safe-area-inset-top))] flex flex-1 flex-col justify-center"
             >
-              <div className="mx-auto flex w-full max-w-md flex-col gap-2">
+              <div className="mx-auto flex w-full max-w-md flex-col gap-2 px-[22px]">
                 <h1 className="text-[56px] leading-none font-extrabold tracking-[-0.045em] outline-none">
                   Fun<span className="text-head-dim">cial</span>
                 </h1>

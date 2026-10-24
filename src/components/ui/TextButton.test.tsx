@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
+import { lacksClasses } from '@/test/classes';
 import { TextButton } from './TextButton';
 
 describe('TextButton', () => {
@@ -9,7 +10,7 @@ describe('TextButton', () => {
     const button = screen.getByRole('button', { name: 'Try with demo money' });
     expect(button).toHaveClass('min-h-11', 'font-bold', 'underline', 'underline-offset-4');
     expect(button).toHaveAttribute('type', 'button');
-    expect(button).not.toHaveClass('glass', 'glass-head', 'bg-primary', 'rounded-full', 'border');
+    lacksClasses(button, 'glass', 'glass-head', 'bg-primary', 'rounded-full', 'border');
   });
 
   it('is written in the accent for the page, the ink for the top block and danger for a risk', () => {

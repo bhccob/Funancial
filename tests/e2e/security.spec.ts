@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { onboard, startFresh, startLocked } from './helpers';
+import { onboard, startFresh, startLocked, strayInks } from './helpers';
 
 test('set PIN → reload → locked → wrong → right → unlocked', async ({ page }) => {
   await startFresh(page, '/settings');
@@ -33,6 +33,18 @@ test('the lock screen stands its pad on the theme block: 44px keys, all on scree
   const blockBox = (await block.boundingBox())!;
   expect(Math.round(blockBox.width), 'the block is as wide as the screen').toBe(viewport.width);
   expect(Math.round(blockBox.y), 'the block starts at the top edge').toBe(0);
+  // The block's own room: 20px at the sides (`reach="screen"`) and 22px under (`compact`), whatever
+  // order the stylesheet puts its classes in.
+  const room = await block.evaluate((el) => {
+    const style = getComputedStyle(el);
+    return [style.marginLeft, style.paddingLeft, style.paddingRight, style.paddingBottom];
+  });
+  expect(room, 'margin-left, padding-left, padding-right, padding-bottom of the block').toEqual([
+    '0px',
+    '20px',
+    '20px',
+    '22px',
+  ]);
 
   const keys = [...'0123456789', 'Delete', 'Unlock'];
   for (const name of keys) {
@@ -62,28 +74,10 @@ test('the lock screen stands its pad on the theme block: 44px keys, all on scree
   await page.getByLabel('PIN').fill('1357');
   await page.getByLabel('PIN').press('Enter');
   await expect(block.getByRole('alert')).toHaveText("That didn't match. Try again.");
-  const strays = await block.evaluate((root) => {
-    const colorOf = (value: string) => {
-      const probe = document.createElement('i');
-      probe.style.color = value;
-      document.body.append(probe);
-      const color = getComputedStyle(probe).color;
-      probe.remove();
-      return color;
-    };
-    const inks = new Set(
-      ['var(--head-ink)', 'var(--color-head-dim)', 'var(--hmain-ink)'].map(colorOf),
-    );
-    const out: string[] = [];
-    for (const el of root.querySelectorAll('*')) {
-      const words = [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent?.trim());
-      if (!words && el.tagName !== 'svg') continue;
-      const color = getComputedStyle(el).color;
-      if (!inks.has(color)) out.push(`${el.tagName} ${el.textContent?.slice(0, 30)} ${color}`);
-    }
-    return out;
-  });
-  expect(strays, 'text and marks on the block in a colour that is not its ink').toEqual([]);
+  expect(
+    await strayInks(block),
+    'text and marks on the block in a colour that is not its ink',
+  ).toEqual([]);
 
   // The Erase dialog is off the block, so its words are the page's ink and not the block's white.
   await forgot.click();

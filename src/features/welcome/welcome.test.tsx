@@ -4,6 +4,7 @@ import { expect, it, vi } from 'vitest';
 import { Toaster } from '@/components/ui/Toaster';
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
 import { fakeAccount, withAccount } from '@/test/fakeAccount';
+import { lacksClasses } from '@/test/classes';
 import { WelcomeScreen } from './WelcomeScreen';
 
 const choice = (name: string) => screen.getByRole('button', { name });
@@ -50,7 +51,8 @@ it('puts the choices where a thumb reaches, 44px or more tall, with the demo the
   expect(choice('I have an account')).toHaveClass('h-14', 'glass');
   // 0.13's R4: the demo is the quiet text button, not a glass pill.
   expect(choice('Try with demo money')).toHaveClass('min-h-11', 'underline');
-  expect(choice('Try with demo money')).not.toHaveClass(
+  lacksClasses(
+    choice('Try with demo money'),
     'glass',
     'bg-primary',
     'border',
@@ -72,14 +74,31 @@ it('stands the name on the theme block, and the choices on the page', () => {
   expect(block).not.toContainElement(
     screen.getByText("Funcial helps you track and plan your money. It isn't financial advice."),
   );
-  // The block runs out to the screen's edges, not just the column the choices stand in.
-  expect(block).toHaveClass('mx-[calc(50%-50vw)]');
+  // The block runs out to the screen's edges, not just the column the choices stand in, and keeps the
+  // compact room under its name: its own classes, with none of the screen's to fight them.
+  expect(block).toHaveClass('mx-[calc(50%-50vw)]', 'pb-[22px]');
+  lacksClasses(block, '-mx-5', 'px-5', 'pb-[60px]', 'pb-12', 'px-[22px]');
 });
 
-it('stands on the page with its still shapes, not the moving colours', () => {
+it("draws the block's words in its own ink: no colour of the page lands on the name or the tagline", () => {
+  show();
+  const block = screen
+    .getByRole('heading', { level: 1, name: 'Funcial' })
+    .closest<HTMLElement>('[data-head-block]')!;
+  // The accent is as dark as the block in Black & White, the danger red falls under 4.5:1 on a dark
+  // one: axe cannot judge text over the block's gradient, so nothing but this would notice them.
+  const page =
+    /(^|\s)(text-(accent|accent-text|primary|danger|success|warning|xp-text)|bg-primary)(\s|$)/;
+  for (const el of [block, ...block.querySelectorAll('*')]) {
+    expect(el.getAttribute('class') ?? '', el.outerHTML.slice(0, 80)).not.toMatch(page);
+  }
+  // The name's second half is dimmed in the block's own dim ink, which holds 4.5:1 on every block.
+  expect(screen.getByText('cial')).toHaveClass('text-head-dim');
+});
+
+it('stands on the page with its still shapes', () => {
   const { container } = renderWithStore(<WelcomeScreen />, createStubStore({ phase: 'welcome' }));
   expect(container.querySelector('main')).toHaveClass('page-blobs');
-  expect(container.querySelector('[data-blob]')).toBeNull();
 });
 
 it('keeps Log in and Forgot password on the light page, off the block', async () => {

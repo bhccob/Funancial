@@ -7,6 +7,7 @@ import {
   setOnline,
   setSalary,
   setStartingBalance,
+  strayInks,
 } from './helpers';
 
 // The build gets this token from playwright.config.ts.
@@ -365,6 +366,24 @@ test('the welcome screen stands its name on a block that runs out to the screen 
     page.viewportSize()!.width,
   );
   // The choices are under it, on the page, and no screen is wider than itself.
+  // The block's own room (`reach="column"`, `compact`), whatever order the stylesheet puts its classes
+  // in: no side padding (the column's is brought by what is in it) and 22px under.
+  const room = await block.evaluate((el) => {
+    const style = getComputedStyle(el);
+    return [style.paddingLeft, style.paddingRight, style.paddingBottom];
+  });
+  expect(room, 'padding-left, padding-right, padding-bottom of the block').toEqual([
+    '0px',
+    '0px',
+    '22px',
+  ]);
+  // Its name and line are in the block's ink: a page colour (the accent) on them would pass axe, which
+  // cannot judge text over a gradient.
+  expect(await strayInks(block), 'words on the block in a colour that is not its ink').toEqual([]);
+  // And they line up with the choices under them, at the column's own side room.
+  const name = (await block.getByRole('heading', { level: 1 }).boundingBox())!;
+  const created = (await page.getByRole('button', { name: 'Create an account' }).boundingBox())!;
+  expect(name.x, 'the name starts where the choices do').toBe(created.x);
   const create = page.getByRole('button', { name: 'Create an account' });
   expect((await create.boundingBox())!.y).toBeGreaterThan(box.y + box.height);
   expect(
@@ -385,9 +404,8 @@ test.describe('the welcome screen and setup move', () => {
     await expect(layer).toHaveCSS('animation-name', 'step-in-up');
     await expect(layer).toHaveCSS('animation-duration', '0.62s');
     await expect(layer.locator('> :nth-child(2)')).toHaveCSS('animation-delay', '0.08s');
-    // The shapes behind the page stand still (0.14 took the drifting colours off the welcome screen too).
+    // The shapes behind the page stand still, as on every other screen.
     await expect(page.locator('main')).toHaveClass(/page-blobs/);
-    await expect(page.locator('[data-blob]')).toHaveCount(0);
 
     await page.getByRole('button', { name: 'Create an account' }).click();
     await expect(page.locator('[data-motion="current"]')).toHaveCSS('animation-name', 'step-in-up');
