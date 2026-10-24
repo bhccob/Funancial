@@ -2,9 +2,10 @@ import { render } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import type { Slice } from '@/domain/charts';
 import { Donut, DonutLegend } from './Donut';
-import { BADGE, badgeWidth, LABEL, layoutLabels, type Box } from './labelLayout';
+import { BADGE, badgeWidth, layoutBadges, type Box } from './labelLayout';
 
-const SIZE = 220;
+/** The pie's own size (HoldingsTab's), so that what is measured here is what is on the phone. */
+const SIZE = 200;
 const CENTRE = SIZE / 2;
 
 const money = (minor: number) => `$${minor}`;
@@ -12,11 +13,13 @@ const sharesOf = (slices: Slice[]) => {
   const total = slices.reduce((sum, s) => sum + s.amount, 0);
   return slices.map((s) => s.amount / total);
 };
+/** The share as the pie writes it, such as "27%". */
+const textOf = (share: number) => `${Math.round(share * 100)}%`;
 const labelsFor = (slices: Slice[]) =>
-  slices.map((s) => ({
-    key: s.key,
-    logo: <i data-logo={s.key} />,
-    text: `${Math.round((s.amount / slices.reduce((sum, o) => sum + o.amount, 0)) * 100)}%`,
+  sharesOf(slices).map((share, i) => ({
+    key: slices[i]!.key,
+    logo: <i data-logo={slices[i]!.key} />,
+    text: textOf(share),
   }));
 
 function donut(slices: Slice[], extra: Partial<React.ComponentProps<typeof Donut>> = {}) {
@@ -61,189 +64,8 @@ const slice = (key: string, amount: number): Slice => ({ key, label: key.toUpper
 const FOUR = [slice('a', 42), slice('b', 27), slice('c', 20), slice('d', 11)];
 /** Two big slices and ten thin ones: the thin ones' labels cannot all stand side by side. */
 const TWELVE = [30, 22, 12, 6, 5, 4, 4, 4, 4, 3, 3, 3].map((n, i) => slice(`s${i}`, n));
-
-describe('layoutLabels', () => {
-  it('stands each box clear of the ring, whichever way its slice points', () => {
-    const shares = Array.from({ length: 12 }, () => 1 / 12);
-    const placed = layoutLabels(shares, SIZE);
-    expect(placed).toHaveLength(12);
-    for (const { box } of placed) {
-      const corners = [
-        [box.left, box.top],
-        [box.left + box.width, box.top],
-        [box.left, box.top + box.height],
-        [box.left + box.width, box.top + box.height],
-      ] as const;
-      for (const [x, y] of corners) {
-        expect(Math.hypot(x - CENTRE, y - CENTRE)).toBeGreaterThanOrEqual(
-          CENTRE + LABEL.lead - 1e-9,
-        );
-      }
-      expect(box.width).toBe(LABEL.width);
-      expect(box.height).toBe(LABEL.height);
-    }
-  });
-
-  it('points each label along the middle of its slice, clockwise from the top', () => {
-    // A quarter, then three quarters: the first points at 45 degrees (up and right), the second at 225.
-    const [first, second] = layoutLabels([0.25, 0.75], SIZE);
-    const mid = (box: Box) => [
-      box.left + box.width / 2 - CENTRE,
-      box.top + box.height / 2 - CENTRE,
-    ];
-    const [x1, y1] = mid(first!.box);
-    expect(x1).toBeGreaterThan(0);
-    expect(y1).toBeLessThan(0);
-    expect(x1).toBeCloseTo(-y1!, 5);
-    const [x2, y2] = mid(second!.box);
-    expect(x2).toBeLessThan(0);
-    expect(y2).toBeGreaterThan(0);
-    expect(x2).toBeCloseTo(-y2!, 5);
-    expect(first!.above).toBe(true);
-    expect(second!.above).toBe(false);
-  });
-
-  it('draws a leader from the ring edge to the box', () => {
-    for (const { box, line } of layoutLabels(sharesOf(TWELVE), SIZE, new Set([0, 1, 2, 3]))) {
-      expect(Math.hypot(line.x1 - CENTRE, line.y1 - CENTRE)).toBeCloseTo(CENTRE, 5);
-      expect(line.x2).toBeGreaterThanOrEqual(box.left - 1e-9);
-      expect(line.x2).toBeLessThanOrEqual(box.left + box.width + 1e-9);
-      expect(line.y2).toBeGreaterThanOrEqual(box.top - 1e-9);
-      expect(line.y2).toBeLessThanOrEqual(box.top + box.height + 1e-9);
-      // Short: the ring to the box is the lead plus at most a box's corner.
-      expect(Math.hypot(line.x2 - line.x1, line.y2 - line.y1)).toBeLessThan(
-        LABEL.lead + LABEL.height,
-      );
-    }
-  });
-
-  it('keeps no two boxes touching, dropping a label only for a bigger slice, and the smallest first', () => {
-    const shares = sharesOf(TWELVE);
-    const kept = layoutLabels(shares, SIZE);
-    const keptIndexes = kept.map((p) => p.index);
-    expect(kept.length).toBeGreaterThan(3);
-    expect(kept.length).toBeLessThan(TWELVE.length);
-    for (const [i, a] of kept.entries()) {
-      for (const b of kept.slice(i + 1))
-        expect(overlap(a.box, b.box), `${a.index} ${b.index}`).toBe(false);
-    }
-    // The biggest slices always keep theirs.
-    expect(keptIndexes.slice(0, 3)).toEqual([0, 1, 2]);
-    // A dropped label is dropped because its box meets (or crowds) one of a slice at least as big.
-    for (let i = 0; i < shares.length; i++) {
-      if (keptIndexes.includes(i)) continue;
-      const [alone] = layoutLabels(shares, SIZE, new Set([i]));
-      const blocker = kept.find(
-        (p) => overlap(alone!.box, p.box, LABEL.gap) && shares[p.index]! >= shares[i]!,
-      );
-      expect(blocker, `slice ${i} dropped with nothing bigger in its way`).toBeDefined();
-    }
-  });
-
-  it('leaves out a slice with nothing to show, or not asked for', () => {
-    expect(layoutLabels([0.5, 0, 0.5], SIZE).map((p) => p.index)).toEqual([0, 2]);
-    expect(layoutLabels([0.5, 0.25, 0.25], SIZE, new Set([1])).map((p) => p.index)).toEqual([1]);
-    expect(layoutLabels([], SIZE)).toEqual([]);
-  });
-});
-
-describe('Donut outside labels', () => {
-  it('shows a label for each of four slices, at the box the geometry gives', () => {
-    const { container } = donut(FOUR);
-    const labels = drawn(container);
-    expect(labels.map((l) => l.key)).toEqual(['a', 'b', 'c', 'd']);
-    const placed = layoutLabels(sharesOf(FOUR), SIZE);
-    labels.forEach((label, i) => {
-      expect(label.box).toEqual(placed[i]!.box);
-      // The logo and the share, in the text colour and hidden from a screen reader.
-      expect(label.el.querySelector(`[data-logo="${label.key}"]`)).not.toBeNull();
-      expect(label.el).toHaveTextContent(/^\d+%$/);
-      expect(label.el).toHaveClass('text-text');
-      expect(label.el).toHaveAttribute('aria-hidden', 'true');
-    });
-    expect(labels.map((l) => l.el.textContent)).toEqual(['42%', '27%', '20%', '11%']);
-  });
-
-  it('joins each label to the ring with a leader line, in the same space as the box', () => {
-    const { container } = donut(FOUR);
-    const lines = [...container.querySelectorAll('line')];
-    const placed = layoutLabels(sharesOf(FOUR), SIZE);
-    expect(lines).toHaveLength(4);
-    lines.forEach((line, i) => {
-      const want = placed[i]!.line;
-      for (const end of ['x1', 'y1', 'x2', 'y2'] as const) {
-        expect(parseFloat(line.getAttribute(end)!)).toBeCloseTo(want[end], 5);
-      }
-      // Not under the rotation the arcs are drawn with.
-      expect(line.closest('svg')).not.toHaveClass('-rotate-90');
-      expect(line.closest('svg')).toHaveAttribute('aria-hidden', 'true');
-    });
-  });
-
-  it('puts the logo nearest the ring: under a label above it, over a label below it', () => {
-    const { container } = donut(FOUR);
-    const placed = layoutLabels(sharesOf(FOUR), SIZE);
-    for (const [i, label] of drawn(container).entries()) {
-      const logoFirst = label.el.firstElementChild!.hasAttribute('data-logo');
-      expect(logoFirst, label.key).toBe(!placed[i]!.above);
-    }
-  });
-
-  it('keeps room around the ring for the labels', () => {
-    const { container } = donut(FOUR);
-    expect(container.firstElementChild).toHaveStyle({
-      margin: `${LABEL.lead + LABEL.height}px ${LABEL.lead + LABEL.width}px`,
-    });
-  });
-
-  it('drops the labels that would overlap, so that no two boxes on the page meet', () => {
-    const { container } = donut(TWELVE);
-    const labels = drawn(container);
-    const kept = layoutLabels(sharesOf(TWELVE), SIZE);
-    expect(labels.map((l) => l.key)).toEqual(kept.map((p) => TWELVE[p.index]!.key));
-    expect(labels.length).toBeLessThan(TWELVE.length);
-    for (const [i, a] of labels.entries()) {
-      for (const b of labels.slice(i + 1)) {
-        expect(overlap(a.box, b.box), `${a.key} and ${b.key}`).toBe(false);
-      }
-    }
-    // A dropped slice is still there to tap and read, and the leaders go with their labels only.
-    expect(container.querySelectorAll('button')).toHaveLength(TWELVE.length);
-    expect(container.querySelectorAll('line')).toHaveLength(labels.length);
-  });
-
-  it('labels a lone slice below the ring, as 100%', () => {
-    const { container } = donut([slice('ko', 500)]);
-    const [only] = drawn(container);
-    expect(only!.el).toHaveTextContent('100%');
-    expect(only!.box.top).toBeGreaterThan(SIZE);
-    expect(only!.box.left + only!.box.width / 2).toBeCloseTo(CENTRE, 5);
-  });
-
-  it('writes nothing, and keeps no room, unless asked', () => {
-    const { container } = donut(FOUR, { outsideLabels: undefined });
-    expect(drawn(container)).toEqual([]);
-    expect(container.querySelectorAll('line')).toHaveLength(0);
-    expect((container.firstElementChild as HTMLElement).style.margin).toBe('');
-  });
-
-  it('writes none on an empty donut, and ignores a label whose key is no slice', () => {
-    const empty = donut([]);
-    expect(drawn(empty.container)).toEqual([]);
-    empty.unmount();
-    const { container } = donut(FOUR, {
-      outsideLabels: [...labelsFor(FOUR), { key: 'ghost', logo: null, text: '0%' }],
-    });
-    expect(drawn(container).map((l) => l.key)).toEqual(['a', 'b', 'c', 'd']);
-  });
-});
-
-/*
- * The badge style (`labelStyle="badge"`): a glass pill with a 24px round badge and the share after
- * it, standing just outside its slice with no leader line. Pills that would meet are nudged apart
- * along the ring, and none is dropped.
- */
 const TEN = [24, 18, 12, 9, 8, 7, 6, 6, 5, 5].map((n, i) => slice(`h${i}`, n));
+
 /** What the donut keeps clear around it for the pills; one outside it would be clipped. */
 const ROOM = { x: BADGE.reach, y: BADGE.lead + BADGE.height };
 
@@ -261,18 +83,15 @@ const nearest = (box: Box) =>
     ),
   );
 
-const badged = (slices: Slice[], extra: Partial<React.ComponentProps<typeof Donut>> = {}) =>
-  donut(slices, { labelStyle: 'badge', ...extra });
+/** The pills' widths for these shares, as the donut sizes them (or for these texts). */
+const widthsOf = (shares: readonly number[], texts?: readonly string[]) =>
+  shares.map((share, i) => badgeWidth(texts?.[i] ?? textOf(share)));
 
-describe('layoutLabels, badge style', () => {
-  const fit = (shares: number[], texts?: string[]) => ({
-    widths: shares.map((share, i) => badgeWidth(texts?.[i] ?? `${Math.round(share * 100)}%`)),
-  });
-
+describe('layoutBadges', () => {
   it('stands each pill at the middle of its slice, clear of the ring, when there is room', () => {
     // A quarter then three quarters: 45 degrees (up and right), then 225 (down and left).
     const shares = [0.25, 0.75];
-    const [first, second] = layoutLabels(shares, SIZE, undefined, fit(shares));
+    const [first, second] = layoutBadges(shares, SIZE, widthsOf(shares));
     const mid = (box: Box) => [
       box.left + box.width / 2 - CENTRE,
       box.top + box.height / 2 - CENTRE,
@@ -296,14 +115,14 @@ describe('layoutLabels, badge style', () => {
     expect(badgeWidth('27%')).toBeLessThan(badgeWidth('100%'));
     // The disc, its padding and the share's digits and sign are all in it.
     expect(badgeWidth('27%')).toBeGreaterThan(BADGE.disc + 14);
-    const [only] = layoutLabels([1], SIZE, undefined, fit([1], ['100%']));
+    const [only] = layoutBadges([1], SIZE, widthsOf([1], ['100%']));
     expect(only!.box.width).toBe(badgeWidth('100%'));
   });
 
   it('keeps every slice a pill, and no two meet, however many slices crowd the ring', () => {
     for (const slices of [TEN, TWELVE, FOUR]) {
       const shares = sharesOf(slices);
-      const placed = layoutLabels(shares, SIZE, undefined, fit(shares));
+      const placed = layoutBadges(shares, SIZE, widthsOf(shares));
       expect(placed.map((p) => p.index)).toEqual(slices.map((_, i) => i));
       for (const [i, a] of placed.entries()) {
         expect(insideRoom(a.box), `slice ${a.index} inside the room`).toBe(true);
@@ -317,11 +136,74 @@ describe('layoutLabels, badge style', () => {
     }
   });
 
+  describe('at the production size: a 200px pie of five holdings and Other', () => {
+    /** What the pie draws for these six amounts: shares, each pill as wide as its written share needs. */
+    const six = (amounts: readonly number[]) => {
+      const total = amounts.reduce((sum, a) => sum + a, 0);
+      const shares = amounts.map((a) => a / total);
+      return { shares, placed: layoutBadges(shares, SIZE, widthsOf(shares)) };
+    };
+
+    /** Every pill is there, clear of the ring and of each other, inside the chart's box. */
+    const expectFits = (amounts: readonly number[]) => {
+      const { shares, placed } = six(amounts);
+      expect(
+        placed.map((p) => p.index),
+        amounts.join(','),
+      ).toEqual(shares.map((_, i) => i));
+      for (const [i, a] of placed.entries()) {
+        expect(insideRoom(a.box), `${amounts.join(',')}: slice ${a.index} in the chart's box`).toBe(
+          true,
+        );
+        expect(nearest(a.box), `slice ${a.index} clear of the ring`).toBeGreaterThanOrEqual(
+          CENTRE + BADGE.lead - 1e-9,
+        );
+        for (const b of placed.slice(i + 1)) {
+          expect(
+            overlap(a.box, b.box, BADGE.space),
+            `${amounts.join(',')}: ${a.index} and ${b.index}`,
+          ).toBe(false);
+        }
+      }
+    };
+
+    it('fits the shares of the demo, a pie with two thin slices, and one with a big slice and five thin', () => {
+      // Demo-like: 28, 23, 22, 9, 5 and Other 13.
+      expectFits([28, 23, 22, 9, 5, 13]);
+      // Two thin slices side by side, then a long run of 1-digit shares.
+      expectFits([34, 28, 20, 9, 5, 4]);
+      expectFits([40, 30, 15, 5, 5, 5]);
+      expectFits([90, 4, 2, 2, 1, 1]);
+      expectFits([60, 10, 10, 10, 5, 5]);
+    });
+
+    it('fits an equal split, where six pills are the same width and meet at the top and bottom', () => {
+      expectFits([1, 1, 1, 1, 1, 1]);
+    });
+
+    it('fits any of 400 shares of six, however thin or lopsided', () => {
+      // A fixed pseudo-random sequence, so a failure names the shares that broke it.
+      let seed = 20261023;
+      const next = () => (seed = (seed * 1664525 + 1013904223) % 4294967296) / 4294967296;
+      for (let n = 0; n < 400; n++) {
+        expectFits(Array.from({ length: 6 }, () => 1 + Math.round(next() ** 2 * 100)));
+      }
+    });
+
+    it('fits the widest pills, a three-digit share on one slice, anywhere on the ring', () => {
+      // 100% is a lone slice (below the ring); 6 of "100%" cannot be, so the widest real case is 99%.
+      expectFits([99, 1, 1, 1, 1, 1]);
+      const [only] = layoutBadges([1], SIZE, widthsOf([1], ['100%']));
+      expect(insideRoom(only!.box)).toBe(true);
+    });
+  });
+
   it('moves only the slice that is in the way, the thinner one, and only along the ring', () => {
-    // Two thin slices side by side at the top, between a big one each side: both cannot stand at their middles.
+    // Two thin slices side by side at the bottom, between a big one each side: both cannot stand at their middles.
     const shares = [0.4, 0.04, 0.04, 0.52];
-    const alone = (i: number) => layoutLabels(shares, SIZE, new Set([i]), fit(shares))[0]!.box;
-    const placed = layoutLabels(shares, SIZE, undefined, fit(shares));
+    const widths = widthsOf(shares);
+    const alone = (i: number) => layoutBadges(shares, SIZE, widths, new Set([i]))[0]!.box;
+    const placed = layoutBadges(shares, SIZE, widths);
     // The big slices keep their middles.
     expect(placed[0]!.box).toEqual(alone(0));
     expect(placed[3]!.box).toEqual(alone(3));
@@ -336,34 +218,34 @@ describe('layoutLabels, badge style', () => {
   it('keeps a pill that is too wide for the side its slice points to inside the room, by sliding it along the ring', () => {
     // A slice centred on three o'clock: its pill, standing straight out, would reach past the room.
     const shares = [0.125, 0.25, 0.625];
-    const wide = fit(shares, ['12%', '25%', '62%']);
-    wide.widths[1] = ROOM.x + 20;
-    const [, right] = layoutLabels(shares, SIZE, undefined, wide);
+    const widths = widthsOf(shares, ['12%', '25%', '62%']);
+    widths[1] = ROOM.x + 20;
+    const [, right] = layoutBadges(shares, SIZE, widths);
     expect(insideRoom(right!.box)).toBe(true);
     expect(nearest(right!.box)).toBeGreaterThanOrEqual(CENTRE + BADGE.lead - 1e-9);
   });
 
   it('never drops a pill, even when the ring is too full for them all to stand apart', () => {
     const shares = Array.from({ length: 40 }, () => 1 / 40);
-    const placed = layoutLabels(shares, SIZE, undefined, fit(shares));
+    const placed = layoutBadges(shares, SIZE, widthsOf(shares));
     expect(placed.map((p) => p.index)).toEqual(shares.map((_, i) => i));
   });
 
   it('leaves out a slice with nothing to show, or not asked for', () => {
     const shares = [0.5, 0, 0.5];
-    expect(layoutLabels(shares, SIZE, undefined, fit(shares)).map((p) => p.index)).toEqual([0, 2]);
+    expect(layoutBadges(shares, SIZE, widthsOf(shares)).map((p) => p.index)).toEqual([0, 2]);
     expect(
-      layoutLabels([0.5, 0.25, 0.25], SIZE, new Set([1]), fit([0.5, 0.25, 0.25])).map(
+      layoutBadges([0.5, 0.25, 0.25], SIZE, widthsOf([0.5, 0.25, 0.25]), new Set([1])).map(
         (p) => p.index,
       ),
     ).toEqual([1]);
-    expect(layoutLabels([], SIZE, undefined, { widths: [] })).toEqual([]);
+    expect(layoutBadges([], SIZE, [])).toEqual([]);
   });
 });
 
-describe('Donut badge labels', () => {
+describe('Donut outside labels', () => {
   it('has ten holdings keep every label apart: one pill each, none meeting another', () => {
-    const { container } = badged(TEN);
+    const { container } = donut(TEN);
     const labels = drawn(container);
     expect(labels).toHaveLength(TEN.length);
     expect(labels.map((l) => l.key)).toEqual(TEN.map((s) => s.key));
@@ -377,14 +259,13 @@ describe('Donut badge labels', () => {
     expect(container.querySelectorAll('button')).toHaveLength(TEN.length);
   });
 
-  it('keeps all twelve of a crowded ring, where the default style drops labels', () => {
-    const { container } = badged(TWELVE);
+  it('keeps all twelve of a crowded ring', () => {
+    const { container } = donut(TWELVE);
     expect(drawn(container)).toHaveLength(TWELVE.length);
-    expect(layoutLabels(sharesOf(TWELVE), SIZE).length).toBeLessThan(TWELVE.length);
   });
 
   it('draws a pill: the badge first, then the share, in glass and the text colour, with no leader line', () => {
-    const { container } = badged(FOUR);
+    const { container } = donut(FOUR);
     const labels = drawn(container);
     expect(labels.map((l) => l.el.textContent)).toEqual(['42%', '27%', '20%', '11%']);
     for (const { key, el, box } of labels) {
@@ -394,22 +275,19 @@ describe('Donut badge labels', () => {
       expect(box.height).toBe(BADGE.height);
       expect(box.width).toBe(badgeWidth(el.textContent!));
     }
-    // Not the default style's leaders, nor its margin.
     expect(container.querySelectorAll('line')).toHaveLength(0);
     expect(container.firstElementChild).toHaveStyle({ margin: `${ROOM.y}px ${ROOM.x}px` });
   });
 
   it('puts each pill where the geometry says', () => {
-    const { container } = badged(FOUR);
+    const { container } = donut(FOUR);
     const shares = sharesOf(FOUR);
-    const placed = layoutLabels(shares, SIZE, undefined, {
-      widths: shares.map((share) => badgeWidth(`${Math.round(share * 100)}%`)),
-    });
+    const placed = layoutBadges(shares, SIZE, widthsOf(shares));
     drawn(container).forEach((label, i) => expect(label.box).toEqual(placed[i]!.box));
   });
 
   it('labels a lone slice below the ring, as 100%', () => {
-    const { container } = badged([slice('ko', 500)]);
+    const { container } = donut([slice('ko', 500)]);
     const [only] = drawn(container);
     expect(only!.el).toHaveTextContent('100%');
     expect(only!.box.top).toBeGreaterThan(SIZE);
@@ -418,15 +296,15 @@ describe('Donut badge labels', () => {
   });
 
   it('writes none on an empty donut, ignores a label whose key is no slice, and keeps no room unless asked', () => {
-    const empty = badged([]);
+    const empty = donut([]);
     expect(drawn(empty.container)).toEqual([]);
     empty.unmount();
-    const ghost = badged(FOUR, {
+    const ghost = donut(FOUR, {
       outsideLabels: [...labelsFor(FOUR), { key: 'ghost', logo: null, text: '0%' }],
     });
     expect(drawn(ghost.container).map((l) => l.key)).toEqual(['a', 'b', 'c', 'd']);
     ghost.unmount();
-    const none = badged(FOUR, { outsideLabels: undefined });
+    const none = donut(FOUR, { outsideLabels: undefined });
     expect(drawn(none.container)).toEqual([]);
     expect((none.container.firstElementChild as HTMLElement).style.margin).toBe('');
   });
@@ -435,17 +313,11 @@ describe('Donut badge labels', () => {
     const colors = ['#0f3e99', '#c8102e', '#22c55e', '#ec4899'];
     const arcs = (el: HTMLElement) =>
       [...el.querySelectorAll('svg > circle')].slice(1).map((c) => c.getAttribute('stroke'));
-    const given = badged(FOUR, { colors });
+    const given = donut(FOUR, { colors });
     expect(arcs(given.container)).toEqual(colors);
     given.unmount();
-    const none = badged(FOUR);
+    const none = donut(FOUR);
     expect(arcs(none.container)).toEqual([1, 2, 3, 4].map((n) => `var(--color-chart-${n})`));
-  });
-
-  it('leaves the default style as it was, for anything that does not ask for the badge', () => {
-    const { container } = donut(FOUR);
-    expect(container.querySelectorAll('line')).toHaveLength(4);
-    expect(drawn(container)[0]!.el).not.toHaveClass('glass-strong');
   });
 });
 

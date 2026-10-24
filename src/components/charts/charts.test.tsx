@@ -236,6 +236,59 @@ describe('Donut centre figure', () => {
     donut({ size: 120, thickness: 14, selected: 0 });
     expect(screen.getByText('$1,200.00')).toHaveClass('text-[15px]');
   });
+
+  /** The px a donut writes `text` at, read from its `text-[NNpx]` class. */
+  const sizeOf = (text: string, props: Partial<React.ComponentProps<typeof Donut>> = {}) => {
+    const { unmount } = donut({
+      size: 200,
+      thickness: 22,
+      idle: { value: text, label: 'All' },
+      ...props,
+    });
+    const px = Number(/text-\[(\d+)px\]/.exec(screen.getByText(text).className)![1]);
+    unmount();
+    return px;
+  };
+
+  it('steps a long amount down 28, 24, 20px so that it fits the hole of a 200px donut', () => {
+    // The hole is 156px; an amount of 163px at 28px would graze the ring.
+    expect(sizeOf('$14,853')).toBe(28);
+    expect(sizeOf('$99,999')).toBe(28);
+    // Common amounts with cents still fit at 28px (145px).
+    expect(sizeOf('$1,200.00')).toBe(28);
+    expect(sizeOf('$10,000.00')).toBe(24);
+    expect(sizeOf('$1,234,567')).toBe(24);
+    expect(sizeOf('$100,000.00')).toBe(20);
+  });
+
+  it('goes no lower than 20px, however long the amount', () => {
+    expect(sizeOf('$999,999,999,999,999.00')).toBe(20);
+  });
+
+  it('steps a chosen slice by the amount it shows, as the idle figure is', () => {
+    const shows = (text: string) => ({ selected: 0, formatAmount: () => text });
+    expect(sizeOf('$5.00', shows('$5.00'))).toBe(28);
+    expect(sizeOf('$12,000.00', shows('$12,000.00'))).toBe(24);
+    expect(sizeOf('$10,000,000.00', shows('$10,000,000.00'))).toBe(20);
+  });
+
+  it('takes the hole of the donut it is in: a 240px donut (Budget) keeps 28px for the same amount', () => {
+    expect(sizeOf('$10,000.00', { size: 240 })).toBe(28);
+    expect(sizeOf('$123,456.78', { size: 240 })).toBe(28);
+  });
+
+  it('keeps the same size for a hidden amount, whatever it is: the mask is one string', () => {
+    // The pie writes the mask in place of every amount while they are hidden, so its size cannot say how much.
+    for (const amount of [5, 1000, 123_456_700, 99_999_999_999_00]) {
+      const slices = [{ key: 'a', label: 'A', amount }];
+      expect(sizeOf('••••', { selected: 0, formatAmount: () => '••••', slices })).toBe(28);
+    }
+  });
+
+  it('leaves the 15px and 19px donuts as they are, however long the amount', () => {
+    expect(sizeOf('$1,234,567.00', { size: 120, thickness: 14 })).toBe(15);
+    expect(sizeOf('$1,234,567.00', { size: 150, thickness: 18 })).toBe(19);
+  });
 });
 
 describe('DonutLegend', () => {

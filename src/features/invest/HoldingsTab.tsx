@@ -128,7 +128,6 @@ function PieBlock({ rows, label }: { rows: HoldingRow[]; label: string }) {
           size={200}
           thickness={22}
           colors={colors}
-          labelStyle="badge"
           outsideLabels={slices.map((slice, i) => ({
             key: slice.key,
             logo: logo(slice, i, BADGE.disc, true),

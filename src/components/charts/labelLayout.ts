@@ -1,16 +1,3 @@
-/**
- * A label's size and how it stands off the ring, in px. An 18px logo disc over a 12px share, such
- * as "27%", with 2px between; the width is the widest share's, "100%".
- */
-export const LABEL = {
-  width: 32,
-  height: 32,
-  /** From the ring's edge to the nearest side of the box: the room for the leader line. */
-  lead: 12,
-  /** The least space left between two boxes. */
-  gap: 2,
-} as const;
-
 /** A rectangle in px from the donut's top-left corner. */
 export interface Box {
   left: number;
@@ -19,19 +6,9 @@ export interface Box {
   height: number;
 }
 
-export interface PlacedLabel {
-  /** The slice's position in the list of shares. */
-  index: number;
-  box: Box;
-  /** From the ring's edge to the box, in the same px. */
-  line: { x1: number; y1: number; x2: number; y2: number };
-  /** The label stands over the middle of its slice, so its logo (the part the line meets) goes under its text. */
-  above: boolean;
-}
-
 /**
- * The badge style's measures, in px: a glass pill with a 24px round badge (a logo, or a ticker on the
- * slice's colour) and the slice's share after it.
+ * The measures of a donut's outside labels, in px: a glass pill with a 24px round badge (a logo, or
+ * a ticker on the slice's colour) and the slice's share after it.
  */
 export const BADGE = {
   /** The round badge. */
@@ -51,7 +28,10 @@ export const BADGE = {
   reach: 60,
 } as const;
 
-/** The pill's left padding, the gap between the badge and the share, and the padding after it. */
+/**
+ * The pill's left padding (1px glass edge and 2px), the gap between the badge and the share, and the
+ * padding after it (1px edge and 7px): the `pl-0.5`, `ml-1` and `pr-[7px]` of Donut's `PILL`.
+ */
 const PILL = { before: 3, between: 4, after: 8 } as const;
 /**
  * The width of the share's digits (7.8px) and its percent sign (9.9px) at 12px, bold and tabular,
@@ -65,12 +45,7 @@ export function badgeWidth(text: string): number {
   return PILL.before + BADGE.disc + PILL.between + glyphs + PILL.after;
 }
 
-/** What the badge style needs of each label: how wide its pill is, by slice. */
-export interface BadgeFit {
-  widths: readonly number[];
-}
-
-/** A pill placed: the slice's position in the list of shares, and the box it stands in. No leader. */
+/** A pill placed: the slice's position in the list of shares, and the box it stands in. */
 export interface PlacedBadge {
   index: number;
   box: Box;
@@ -80,26 +55,28 @@ export interface PlacedBadge {
 const SLIDE = Math.PI / 180;
 const SLIDES = 180;
 
-const near = (a: Box, b: Box, gap: number = LABEL.gap) =>
+const near = (a: Box, b: Box, gap: number) =>
   a.left < b.left + b.width + gap &&
   b.left < a.left + a.width + gap &&
   a.top < b.top + b.height + gap &&
   b.top < a.top + a.height + gap;
 
-const clamp = (n: number, low: number, high: number) => Math.min(high, Math.max(low, n));
-
 /**
- * The pills of a donut of `size`. Each is at the middle of its slice, just outside the ring, as the
- * default style's boxes are, with no leader line; the biggest slices are placed first. A pill that
- * meets one already placed, or reaches past the room the donut keeps at its sides, is slid along the
- * ring a degree at a time, clockwise first, to the nearest spot where it does not. None is dropped.
- * Only if the whole ring is full does a pill stand over another, at its slice's middle.
+ * Where the pills of a donut of `size` stand (`shares` are fractions of the whole, clockwise from the
+ * top; `widths` are the pills' widths by slice, from `badgeWidth`). Each is at the middle of its
+ * slice, just outside the ring, pushed out along its slice's direction until its nearest side clears
+ * the ring by `BADGE.lead`; there is no leader line. The biggest slices are placed first. A pill that
+ * meets one already placed, or reaches past the room the donut keeps at its sides (`BADGE.reach`, and
+ * above and below), is slid along the ring a degree at a time, clockwise first, to the nearest spot
+ * where it does not. None is dropped: only if the whole ring is full does a pill stand over another,
+ * at its slice's middle. `only` limits which slices are asked for; the rest take no room. Returns the
+ * pills in slice order.
  */
-function layoutBadges(
+export function layoutBadges(
   shares: readonly number[],
   size: number,
-  only: ReadonlySet<number> | undefined,
-  { widths }: BadgeFit,
+  widths: readonly number[],
+  only?: ReadonlySet<number>,
 ): PlacedBadge[] {
   const centre = size / 2;
   const { height, lead, space, reach } = BADGE;
@@ -145,68 +122,4 @@ function layoutBadges(
     placed.push({ index: c.index, box: box ?? boxAt(c.mid, c.width) });
   }
   return placed.sort((a, b) => a.index - b.index);
-}
-
-/**
- * Where the labels of a donut of `size` stand: at the middle of each slice (`shares` are fractions of
- * the whole, clockwise from the top), just outside the ring. A box is pushed out along its slice's
- * direction until its nearest side clears the ring by `LABEL.lead`. Labels that would meet are
- * dropped, the smallest slice's first: slices are taken biggest first and one whose box meets one
- * already kept is left out. `only` limits which slices are asked for; the rest take no room.
- * Returns the kept labels in slice order.
- *
- * With `badge` (the badge style) the labels are pills of the widths it gives, with no leader line, and
- * none is dropped: one that would meet another is nudged along the ring instead.
- */
-export function layoutLabels(
-  shares: readonly number[],
-  size: number,
-  only?: ReadonlySet<number>,
-): PlacedLabel[];
-export function layoutLabels(
-  shares: readonly number[],
-  size: number,
-  only: ReadonlySet<number> | undefined,
-  badge: BadgeFit,
-): PlacedBadge[];
-export function layoutLabels(
-  shares: readonly number[],
-  size: number,
-  only?: ReadonlySet<number>,
-  badge?: BadgeFit,
-): PlacedLabel[] | PlacedBadge[] {
-  if (badge) return layoutBadges(shares, size, only, badge);
-  const centre = size / 2;
-  const { width, height, lead } = LABEL;
-  let before = 0;
-  const candidates = shares.flatMap((share, index) => {
-    const mid = (before + share / 2) * 2 * Math.PI;
-    before += share;
-    if (share <= 0 || (only && !only.has(index))) return [];
-    const [x, y] = [Math.sin(mid), -Math.cos(mid)];
-    // The distance at which a box of this size, centred on the direction, just clears the circle.
-    const reach = centre + lead + (width / 2) * Math.abs(x) + (height / 2) * Math.abs(y);
-    const box = {
-      left: centre + reach * x - width / 2,
-      top: centre + reach * y - height / 2,
-      width,
-      height,
-    };
-    const line = {
-      x1: centre + centre * x,
-      y1: centre + centre * y,
-      // The end of the line is the point of the box nearest the spot `lead` out from the ring.
-      x2: clamp(centre + (centre + lead) * x, box.left, box.left + width),
-      y2: clamp(centre + (centre + lead) * y, box.top, box.top + height),
-    };
-    return [{ index, share, box, line, above: y < 0 }];
-  });
-
-  const kept: typeof candidates = [];
-  for (const c of [...candidates].sort((a, b) => b.share - a.share || a.index - b.index)) {
-    if (!kept.some((k) => near(c.box, k.box))) kept.push(c);
-  }
-  return kept
-    .sort((a, b) => a.index - b.index)
-    .map(({ index, box, line, above }) => ({ index, box, line, above }));
 }

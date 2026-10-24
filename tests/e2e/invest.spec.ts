@@ -249,9 +249,29 @@ test('mobile: the pie labels fit a 360px screen: none clipped, none over another
   const boxes = await pie
     .locator('[data-label]')
     .evaluateAll((els) => els.map((el) => el.getBoundingClientRect().toJSON() as DOMRect));
+  // The chart's own box: the ring and the room the donut keeps round it for the labels (its margin).
+  const chart = await pie
+    .locator('svg')
+    .first()
+    .evaluate((svg) => {
+      const donut = svg.parentElement!;
+      const rect = donut.getBoundingClientRect();
+      const margin = getComputedStyle(donut);
+      return {
+        left: rect.left - parseFloat(margin.marginLeft),
+        right: rect.right + parseFloat(margin.marginRight),
+        top: rect.top - parseFloat(margin.marginTop),
+        bottom: rect.bottom + parseFloat(margin.marginBottom),
+      };
+    });
+  // The chart is inside the page's own 20px gutters (320px of a 360px screen), not into them.
+  expect(chart.left, 'the chart box, left').toBeGreaterThanOrEqual(20 - 0.5);
+  expect(chart.right, 'the chart box, right').toBeLessThanOrEqual(340 + 0.5);
   for (const [i, a] of boxes.entries()) {
-    expect(a.left, 'not clipped on the left').toBeGreaterThanOrEqual(0);
-    expect(a.right, 'not clipped on the right').toBeLessThanOrEqual(360);
+    expect(a.left, 'inside the chart box, left').toBeGreaterThanOrEqual(chart.left - 0.5);
+    expect(a.right, 'inside the chart box, right').toBeLessThanOrEqual(chart.right + 0.5);
+    expect(a.top, 'inside the chart box, top').toBeGreaterThanOrEqual(chart.top - 0.5);
+    expect(a.bottom, 'inside the chart box, bottom').toBeLessThanOrEqual(chart.bottom + 0.5);
     for (const b of boxes.slice(i + 1)) {
       const apart =
         a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top;
@@ -259,6 +279,29 @@ test('mobile: the pie labels fit a 360px screen: none clipped, none over another
     }
   }
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(360);
+});
+
+test("the pie's centre amount fits the hole when a holding is worth $10,000 or more", async ({
+  page,
+}) => {
+  // 6 shares at $2,000 is $12,000.00, which is 163px at 28px and the hole is 156px wide.
+  await mockPriceService(page, usStock('AAPL', 'Apple', 2000));
+  await startFresh(page, '/invest');
+  await addHolding(page, 'AAPL', '6', '1800', { search: 'appl' });
+
+  const pie = page.getByRole('group', { name: 'All holdings' });
+  const centre = pie.locator('b');
+  const size = () => centre.evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
+  const width = async () => (await centre.boundingBox())!.width;
+  // Idle it is the whole-dollar total, which fits at the full 28px.
+  await expect(centre).toHaveText('$12,000');
+  expect(await size()).toBe(28);
+  // Selected it is the exact amount, which is wider: it steps down and sits inside the hole.
+  await pie.locator('button[aria-pressed]').filter({ hasText: 'AAPL' }).click();
+  await expect(centre).toHaveText('$12,000.00');
+  expect(await size()).toBeLessThan(28);
+  expect(await size()).toBeGreaterThanOrEqual(20);
+  expect(await width()).toBeLessThanOrEqual(200 - 2 * 22 - 8);
 });
 
 test('a slice takes its company colour from the logo once it has loaded, and not for its neighbour', async ({

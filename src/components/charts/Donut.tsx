@@ -3,22 +3,57 @@ import type { Slice } from '@/domain/charts';
 import { ROWS } from '@/features/shared/PlainSection';
 import { cn } from '@/lib/cn';
 import { sliceColors } from './colors';
-import { BADGE, badgeWidth, LABEL, layoutLabels } from './labelLayout';
+import { BADGE, badgeWidth, layoutBadges } from './labelLayout';
 
 /** The space between neighbouring arcs, in px along the ring. */
 const GAP = 3;
 
 /**
- * A badge-style label: strong glass in the text colour, the share in 12px bold. The share is held at
+ * An outside label: strong glass in the text colour, the share in 12px bold. The share is held at
  * 4.5:1 on the glass over the page and every shape behind it, in every theme and both modes
- * (tests/unit/tokens.test.ts reads this string). Its size is the layout's (`BADGE`), set inline.
+ * (tests/unit/tokens.test.ts reads this string). Its box is the layout's, set inline. `pl-0.5`,
+ * `pr-[7px]` and the share's `ml-1`, with the 1px edge, are the 3, 8 and 4 of `PILL` in labelLayout.ts.
  */
 const PILL =
   'glass-strong text-text pointer-events-none absolute flex items-center rounded-full pr-[7px] pl-0.5 text-xs leading-none font-bold tabular-nums';
 
-/** What stands outside the ring for the slice with this key: a logo over a short text such as "27%". */
+/** The centre figure's sizes as classes, written out so that Tailwind finds them. */
+const FIGURE_CLASS: Record<number, string> = {
+  28: 'text-[28px]',
+  24: 'text-[24px]',
+  20: 'text-[20px]',
+  19: 'text-[19px]',
+  15: 'text-[15px]',
+};
+
+/** The space either side of the centre figure, in px, that it keeps clear of the ring. */
+const FIGURE_MARGIN = 4;
+
+/**
+ * The width of a centre figure in em, as the app's font sets it extra-bold (measured at 28px: a digit
+ * or a currency sign 0.665em, a point, comma or space 0.28em, a lowercase letter taken as 0.5em). The
+ * figure is a string, so a hidden amount, which is one mask whatever it hides, is one width.
+ */
+function figureEm(text: string): number {
+  let em = 0;
+  for (const ch of text) em += /[.,\s]/.test(ch) ? 0.28 : /\p{Ll}/u.test(ch) ? 0.5 : 0.665;
+  return em;
+}
+
+/**
+ * The size for the centre figure: the first of `sizes` (biggest first) at which it fits `hole` px
+ * with `FIGURE_MARGIN` to spare each side, else the last. It is worked out from the text, as Home's
+ * hero does from its amount, so it is the same on every render and in a test.
+ */
+function fitFigure(text: string, sizes: readonly number[], hole: number): number {
+  const em = figureEm(text);
+  return sizes.find((px) => em * px <= hole - 2 * FIGURE_MARGIN) ?? sizes[sizes.length - 1]!;
+}
+
+/** What stands outside the ring for the slice with this key: a 24px round badge and a short text such as "27%". */
 export interface OutsideLabel {
   key: string;
+  /** The round badge (`BADGE.disc` px): a company's logo, or its ticker on the slice's colour. */
   logo: ReactNode;
   text: string;
 }
@@ -37,18 +72,12 @@ export interface DonutProps {
   selected: number | null;
   onSelect(index: number | null): void;
   /**
-   * A label for slices (matched by key), just outside the ring at the middle of the slice with a
-   * leader line to it. A label that would overlap another is left out, the smaller slice's first.
-   * The donut then takes room around it for the labels. With `labelStyle="badge"` they are instead
-   * pills with no leader line, and none is left out.
+   * A label for slices (matched by key): a glass pill with the label's `logo` as a round badge and
+   * its `text` after it, just outside the ring at the middle of the slice, with no leader line.
+   * Pills that would meet are nudged apart along the ring and none is left out. The donut then takes
+   * room around it for them (`BADGE.reach` at each side, a pill's height above and below).
    */
   outsideLabels?: OutsideLabel[];
-  /**
-   * How the outside labels look. Unset, each is a logo over its text with a leader line to the ring.
-   * `"badge"`: a glass pill with the label's `logo` as a 24px round badge and the `text` after it, just
-   * outside the slice with no leader line; pills that would meet are nudged apart along the ring.
-   */
-  labelStyle?: 'badge';
   /** The colour of each slice, by position, in place of the chart series (a CSS colour; see `sliceColors`). */
   colors?: readonly string[];
 }
@@ -64,7 +93,6 @@ export function Donut({
   selected,
   onSelect,
   outsideLabels,
-  labelStyle,
   colors: given,
 }: DonutProps) {
   const [focused, setFocused] = useState<number | null>(null);
@@ -90,19 +118,24 @@ export function Donut({
   const labelFor = new Map((outsideLabels ?? []).map((l) => [l.key, l]));
   const shares = drawn.map((s) => Math.max(0, s.amount) / total);
   const asked = new Set(drawn.flatMap((s, i) => (labelFor.has(s.key) ? [i] : [])));
-  const badge = labelStyle === 'badge';
-  const placed = badge ? [] : layoutLabels(shares, size, asked);
-  const pills = badge
-    ? layoutLabels(shares, size, asked, {
-        widths: drawn.map((s) => badgeWidth(labelFor.get(s.key)?.text ?? '')),
-      })
-    : [];
+  const pills = layoutBadges(
+    shares,
+    size,
+    drawn.map((s) => badgeWidth(labelFor.get(s.key)?.text ?? '')),
+    asked,
+  );
 
   const toggle = (i: number) => onSelect(i === selected ? null : i);
   const big = size >= 200;
   // The hole of a small donut (96px at 120, thickness 12) is too narrow for an exact amount at
   // 19px.
   const small = size < 150;
+  const figure = chosen ? formatAmount(chosen.amount) : idle.value;
+  const figurePx = fitFigure(
+    figure,
+    big ? [28, 24, 20] : small ? [15] : [19],
+    size - 2 * thickness,
+  );
   const focusedArc = focused !== null ? arcs[focused] : undefined;
 
   return (
@@ -111,11 +144,7 @@ export function Donut({
       style={{
         width: size,
         height: size,
-        margin: !outsideLabels
-          ? undefined
-          : badge
-            ? `${BADGE.lead + BADGE.height}px ${BADGE.reach}px`
-            : `${LABEL.lead + LABEL.height}px ${LABEL.lead + LABEL.width}px`,
+        margin: outsideLabels ? `${BADGE.lead + BADGE.height}px ${BADGE.reach}px` : undefined,
       }}
     >
       <svg
@@ -163,26 +192,6 @@ export function Donut({
           />
         ))}
       </svg>
-      {placed.length > 0 && (
-        // Not under the arcs' rotation, so the lines are in the same px as the label boxes.
-        <svg
-          width={size}
-          height={size}
-          aria-hidden="true"
-          focusable="false"
-          className="pointer-events-none absolute inset-0 overflow-visible"
-        >
-          {placed.map(({ index, line }) => (
-            <line
-              key={drawn[index]!.key}
-              {...line}
-              stroke="var(--color-text-muted)"
-              strokeOpacity={0.6}
-              strokeWidth={1.25}
-            />
-          ))}
-        </svg>
-      )}
       {pills.map(({ index, box }) => {
         const key = drawn[index]!.key;
         const { logo, text } = labelFor.get(key)!;
@@ -199,46 +208,13 @@ export function Donut({
           </div>
         );
       })}
-      {placed.map(({ index, box, above }) => {
-        const key = drawn[index]!.key;
-        const { logo, text } = labelFor.get(key)!;
-        return (
-          <div
-            key={key}
-            data-label={key}
-            aria-hidden="true"
-            className="text-text pointer-events-none absolute flex flex-col items-center justify-between text-xs leading-none font-extrabold tabular-nums"
-            style={{ left: box.left, top: box.top, width: box.width, height: box.height }}
-          >
-            {/* The logo is the part the leader line meets, so it faces the ring. */}
-            {above ? (
-              <>
-                <span>{text}</span>
-                {logo}
-              </>
-            ) : (
-              <>
-                {logo}
-                <span>{text}</span>
-              </>
-            )}
-          </div>
-        );
-      })}
       <div className="pointer-events-none absolute inset-0 grid place-content-center px-2 text-center">
         {caption && (
           <span className={cn('text-muted font-bold', big ? 'text-[13px]' : 'text-xs')}>
             {caption}
           </span>
         )}
-        <b
-          className={cn(
-            'font-extrabold',
-            big ? 'text-[28px]' : small ? 'text-[15px]' : 'text-[19px]',
-          )}
-        >
-          {chosen ? formatAmount(chosen.amount) : idle.value}
-        </b>
+        <b className={cn('font-extrabold', FIGURE_CLASS[figurePx])}>{figure}</b>
         <span className={cn('text-muted font-bold', big ? 'text-[13px]' : 'text-xs')}>
           {chosen ? `${chosen.label} · ${pct(chosen)}%` : idle.label}
         </span>
