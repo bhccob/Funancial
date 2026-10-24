@@ -61,6 +61,27 @@ let user = userEvent.setup();
 beforeEach(() => {
   user = userEvent.setup();
 });
+/**
+ * A clock that moves only when the test moves it (`advance`), so a 30 s hold is measured to the
+ * millisecond. Under it a test acts with `fireEvent` in `act` (`tap`, `typeIn`): user-event and
+ * `findBy…` wait on a `setTimeout` of Testing Library's own, which a stopped clock never runs.
+ */
+function fakeClock() {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+}
+const advance = (ms: number) => act(() => void vi.advanceTimersByTime(ms));
+/** A tap, and whatever it sets going (a request answered at once) settled. */
+const tap = (element: HTMLElement) => act(async () => void fireEvent.click(element));
+const typeIn = (label: string, value: string) =>
+  act(() => void fireEvent.change(nowShowing().getByLabelText(label), { target: { value } }));
+/** `toCode`, under the stopped clock. */
+async function toCodeOnTheClock() {
+  typeIn('Username', 'Robin');
+  typeIn('Email', 'robin@example.com');
+  typeIn('Password', PASSWORD);
+  await tap(screen.getByRole('button', { name: 'Continue' }));
+  expect(screen.getByRole('heading', { level: 1, name: 'Check your email' })).toBeInTheDocument();
+}
 const press = (name: string) => user.click(screen.getByRole('button', { name }));
 const next = () => press('Continue');
 const verify = () => press('Verify');
@@ -294,7 +315,6 @@ describe('the account step', () => {
   // `unavailable` is any 5xx (a 503 "not set up" too) and a refused shared token (401 unauthorized).
   it.each([
     ['unavailable', new AccountError('unavailable')],
-    ['limited', new AccountError('limited', 'Too many tries. Try again in 60 minutes.', 3600)],
     ['busy', new AccountError('busy')],
   ] as const)(
     'offers the skip, with one calm line, when the service fails (%s), and still lets the person try again',
@@ -315,6 +335,25 @@ describe('the account step', () => {
       expect(await screen.findByText('Step 2 of 4')).toBeInTheDocument();
     },
   );
+
+  it('says how long to wait after too many codes, in the calm line, and still offers the skip', async () => {
+    const account = fakeAccount();
+    account.requestCode.mockRejectedValueOnce(
+      new AccountError('limited', 'Too many tries. Try again in 60 minutes.', 3600),
+    );
+    renderWizard({ account });
+    await fillAccount();
+    await next();
+    expect(await screen.findByText('Too many tries. Try again in 60 minutes.')).toBeInTheDocument();
+    // Its own words, not the service's: it is answering, and holding back.
+    expect(screen.queryByText(SERVICE_DOWN)).not.toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Skip for now' })).toBeEnabled();
+
+    // Or the next try sends the code.
+    await next();
+    expect(await screen.findByText('Step 2 of 4')).toBeInTheDocument();
+  });
 
   it('skips on from a failed service, without asking it again', async () => {
     const account = fakeAccount();
@@ -670,36 +709,34 @@ describe('the code step', () => {
   });
 
   it('send a new code waits 30 seconds after each send', async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
-    user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    fakeClock();
     const { account } = renderWizard();
-    await toCode();
-    await user.type(nowShowing().getByLabelText('Code'), '48');
+    await toCodeOnTheClock();
+    typeIn('Code', '48');
     expect(resendButton()).toBeDisabled();
-    act(() => void vi.advanceTimersByTime(29_000));
+    advance(29_999);
     expect(resendButton()).toBeDisabled();
-    act(() => void vi.advanceTimersByTime(1_000));
+    advance(1);
     expect(resendButton()).toBeEnabled();
 
-    await user.click(resendButton());
+    await tap(resendButton());
     expect(account.requestCode).toHaveBeenCalledTimes(2);
     expect(account.requestCode).toHaveBeenLastCalledWith({
       username: 'Robin',
       email: 'robin@example.com',
     });
-    expect(await screen.findByRole('status')).toHaveTextContent('We sent a new code.');
+    expect(screen.getByRole('status')).toHaveTextContent('We sent a new code.');
     // The code typed so far was the old one's.
     expect(nowShowing().getByLabelText('Code')).toHaveValue('');
     expect(resendButton()).toBeDisabled();
-    act(() => void vi.advanceTimersByTime(29_000));
+    advance(29_999);
     expect(resendButton()).toBeDisabled();
-    act(() => void vi.advanceTimersByTime(1_000));
+    advance(1);
     expect(resendButton()).toBeEnabled();
   });
 
   it('holds Send a new code as long as the service says when it refuses one', async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
-    user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    fakeClock();
     const account = fakeAccount();
     account.requestCode
       .mockResolvedValueOnce()
@@ -707,33 +744,30 @@ describe('the code step', () => {
         new AccountError('limited', 'Too many tries. Try again in 2 minutes.', 120),
       );
     renderWizard({ account });
-    await toCode();
-    act(() => void vi.advanceTimersByTime(30_000));
-    await user.click(resendButton());
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Too many tries. Try again in 2 minutes.',
-    );
+    await toCodeOnTheClock();
+    advance(30_000);
+    await tap(resendButton());
+    expect(screen.getByRole('alert')).toHaveTextContent('Too many tries. Try again in 2 minutes.');
     expect(resendButton()).toBeDisabled();
-    act(() => void vi.advanceTimersByTime(119_000));
+    advance(119_999);
     expect(resendButton()).toBeDisabled();
-    act(() => void vi.advanceTimersByTime(1_000));
+    advance(1);
     expect(resendButton()).toBeEnabled();
   });
 
   it('keeps the code that was typed when a new one could not be sent', async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
-    user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    fakeClock();
     const account = fakeAccount();
     account.requestCode
       .mockResolvedValueOnce()
       .mockRejectedValueOnce(new AccountError('unavailable'));
     renderWizard({ account });
-    await toCode();
-    await user.type(nowShowing().getByLabelText('Code'), '481');
-    act(() => void vi.advanceTimersByTime(30_000));
-    await user.click(resendButton());
+    await toCodeOnTheClock();
+    typeIn('Code', '481');
+    advance(30_000);
+    await tap(resendButton());
     // The service keeps the last code when a mail fails, so what was typed of it stays.
-    expect(await screen.findByText(SERVICE_DOWN)).toBeInTheDocument();
+    expect(screen.getByText(SERVICE_DOWN)).toBeInTheDocument();
     expect(nowShowing().getByLabelText('Code')).toHaveValue('481');
   });
 
@@ -755,8 +789,7 @@ describe('the code step', () => {
   });
 
   it('holds Verify while a new code is on its way, and Send a new code while the account is made', async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
-    user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    fakeClock();
     const account = fakeAccount();
     let sent = () => {};
     account.requestCode
@@ -764,17 +797,18 @@ describe('the code step', () => {
       .mockReturnValueOnce(new Promise<void>((resolve) => (sent = resolve)));
     account.signUp.mockReturnValue(new Promise(() => {}));
     renderWizard({ account });
-    await toCode();
-    act(() => void vi.advanceTimersByTime(30_000));
-    await user.click(resendButton());
+    await toCodeOnTheClock();
+    advance(30_000);
+    await tap(resendButton());
     expect(screen.getByRole('button', { name: 'Verify' })).toBeDisabled();
     expect(resendButton()).toBeDisabled();
     await act(async () => sent());
     expect(screen.getByRole('button', { name: 'Verify' })).toBeEnabled();
 
-    act(() => void vi.advanceTimersByTime(30_000));
+    advance(30_000);
     expect(resendButton()).toBeEnabled();
-    await enterCode();
+    typeIn('Code', '481529');
+    await tap(screen.getByRole('button', { name: 'Verify' }));
     expect(screen.getByRole('button', { name: 'Verifying…' })).toBeDisabled();
     expect(resendButton()).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Back' })).toBeDisabled();

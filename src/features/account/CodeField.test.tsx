@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
@@ -81,6 +81,60 @@ describe('CodeField', () => {
     expect(screen.getByLabelText('Code')).toHaveValue('4815');
     await userEvent.paste('2999');
     expect(screen.getByLabelText('Code')).toHaveValue('481529');
+  });
+
+  describe('text the keyboard puts in whole', () => {
+    /**
+     * What a keyboard does with text no key press makes (Gboard's suggested "481 529" from the
+     * clipboard): a `beforeinput` with all of it, before the browser cuts it to the field's six
+     * characters ("481 52") for the `input` that follows.
+     */
+    function insertByKeyboard(data: string) {
+      const field = screen.getByLabelText<HTMLInputElement>('Code');
+      const event = new InputEvent('beforeinput', {
+        data,
+        inputType: 'insertText',
+        bubbles: true,
+        cancelable: true,
+      });
+      field.dispatchEvent(event);
+      return event;
+    }
+
+    it('fits a spaced code the length would cut, digits only', () => {
+      const onChange = vi.fn();
+      render(<CodeField value="" onChange={onChange} />);
+      const event = insertByKeyboard('481 529');
+      expect(onChange).toHaveBeenLastCalledWith('481529');
+      // Put in by the field, not left to the browser, which would keep "481 52".
+      expect(event.defaultPrevented).toBe(true);
+    });
+
+    it('puts a whole code in place of one already there, and a few digits at the caret', async () => {
+      render(<Field initial="123456" />);
+      act(() => void insertByKeyboard('481-529'));
+      expect(screen.getByLabelText('Code')).toHaveValue('481529');
+
+      await userEvent.clear(screen.getByLabelText('Code'));
+      await userEvent.type(screen.getByLabelText('Code'), '48');
+      act(() => void insertByKeyboard('1 5'));
+      expect(screen.getByLabelText('Code')).toHaveValue('4815');
+    });
+
+    it('leaves a key press, and a deletion, to the browser', () => {
+      const onChange = vi.fn();
+      render(<CodeField value="48" onChange={onChange} />);
+      expect(insertByKeyboard('1').defaultPrevented).toBe(false);
+      const field = screen.getByLabelText('Code');
+      const deletion = new InputEvent('beforeinput', {
+        inputType: 'deleteContentBackward',
+        bubbles: true,
+        cancelable: true,
+      });
+      field.dispatchEvent(deletion);
+      expect(deletion.defaultPrevented).toBe(false);
+      expect(onChange).not.toHaveBeenCalled();
+    });
   });
 
   it("keeps only digits from what fills it another way (the keyboard's suggested code)", () => {

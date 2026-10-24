@@ -1,10 +1,28 @@
-import { useId, type ClipboardEvent, type SyntheticEvent } from 'react';
+import {
+  useEffect,
+  useEffectEvent,
+  useId,
+  useRef,
+  type ClipboardEvent,
+  type SyntheticEvent,
+} from 'react';
 import { cn } from '@/lib/cn';
 
 /** How many digits an emailed code has. */
 const LENGTH = 6;
 
 const digitsOf = (text: string) => text.replace(/\D/g, '');
+
+/**
+ * `current` with the digits of `text` put in place of its characters `start` to `end`, at most six: a
+ * whole code (six digits or more) takes the place of what was there, a few go in where the caret is.
+ */
+function withInserted(current: string, text: string, start: number, end: number): string {
+  const digits = digitsOf(text);
+  return digits.length >= LENGTH
+    ? digits.slice(0, LENGTH)
+    : (current.slice(0, start) + digits + current.slice(end)).slice(0, LENGTH);
+}
 
 /**
  * The six digits of an emailed code. It is one field, so a paste, the keyboard's suggested code
@@ -26,24 +44,41 @@ export function CodeField({
 }) {
   const id = useId();
   const errorId = `${id}-error`;
+  const input = useRef<HTMLInputElement>(null);
   // The box the next digit goes in, or the last one once all six are there.
   const current = Math.min(value.length, LENGTH - 1);
+
+  /** Puts `text` in for the field's selection (or at its caret), digits only, at most six. */
+  function insert(field: HTMLInputElement, text: string) {
+    const digits = digitsOf(text);
+    if (!digits) return;
+    const start = field.selectionStart ?? value.length;
+    const end = field.selectionEnd ?? value.length;
+    onChange(withInserted(value, digits, start, end));
+  }
 
   function paste(e: ClipboardEvent<HTMLInputElement>) {
     // Not left to the browser: it would cut "481 529" to the field's six characters first.
     e.preventDefault();
-    const digits = digitsOf(e.clipboardData.getData('text'));
-    if (!digits) return;
-    const field = e.currentTarget;
-    const start = field.selectionStart ?? value.length;
-    const end = field.selectionEnd ?? value.length;
-    // A whole code takes the place of what was there; a few digits go in where the caret is.
-    onChange(
-      digits.length >= LENGTH
-        ? digits.slice(0, LENGTH)
-        : (value.slice(0, start) + digits + value.slice(end)).slice(0, LENGTH),
-    );
+    insert(e.currentTarget, e.clipboardData.getData('text'));
   }
+
+  // Text a keyboard puts in whole, not a key at a time (Gboard's suggested "481 529" from the clipboard)
+  // comes with no paste, and the browser cuts it to six characters before `onChange` sees it. The
+  // native `beforeinput` carries all of it: React's `onBeforeInput` is another event (`textInput`),
+  // which a phone's keyboard need not send. A key press and a deletion are left to the browser.
+  const keyboardInsert = useEffectEvent((e: InputEvent) => {
+    if (!e.cancelable || e.inputType !== 'insertText' || !e.data || e.data.length < 2) return;
+    e.preventDefault();
+    insert(e.target as HTMLInputElement, e.data);
+  });
+  useEffect(() => {
+    const field = input.current;
+    if (!field) return;
+    const listener = (e: Event) => keyboardInsert(e as InputEvent);
+    field.addEventListener('beforeinput', listener);
+    return () => field.removeEventListener('beforeinput', listener);
+  }, []);
 
   function caretToEnd(e: SyntheticEvent<HTMLInputElement>) {
     const field = e.currentTarget;
@@ -78,6 +113,7 @@ export function CodeField({
           ))}
         </div>
         <input
+          ref={input}
           id={id}
           inputMode="numeric"
           autoComplete="one-time-code"

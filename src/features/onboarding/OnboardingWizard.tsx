@@ -1,30 +1,24 @@
 import { Check } from 'lucide-react';
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 import { Button } from '@/components/ui/Button';
 import { RadioGroup } from '@/components/ui/RadioGroup';
 import { Select } from '@/components/ui/Select';
 import { StepMotion, type StepDirection } from '@/components/ui/StepMotion';
 import { Switch } from '@/components/ui/Switch';
 import { TextField } from '@/components/ui/TextField';
-import { KeyDerivationError } from '@/data/accountCrypto';
 import { validateSecret, type SecretKind } from '@/data/keys';
 import { CodeField } from '@/features/account/CodeField';
 import { ForgotScreen } from '@/features/account/ForgotScreen';
 import { LoginScreen } from '@/features/account/LoginScreen';
 import { BackButton, PasswordField, Problem, ScreenHeader } from '@/features/account/parts';
-import { BIOMETRIC_FAILED, errorMessage, SAVE_NOTE, useBusy } from '@/features/account/shared';
+import { BIOMETRIC_FAILED, SAVE_NOTE } from '@/features/account/shared';
+import { useEmailCode, type CodeFailure, type CodeOutcome } from '@/features/account/useEmailCode';
 import { currencyOptions, defaultCurrency } from '@/features/shared/currencies';
 import { toast } from '@/lib/toast';
 import { useAction } from '@/lib/useAction';
 import { useApp } from '@/store/AppStoreProvider';
-import {
-  AccountError,
-  emailProblem,
-  hasData,
-  passwordProblem,
-  usernameProblem,
-} from '@/store/accountActions';
-import { useAccount, useAccountActions } from '@/store/useAccount';
+import { emailProblem, hasData, passwordProblem, usernameProblem } from '@/store/accountActions';
+import { useAccount } from '@/store/useAccount';
 import { useFinanceActions } from '@/store/useFinance';
 
 const STEPS = 4;
@@ -36,32 +30,35 @@ const LOCK = 4;
 /** A step, the last screen, or a way out of the first step to an account the person already has. */
 type Step = number | 'done' | 'login' | 'forgot';
 
-/** The service mails a new code only this long after the last one. */
-const RESEND_SECONDS = 30;
-/** How long a code works, from the service's mail. One older than this is not gone back to. */
-const CODE_LIFETIME_MS = 10 * 60_000;
-/** What an emailed code is: six digits. */
-const CODE_LENGTH = 6;
-
 type LockChoice = 'none' | SecretKind;
 const LOCK_NAMES: Record<SecretKind, string> = { pin: 'PIN', passphrase: 'passphrase' };
 
-/** Who a code was mailed for, and when: Back and Continue with the same details goes back to it. */
-type Sent = { username: string; email: string; at: number };
-
 /**
- * A try that failed for a reason that isn't what was typed: nothing came back (as good as offline),
- * the service failed, this phone couldn't make the keys, or the service is holding sign-ups back for
- * a while. None of them may block setup, so each comes with "Skip for now".
+ * A try that failed for a reason that isn't what was typed (`CodeFailure`), with the line said over
+ * "Skip for now": none of them may block setup. `line` is null where the step says it already.
  */
-type Failure = 'offline' | 'service' | 'keys' | 'limited';
+type Failure = { kind: CodeFailure; line: string | null };
 
-const FAILURE_LINE: Record<Exclude<Failure, 'limited'>, string> = {
+const FAILURE_LINE: Record<Exclude<CodeFailure, 'limited'>, string> = {
   offline: "You're offline. Create your account later in Settings.",
   keys: "This phone couldn't make your keys. Close other apps and try again, or make an account later in Settings.",
   service:
     "Funcial's service isn't answering right now. You can make an account later in Settings.",
 };
+
+/**
+ * The failure of an outcome. Too many tries says its own words, the wait it names (the service is
+ * answering, and holding back): in the line on the account step, and on the code step in the step's
+ * own message, which says it already.
+ */
+function failureOf(
+  outcome: Extract<CodeOutcome, { kind: 'failed' }>,
+  onCodeStep: boolean,
+): Failure {
+  const { failure, message } = outcome;
+  if (failure === 'limited') return { kind: failure, line: onCodeStep ? null : message };
+  return { kind: failure, line: FAILURE_LINE[failure] };
+}
 
 /**
  * First-run setup for real data in four short steps, each rising in from below: the account, the
@@ -84,7 +81,8 @@ export function OnboardingWizard({ onFinishing }: { onFinishing?(finishing: bool
   const [keptLock] = useState(() =>
     lockMode === 'pin' || lockMode === 'passphrase' ? lockMode : null,
   );
-  const { requestCode, signUp } = useAccountActions();
+  // The code step: the code mailed, typed, sent again, and Verify, which makes the account.
+  const emailCode = useEmailCode();
   const account = useAccount();
   const run = useAction();
   const [options] = useState(() => currencyOptions());
@@ -105,20 +103,6 @@ export function OnboardingWizard({ onFinishing }: { onFinishing?(finishing: bool
     other?: string;
   }>({});
   const [failure, setFailure] = useState<Failure | null>(null);
-  // Asking for a code (Continue, Send a new code) and making the account (Verify) are one at a time,
-  // as the account layer has them: a resend during a sign-up would replace the code being checked.
-  const { busy: sending, guard: guardSend } = useBusy();
-  const { busy: signingUp, guard: guardSignUp } = useBusy();
-
-  const [code, setCode] = useState('');
-  const [sent, setSent] = useState<Sent | null>(null);
-  // What the code step says went wrong: about the code itself (under it), or about the tries.
-  const [codeError, setCodeError] = useState<string>();
-  const [codeProblem, setCodeProblem] = useState<string>();
-  // "Send a new code" waits RESEND_SECONDS after each send, or as long as the service says.
-  const [resendHeld, setResendHeld] = useState(false);
-  const holdTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
-  useEffect(() => () => clearTimeout(holdTimer.current), []);
 
   // A guess from where the phone is; the Select still offers every currency.
   const [currency, setCurrency] = useState(
@@ -147,26 +131,6 @@ export function OnboardingWizard({ onFinishing }: { onFinishing?(finishing: bool
     setAside(to);
   }
 
-  /** Holds "Send a new code" for `seconds`, or lets it go at once for 0. */
-  function holdResend(seconds: number) {
-    clearTimeout(holdTimer.current);
-    setResendHeld(seconds > 0);
-    if (seconds > 0) holdTimer.current = setTimeout(() => setResendHeld(false), seconds * 1000);
-  }
-
-  /** A code is on its way for these details: what was typed of an earlier one is no use now. */
-  function codeSent(who: { username: string; email: string }) {
-    setSent({ ...who, at: Date.now() });
-    setCode('');
-    setCodeError(undefined);
-    setCodeProblem(undefined);
-    holdResend(RESEND_SECONDS);
-  }
-
-  /** Whether the last code went to `who`'s address and still works (it is under 10 minutes old). */
-  const liveCode = (who: { username: string; email: string }) =>
-    sent !== null && sent.email === who.email && Date.now() - sent.at < CODE_LIFETIME_MS;
-
   /** Continue on the account step: checks what was typed, then has a code mailed to the address. */
   async function askForCode() {
     const found = {
@@ -176,118 +140,65 @@ export function OnboardingWizard({ onFinishing }: { onFinishing?(finishing: bool
     };
     setAccountErrors(found);
     if (found.username || found.email || found.password) return;
-    const who = { username: username.trim(), email: email.trim() };
-    // Back from the code and on again with the same details: the code sent is still the one.
-    if (liveCode(who) && sent?.username === who.username) return go(CODE);
-    await guardSend(async () => {
-      try {
-        await requestCode({ username, email });
-        codeSent(who);
-        go(CODE);
-      } catch (err) {
-        const reason = err instanceof AccountError ? err.code : null;
-        if (reason === 'taken' || reason === 'invalid') {
-          // The person's own input: theirs to fix, with no way round it.
-          setFailure(null);
-          setAccountErrors(
-            reason === 'taken' ? { username: errorMessage(err) } : { other: errorMessage(err) },
-          );
-        } else if (reason === 'limited' && liveCode(who)) {
-          // Only the name changed, too soon for another mail: the code sent to this address still
-          // works (the service checks the name again when the account is made).
-          setSent((last) => last && { ...last, username: who.username });
-          holdResend((err as AccountError).retryAfter ?? RESEND_SECONDS);
-          go(CODE);
-        } else {
-          // Say so once, in the one line that comes with the way on.
-          setAccountErrors({});
-          setFailure(reason === 'offline' ? 'offline' : 'service');
-        }
-      }
-    });
+    const outcome = await emailCode.request({ username, email });
+    switch (outcome?.kind) {
+      case 'ok':
+        // Mailed, or the one mailed for these details still works (Back and on again).
+        return go(CODE);
+      case 'taken':
+        // The person's own input: theirs to fix, with no way round it.
+        setFailure(null);
+        return setAccountErrors({ username: outcome.message });
+      case 'invalid':
+        setFailure(null);
+        return setAccountErrors({ other: outcome.message });
+      case 'failed':
+        // Say so once, in the one line that comes with the way on.
+        setAccountErrors({});
+        return setFailure(failureOf(outcome, false));
+    }
   }
 
   /** "Send a new code" on the code step. */
   async function resend() {
-    if (resendHeld || signingUp) return;
-    const who = { username: username.trim(), email: email.trim() };
-    setCodeProblem(undefined);
-    await guardSend(async () => {
-      try {
-        await requestCode({ username, email });
-        codeSent(who);
-        setFailure(null);
-        toast('success', 'We sent a new code.');
-      } catch (err) {
-        const reason = err instanceof AccountError ? err.code : null;
-        if (reason === 'taken') {
-          setAccountErrors({ username: errorMessage(err) });
-          go(ACCOUNT);
-        } else if (reason === 'limited') {
-          holdResend((err as AccountError).retryAfter ?? RESEND_SECONDS);
-          setCodeProblem(errorMessage(err));
-        } else if (reason === 'invalid') {
-          setCodeProblem(errorMessage(err));
-        } else {
-          // The service keeps the last code when a mail fails, so what was typed of it stays.
-          setFailure(reason === 'offline' ? 'offline' : 'service');
-        }
-      }
-    });
+    const outcome = await emailCode.resend({ username, email });
+    switch (outcome?.kind) {
+      case 'ok':
+        return setFailure(null);
+      case 'taken':
+        setAccountErrors({ username: outcome.message });
+        return go(ACCOUNT);
+      case 'failed':
+        // The service keeps the last code when a mail fails, so what was typed of it stays.
+        return setFailure(failureOf(outcome, true));
+    }
   }
 
   /** Verify on the code step: makes the account with the code. */
   async function verify() {
-    setCodeError(undefined);
-    setCodeProblem(undefined);
-    // What cannot be a code is not sent: the account layer would refuse it the same way.
-    if (code.length !== CODE_LENGTH) return setCodeError(new AccountError('code').message);
-    await guardSignUp(async () => {
-      try {
-        // Slow on purpose (the password is stretched into keys): once per tap, behind the busy state.
-        await signUp({ username, email, password, code });
+    // Slow on purpose (the password is stretched into keys): once per tap, behind the busy state.
+    const outcome = await emailCode.verify({ username, email, password });
+    switch (outcome?.kind) {
+      case 'ok':
         setPassword('');
-        setCode('');
-        setSent(null);
-        go(YOU);
-      } catch (err) {
-        const reason = err instanceof AccountError ? err.code : null;
-        setFailure(null);
-        if (reason === 'code') {
-          setCodeError(errorMessage(err));
-        } else if (reason === 'expired') {
-          // Gone: Continue asks for a new one too, and Send a new code may at once.
-          setSent(null);
-          holdResend(0);
-          setCodeError(errorMessage(err));
-        } else if (reason === 'taken') {
-          // Someone took the name since the code was sent: the account step is where it is fixed.
-          setAccountErrors({ username: errorMessage(err) });
-          go(ACCOUNT);
-        } else if (reason === 'invalid') {
-          setCodeProblem(errorMessage(err));
-        } else if (reason === 'limited') {
-          // The code may be spent by now (the service takes it before its sign-up limit): offer a
-          // new one, and the way on without an account.
-          holdResend(0);
-          setCodeProblem(errorMessage(err));
-          setFailure('limited');
-        } else {
-          setFailure(
-            reason === 'offline'
-              ? 'offline'
-              : err instanceof KeyDerivationError
-                ? 'keys'
-                : 'service',
-          );
-        }
-      }
-    });
+        return go(YOU);
+      case 'shown':
+        // Said on the code step (a wrong or expired code, …): no failure of the service's.
+        return setFailure(null);
+      case 'taken':
+        // Someone took the name since the code was sent: the account step is where it is fixed.
+        setAccountErrors({ username: outcome.message });
+        return go(ACCOUNT);
+      case 'failed':
+        // Too many tries is said on the step, which offers a new code (this one may be spent) and
+        // the way on without an account.
+        return setFailure(failureOf(outcome, true));
+    }
   }
 
   function skip() {
     setPassword('');
-    setCode('');
+    emailCode.setCode('');
     go(YOU);
   }
 
@@ -322,6 +233,7 @@ export function OnboardingWizard({ onFinishing }: { onFinishing?(finishing: bool
     } else onFinishing?.(false);
   }
 
+  const { sending, signingUp } = emailCode;
   const working = busy || sending || signingUp;
   const valid: Record<number, boolean> = {
     // Not before the phone has read whether it already has an account.
@@ -345,7 +257,7 @@ export function OnboardingWizard({ onFinishing }: { onFinishing?(finishing: bool
     else void finish();
   }
 
-  const offline = account.offline || failure === 'offline';
+  const offline = account.offline || failure?.kind === 'offline';
   // Back on the first step undoes "Create an account", but only while the data it made is still
   // empty: no account (none made, none logged in to), nothing entered. Log in hides this row.
   const canLeave = account.loaded && account.status === 'none' && emptyData;
@@ -363,11 +275,7 @@ export function OnboardingWizard({ onFinishing }: { onFinishing?(finishing: bool
   /** The way on without an account, and why, when the service or the phone let the person down. */
   function skipOffer() {
     if (!offline && failure === null) return null;
-    const line = offline
-      ? FAILURE_LINE.offline
-      : failure === 'limited'
-        ? null
-        : FAILURE_LINE[failure!];
+    const line = offline ? FAILURE_LINE.offline : (failure?.line ?? null);
     return (
       <div className="flex flex-col items-start gap-3">
         {line && <p className="text-muted text-sm">{line}</p>}
@@ -474,21 +382,18 @@ export function OnboardingWizard({ onFinishing }: { onFinishing?(finishing: bool
             <ScreenHeader
               eyebrow="Security"
               title="Check your email"
-              lead={`We sent a 6-digit code to ${sent?.email ?? email.trim()}. Your account is made once you type it.`}
+              lead={`We sent a 6-digit code to ${emailCode.sentTo ?? email.trim()}. Your account is made once you type it.`}
             />
             <CodeField
-              value={code}
-              onChange={(next) => {
-                setCode(next);
-                setCodeError(undefined);
-              }}
-              error={codeError}
+              value={emailCode.code}
+              onChange={emailCode.setCode}
+              error={emailCode.codeError}
             />
             <div className="-mt-2 flex flex-col items-center gap-1 text-center">
               <button
                 type="button"
                 onClick={() => void resend()}
-                disabled={resendHeld || working}
+                disabled={emailCode.resendHeld || working}
                 className="text-accent-text inline-flex min-h-11 items-center font-bold underline underline-offset-4 disabled:pointer-events-none disabled:opacity-45"
               >
                 Send a new code
@@ -497,7 +402,7 @@ export function OnboardingWizard({ onFinishing }: { onFinishing?(finishing: bool
                 The code works for 10 minutes. Wrong email? Go back and fix it.
               </p>
             </div>
-            <Problem>{codeProblem}</Problem>
+            <Problem>{emailCode.problem}</Problem>
             {skipOffer()}
           </>
         );

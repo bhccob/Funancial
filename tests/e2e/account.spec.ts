@@ -281,6 +281,12 @@ test('setup makes the account only with the emailed code, and turns a wrong one 
     );
   }, '123 456');
   await expect(field).toHaveValue(CODE);
+  // And put in whole by a keyboard (Gboard's suggestion from the clipboard), with no paste: the
+  // browser alone would cut "123 456" to the field's six characters, "123 45".
+  await field.fill('');
+  await field.focus();
+  await page.keyboard.insertText('123 456');
+  await expect(field).toHaveValue(CODE);
   await page.getByRole('button', { name: 'Verify' }).click();
   await expect(
     page.getByRole('heading', { level: 1, name: 'Your currency and name' }),

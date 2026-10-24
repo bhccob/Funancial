@@ -162,7 +162,10 @@ describe('glossary, FAQ and legal text', () => {
       /If you have an account, the app also sends a locked copy of your data to that service, and keeps it there/,
     );
     expect(privacy).toMatch(/so you can move to a new phone/i);
-    expect(privacy).toMatch(/email is used only for "forgot password"/i);
+    // Setup emails a code before the account is made: the email's uses are that and the reset.
+    expect(LEGAL.privacy).toContain(
+      'Your email is used only to send you a code when you sign up, and for "forgot password".',
+    );
     // Plain that the owner could read the money data, not only that the owner runs the service.
     expect(privacy).toMatch(
       /the service can unlock the copy, so the app's owner, who runs it, and anyone who got into the owner's Vercel account could read it/,
