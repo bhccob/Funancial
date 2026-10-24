@@ -10,6 +10,12 @@ export const SAVE_NOTE =
 export const FORGOT_LEAD =
   "Type your username or the email you signed up with. We'll email you a link to choose a new password.";
 
+/** The words of the code step, said the same in setup and in Settings' Create account. */
+export const CODE_EYEBROW = 'Security';
+export const CODE_TITLE = 'Check your email';
+export const codeLead = (email: string) =>
+  `We sent a 6-digit code to ${email}. Your account is made once you type it.`;
+
 export const errorMessage = (e: unknown) =>
   e instanceof Error && e.message ? e.message : 'Something went wrong.';
 

@@ -4,7 +4,13 @@ import { base64ToBytes } from '@/data/crypto';
 import { emptySnapshot, type DataSnapshot } from '@/domain/snapshot';
 import { toastStore } from '@/lib/toast';
 import type { CopyBody } from '@/services/account';
-import { answers, fakeAccountApi, lostReply, unreachable } from '@/test/fakeAccountApi';
+import {
+  answers,
+  fakeAccountApi,
+  lostReply,
+  unreachable,
+  type FakeAccountApi,
+} from '@/test/fakeAccountApi';
 import { makeExpense, makeProfile } from '@/test/fixtures';
 import { freshRealStore, realStoreDeps } from '@/test/realStore';
 import {
@@ -19,6 +25,8 @@ import {
 import { createAppStore } from './appStore';
 
 const ME = { username: 'Robin', email: 'robin@example.com', password: 'a long enough password' };
+/** A well-formed code the service never mailed: for what is refused before it is asked, or answered first. */
+const ANY_CODE = '123456';
 /** Argon2id at its smallest: 8 KiB, one pass. */
 const FAST = { memorySize: 8, iterations: 1, parallelism: 1 };
 
@@ -104,6 +112,12 @@ async function setup() {
   return { ...t, ...(await follow(t.store)) };
 }
 
+/** A sign-up as a screen makes it: the code asked for, then typed. */
+async function signUp(actions: AccountActions, server: FakeAccountApi, who = ME) {
+  await actions.requestCode(who);
+  await actions.signUp({ ...who, code: server.codeFor(who.email)! });
+}
+
 const linkedState = (a: AccountActions) => a.view.getState().state;
 const puts = (server: ReturnType<typeof fakeAccountApi>) => server.sent('putCopy') as CopyBody[];
 const waitForPuts = (server: ReturnType<typeof fakeAccountApi>, n: number) =>
@@ -127,8 +141,8 @@ function snapshotWith(...ids: string[]): DataSnapshot {
 
 describe('sign-up', () => {
   it('keeps the link encrypted in the metadata, outside the data', async () => {
-    const { actions, deps, store } = await setup();
-    await actions.signUp(ME);
+    const { actions, server, deps, store } = await setup();
+    await signUp(actions, server);
 
     const backend = await deps.storage.open('real');
     const stored = await backend.meta.get<unknown>('funancial.account');
@@ -148,7 +162,7 @@ describe('sign-up', () => {
 
   it('is read back after a restart', async () => {
     const { actions, deps, server } = await setup();
-    await actions.signUp(ME);
+    await signUp(actions, server);
     const again = createAppStore(deps);
     await again.getState().boot();
     const next = await follow(again, server);
@@ -157,11 +171,13 @@ describe('sign-up', () => {
 
   it('sends the keys the service needs, not the password, and canonical names', async () => {
     const { actions, server } = await setup();
-    await actions.signUp({ ...ME, username: '  Robin ', email: ' robin@example.com ' });
+    const who = { ...ME, username: '  Robin ', email: ' robin@example.com ' };
+    await actions.requestCode(who);
+    await actions.signUp({ ...who, code: server.codeFor(who.email)! });
     const [body] = server.sent('signUp') as Array<Record<string, unknown>>;
     expect(body).toMatchObject({ username: 'robin', email: 'robin@example.com' });
     expect(Object.keys(body!).sort()).toEqual(
-      ['authKey', 'dek', 'email', 'username', 'wrappedPw'].sort(),
+      ['authKey', 'code', 'dek', 'email', 'username', 'wrappedPw'].sort(),
     );
     expect(JSON.stringify(body)).not.toContain(ME.password);
     // wrappedPw opens with the password's key, to the dek that was sent.
@@ -173,7 +189,7 @@ describe('sign-up', () => {
 
   it('uploads version 0 at once, then a change 30 s after it', async () => {
     const { actions, server, store } = await setup();
-    await actions.signUp(ME);
+    await signUp(actions, server);
     expect(puts(server)).toHaveLength(1);
     expect(puts(server)[0]).toMatchObject({ baseVersion: 0 });
     expect(linkedState(actions)).toMatchObject({ version: 1, dirty: false, status: 'linked' });
@@ -193,7 +209,7 @@ describe('sign-up', () => {
 
   it('waits 30 s after the last change, not the first', async () => {
     const { actions, server, store } = await setup();
-    await actions.signUp(ME);
+    await signUp(actions, server);
     clock();
     await store.getState().put('expense', lunch('e1'));
     await elapse(20_000);
@@ -208,7 +224,7 @@ describe('sign-up', () => {
 
   it('uploads nothing when nothing changed', async () => {
     const { actions, server } = await setup();
-    await actions.signUp(ME);
+    await signUp(actions, server);
     clock();
     await actions.saveNow();
     pause();
@@ -220,7 +236,7 @@ describe('sign-up', () => {
 
   it('uploads when the app goes to the background, without waiting', async () => {
     const { actions, server, store } = await setup();
-    await actions.signUp(ME);
+    await signUp(actions, server);
     clock();
     await store.getState().put('expense', lunch('e1'));
     pause();
@@ -229,8 +245,10 @@ describe('sign-up', () => {
 
   it('takes one request at a time: a second tap does not start a second sign-up', async () => {
     const { actions, server } = await setup();
-    const first = actions.signUp(ME);
-    await expect(actions.signUp(ME)).rejects.toMatchObject({ code: 'busy' });
+    await actions.requestCode(ME);
+    const typed = { ...ME, code: server.codeFor(ME.email)! };
+    const first = actions.signUp(typed);
+    await expect(actions.signUp(typed)).rejects.toMatchObject({ code: 'busy' });
     await first;
     expect(server.sent('signUp')).toHaveLength(1);
     expect(linkedState(actions)).toMatchObject({ status: 'linked' });
@@ -244,7 +262,9 @@ describe('sign-up', () => {
       { ...ME, email: 'nobody' },
       { ...ME, password: 'short' },
     ]) {
-      await expect(actions.signUp(bad)).rejects.toMatchObject({ code: 'invalid' });
+      await expect(actions.signUp({ ...bad, code: ANY_CODE })).rejects.toMatchObject({
+        code: 'invalid',
+      });
     }
     expect(server.calls).toEqual([]);
     expect(linkedState(actions)).toBeNull();
@@ -264,7 +284,10 @@ describe('sign-up', () => {
         "Don't use your username or email as your password.",
       ],
     ] as const) {
-      await expect(actions.signUp(bad)).rejects.toMatchObject({ code: 'invalid', message });
+      await expect(actions.signUp({ ...bad, code: ANY_CODE })).rejects.toMatchObject({
+        code: 'invalid',
+        message,
+      });
     }
     expect(server.calls).toEqual([]);
     expect(linkedState(actions)).toBeNull();
@@ -273,7 +296,9 @@ describe('sign-up', () => {
   it('says a taken name is taken, without trying to log in', async () => {
     const { actions, server } = await setup();
     await server.seed({ username: 'robin', password: 'someone elses password' });
-    await expect(actions.signUp(ME)).rejects.toMatchObject({ code: 'taken' });
+    await expect(actions.signUp({ ...ME, code: ANY_CODE })).rejects.toMatchObject({
+      code: 'taken',
+    });
     expect(server.sent('logIn')).toEqual([]);
     expect(linkedState(actions)).toBeNull();
   });
@@ -281,7 +306,7 @@ describe('sign-up', () => {
   it('after a lost answer, a name that is its own is not taken', async () => {
     const { actions, server } = await setup();
     server.script('signUp', lostReply);
-    await actions.signUp(ME);
+    await signUp(actions, server);
     expect(server.sent('signUp')).toHaveLength(2);
     // The account the first try made, with its data key.
     expect(linkedState(actions)).toMatchObject({
@@ -296,7 +321,9 @@ describe('sign-up', () => {
     const { actions, server } = await setup();
     server.script('signUp', unreachable);
     await server.seed({ username: 'robin', password: 'someone elses password' });
-    await expect(actions.signUp(ME)).rejects.toMatchObject({ code: 'taken' });
+    await expect(actions.signUp({ ...ME, code: ANY_CODE })).rejects.toMatchObject({
+      code: 'taken',
+    });
     expect(linkedState(actions)).toBeNull();
   });
 
@@ -304,7 +331,9 @@ describe('sign-up', () => {
     const { actions, server } = await setup();
     server.script('signUp', unreachable);
     await server.seed({ username: 'robin', password: ME.password, snapshot: snapshotWith('x') });
-    await expect(actions.signUp(ME)).rejects.toMatchObject({ code: 'taken' });
+    await expect(actions.signUp({ ...ME, code: ANY_CODE })).rejects.toMatchObject({
+      code: 'taken',
+    });
     expect(linkedState(actions)).toBeNull();
     expect(puts(server)).toEqual([]);
   });
@@ -312,14 +341,16 @@ describe('sign-up', () => {
   it('says offline when nothing answers twice, and keeps no link', async () => {
     const { actions, server } = await setup();
     server.script('signUp', unreachable, unreachable);
-    await expect(actions.signUp(ME)).rejects.toMatchObject({ code: 'offline' });
+    await expect(actions.signUp({ ...ME, code: ANY_CODE })).rejects.toMatchObject({
+      code: 'offline',
+    });
     expect(linkedState(actions)).toBeNull();
   });
 
   it('tells a rate limit with its wait, and nothing about the account', async () => {
     const { actions, server } = await setup();
     server.script('signUp', answers(429, { error: 'too many attempts' }, 1800));
-    const error = await actions.signUp(ME).catch((e: unknown) => e);
+    const error = await actions.signUp({ ...ME, code: ANY_CODE }).catch((e: unknown) => e);
     expect(error).toBeInstanceOf(AccountError);
     expect((error as AccountError).message).toBe('Too many tries. Try again in 30 minutes.');
   });
@@ -328,7 +359,9 @@ describe('sign-up', () => {
     const { actions, server, store } = await setup();
     await store.getState().put('expense', lunch('e1'));
     server.script('signUp', answers(503, { error: 'not configured' }));
-    await expect(actions.signUp(ME)).rejects.toMatchObject({ code: 'unavailable' });
+    await expect(actions.signUp({ ...ME, code: ANY_CODE })).rejects.toMatchObject({
+      code: 'unavailable',
+    });
     expect(linkedState(actions)).toBeNull();
     expect(store.getState().data.tables.expense.map((e) => e.id)).toEqual(['e1']);
   });
@@ -456,11 +489,12 @@ describe('asking for a code', () => {
 
   it('asks for nothing in the demo, from a phone that has an account, or before the link is read', async () => {
     const { actions, server, store } = await setup();
-    await actions.signUp(ME);
+    await signUp(actions, server);
+    // The one request that made the account is all the service heard.
     await expect(actions.requestCode(who)).rejects.toMatchObject({ code: 'linked' });
     await store.getState().startDemo();
     await expect(actions.requestCode(who)).rejects.toMatchObject({ code: 'demo' });
-    expect(server.sent('requestCode')).toEqual([]);
+    expect(server.sent('requestCode')).toHaveLength(1);
 
     const t = await freshRealStore();
     const early = createAccountActions(t.store, fakeAccountApi().api, platform, { kdf: FAST });
@@ -651,11 +685,17 @@ describe('sign-up with a code', () => {
     expect(linkedState(actions)).toMatchObject({ status: 'linked' });
   });
 
-  it('sends no code at all where the screen gives none (the sign-up of today)', async () => {
+  it('needs a code: one left out is turned away, before the slow key work and before asking the service', async () => {
     const { actions, server } = await setup();
-    await actions.signUp(ME);
-    expect(Object.keys(server.sent('signUp')[0] as object)).not.toContain('code');
-    expect(linkedState(actions)).toMatchObject({ status: 'linked' });
+    // The type asks for a code; a caller that gets past it still makes no account without one.
+    const none = { ...ME } as Parameters<AccountActions['signUp']>[0];
+    await expect(actions.signUp(none)).rejects.toMatchObject({
+      code: 'code',
+      message: "That code isn't right. Check the email and try again.",
+    });
+    expect(server.calls).toEqual([]);
+    expect(server.accounts.has('robin')).toBe(false);
+    expect(linkedState(actions)).toBeNull();
   });
 });
 
@@ -663,7 +703,7 @@ describe('demo', () => {
   it('never signs up and never uploads', async () => {
     const { actions, server, store } = await setup();
     await store.getState().startDemo();
-    await expect(actions.signUp(ME)).rejects.toMatchObject({ code: 'demo' });
+    await expect(actions.signUp({ ...ME, code: ANY_CODE })).rejects.toMatchObject({ code: 'demo' });
     await expect(actions.logIn(ME, { replace: true })).rejects.toMatchObject({ code: 'demo' });
     clock();
     await store.getState().put('expense', lunch('d1'));
@@ -685,7 +725,7 @@ describe('demo', () => {
 
   it('a linked phone that goes into the demo uploads nothing from it, and has its link back after', async () => {
     const { actions, server, store } = await setup();
-    await actions.signUp(ME);
+    await signUp(actions, server);
     await store.getState().startDemo();
     clock();
     await store.getState().put('expense', lunch('d1'));
@@ -983,7 +1023,8 @@ describe('log-in', () => {
           answer = () => resolve(real());
         }),
     );
-    const signing = actions.signUp(ME);
+    await actions.requestCode(ME);
+    const signing = actions.signUp({ ...ME, code: server.codeFor(ME.email)! });
     signing.catch(() => {});
     await vi.waitFor(() => expect(server.sent('signUp')).toHaveLength(1));
     store.getState().lock();
@@ -994,7 +1035,7 @@ describe('log-in', () => {
 
   it('refuses while this phone is linked', async () => {
     const { actions, server } = await setup();
-    await actions.signUp(ME);
+    await signUp(actions, server);
     await server.seed({ username: 'other', password: ME.password });
     await expect(
       actions.logIn({ username: 'other', password: ME.password }, { replace: true }),
@@ -1005,7 +1046,7 @@ describe('log-in', () => {
 describe('another phone logs in', () => {
   async function linked() {
     const t = await setup();
-    await t.actions.signUp(ME);
+    await signUp(t.actions, t.server);
     clock();
     return t;
   }
@@ -1109,7 +1150,7 @@ describe('another phone logs in', () => {
 describe('retries', () => {
   async function linked() {
     const t = await setup();
-    await t.actions.signUp(ME);
+    await signUp(t.actions, t.server);
     clock();
     return t;
   }
@@ -1207,7 +1248,7 @@ describe('a copy stays clean', () => {
     const { actions, server, store } = await setup();
     await store.getState().put('profile', makeProfile({ name: 'Robin' }));
     await store.getState().put('expense', lunch('e1'));
-    await actions.signUp(ME);
+    await signUp(actions, server);
     const state = linkedState(actions)!;
 
     const body = puts(server)[0]!;
@@ -1230,7 +1271,7 @@ describe('a copy stays clean', () => {
 
   it('uploads what a restore of a snapshot put back', async () => {
     const { actions, server, store } = await setup();
-    await actions.signUp(ME);
+    await signUp(actions, server);
     const before = structuredClone(store.getState().data);
     clock();
     await store.getState().put('expense', lunch('later'));
@@ -1245,7 +1286,7 @@ describe('a copy stays clean', () => {
     const { actions, server, store } = await setup();
     await store.getState().put('profile', makeProfile({ name: 'Robin', currency: 'EUR' }));
     await store.getState().put('expense', lunch('e1'));
-    await actions.signUp(ME);
+    await signUp(actions, server);
     const linked = linkedState(actions)!;
     await store.getState().startOver();
     pause();
@@ -1266,7 +1307,7 @@ describe('a copy stays clean', () => {
 describe('a restart or a lock', () => {
   it('does not forget changes that were waiting to upload', async () => {
     const { actions, server, store, deps, stop } = await setup();
-    await actions.signUp(ME);
+    await signUp(actions, server);
     clock();
     await store.getState().put('expense', lunch('e1'));
     stop();
@@ -1283,7 +1324,7 @@ describe('a restart or a lock', () => {
   it('holds the upload while locked and sends it after the unlock', async () => {
     const { actions, server, store } = await setup();
     await store.getState().setSecret('2468', 'pin');
-    await actions.signUp(ME);
+    await signUp(actions, server);
     clock();
     await store.getState().put('expense', lunch('e1'));
     store.getState().lock();
@@ -1303,7 +1344,7 @@ describe('a restart or a lock', () => {
 describe('changing the password', () => {
   async function linked() {
     const t = await setup();
-    await t.actions.signUp(ME);
+    await signUp(t.actions, t.server);
     return t;
   }
 
@@ -1378,7 +1419,7 @@ describe('turning the account off', () => {
   it('deletes the copy, forgets the link and stops uploading, keeping the data', async () => {
     const { actions, server, store, deps } = await setup();
     await store.getState().put('expense', lunch('e1'));
-    await actions.signUp(ME);
+    await signUp(actions, server);
     const token = linkedState(actions)!.deviceToken;
     await expect(actions.deleteAccount()).resolves.toBe('deleted');
 
@@ -1406,7 +1447,7 @@ describe('turning the account off', () => {
 
   it('keeps the link when the service cannot be reached: the copy is still there', async () => {
     const { actions, server } = await setup();
-    await actions.signUp(ME);
+    await signUp(actions, server);
     server.script('deleteAccount', unreachable);
     await expect(actions.deleteAccount()).rejects.toMatchObject({ code: 'offline' });
     expect(linkedState(actions)!.status).toBe('linked');
@@ -1415,7 +1456,7 @@ describe('turning the account off', () => {
 
   it('tells a phone that has moved nothing was deleted, and still forgets its link', async () => {
     const { actions, server } = await setup();
-    await actions.signUp(ME);
+    await signUp(actions, server);
     await server.api.logIn({ username: 'robin', authKey: server.accounts.get('robin')!.authKey });
     await expect(actions.deleteAccount()).resolves.toBe('moved');
     expect(linkedState(actions)).toBeNull();
@@ -1424,7 +1465,7 @@ describe('turning the account off', () => {
 
   it('keeps using the phone without an account, leaving the service alone', async () => {
     const { actions, server } = await setup();
-    await actions.signUp(ME);
+    await signUp(actions, server);
     const calls = server.calls.length;
     await actions.unlink();
     expect(linkedState(actions)).toBeNull();
@@ -1535,7 +1576,7 @@ describe('logging out of the account on this phone', () => {
 async function linkedPhone({ pin = false } = {}) {
   const t = await setup();
   if (pin) await t.store.getState().setSecret('2468', 'pin');
-  await t.actions.signUp(ME);
+  await signUp(t.actions, t.server);
   clock();
   return t;
 }
@@ -1694,7 +1735,9 @@ describe('the two 401s', () => {
     server.script('signUp', unreachable);
     await server.seed({ username: 'robin', password: 'someone elses password' });
     server.script('logIn', answers(401, { error: 'unauthorized' }));
-    await expect(actions.signUp(ME)).rejects.toMatchObject({ code: 'unavailable' });
+    await expect(actions.signUp({ ...ME, code: ANY_CODE })).rejects.toMatchObject({
+      code: 'unavailable',
+    });
     expect(linkedState(actions)).toBeNull();
   });
 });

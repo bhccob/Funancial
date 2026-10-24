@@ -483,8 +483,7 @@ export function createAccountActions(
   /**
    * Makes the account and links this phone to it. `code` is the six digits mailed by `requestCode`,
    * as read from the email (a space in the middle is fine); the service makes the account only with
-   * it. Left out, the service makes an account it marks as unverified, as it does for an older app:
-   * only a screen that does not ask for a code yet should do that.
+   * it. Every screen that makes an account asks for one (setup and Settings), so it is never left out.
    */
   async function signUp({
     username,
@@ -495,7 +494,7 @@ export function createAccountActions(
     username: string;
     email: string;
     password: string;
-    code?: string;
+    code: string;
   }): Promise<void> {
     requireOpen();
     if (current()) throw new AccountError('linked');
@@ -505,8 +504,9 @@ export function createAccountActions(
       passwordProblem(password, { username, email });
     if (problem) throw new AccountError('invalid', problem);
     // What cannot be a code is not sent: it would only spend a try, after the slow key work.
-    const digits = code?.replace(/\s/g, '');
-    if (digits !== undefined && !CODE.test(digits)) throw new AccountError('code');
+    // A caller that slipped past the type with none is turned away the same way.
+    const digits = String(code ?? '').replace(/\s/g, '');
+    if (!CODE.test(digits)) throw new AccountError('code');
 
     const name = canonicalUsername(username.trim());
     const address = email.trim();
@@ -520,7 +520,7 @@ export function createAccountActions(
       authKey,
       dek: dek.raw,
       wrappedPw: await wrapDek(dek.raw, kek),
-      ...(digits === undefined ? {} : { code: digits }),
+      code: digits,
     };
 
     let reply = await api.signUp(body).catch((e: unknown) => {

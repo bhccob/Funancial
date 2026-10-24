@@ -36,11 +36,14 @@ export function CodeField({
   onChange,
   error,
   label = 'Code',
+  autoFocus,
 }: {
   value: string;
   onChange(value: string): void;
   error?: string;
   label?: string;
+  /** Takes focus as it appears: for a step that is reached by a tap, whose own button is gone. */
+  autoFocus?: boolean;
 }) {
   const id = useId();
   const errorId = `${id}-error`;
@@ -118,6 +121,7 @@ export function CodeField({
           inputMode="numeric"
           autoComplete="one-time-code"
           maxLength={LENGTH}
+          autoFocus={autoFocus}
           spellCheck={false}
           autoCorrect="off"
           aria-invalid={error ? true : undefined}

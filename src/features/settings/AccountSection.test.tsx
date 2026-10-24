@@ -64,115 +64,6 @@ describe('Settings → Account without an account', () => {
     expect(screen.getByText(/You're offline\./)).toBeInTheDocument();
   });
 
-  it('creates an account from what is typed, with the checks before any request', async () => {
-    const actions = show();
-    await userEvent.click(button('Create account'));
-    const dialog = screen.getByRole('dialog', { name: 'Create your account' });
-    expect(
-      within(dialog).getByText('So you can move to a new phone and keep everything.'),
-    ).toBeInTheDocument();
-    await userEvent.type(within(dialog).getByLabelText('Username'), 'ro');
-    await userEvent.type(within(dialog).getByLabelText('Email (for "forgot password")'), 'nobody');
-    await userEvent.type(within(dialog).getByLabelText('Password'), 'short');
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Create account' }));
-    expect(within(dialog).getByText(/Use 3 to 30 letters/)).toBeInTheDocument();
-    expect(within(dialog).getByText('Enter a valid email address.')).toBeInTheDocument();
-    expect(within(dialog).getByText('Use at least 10 characters.')).toBeInTheDocument();
-    expect(actions.signUp).not.toHaveBeenCalled();
-
-    await userEvent.type(within(dialog).getByLabelText('Username'), 'bin');
-    await userEvent.clear(within(dialog).getByLabelText('Email (for "forgot password")'));
-    await userEvent.type(
-      within(dialog).getByLabelText('Email (for "forgot password")'),
-      'robin@example.com',
-    );
-    await userEvent.type(within(dialog).getByLabelText('Password'), ' and then some');
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Create account' }));
-    expect(actions.signUp).toHaveBeenCalledWith({
-      username: 'robin',
-      email: 'robin@example.com',
-      password: 'short and then some',
-    });
-    expect(screen.queryByRole('dialog', { name: 'Create your account' })).not.toBeInTheDocument();
-    expect(await screen.findByText('Your account is ready.')).toBeInTheDocument();
-  });
-
-  it('shows how strong the password is as it is typed, and refuses a common one or the username before any request', async () => {
-    const actions = show();
-    await userEvent.click(button('Create account'));
-    const dialog = screen.getByRole('dialog', { name: 'Create your account' });
-    const password = within(dialog).getByLabelText('Password');
-    await userEvent.type(within(dialog).getByLabelText('Username'), 'robin.smith1');
-    await userEvent.type(
-      within(dialog).getByLabelText('Email (for "forgot password")'),
-      'robin@example.com',
-    );
-
-    await userEvent.type(password, 'password123');
-    expect(within(dialog).getByText('Weak')).toBeInTheDocument();
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Create account' }));
-    expect(
-      within(dialog).getByText('That password is too common. Pick another one.'),
-    ).toBeInTheDocument();
-
-    await userEvent.clear(password);
-    await userEvent.type(password, 'Robin.Smith1');
-    // The bar agrees with what sending will say, whatever the password looks like.
-    expect(within(dialog).getByText('Weak')).toBeInTheDocument();
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Create account' }));
-    expect(
-      within(dialog).getByText("Don't use your username or email as your password."),
-    ).toBeInTheDocument();
-
-    await userEvent.clear(password);
-    await userEvent.type(password, 'abcdefghijk');
-    expect(within(dialog).getByText('Okay')).toBeInTheDocument();
-    await userEvent.clear(password);
-    await userEvent.type(password, 'Tr0ub4dor&3xyz');
-    expect(within(dialog).getByText('Strong')).toBeInTheDocument();
-    expect(actions.signUp).not.toHaveBeenCalled();
-  });
-
-  it('sends one request for two taps in the same instant', async () => {
-    const actions = fakeAccount();
-    actions.signUp.mockReturnValue(new Promise(() => {}));
-    show(actions);
-    await userEvent.click(button('Create account'));
-    const dialog = screen.getByRole('dialog', { name: 'Create your account' });
-    await userEvent.type(within(dialog).getByLabelText('Username'), 'robin');
-    await userEvent.type(
-      within(dialog).getByLabelText('Email (for "forgot password")'),
-      'robin@example.com',
-    );
-    await userEvent.type(within(dialog).getByLabelText('Password'), PASSWORD);
-    const form = dialog.querySelector('form')!;
-    act(() => {
-      fireEvent.submit(form);
-      fireEvent.submit(form);
-    });
-    expect(actions.signUp).toHaveBeenCalledTimes(1);
-    expect(within(dialog).getByRole('button', { name: 'Creating…' })).toBeDisabled();
-  });
-
-  it('shows why an account could not be made, and keeps the form', async () => {
-    const actions = fakeAccount();
-    actions.signUp.mockRejectedValue(new AccountError('taken'));
-    show(actions);
-    await userEvent.click(button('Create account'));
-    const dialog = screen.getByRole('dialog', { name: 'Create your account' });
-    await userEvent.type(within(dialog).getByLabelText('Username'), 'robin');
-    await userEvent.type(
-      within(dialog).getByLabelText('Email (for "forgot password")'),
-      'robin@example.com',
-    );
-    await userEvent.type(within(dialog).getByLabelText('Password'), PASSWORD);
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Create account' }));
-    expect(await within(dialog).findByRole('alert')).toHaveTextContent(
-      'That username is taken. Try another one.',
-    );
-    expect(within(dialog).getByLabelText('Username')).toHaveValue('robin');
-  });
-
   it('logs in without asking when nothing needs replacing', async () => {
     const actions = show();
     await fillLogIn();
@@ -225,6 +116,349 @@ describe('Settings → Account without an account', () => {
     expect(await within(dialog).findByRole('alert')).toHaveTextContent(
       "That username and password don't match.",
     );
+  });
+});
+
+describe('Settings → Create account, in two steps', () => {
+  const CODE_LEAD =
+    'We sent a 6-digit code to robin@example.com. Your account is made once you type it.';
+  const CODE_HINT = 'The code works for 10 minutes. Wrong email? Go back and fix it.';
+  const WRONG_CODE = "That code isn't right. Check the email and try again.";
+
+  const accountStep = () => screen.getByRole('dialog', { name: 'Create your account' });
+  const codeStep = () => screen.findByRole('dialog', { name: 'Check your email' });
+
+  /** Opens the sheet and types the account step (what is not given is Robin's). */
+  async function fillAccount(typed: { username?: string; email?: string; password?: string } = {}) {
+    await userEvent.click(button('Create account'));
+    const dialog = accountStep();
+    await userEvent.type(within(dialog).getByLabelText('Username'), typed.username ?? 'robin');
+    await userEvent.type(
+      within(dialog).getByLabelText('Email'),
+      typed.email ?? 'robin@example.com',
+    );
+    await userEvent.type(within(dialog).getByLabelText('Password'), typed.password ?? PASSWORD);
+    return dialog;
+  }
+  const press = (dialog: HTMLElement, name: string) =>
+    userEvent.click(within(dialog).getByRole('button', { name }));
+
+  /** The sheet on its second step: the account typed, a code asked for. */
+  async function toCode(actions = fakeAccount()) {
+    show(actions);
+    await press(await fillAccount(), 'Continue');
+    return { actions, dialog: await codeStep() };
+  }
+  async function enterCode(dialog: HTMLElement, digits = '481529') {
+    await userEvent.type(within(dialog).getByLabelText('Code'), digits);
+    await press(dialog, 'Verify');
+  }
+
+  it('creates an account with a code from Settings', async () => {
+    const actions = show();
+    await userEvent.click(button('Create account'));
+    const dialog = accountStep();
+    expect(
+      within(dialog).getByText('So you can move to a new phone and keep everything.'),
+    ).toBeInTheDocument();
+    await userEvent.type(within(dialog).getByLabelText('Username'), 'ro');
+    await userEvent.type(within(dialog).getByLabelText('Email'), 'nobody');
+    await userEvent.type(within(dialog).getByLabelText('Password'), 'short');
+    await press(dialog, 'Continue');
+    expect(within(dialog).getByText(/Use 3 to 30 letters/)).toBeInTheDocument();
+    expect(within(dialog).getByText('Enter a valid email address.')).toBeInTheDocument();
+    expect(within(dialog).getByText('Use at least 10 characters.')).toBeInTheDocument();
+    expect(actions.requestCode).not.toHaveBeenCalled();
+
+    await userEvent.type(within(dialog).getByLabelText('Username'), 'bin');
+    await userEvent.clear(within(dialog).getByLabelText('Email'));
+    await userEvent.type(within(dialog).getByLabelText('Email'), 'robin@example.com');
+    await userEvent.type(within(dialog).getByLabelText('Password'), ' and then some');
+    await press(dialog, 'Continue');
+    expect(actions.requestCode).toHaveBeenCalledTimes(1);
+    expect(actions.requestCode).toHaveBeenCalledWith({
+      username: 'robin',
+      email: 'robin@example.com',
+    });
+    // Nothing is made before the code: the keys come with it.
+    expect(actions.signUp).not.toHaveBeenCalled();
+
+    const step = await codeStep();
+    expect(within(step).getByText('Security')).toBeInTheDocument();
+    expect(within(step).getByText(CODE_LEAD)).toBeInTheDocument();
+    expect(within(step).getByText(CODE_HINT)).toBeInTheDocument();
+    expect(within(step).getByRole('button', { name: 'Send a new code' })).toBeInTheDocument();
+    const field = within(step).getByLabelText('Code');
+    expect(field).toHaveAttribute('autocomplete', 'one-time-code');
+    // The button that was tapped is gone: the code is where the keyboard goes.
+    expect(field).toHaveFocus();
+
+    await userEvent.type(field, '481529');
+    await press(step, 'Verify');
+    expect(actions.signUp).toHaveBeenCalledTimes(1);
+    expect(actions.signUp).toHaveBeenCalledWith({
+      username: 'robin',
+      email: 'robin@example.com',
+      password: 'short and then some',
+      code: '481529',
+    });
+    expect(screen.queryByRole('dialog', { name: 'Check your email' })).not.toBeInTheDocument();
+    expect(await screen.findByText('Your account is ready.')).toBeInTheDocument();
+  });
+
+  it('back keeps what was typed, and asks again only for a changed address', async () => {
+    const { actions, dialog } = await toCode();
+    await userEvent.type(within(dialog).getByLabelText('Code'), '48');
+    await press(dialog, 'Back');
+    expect(accountStep()).toBe(dialog);
+    expect(within(dialog).getByLabelText('Username')).toHaveValue('robin');
+    expect(within(dialog).getByLabelText('Email')).toHaveValue('robin@example.com');
+    expect(within(dialog).getByLabelText('Password')).toHaveValue(PASSWORD);
+
+    // Nothing changed: on to the code that was sent, with what was typed of it.
+    await press(dialog, 'Continue');
+    expect(await codeStep()).toBe(dialog);
+    expect(actions.requestCode).toHaveBeenCalledTimes(1);
+    expect(within(dialog).getByLabelText('Code')).toHaveValue('48');
+
+    // A fixed address gets a code of its own, and the sheet says where it went.
+    await press(dialog, 'Back');
+    const email = within(dialog).getByLabelText('Email');
+    await userEvent.clear(email);
+    await userEvent.type(email, 'robin@mail.example');
+    await press(dialog, 'Continue');
+    await codeStep();
+    expect(actions.requestCode).toHaveBeenCalledTimes(2);
+    expect(actions.requestCode).toHaveBeenLastCalledWith({
+      username: 'robin',
+      email: 'robin@mail.example',
+    });
+    expect(
+      within(dialog).getByText(
+        'We sent a 6-digit code to robin@mail.example. Your account is made once you type it.',
+      ),
+    ).toBeInTheDocument();
+    expect(within(dialog).getByLabelText('Code')).toHaveValue('');
+  });
+
+  it('a wrong code stays on the code step, and the right one then makes the account', async () => {
+    const actions = fakeAccount();
+    actions.signUp.mockRejectedValueOnce(new AccountError('code'));
+    const { dialog } = await toCode(actions);
+    await enterCode(dialog, '111111');
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(WRONG_CODE);
+    expect(within(dialog).getByLabelText('Code')).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getByRole('dialog', { name: 'Check your email' })).toBe(dialog);
+    expect(screen.queryByText('Your account is ready.')).not.toBeInTheDocument();
+
+    // Typing again takes the message away.
+    await userEvent.clear(within(dialog).getByLabelText('Code'));
+    expect(within(dialog).queryByRole('alert')).not.toBeInTheDocument();
+    await enterCode(dialog, '481529');
+    expect(actions.signUp).toHaveBeenCalledTimes(2);
+    expect(actions.signUp).toHaveBeenLastCalledWith(expect.objectContaining({ code: '481529' }));
+    expect(await screen.findByText('Your account is ready.')).toBeInTheDocument();
+  });
+
+  it('says a code that is not six digits is not right, and sends nothing', async () => {
+    const { actions, dialog } = await toCode();
+    await enterCode(dialog, '4815');
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(WRONG_CODE);
+    expect(actions.signUp).not.toHaveBeenCalled();
+  });
+
+  it('the email row has its hint', async () => {
+    show();
+    await userEvent.click(button('Create account'));
+    const dialog = accountStep();
+    const email = within(dialog).getByLabelText('Email');
+    // A row: the label on the left, the value on the right, and the hint under it.
+    expect(email).toHaveClass('text-right', 'h-11');
+    expect(email).toHaveAccessibleDescription('For "forgot password".');
+    expect(email.closest('.border-b')).toHaveClass('border-black/7', 'dark:border-white/8');
+    expect(within(dialog).queryByLabelText(/forgot password/)).not.toBeInTheDocument();
+  });
+
+  it('shows how strong the password is as it is typed, and refuses a common one or the username before any request', async () => {
+    const actions = show();
+    await userEvent.click(button('Create account'));
+    const dialog = accountStep();
+    const password = within(dialog).getByLabelText('Password');
+    await userEvent.type(within(dialog).getByLabelText('Username'), 'robin.smith1');
+    await userEvent.type(within(dialog).getByLabelText('Email'), 'robin@example.com');
+
+    await userEvent.type(password, 'password123');
+    expect(within(dialog).getByText('Weak')).toBeInTheDocument();
+    await press(dialog, 'Continue');
+    expect(
+      within(dialog).getByText('That password is too common. Pick another one.'),
+    ).toBeInTheDocument();
+
+    await userEvent.clear(password);
+    await userEvent.type(password, 'Robin.Smith1');
+    // The bar agrees with what sending will say, whatever the password looks like.
+    expect(within(dialog).getByText('Weak')).toBeInTheDocument();
+    await press(dialog, 'Continue');
+    expect(
+      within(dialog).getByText("Don't use your username or email as your password."),
+    ).toBeInTheDocument();
+
+    await userEvent.clear(password);
+    await userEvent.type(password, 'abcdefghijk');
+    expect(within(dialog).getByText('Okay')).toBeInTheDocument();
+    await userEvent.clear(password);
+    await userEvent.type(password, 'Tr0ub4dor&3xyz');
+    expect(within(dialog).getByText('Strong')).toBeInTheDocument();
+    expect(actions.requestCode).not.toHaveBeenCalled();
+    expect(actions.signUp).not.toHaveBeenCalled();
+  });
+
+  it('says a taken name under the username, and stays on the account step with the form kept', async () => {
+    const actions = fakeAccount();
+    actions.requestCode.mockRejectedValue(new AccountError('taken'));
+    show(actions);
+    const dialog = await fillAccount();
+    await press(dialog, 'Continue');
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(
+      'That username is taken. Try another one.',
+    );
+    expect(accountStep()).toBe(dialog);
+    expect(within(dialog).getByLabelText('Username')).toHaveValue('robin');
+    expect(within(dialog).getByLabelText('Username')).toHaveAttribute('aria-invalid', 'true');
+    expect(within(dialog).getByLabelText('Password')).toHaveValue(PASSWORD);
+    expect(actions.signUp).not.toHaveBeenCalled();
+  });
+
+  it('takes the person back to the account step when the name was taken since the code was sent', async () => {
+    const actions = fakeAccount();
+    actions.signUp.mockRejectedValueOnce(new AccountError('taken'));
+    const { dialog } = await toCode(actions);
+    await enterCode(dialog);
+    expect(await within(dialog).findByLabelText('Username')).toHaveValue('robin');
+    expect(accountStep()).toBe(dialog);
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(
+      'That username is taken. Try another one.',
+    );
+    expect(within(dialog).getByLabelText('Password')).toHaveValue(PASSWORD);
+  });
+
+  it('says a service that is not answering on the step it met it, and keeps the form', async () => {
+    const actions = fakeAccount();
+    actions.requestCode.mockRejectedValueOnce(new AccountError('unavailable'));
+    actions.signUp.mockRejectedValueOnce(new AccountError('offline'));
+    show(actions);
+    const dialog = await fillAccount();
+    await press(dialog, 'Continue');
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(
+      "Funcial's service isn't answering right now. Try again in a moment.",
+    );
+    expect(accountStep()).toBe(dialog);
+    expect(within(dialog).getByLabelText('Username')).toHaveValue('robin');
+
+    // And once it answers, the code step says its own: the code typed stays for another try.
+    await press(dialog, 'Continue');
+    await codeStep();
+    await enterCode(dialog);
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(
+      "You're offline. Try again when you're connected.",
+    );
+    expect(screen.getByRole('dialog', { name: 'Check your email' })).toBe(dialog);
+    expect(within(dialog).getByLabelText('Code')).toHaveValue('481529');
+  });
+
+  it('says too many tries once, with the wait, on the code step', async () => {
+    const actions = fakeAccount();
+    actions.signUp.mockRejectedValueOnce(
+      new AccountError('limited', 'Too many tries. Try again in 30 minutes.', 1800),
+    );
+    const { dialog } = await toCode(actions);
+    await enterCode(dialog);
+    await within(dialog).findByRole('alert');
+    expect(within(dialog).getAllByText('Too many tries. Try again in 30 minutes.')).toHaveLength(1);
+    // The code may be spent: a new one may be asked for at once.
+    expect(within(dialog).getByRole('button', { name: 'Send a new code' })).toBeEnabled();
+  });
+
+  it('holds Send a new code right after a send, and lets it go for a code that has run out', async () => {
+    const actions = fakeAccount();
+    actions.signUp.mockRejectedValueOnce(new AccountError('expired'));
+    const { dialog } = await toCode(actions);
+    const resend = within(dialog).getByRole('button', { name: 'Send a new code' });
+    expect(resend).toBeDisabled();
+
+    await enterCode(dialog);
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(
+      'That code has expired. Send a new one.',
+    );
+    expect(resend).toBeEnabled();
+    await userEvent.click(resend);
+    expect(actions.requestCode).toHaveBeenCalledTimes(2);
+    expect(await screen.findByText('We sent a new code.')).toBeInTheDocument();
+    expect(resend).toBeDisabled();
+  });
+
+  it('sends one request for two taps in the same instant, and does not close meanwhile', async () => {
+    const actions = fakeAccount();
+    actions.requestCode.mockReturnValue(new Promise(() => {}));
+    show(actions);
+    const dialog = await fillAccount();
+    const form = dialog.querySelector('form')!;
+    act(() => {
+      fireEvent.submit(form);
+      fireEvent.submit(form);
+    });
+    expect(actions.requestCode).toHaveBeenCalledTimes(1);
+    expect(within(dialog).getByRole('button', { name: 'Sending…' })).toBeDisabled();
+    expect(within(dialog).getByRole('button', { name: 'Cancel' })).toBeDisabled();
+    // Escape and the back gesture wait too: the answer would land in a sheet nobody sees.
+    fireEvent.keyDown(dialog, { key: 'Escape' });
+    expect(accountStep()).toBe(dialog);
+  });
+
+  it('makes one account for two taps on Verify in the same instant', async () => {
+    const actions = fakeAccount();
+    actions.signUp.mockReturnValue(new Promise(() => {}));
+    const { dialog } = await toCode(actions);
+    await userEvent.type(within(dialog).getByLabelText('Code'), '481529');
+    const form = dialog.querySelector('form')!;
+    act(() => {
+      fireEvent.submit(form);
+      fireEvent.submit(form);
+    });
+    expect(actions.signUp).toHaveBeenCalledTimes(1);
+    expect(within(dialog).getByRole('button', { name: 'Verifying…' })).toBeDisabled();
+    expect(within(dialog).getByRole('button', { name: 'Back' })).toBeDisabled();
+    expect(within(dialog).getByRole('button', { name: 'Send a new code' })).toBeDisabled();
+  });
+
+  it('closes with Cancel, keeping the name and address but not the password', async () => {
+    const actions = show();
+    const dialog = await fillAccount();
+    await press(dialog, 'Cancel');
+    expect(screen.queryByRole('dialog', { name: 'Create your account' })).not.toBeInTheDocument();
+    expect(actions.requestCode).not.toHaveBeenCalled();
+
+    await userEvent.click(button('Create account'));
+    expect(within(accountStep()).getByLabelText('Username')).toHaveValue('robin');
+    expect(within(accountStep()).getByLabelText('Email')).toHaveValue('robin@example.com');
+    expect(within(accountStep()).getByLabelText('Password')).toHaveValue('');
+  });
+
+  it('opens on the account step again after it was closed on the code step, and goes back to the code sent', async () => {
+    const { actions, dialog } = await toCode();
+    await userEvent.type(within(dialog).getByLabelText('Code'), '48');
+    fireEvent.keyDown(dialog, { key: 'Escape' });
+    expect(screen.queryByRole('dialog', { name: 'Check your email' })).not.toBeInTheDocument();
+
+    await userEvent.click(button('Create account'));
+    const again = accountStep();
+    expect(within(again).getByLabelText('Password')).toHaveValue('');
+    await userEvent.type(within(again).getByLabelText('Password'), PASSWORD);
+    await press(again, 'Continue');
+    await codeStep();
+    // The code sent a moment ago still works: no second mail, and what was typed of it is gone.
+    expect(actions.requestCode).toHaveBeenCalledTimes(1);
+    expect(within(again).getByLabelText('Code')).toHaveValue('');
   });
 });
 

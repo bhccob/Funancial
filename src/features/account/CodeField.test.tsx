@@ -42,6 +42,14 @@ describe('CodeField', () => {
     expect(screen.getByLabelText('Email code')).toBeInTheDocument();
   });
 
+  it('takes focus as it appears when asked to, and not otherwise', () => {
+    const { unmount } = render(<Field />);
+    expect(screen.getByLabelText('Code')).not.toHaveFocus();
+    unmount();
+    render(<CodeField value="" onChange={() => {}} autoFocus />);
+    expect(screen.getByLabelText('Code')).toHaveFocus();
+  });
+
   it('shows each typed digit in its own box, and keeps letters out', async () => {
     render(<Field />);
     await userEvent.type(screen.getByLabelText('Code'), '4a8 1');

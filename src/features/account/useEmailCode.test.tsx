@@ -173,6 +173,47 @@ describe('useEmailCode', () => {
     expect(current().resendHeld).toBe(false);
   });
 
+  describe('a refused Send a new code', () => {
+    it('hands a name that has been taken meanwhile back to the screen, and keeps the code it has', async () => {
+      const account = fakeAccount();
+      account.requestCode.mockResolvedValueOnce().mockRejectedValueOnce(new AccountError('taken'));
+      const { run, advance, current } = setup(account);
+      await run((c) => c.request(ROBIN));
+      act(() => current().setCode('481'));
+      advance(30_000);
+      expect(await run((c) => c.resend(ROBIN))).toEqual({
+        kind: 'taken',
+        message: 'That username is taken. Try another one.',
+      });
+      // The screen fixes the name on the account step: nothing is said here, no new mail is
+      // promised, and the code sent before and what was typed of it are as they were.
+      expect(current().problem).toBeUndefined();
+      expect(current().codeError).toBeUndefined();
+      expect(current().sentTo).toBe('robin@example.com');
+      expect(current().code).toBe('481');
+      expect(current().resendHeld).toBe(false);
+      expect(toastStore.getState().toasts).toEqual([]);
+    });
+
+    it('says what was typed being wrong on the code step, and holds nothing', async () => {
+      const account = fakeAccount();
+      account.requestCode
+        .mockResolvedValueOnce()
+        .mockRejectedValueOnce(new AccountError('invalid'));
+      const { run, advance, current } = setup(account);
+      await run((c) => c.request(ROBIN));
+      act(() => current().setCode('481'));
+      advance(30_000);
+      expect(await run((c) => c.resend(ROBIN))).toEqual({ kind: 'shown' });
+      expect(current().problem).toBe('Check what you typed and try again.');
+      // Not a refusal to wait out: Send a new code stays open, and the code typed is kept.
+      expect(current().resendHeld).toBe(false);
+      expect(current().code).toBe('481');
+      expect(current().sentTo).toBe('robin@example.com');
+      expect(toastStore.getState().toasts).toEqual([]);
+    });
+  });
+
   describe('one call at a time', () => {
     it('does nothing for a second request, or a Verify, while a code is on its way', async () => {
       const account = fakeAccount();
@@ -264,6 +305,22 @@ describe('useEmailCode', () => {
       });
       expect(current().problem).toBe('Too many tries. Try again in 60 minutes.');
       expect(current().resendHeld).toBe(false);
+    });
+
+    it('says what was typed being wrong on the code step, and keeps the code, the hold and the address', async () => {
+      const account = fakeAccount();
+      account.signUp.mockRejectedValueOnce(new AccountError('invalid'));
+      const { run, current } = setup(account);
+      await run((c) => c.request(ROBIN));
+      act(() => current().setCode('481529'));
+      expect(await run((c) => c.verify(SIGN_UP))).toEqual({ kind: 'shown' });
+      expect(current().problem).toBe('Check what you typed and try again.');
+      // The code is not the matter: nothing is said under it, it stays typed and sent, and the
+      // hold on Send a new code runs on.
+      expect(current().codeError).toBeUndefined();
+      expect(current().code).toBe('481529');
+      expect(current().sentTo).toBe('robin@example.com');
+      expect(current().resendHeld).toBe(true);
     });
 
     it.each([

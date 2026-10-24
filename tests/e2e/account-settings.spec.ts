@@ -5,12 +5,15 @@ import { startDemo, startFresh } from './helpers';
 // The build gets this token from playwright.config.ts.
 const TOKEN = 'e2e-token';
 const PASSWORD = 'a long enough password';
+/** The code the mock service "emails": the only one its sign-up takes. */
+const CODE = '123456';
 
 type Seen = { method: string; route: string; body: Record<string, unknown> | null; auth: string };
 
 /**
- * The account service, in memory: sign-up answers with a device token, uploads count up from 1, and
- * `refuseUploads` makes the next ones answer as an account that moved to another phone does.
+ * The account service, in memory: a code request "mails" `CODE`, sign-up answers with a device token
+ * for that code alone, uploads count up from 1, and `refuseUploads` makes the next ones answer as an
+ * account that moved to another phone does.
  */
 async function mockAccountService(page: Page) {
   const seen: Seen[] = [];
@@ -28,7 +31,13 @@ async function mockAccountService(page: Page) {
       body: request.postDataJSON() as Record<string, unknown> | null,
       auth: headers['authorization'] ?? '',
     });
-    if (name === 'signup') return route.fulfill({ json: { deviceToken: 'device-token-1' } });
+    if (name === 'code') return route.fulfill({ json: { ok: true } });
+    if (name === 'signup') {
+      if (seen.at(-1)?.body?.code !== CODE) {
+        return route.fulfill({ status: 401, json: { error: 'code' } });
+      }
+      return route.fulfill({ json: { deviceToken: 'device-token-1' } });
+    }
     if (name === 'copy' && request.method() === 'PUT') {
       if (state.refuseUploads) return route.fulfill({ status: 401, json: { error: 'moved' } });
       state.version += 1;
@@ -47,13 +56,23 @@ const sendToBackground = (page: Page) =>
     document.dispatchEvent(new Event('visibilitychange'));
   });
 
-async function createAccount(page: Page) {
+/** The account step of the Create-account sheet, typed and sent on: the sheet is then on its code step. */
+async function accountStep(page: Page) {
   await page.getByRole('button', { name: 'Create account' }).click();
   const dialog = page.getByRole('dialog', { name: 'Create your account' });
   await dialog.getByLabel('Username').fill('Robin');
-  await dialog.getByLabel('Email (for "forgot password")').fill('robin@example.com');
+  await dialog.getByLabel('Email', { exact: true }).fill('robin@example.com');
   await dialog.getByLabel('Password', { exact: true }).fill(PASSWORD);
-  await dialog.getByRole('button', { name: 'Create account' }).click();
+  await dialog.getByRole('button', { name: 'Continue' }).click();
+  const code = page.getByRole('dialog', { name: 'Check your email' });
+  await expect(code).toBeVisible();
+  return code;
+}
+
+async function createAccount(page: Page) {
+  const dialog = await accountStep(page);
+  await dialog.getByLabel('Code', { exact: true }).fill(CODE);
+  await dialog.getByRole('button', { name: 'Verify' }).click();
   await expect(page.getByText('Your account is ready.')).toBeVisible();
 }
 
@@ -73,11 +92,19 @@ test('the Home reminder leads to Settings, where an account is made and then tur
   await expect(page.getByText('robin@example.com')).toBeVisible();
   await expect(page.getByText(/Last copy saved/)).toBeVisible();
 
-  // The service heard the keys, not the password, and the copy: sealed, from version 0.
+  // A code was asked for the name and address, and the account made with it.
+  expect(service.seen.filter((s) => s.route === 'code').map((s) => s.body)).toEqual([
+    { username: 'robin', email: 'robin@example.com' },
+  ]);
+  // The service heard the keys and the code, not the password, and the copy: sealed, from version 0.
   const [signup] = service.seen.filter((s) => s.route === 'signup');
-  expect(signup!.body).toMatchObject({ username: 'robin', email: 'robin@example.com' });
+  expect(signup!.body).toMatchObject({
+    username: 'robin',
+    email: 'robin@example.com',
+    code: CODE,
+  });
   expect(Object.keys(signup!.body!).sort()).toEqual(
-    ['authKey', 'dek', 'email', 'username', 'wrappedPw'].sort(),
+    ['authKey', 'code', 'dek', 'email', 'username', 'wrappedPw'].sort(),
   );
   expect(JSON.stringify(signup!.body)).not.toContain(PASSWORD);
   // Argon2id (64 MiB, 3 passes) from the built app's own WASM gives what Node's Argon2id and HKDF
@@ -108,6 +135,48 @@ test('the Home reminder leads to Settings, where an account is made and then tur
   expect(
     service.seen.some((s) => s.method === 'DELETE' && s.auth === 'Bearer device-token-1'),
   ).toBe(true);
+});
+
+test('Create account in Settings makes the account only with the emailed code', async ({
+  page,
+}) => {
+  const service = await mockAccountService(page);
+  await startFresh(page, '/settings');
+  const dialog = await accountStep(page);
+  await expect(
+    dialog.getByText(
+      'We sent a 6-digit code to robin@example.com. Your account is made once you type it.',
+    ),
+  ).toBeVisible();
+  // The tapped button is gone: the code takes the focus.
+  await expect(dialog.getByLabel('Code', { exact: true })).toBeFocused();
+
+  // A wrong code is turned away on the code step; nothing is made.
+  await dialog.getByLabel('Code', { exact: true }).fill('000000');
+  await dialog.getByRole('button', { name: 'Verify' }).click();
+  await expect(dialog.getByRole('alert')).toHaveText(
+    "That code isn't right. Check the email and try again.",
+  );
+  await expect(page.getByText('Your account is ready.')).toBeHidden();
+
+  // Back keeps what was typed, and on again goes to the code already sent.
+  await dialog.getByRole('button', { name: 'Back' }).click();
+  const first = page.getByRole('dialog', { name: 'Create your account' });
+  await expect(first.getByLabel('Username')).toHaveValue('Robin');
+  await expect(first.getByLabel('Email', { exact: true })).toHaveValue('robin@example.com');
+  await expect(first.getByLabel('Password', { exact: true })).toHaveValue(PASSWORD);
+  await first.getByRole('button', { name: 'Continue' }).click();
+  await expect(dialog).toBeVisible();
+  expect(service.seen.filter((s) => s.route === 'code')).toHaveLength(1);
+
+  await dialog.getByLabel('Code', { exact: true }).fill(CODE);
+  await dialog.getByRole('button', { name: 'Verify' }).click();
+  await expect(page.getByText('Your account is ready.')).toBeVisible();
+  await expect(page.getByText('robin', { exact: true })).toBeVisible();
+  expect(service.seen.filter((s) => s.route === 'signup').map((s) => s.body?.code)).toEqual([
+    '000000',
+    CODE,
+  ]);
 });
 
 test('logging out keeps the data, stops saving and leaves the service alone', async ({ page }) => {

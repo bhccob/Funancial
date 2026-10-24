@@ -469,6 +469,44 @@ for (const theme of GAME_THEMES) {
         await expectReadable(page, 'the Change currency dialog', look);
       });
 
+      test("Settings' Create account sheet, on its account step and on its code step", async ({
+        page,
+      }) => {
+        // A code is "mailed" for any name, and the one typed is turned away: the sheet then shows
+        // its error as well. Nothing is made.
+        await page.route('**/api/code', (route) => route.fulfill({ json: { ok: true } }));
+        await page.route('**/api/signup', (route) =>
+          route.fulfill({ status: 401, json: { error: 'code' } }),
+        );
+        await startFresh(page);
+        await wearTheme(page, theme);
+        await page.goto('/settings');
+        await page.getByRole('button', { name: 'Create account' }).click();
+        const account = page.getByRole('dialog', { name: 'Create your account' });
+        await expect(account.getByLabel('Email', { exact: true })).toBeVisible();
+        await expectReadable(page, 'the Create account sheet', look);
+
+        await account.getByLabel('Username').fill('robin');
+        await account.getByLabel('Email', { exact: true }).fill('robin@example.com');
+        // Typed, so the strength bar and its word are in the scan; a bad email shows an error too.
+        await account.getByLabel('Password', { exact: true }).fill('Tr0ub4dor&3xyz');
+        await account.getByLabel('Email', { exact: true }).fill('robin');
+        await account.getByRole('button', { name: 'Continue' }).click();
+        await expect(account.getByText('Enter a valid email address.')).toBeVisible();
+        await expectReadable(page, 'the Create account sheet with an error', look);
+
+        await account.getByLabel('Email', { exact: true }).fill('robin@example.com');
+        await account.getByRole('button', { name: 'Continue' }).click();
+        const code = page.getByRole('dialog', { name: 'Check your email' });
+        await expect(code.getByLabel('Code', { exact: true })).toBeVisible();
+        await expectReadable(page, "the Create account sheet's code step", look);
+
+        await code.getByLabel('Code', { exact: true }).fill('000000');
+        await code.getByRole('button', { name: 'Verify' }).click();
+        await expect(code.getByRole('alert')).toBeVisible();
+        await expectReadable(page, "the Create account sheet's code step with an error", look);
+      });
+
       test("Settings' Leave demo dialog", async ({ page }) => {
         await visit(page, '/settings');
         await page.getByRole('button', { name: 'Start with my real data' }).click();

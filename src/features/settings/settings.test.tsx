@@ -781,7 +781,7 @@ describe('Settings in glass', () => {
     expect(el, label).not.toHaveClass('border-b', 'font-extrabold', 'rounded-md');
     expect(el.closest('.border-b'), label).toHaveClass('border-black/7', 'dark:border-white/8');
   };
-  /** The line field the create dialog and the erase dialog keep. */
+  /** The line field the erase dialog keeps. */
   const isLine = (el: HTMLElement, label: string) => {
     expect(el, label).toHaveClass('border-b', 'font-extrabold');
     expect(el, label).not.toHaveClass('rounded-md');
@@ -886,7 +886,7 @@ describe('Settings in glass', () => {
     isRow(within(picker).getByLabelText('New currency'), 'New currency');
   });
 
-  it('has row fields in the log-in dialog, and the create dialog keeps its line fields', async () => {
+  it('has row fields in the log-in dialog and in the create-account sheet', async () => {
     renderWithStore(withAccount(fakeAccount(), <SettingsScreen />), createStubStore());
     await userEvent.click(screen.getByRole('button', { name: 'Log in' }));
     let dialog = screen.getByRole('dialog', { name: 'Log in' });
@@ -895,11 +895,11 @@ describe('Settings in glass', () => {
     }
     await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
 
-    // The email's label is too long to share a row with its value on a phone.
+    // The email's label is just Email, with its hint under it, so the row has room for its value.
     await userEvent.click(screen.getByRole('button', { name: 'Create account' }));
     dialog = screen.getByRole('dialog', { name: 'Create your account' });
-    for (const label of ['Username', 'Email (for "forgot password")', 'Password']) {
-      isLine(within(dialog).getByLabelText(label), label);
+    for (const label of ['Username', 'Email', 'Password']) {
+      isRow(within(dialog).getByLabelText(label), label);
     }
   });
 

@@ -10,8 +10,20 @@ import { validateSecret, type SecretKind } from '@/data/keys';
 import { CodeField } from '@/features/account/CodeField';
 import { ForgotScreen } from '@/features/account/ForgotScreen';
 import { LoginScreen } from '@/features/account/LoginScreen';
-import { BackButton, PasswordField, Problem, ScreenHeader } from '@/features/account/parts';
-import { BIOMETRIC_FAILED, SAVE_NOTE } from '@/features/account/shared';
+import {
+  BackButton,
+  PasswordField,
+  Problem,
+  ResendCode,
+  ScreenHeader,
+} from '@/features/account/parts';
+import {
+  BIOMETRIC_FAILED,
+  CODE_EYEBROW,
+  CODE_TITLE,
+  codeLead,
+  SAVE_NOTE,
+} from '@/features/account/shared';
 import { useEmailCode, type CodeFailure, type CodeOutcome } from '@/features/account/useEmailCode';
 import { currencyOptions, defaultCurrency } from '@/features/shared/currencies';
 import { toast } from '@/lib/toast';
@@ -380,28 +392,16 @@ export function OnboardingWizard({ onFinishing }: { onFinishing?(finishing: bool
         return (
           <>
             <ScreenHeader
-              eyebrow="Security"
-              title="Check your email"
-              lead={`We sent a 6-digit code to ${emailCode.sentTo ?? email.trim()}. Your account is made once you type it.`}
+              eyebrow={CODE_EYEBROW}
+              title={CODE_TITLE}
+              lead={codeLead(emailCode.sentTo ?? email.trim())}
             />
             <CodeField
               value={emailCode.code}
               onChange={emailCode.setCode}
               error={emailCode.codeError}
             />
-            <div className="-mt-2 flex flex-col items-center gap-1 text-center">
-              <button
-                type="button"
-                onClick={() => void resend()}
-                disabled={emailCode.resendHeld || working}
-                className="text-accent-text inline-flex min-h-11 items-center font-bold underline underline-offset-4 disabled:pointer-events-none disabled:opacity-45"
-              >
-                Send a new code
-              </button>
-              <p className="text-muted text-sm">
-                The code works for 10 minutes. Wrong email? Go back and fix it.
-              </p>
-            </div>
+            <ResendCode onResend={() => void resend()} disabled={emailCode.resendHeld || working} />
             <Problem>{emailCode.problem}</Problem>
             {skipOffer()}
           </>

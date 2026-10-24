@@ -34,6 +34,28 @@ export function BackButton({ onClick, disabled }: { onClick(): void; disabled?: 
   );
 }
 
+/**
+ * Under the code field: Send a new code (held, while the last one was just sent, by `disabled`) and
+ * how long a code works. Setup and Settings' Create account say it the same.
+ */
+export function ResendCode({ onResend, disabled }: { onResend(): void; disabled?: boolean }) {
+  return (
+    <div className="-mt-2 flex flex-col items-center gap-1 text-center">
+      <button
+        type="button"
+        onClick={onResend}
+        disabled={disabled}
+        className="text-accent-text inline-flex min-h-11 items-center font-bold underline underline-offset-4 disabled:pointer-events-none disabled:opacity-45"
+      >
+        Send a new code
+      </button>
+      <p className="text-muted text-sm">
+        The code works for 10 minutes. Wrong email? Go back and fix it.
+      </p>
+    </div>
+  );
+}
+
 const STRENGTH: Record<PasswordStrength, { word: string; marks: number; fill: string }> = {
   weak: { word: 'Weak', marks: 1, fill: 'bg-danger' },
   okay: { word: 'Okay', marks: 2, fill: 'bg-warning' },
