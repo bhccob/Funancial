@@ -472,12 +472,10 @@ for (const theme of GAME_THEMES) {
       test("Settings' Create account sheet, on its account step and on its code step", async ({
         page,
       }) => {
-        // A code is "mailed" for any name, and the one typed is turned away: the sheet then shows
-        // its error as well. Nothing is made.
+        // A code is "mailed" for any name. Nothing is made: the sheet's errors are the ones it finds
+        // itself, a bad email on the first step and a short code on the second (said before any
+        // sign-up, so no key work runs and the scan cannot be slowed by it).
         await page.route('**/api/code', (route) => route.fulfill({ json: { ok: true } }));
-        await page.route('**/api/signup', (route) =>
-          route.fulfill({ status: 401, json: { error: 'code' } }),
-        );
         await startFresh(page);
         await wearTheme(page, theme);
         await page.goto('/settings');
@@ -501,7 +499,7 @@ for (const theme of GAME_THEMES) {
         await expect(code.getByLabel('Code', { exact: true })).toBeVisible();
         await expectReadable(page, "the Create account sheet's code step", look);
 
-        await code.getByLabel('Code', { exact: true }).fill('000000');
+        await code.getByLabel('Code', { exact: true }).fill('4815');
         await code.getByRole('button', { name: 'Verify' }).click();
         await expect(code.getByRole('alert')).toBeVisible();
         await expectReadable(page, "the Create account sheet's code step with an error", look);

@@ -1,5 +1,5 @@
 import { Check } from 'lucide-react';
-import { useState, type FormEvent } from 'react';
+import { useId, useState, type FormEvent } from 'react';
 import { Button } from '@/components/ui/Button';
 import { RadioGroup } from '@/components/ui/RadioGroup';
 import { Select } from '@/components/ui/Select';
@@ -15,14 +15,19 @@ import {
   PasswordField,
   Problem,
   ResendCode,
+  SaveNote,
   ScreenHeader,
 } from '@/features/account/parts';
 import {
+  ACCOUNT_EYEBROW,
+  ACCOUNT_LEAD,
+  ACCOUNT_TITLE,
   BIOMETRIC_FAILED,
   CODE_EYEBROW,
   CODE_TITLE,
   codeLead,
-  SAVE_NOTE,
+  EMAIL_HINT,
+  PASSWORD_HINT,
 } from '@/features/account/shared';
 import { useEmailCode, type CodeFailure, type CodeOutcome } from '@/features/account/useEmailCode';
 import { currencyOptions, defaultCurrency } from '@/features/shared/currencies';
@@ -95,6 +100,8 @@ export function OnboardingWizard({ onFinishing }: { onFinishing?(finishing: bool
   );
   // The code step: the code mailed, typed, sent again, and Verify, which makes the account.
   const emailCode = useEmailCode();
+  // The code step's lead, which its field is described by.
+  const codeLeadId = useId();
   const account = useAccount();
   const run = useAction();
   const [options] = useState(() => currencyOptions());
@@ -339,11 +346,7 @@ export function OnboardingWizard({ onFinishing }: { onFinishing?(finishing: bool
         }
         return (
           <>
-            <ScreenHeader
-              eyebrow="Your account"
-              title="Create your account"
-              lead="So you can move to a new phone and keep everything."
-            />
+            <ScreenHeader eyebrow={ACCOUNT_EYEBROW} title={ACCOUNT_TITLE} lead={ACCOUNT_LEAD} />
             <div>
               <TextField
                 variant="row"
@@ -358,7 +361,7 @@ export function OnboardingWizard({ onFinishing }: { onFinishing?(finishing: bool
               <TextField
                 variant="row"
                 label="Email"
-                hint={'For "forgot password".'}
+                hint={EMAIL_HINT}
                 type="email"
                 autoComplete="email"
                 value={email}
@@ -369,13 +372,13 @@ export function OnboardingWizard({ onFinishing }: { onFinishing?(finishing: bool
                 variant="row"
                 strength={{ username, email }}
                 autoComplete="new-password"
-                hint="At least 10 characters"
+                hint={PASSWORD_HINT}
                 value={password}
                 error={accountErrors.password}
                 onChange={(e) => setPassword(e.target.value)}
               />
             </div>
-            <p className="text-muted text-sm">{SAVE_NOTE}</p>
+            <SaveNote />
             <button
               type="button"
               onClick={() => goAside('login')}
@@ -395,8 +398,10 @@ export function OnboardingWizard({ onFinishing }: { onFinishing?(finishing: bool
               eyebrow={CODE_EYEBROW}
               title={CODE_TITLE}
               lead={codeLead(emailCode.sentTo ?? email.trim())}
+              leadId={codeLeadId}
             />
             <CodeField
+              describedBy={codeLeadId}
               value={emailCode.code}
               onChange={emailCode.setCode}
               error={emailCode.codeError}

@@ -50,6 +50,27 @@ describe('CodeField', () => {
     expect(screen.getByLabelText('Code')).toHaveFocus();
   });
 
+  it('is described by what tells where the code went, with an error read after it', () => {
+    const { rerender } = render(
+      <>
+        <p id="lead">We sent a 6-digit code to robin@example.com.</p>
+        <CodeField value="" onChange={() => {}} describedBy="lead" />
+      </>,
+    );
+    expect(screen.getByLabelText('Code')).toHaveAccessibleDescription(
+      'We sent a 6-digit code to robin@example.com.',
+    );
+    rerender(
+      <>
+        <p id="lead">We sent a 6-digit code to robin@example.com.</p>
+        <CodeField value="" onChange={() => {}} describedBy="lead" error="That code isn't right." />
+      </>,
+    );
+    expect(screen.getByLabelText('Code')).toHaveAccessibleDescription(
+      "We sent a 6-digit code to robin@example.com. That code isn't right.",
+    );
+  });
+
   it('shows each typed digit in its own box, and keeps letters out', async () => {
     render(<Field />);
     await userEvent.type(screen.getByLabelText('Code'), '4a8 1');

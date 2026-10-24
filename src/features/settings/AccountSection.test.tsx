@@ -190,8 +190,10 @@ describe('Settings → Create account, in two steps', () => {
     expect(within(step).getByRole('button', { name: 'Send a new code' })).toBeInTheDocument();
     const field = within(step).getByLabelText('Code');
     expect(field).toHaveAttribute('autocomplete', 'one-time-code');
-    // The button that was tapped is gone: the code is where the keyboard goes.
+    // The button that was tapped is gone: the code is where the keyboard goes, and a screen reader
+    // that is moved there is told where the code went.
     expect(field).toHaveFocus();
+    expect(field).toHaveAccessibleDescription(CODE_LEAD);
 
     await userEvent.type(field, '481529');
     await press(step, 'Verify');
@@ -248,6 +250,10 @@ describe('Settings → Create account, in two steps', () => {
     await enterCode(dialog, '111111');
     expect(await within(dialog).findByRole('alert')).toHaveTextContent(WRONG_CODE);
     expect(within(dialog).getByLabelText('Code')).toHaveAttribute('aria-invalid', 'true');
+    // The lead is still read with the field, and the error after it.
+    expect(within(dialog).getByLabelText('Code')).toHaveAccessibleDescription(
+      `${CODE_LEAD} ${WRONG_CODE}`,
+    );
     expect(screen.getByRole('dialog', { name: 'Check your email' })).toBe(dialog);
     expect(screen.queryByText('Your account is ready.')).not.toBeInTheDocument();
 
@@ -397,6 +403,43 @@ describe('Settings → Create account, in two steps', () => {
     expect(resend).toBeDisabled();
   });
 
+  it('takes the person back to the account step when Send a new code finds the name taken', async () => {
+    const actions = fakeAccount();
+    actions.requestCode.mockResolvedValueOnce().mockRejectedValueOnce(new AccountError('taken'));
+    // An expired code lets the hold on Send a new code go at once.
+    actions.signUp.mockRejectedValueOnce(new AccountError('expired'));
+    const { dialog } = await toCode(actions);
+    await enterCode(dialog);
+    await within(dialog).findByRole('alert');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Send a new code' }));
+
+    expect(actions.requestCode).toHaveBeenCalledTimes(2);
+    expect(await within(dialog).findByLabelText('Username')).toHaveValue('robin');
+    expect(accountStep()).toBe(dialog);
+    expect(within(dialog).getByLabelText('Username')).toHaveAttribute('aria-invalid', 'true');
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(
+      'That username is taken. Try another one.',
+    );
+    // Everything else is as it was typed, and no new code is claimed.
+    expect(within(dialog).getByLabelText('Email')).toHaveValue('robin@example.com');
+    expect(within(dialog).getByLabelText('Password')).toHaveValue(PASSWORD);
+    expect(screen.queryByText('We sent a new code.')).not.toBeInTheDocument();
+  });
+
+  it('forgets the name and address once the account is made, and the next sheet starts empty', async () => {
+    const { dialog } = await toCode();
+    await enterCode(dialog);
+    expect(await screen.findByText('Your account is ready.')).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Check your email' })).not.toBeInTheDocument();
+
+    // (The fake account layer stays unlinked, so the button is still there to open it again.)
+    await userEvent.click(button('Create account'));
+    const again = accountStep();
+    expect(within(again).getByLabelText('Username')).toHaveValue('');
+    expect(within(again).getByLabelText('Email')).toHaveValue('');
+    expect(within(again).getByLabelText('Password')).toHaveValue('');
+  });
+
   it('sends one request for two taps in the same instant, and does not close meanwhile', async () => {
     const actions = fakeAccount();
     actions.requestCode.mockReturnValue(new Promise(() => {}));
@@ -410,8 +453,10 @@ describe('Settings → Create account, in two steps', () => {
     expect(actions.requestCode).toHaveBeenCalledTimes(1);
     expect(within(dialog).getByRole('button', { name: 'Sending…' })).toBeDisabled();
     expect(within(dialog).getByRole('button', { name: 'Cancel' })).toBeDisabled();
-    // Escape and the back gesture wait too: the answer would land in a sheet nobody sees.
+    // Escape and the back gesture (a `cancel` event) wait too: a close that left the request running
+    // would have its answer land in a sheet nobody sees.
     fireEvent.keyDown(dialog, { key: 'Escape' });
+    fireEvent(dialog, new Event('cancel', { cancelable: true }));
     expect(accountStep()).toBe(dialog);
   });
 
@@ -429,6 +474,10 @@ describe('Settings → Create account, in two steps', () => {
     expect(within(dialog).getByRole('button', { name: 'Verifying…' })).toBeDisabled();
     expect(within(dialog).getByRole('button', { name: 'Back' })).toBeDisabled();
     expect(within(dialog).getByRole('button', { name: 'Send a new code' })).toBeDisabled();
+    // And nothing leaves the sheet while the account is being made, by key or by back gesture.
+    fireEvent.keyDown(dialog, { key: 'Escape' });
+    fireEvent(dialog, new Event('cancel', { cancelable: true }));
+    expect(screen.getByRole('dialog', { name: 'Check your email' })).toBe(dialog);
   });
 
   it('closes with Cancel, keeping the name and address but not the password', async () => {
@@ -444,10 +493,23 @@ describe('Settings → Create account, in two steps', () => {
     expect(within(accountStep()).getByLabelText('Password')).toHaveValue('');
   });
 
+  it('closes on Escape and on the back gesture when nothing is under way', async () => {
+    show();
+    for (const close of [
+      (dialog: HTMLElement) => fireEvent.keyDown(dialog, { key: 'Escape' }),
+      (dialog: HTMLElement) => fireEvent(dialog, new Event('cancel', { cancelable: true })),
+    ]) {
+      await userEvent.click(button('Create account'));
+      close(accountStep());
+      expect(screen.queryByRole('dialog', { name: 'Create your account' })).not.toBeInTheDocument();
+    }
+  });
+
   it('opens on the account step again after it was closed on the code step, and goes back to the code sent', async () => {
     const { actions, dialog } = await toCode();
     await userEvent.type(within(dialog).getByLabelText('Code'), '48');
-    fireEvent.keyDown(dialog, { key: 'Escape' });
+    // The back gesture, as the phone sends it.
+    fireEvent(dialog, new Event('cancel', { cancelable: true }));
     expect(screen.queryByRole('dialog', { name: 'Check your email' })).not.toBeInTheDocument();
 
     await userEvent.click(button('Create account'));

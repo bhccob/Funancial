@@ -150,6 +150,10 @@ test('Create account in Settings makes the account only with the emailed code', 
   ).toBeVisible();
   // The tapped button is gone: the code takes the focus.
   await expect(dialog.getByLabel('Code', { exact: true })).toBeFocused();
+  // And a screen reader moved there is told where the code went.
+  await expect(dialog.getByLabel('Code', { exact: true })).toHaveAccessibleDescription(
+    'We sent a 6-digit code to robin@example.com. Your account is made once you type it.',
+  );
 
   // A wrong code is turned away on the code step; nothing is made.
   await dialog.getByLabel('Code', { exact: true }).fill('000000');

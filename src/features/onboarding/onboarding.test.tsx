@@ -567,6 +567,8 @@ describe('the code step', () => {
     expect(screen.getByText(CODE_LEAD)).toBeInTheDocument();
     expect(screen.getByText(CODE_HINT)).toBeInTheDocument();
     expect(nowShowing().getByLabelText('Code')).toHaveAttribute('autocomplete', 'one-time-code');
+    // Tab from the heading to the field, and a screen reader is told where the code went.
+    expect(nowShowing().getByLabelText('Code')).toHaveAccessibleDescription(CODE_LEAD);
     expect(resendButton()).toBeInTheDocument();
 
     await enterCode('481529');

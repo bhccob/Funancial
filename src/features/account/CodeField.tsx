@@ -37,6 +37,7 @@ export function CodeField({
   error,
   label = 'Code',
   autoFocus,
+  describedBy,
 }: {
   value: string;
   onChange(value: string): void;
@@ -44,6 +45,12 @@ export function CodeField({
   label?: string;
   /** Takes focus as it appears: for a step that is reached by a tap, whose own button is gone. */
   autoFocus?: boolean;
+  /**
+   * The id of what tells where the code went ("We sent a 6-digit code to…"), read with the field: a
+   * screen reader that is moved here by focus otherwise hears "Code" and nothing about it. An error
+   * is read after it.
+   */
+  describedBy?: string;
 }) {
   const id = useId();
   const errorId = `${id}-error`;
@@ -125,7 +132,9 @@ export function CodeField({
           spellCheck={false}
           autoCorrect="off"
           aria-invalid={error ? true : undefined}
-          aria-describedby={error ? errorId : undefined}
+          aria-describedby={
+            [describedBy, error ? errorId : undefined].filter(Boolean).join(' ') || undefined
+          }
           value={value}
           onChange={(e) => onChange(digitsOf(e.target.value).slice(0, LENGTH))}
           onPaste={paste}

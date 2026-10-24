@@ -7,6 +7,7 @@ import {
   type PasswordStrength,
 } from '@/domain/passwordRules';
 import { cn } from '@/lib/cn';
+import { SAVE_NOTE } from './shared';
 
 export function Problem({ children }: { children?: string }) {
   return children ? (
@@ -14,6 +15,11 @@ export function Problem({ children }: { children?: string }) {
       {children}
     </p>
   ) : null;
+}
+
+/** Where a friend agrees to an account being made: said under its fields, in setup and in Settings. */
+export function SaveNote() {
+  return <p className="text-muted text-sm">{SAVE_NOTE}</p>;
 }
 
 /**
@@ -151,11 +157,14 @@ export function ScreenHeader({
   eyebrow,
   title,
   lead,
+  leadId,
   focus,
 }: {
   eyebrow?: string;
   title: string;
   lead?: string;
+  /** The lead's id, for a field the lead tells about (`aria-describedby`). */
+  leadId?: string;
   /** Takes focus as it appears, for a screen that changes inside another (a screen reader hears it). */
   focus?: boolean;
 }) {
@@ -171,7 +180,11 @@ export function ScreenHeader({
       <h1 ref={heading} tabIndex={-1} className="text-page outline-none">
         {title}
       </h1>
-      {lead && <p className="text-muted font-semibold">{lead}</p>}
+      {lead && (
+        <p id={leadId} className="text-muted font-semibold">
+          {lead}
+        </p>
+      )}
     </header>
   );
 }

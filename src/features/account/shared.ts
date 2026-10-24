@@ -10,6 +10,14 @@ export const SAVE_NOTE =
 export const FORGOT_LEAD =
   "Type your username or the email you signed up with. We'll email you a link to choose a new password.";
 
+/** The words of the account step, said the same in setup and in Settings' Create account. */
+export const ACCOUNT_EYEBROW = 'Your account';
+export const ACCOUNT_TITLE = 'Create your account';
+export const ACCOUNT_LEAD = 'So you can move to a new phone and keep everything.';
+export const EMAIL_HINT = 'For "forgot password".';
+/** Under every field that chooses a password. */
+export const PASSWORD_HINT = 'At least 10 characters';
+
 /** The words of the code step, said the same in setup and in Settings' Create account. */
 export const CODE_EYEBROW = 'Security';
 export const CODE_TITLE = 'Check your email';
