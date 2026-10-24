@@ -290,6 +290,17 @@ export function createAccounts({ store, masterKey, now, mailer, waitUntil }: Acc
   const tagKey = Buffer.from(
     hkdfSync('sha256', masterKey, new Uint8Array(0), 'funancial reset tag', 32),
   );
+  // And one for the hash a mailed code is kept as.
+  const codeKey = Buffer.from(
+    hkdfSync('sha256', masterKey, new Uint8Array(0), 'funcial signup code', 32),
+  );
+  /**
+   * What the record holds in place of a code. Six digits are only a million values, so a bare hash
+   * could be undone from a copy of the database at once; this one needs the master key too, and is
+   * bound to the address, so one code gives each address a different value.
+   */
+  const codeHash = (address: string, code: string) =>
+    createHmac('sha256', codeKey).update(`${address}\n${code}`).digest('hex');
 
   const stamp = () => new Date(now()).toISOString();
   const newToken = () => randomBytes(32).toString('base64url');
@@ -491,30 +502,60 @@ export function createAccounts({ store, masterKey, now, mailer, waitUntil }: Acc
 
   /**
    * Checks `given` against the newest code mailed to `address`: null when it is right (and now
-   * spent), else the answer to send. Every try is counted before the code is looked at, one write at
-   * a time, so tries sent at once are counted too: no more than 5 can ever be told they were wrong.
-   * A write leaves the key without a lifetime, so it is set again.
+   * spent), else the answer to send. The verdict is decided inside the write that records it, one
+   * write at a time: a wrong try is written as one more try, a right one as all five spent. Only
+   * the request whose write lands gives its verdict, so tries sent at once are each counted (no more
+   * than 5 can ever be told they were wrong) and a right code is accepted once, whatever else is
+   * reading it. A request that loses the write reads again and finds the record as it now is.
+   * The delete after is tidying: every reader already finds the record spent. A write leaves the
+   * key without a lifetime, so it is set again.
    */
   async function takeCode(address: string, given: string): Promise<Result | null> {
     const key = K.code(address);
+    const hash = codeHash(address, given);
     for (let attempt = 0; attempt < WRITE_TRIES; attempt++) {
       const record = await store.get<CodeRecord>(key);
       // The store lets the key go at 10 minutes; the clock is checked too, as the write below
       // leaves it without a lifetime for a moment.
       const left = record ? CODE_SECONDS - Math.floor((now() - record.sentAt) / 1000) : 0;
       if (!record || left <= 0 || record.tries >= CODE_TRIES) return fail(410, 'expired');
-      if (!(await store.compareAndSet(key, record, { ...record, tries: record.tries + 1 })))
-        continue;
+      const right = sameText(record.hash, hash);
+      const next = { ...record, tries: right ? CODE_TRIES : record.tries + 1 };
+      if (!(await store.compareAndSet(key, record, next))) continue;
       await store.expire(key, left);
-      if (sameText(record.hash, sha256(given))) {
-        await store.del(key);
-        return null;
-      }
-      if (record.tries + 1 >= CODE_TRIES) await store.del(key);
-      return fail(401, 'code');
+      if (next.tries >= CODE_TRIES) await store.del(key);
+      return right ? null : fail(401, 'code');
     }
     // Others kept getting in first. No verdict was given, so none was counted.
     return tooSoon(1);
+  }
+
+  /**
+   * After a code's email failed: puts the record that was there before back (with what was left of
+   * its 10 minutes and the tries it had), or clears the key if there was none. It writes only over
+   * the record this send made, though a try counted on that record meanwhile doesn't stop it. Never
+   * throws: the person is told the email didn't go either way.
+   */
+  async function undoCode(address: string, sent: CodeRecord, before: CodeRecord | null) {
+    const key = K.code(address);
+    const left = before ? CODE_SECONDS - Math.floor((now() - before.sentAt) / 1000) : 0;
+    try {
+      for (let attempt = 0; attempt < WRITE_TRIES; attempt++) {
+        const current = await store.get<CodeRecord>(key);
+        // Gone, or another send's: not this send's to undo.
+        if (!current || current.hash !== sent.hash) return;
+        if (!before || before.tries >= CODE_TRIES || !(left > 0)) {
+          await store.del(key);
+          return;
+        }
+        if (await store.compareAndSet(key, current, before)) {
+          await store.expire(key, left);
+          return;
+        }
+      }
+    } catch {
+      // Whatever is left expires by itself in 10 minutes.
+    }
   }
 
   return {
@@ -606,7 +647,9 @@ export function createAccounts({ store, masterKey, now, mailer, waitUntil }: Acc
       }
 
       const code = String(randomInt(0, 1_000_000)).padStart(6, '0');
-      const record: CodeRecord = { hash: sha256(code), tries: 0, sentAt: now() };
+      const record: CodeRecord = { hash: codeHash(address, code), tries: 0, sentAt: now() };
+      // Written before the email goes, so a second request for this address meets the 30 s gap even
+      // while this one's mail is out.
       await store.set(K.code(address), record, CODE_SECONDS);
       try {
         await mailer.send(
@@ -617,8 +660,9 @@ export function createAccounts({ store, masterKey, now, mailer, waitUntil }: Acc
         );
       } catch (err) {
         logMailFailure(err, 'code');
-        // No code is kept for an email that never went, and none holds the person back for 30 s.
-        await store.del(K.code(address)).catch(() => {});
+        // The code that never went is not kept, and the earlier one, if it was still good, is: the
+        // person may be reading it right now. Either way no gap holds them back from asking again.
+        await undoCode(address, record, last);
         return fail(503, 'not sent');
       }
       return { status: 200, body: { ok: true } };
