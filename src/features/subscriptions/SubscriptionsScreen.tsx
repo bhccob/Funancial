@@ -3,13 +3,15 @@ import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Menu } from '@/components/ui/Menu';
 import { PageHeader } from '@/components/ui/PageHeader';
-import { Section } from '@/components/ui/Section';
 import type { Cycle, Subscription } from '@/domain/entities';
 import { localDay } from '@/domain/game/activity';
 import { monthKey } from '@/domain/periods';
 import { CardSheet } from '@/features/goals/CardSheet';
 import { accountName } from '@/features/shared/AccountField';
 import { BillRow } from '@/features/shared/BillRow';
+import { CATEGORY_ICONS } from '@/features/shared/categories';
+import { IconRow, ROW_SUB, ROW_TITLE } from '@/features/shared/IconRow';
+import { PlainSection, ROWS } from '@/features/shared/PlainSection';
 import { cn } from '@/lib/cn';
 import { daysUntil, formatDay, relativeDays } from '@/lib/format';
 import { useAction } from '@/lib/useAction';
@@ -66,10 +68,13 @@ export function SubscriptionsScreen() {
 
   return (
     <div>
+      {/* Bills are listed on the Cards tab: where Back goes when the app has no history to go back through. */}
       <PageHeader
         title="Bills & cards"
+        back
+        backTo="/cards"
         action={
-          <Button size="sm" onClick={() => setEditing(null)}>
+          <Button size="sm" variant="secondary" onClick={() => setEditing(null)}>
             Add
           </Button>
         }
@@ -78,8 +83,8 @@ export function SubscriptionsScreen() {
       </PageHeader>
 
       {cards.length > 0 && (
-        <Section title="Card payments">
-          <ul className="divide-border divide-y">
+        <PlainSection title="Card payments">
+          <ul className={cn('px-1', ROWS)}>
             {cards.map((bill) => (
               <BillRow
                 key={bill.refId}
@@ -92,72 +97,85 @@ export function SubscriptionsScreen() {
               />
             ))}
           </ul>
-        </Section>
+        </PlainSection>
       )}
 
-      <Section
+      <PlainSection
         title="Active"
-        action={active.length > 0 ? `${money(view.subscriptionsMonthly)} a month` : undefined}
+        action={
+          active.length > 0 ? (
+            <span className="text-muted text-[13.5px] font-bold">
+              {`${money(view.subscriptionsMonthly)} a month`}
+            </span>
+          ) : undefined
+        }
       >
         {active.length > 0 ? (
-          <ul className="divide-border -my-4 divide-y">
+          <ul className={cn('px-1', ROWS)}>
             {active.map((sub) => {
               const reviewed = reviewedThisMonth(sub, today);
               return (
-                <li key={sub.id} className="py-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="truncate font-bold">{sub.name}</p>
-                      <p className="text-muted text-sm font-semibold tabular-nums">
-                        {`${money(sub.amount)} / ${PER[sub.cycle]} · ${renewsText(today, sub.nextRenewal)} · ${accountName(accounts, sub.accountId)}`}
-                      </p>
-                    </div>
-                    <Menu
-                      label={`Actions for ${sub.name}`}
-                      items={[
-                        { label: 'Edit', onSelect: () => setEditing(sub) },
-                        {
-                          label: 'Cancel subscription',
-                          danger: true,
-                          onSelect: () =>
-                            void run(() => setSubscriptionStatus(sub.id, 'cancelled'), {
-                              success: `${sub.name} cancelled. No more renewals are added.`,
-                            }),
-                        },
-                      ]}
-                    />
-                  </div>
-                  <div
-                    role="group"
-                    aria-label={`Audit ${sub.name}`}
-                    className="mt-2.5 flex gap-1.5"
+                <li key={sub.id}>
+                  <IconRow
+                    icon={CATEGORY_ICONS[sub.category]}
+                    top
+                    end={
+                      <div className="-mt-2.5 -mr-2.5">
+                        <Menu
+                          label={`Actions for ${sub.name}`}
+                          items={[
+                            { label: 'Edit', onSelect: () => setEditing(sub) },
+                            {
+                              label: 'Cancel subscription',
+                              danger: true,
+                              onSelect: () =>
+                                void run(() => setSubscriptionStatus(sub.id, 'cancelled'), {
+                                  success: `${sub.name} cancelled. No more renewals are added.`,
+                                }),
+                            },
+                          ]}
+                        />
+                      </div>
+                    }
                   >
-                    {AUDITS.map((a) => {
-                      const pressed = sub.audit === a.value;
-                      // A mark from an earlier month (or from before review dates) is stamped again,
-                      // so it counts for this month; only a mark stamped this month is cleared.
-                      const next = pressed && reviewed !== null ? null : a.value;
-                      return (
-                        <button
-                          key={a.value}
-                          type="button"
-                          aria-pressed={pressed}
-                          onClick={() => void run(() => setSubscriptionAudit(sub.id, next))}
-                          className={cn(
-                            'h-11 rounded-full border px-4 text-xs font-bold',
-                            pressed
-                              ? 'bg-primary text-primary-contrast border-transparent'
-                              : 'border-border-strong text-muted hover:text-text',
-                          )}
-                        >
-                          {a.label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  {reviewed !== null && (
-                    <p className="text-muted mt-1.5 text-[12.5px]">{`Reviewed ${formatDay(reviewed)}`}</p>
-                  )}
+                    <p className={cn(ROW_TITLE, 'truncate')}>{sub.name}</p>
+                    <p className={cn(ROW_SUB, 'tabular-nums')}>
+                      {`${money(sub.amount)} / ${PER[sub.cycle]} · ${renewsText(today, sub.nextRenewal)} · ${accountName(accounts, sub.accountId)}`}
+                    </p>
+                    <div
+                      role="group"
+                      aria-label={`Audit ${sub.name}`}
+                      className="mt-2.5 flex gap-2"
+                    >
+                      {AUDITS.map((a) => {
+                        const pressed = sub.audit === a.value;
+                        // A mark from an earlier month (or from before review dates) is stamped again,
+                        // so it counts for this month; only a mark stamped this month is cleared.
+                        const next = pressed && reviewed !== null ? null : a.value;
+                        return (
+                          <button
+                            key={a.value}
+                            type="button"
+                            aria-pressed={pressed}
+                            onClick={() => void run(() => setSubscriptionAudit(sub.id, next))}
+                            className={cn(
+                              // A 32px pill with a 44px tap area, as the add forms' pills are.
+                              'press hit-44 h-8 rounded-full px-3 text-[12.5px] font-extrabold',
+                              // Solid, not glass: the glass shorthand would paint over a fill.
+                              pressed
+                                ? 'bg-primary text-primary-contrast border-primary border'
+                                : 'glass text-text',
+                            )}
+                          >
+                            {a.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {reviewed !== null && (
+                      <p className={cn(ROW_SUB, 'mt-1.5')}>{`Reviewed ${formatDay(reviewed)}`}</p>
+                    )}
+                  </IconRow>
                 </li>
               );
             })}
@@ -174,33 +192,39 @@ export function SubscriptionsScreen() {
             Renewals are added as expenses on their date and count as upcoming bills until then.
           </EmptyState>
         )}
-      </Section>
+      </PlainSection>
 
       {cancelled.length > 0 && (
-        <Section title="Cancelled">
-          <ul className="divide-border -my-3 divide-y">
+        <PlainSection title="Cancelled">
+          <ul className={cn('px-1', ROWS)}>
             {cancelled.map((sub) => (
-              <li key={sub.id} className="flex items-center justify-between gap-3 py-3">
-                <div className="text-muted min-w-0">
-                  <p className="truncate font-semibold">{sub.name}</p>
-                  <p className="text-sm tabular-nums">{`${money(sub.amount)} / ${PER[sub.cycle]}`}</p>
-                </div>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  aria-label={`Resume ${sub.name}`}
-                  onClick={() =>
-                    void run(() => setSubscriptionStatus(sub.id, 'active'), {
-                      success: `${sub.name} resumed.`,
-                    })
+              <li key={sub.id}>
+                <IconRow
+                  icon={CATEGORY_ICONS[sub.category]}
+                  end={
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      aria-label={`Resume ${sub.name}`}
+                      onClick={() =>
+                        void run(() => setSubscriptionStatus(sub.id, 'active'), {
+                          success: `${sub.name} resumed.`,
+                        })
+                      }
+                    >
+                      Resume
+                    </Button>
                   }
                 >
-                  Resume
-                </Button>
+                  <p className={cn(ROW_TITLE, 'text-muted truncate')}>{sub.name}</p>
+                  <p className={cn(ROW_SUB, 'tabular-nums')}>
+                    {`${money(sub.amount)} / ${PER[sub.cycle]}`}
+                  </p>
+                </IconRow>
               </li>
             ))}
           </ul>
-        </Section>
+        </PlainSection>
       )}
 
       <SubscriptionDialog sub={editing} onClose={() => setEditing(undefined)} />

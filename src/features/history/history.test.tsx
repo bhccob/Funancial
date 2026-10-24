@@ -1,6 +1,6 @@
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router';
+import { MemoryRouter, Route, Routes } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { EXAMPLES } from '@/domain/examples';
 import { historyEntries } from '@/domain/history';
@@ -452,14 +452,123 @@ describe('HistoryScreen', () => {
   });
 });
 
-describe('the actual balance dialog in the line style', () => {
-  it('has a line amount and a line account picker', async () => {
+describe('History header', () => {
+  /** The screen inside a router that has the places Back can go to. */
+  function renderRouted(entries: string[], index?: number) {
+    renderWithStore(
+      <MemoryRouter initialEntries={entries} initialIndex={index}>
+        <Routes>
+          <Route path="/history" element={<HistoryScreen />} />
+          <Route path="/profile" element={<p>The Profile page</p>} />
+          <Route path="/" element={<p>The Home page</p>} />
+        </Routes>
+      </MemoryRouter>,
+      createStubStore({ data: bal?.data, today: bal?.today }),
+    );
+  }
+
+  it('has a round Back button before the title, and Set actual balance as a glass pill', () => {
+    renderHistory();
+    const back = screen.getByRole('button', { name: 'Back' });
+    expect(back).toHaveClass('glass', 'rounded-full', 'size-11');
+    const heading = screen.getByRole('heading', { level: 1, name: 'History' });
+    expect(back.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Set actual balance' })).toHaveClass(
+      'glass',
+      'rounded-full',
+    );
+  });
+
+  it('goes back to the screen it was opened from', async () => {
+    renderRouted(['/', '/history'], 1);
+    await userEvent.click(screen.getByRole('button', { name: 'Back' }));
+    expect(screen.getByText('The Home page')).toBeInTheDocument();
+  });
+
+  it('goes to Profile, whose menu lists it, when it was the first screen', async () => {
+    renderRouted(['/history']);
+    await userEvent.click(screen.getByRole('button', { name: 'Back' }));
+    expect(screen.getByText('The Profile page')).toBeInTheDocument();
+  });
+});
+
+describe('History in glass', () => {
+  it('draws Show as pills, the chosen one solid, still radios', async () => {
+    renderHistory();
+    const radios = within(screen.getByRole('group', { name: 'Show' })).getAllByRole('radio');
+    expect(radios.map((r) => r.closest('label')?.textContent)).toEqual([
+      'All',
+      'Spending',
+      'Income',
+      'Transfers',
+    ]);
+    expect(screen.getByText('All')).toHaveClass('bg-primary', 'text-primary-contrast', 'h-8');
+    expect(screen.getByText('Spending')).toHaveClass('glass', 'rounded-full', 'h-8');
+    expect(screen.getByText('Spending')).not.toHaveClass('bg-primary');
+    await userEvent.click(screen.getByRole('radio', { name: 'Spending' }));
+    expect(screen.getByText('Spending')).toHaveClass('bg-primary');
+  });
+
+  it('draws Month, and Category under Spending, as glass pills over their selects', async () => {
+    renderHistory();
+    const pillOf = (label: string) => screen.getByLabelText(label).closest('.glass');
+    expect(pillOf('Month')).toHaveClass('rounded-full', 'h-8');
+    // The pill says what is chosen and ends in a chevron; the select is the whole pill's tap area.
+    expect(pillOf('Month')).toHaveTextContent(formatMonthYear(bal!.today.slice(0, 7)));
+    expect(pillOf('Month')!.querySelector('svg.lucide-chevron-down')).toBeTruthy();
+    expect(screen.getByLabelText('Month')).toHaveClass('h-11');
+    expect(screen.queryByLabelText('Category')).toBeNull();
+
+    await userEvent.click(screen.getByRole('radio', { name: 'Spending' }));
+    expect(pillOf('Category')).toHaveClass('rounded-full', 'h-8');
+    expect(pillOf('Category')).toHaveTextContent('All categories');
+    await userEvent.selectOptions(screen.getByLabelText('Category'), 'Shopping');
+    expect(pillOf('Category')).toHaveTextContent('Shopping');
+  });
+
+  it('shows the month that is picked on its pill', async () => {
+    renderHistory(withDividends());
+    await userEvent.selectOptions(screen.getByLabelText('Month'), formatMonthYear('2026-08'));
+    expect(screen.getByLabelText('Month')).toHaveValue('2026-08');
+    expect(screen.getByLabelText('Month').closest('.glass')).toHaveTextContent(
+      formatMonthYear('2026-08'),
+    );
+  });
+
+  it('lists each day as plain rows with hairlines, none of them boxed', () => {
+    renderHistory();
+    const lists = screen.getAllByRole('list');
+    expect(lists.length).toBeGreaterThan(0);
+    for (const list of lists) {
+      expect(list).toHaveClass('divide-y', 'divide-black/7', 'dark:divide-white/8');
+      expect(list).not.toHaveClass('divide-border');
+      expect(list.closest('section')).not.toHaveClass('border-b');
+    }
+  });
+
+  it('keeps an expense a tappable row and the others a row with a delete after the amount', () => {
+    renderHistory();
+    const groceries = screen.getByRole('button', { name: /^Groceries/ });
+    expect(groceries.closest('li')).toContainElement(screen.getByText('Groceries'));
+    expect(within(groceries.closest('li')!).queryByRole('button', { name: /^Delete/ })).toBeNull();
+    const del = row('Side gig').getByRole('button', { name: 'Delete Side gig' });
+    expect(del).toHaveClass('size-11');
+    expect(del.querySelector('svg.lucide-trash-2')).toHaveAttribute('aria-hidden', 'true');
+  });
+});
+
+describe('the actual balance dialog in glass', () => {
+  it('has a row account picker and a hero amount', async () => {
     renderHistory();
     await userEvent.click(screen.getByRole('button', { name: 'Set actual balance' }));
     const dialog = screen.getByRole('dialog', { name: 'Set actual balance' });
-    for (const label of ['Actual balance', 'Account']) {
-      expect(within(dialog).getByLabelText(label), label).toHaveClass('border-b', 'font-extrabold');
-      expect(within(dialog).getByLabelText(label), label).not.toHaveClass('rounded-md');
-    }
+    const account = within(dialog).getByLabelText('Account');
+    expect(account).toHaveClass('text-right', 'h-11');
+    expect(account).not.toHaveClass('rounded-md', 'border', 'border-b', 'font-extrabold');
+    expect(account.closest('.border-b')).toHaveClass('border-black/7', 'dark:border-white/8');
+    // The dialog is about one amount: the big figure, no box.
+    expect(within(dialog).getByLabelText('Actual balance')).toHaveClass('text-[40px]', 'font-bold');
+    expect(within(dialog).getByRole('button', { name: 'Save' })).toHaveClass('bg-primary');
+    expect(within(dialog).getByRole('button', { name: 'Cancel' })).toHaveClass('glass');
   });
 });

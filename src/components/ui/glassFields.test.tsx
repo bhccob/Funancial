@@ -434,6 +434,30 @@ describe('RadioGroup as pills', () => {
     expect(row).not.toHaveClass('bg-surface-2', 'rounded-[14px]');
   });
 
+  it('draws compact pills 8px in from each end, 6px apart, for four choices in a dialog row', () => {
+    render(
+      <RadioGroup
+        variant="pills"
+        compact
+        legend="Cycle"
+        value="a"
+        onChange={() => {}}
+        options={[
+          { value: 'a', label: 'Weekly' },
+          { value: 'b', label: 'Monthly' },
+          { value: 'c', label: 'Quarterly' },
+          { value: 'd', label: 'Yearly' },
+        ]}
+      />,
+    );
+    const pill = screen.getByText('Monthly');
+    expect(pill).toHaveClass('glass', 'h-8', 'rounded-full', 'px-2', 'text-[12px]');
+    expect(pill).not.toHaveClass('px-3', 'text-[12.5px]');
+    expect(screen.getByText('Weekly')).toHaveClass('bg-primary', 'px-2');
+    expect(pill.parentElement).toHaveClass('gap-x-1.5', 'gap-y-3');
+    expect(pill.parentElement).not.toHaveClass('gap-x-2');
+  });
+
   it('says its legend as a small muted label above the pills', () => {
     group();
     expect(screen.getByText('Category').tagName).toBe('LEGEND');

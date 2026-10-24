@@ -1,6 +1,6 @@
 import { cleanup, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router';
+import { MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, describe, expect, it } from 'vitest';
 import { formatMoney } from '@/domain/money';
 import { emptySnapshot, type DataSnapshot } from '@/domain/snapshot';
@@ -125,18 +125,15 @@ describe('Income page', () => {
     const legend = within(chart).getAllByRole('listitem');
     expect(legend.map((li) => li.textContent)).toEqual(['Salary', 'Extra', 'Dividends']);
     const dot = (li: HTMLElement) => li.firstElementChild as HTMLElement;
-    expect(legend.map((li) => dot(li).style.backgroundColor)).toEqual([
-      'var(--color-chart-1)',
-      'var(--color-chart-2)',
-      'var(--color-chart-3)',
-    ]);
+    // The series colours with a share of the ink in them, so each mark holds 3:1 on the glass
+    // (tests/unit/tokens.test.ts holds the share to that).
+    const marks = [1, 2, 3].map(
+      (n) => `color-mix(in srgb, var(--color-chart-${n}), var(--color-text) 30%)`,
+    );
+    expect(legend.map((li) => dot(li).style.backgroundColor)).toEqual(marks);
     // The October bar is stacked in the same colours, salary at the bottom.
     const parts = [...(bars[11]!.firstElementChild as HTMLElement).children] as HTMLElement[];
-    expect(parts.map((p) => p.style.backgroundColor)).toEqual([
-      'var(--color-chart-1)',
-      'var(--color-chart-2)',
-      'var(--color-chart-3)',
-    ]);
+    expect(parts.map((p) => p.style.backgroundColor)).toEqual(marks);
   });
 
   it('tells a month’s three amounts when its bar is tapped, and asks for a tap before', async () => {
@@ -252,5 +249,88 @@ describe('Income page with nothing yet', () => {
     );
     renderIncome(data);
     expect(screen.getByText('No income yet')).toBeInTheDocument();
+  });
+});
+
+describe('Income header', () => {
+  /** The screen inside a router that has the places Back can go to. */
+  function renderRouted(data: DataSnapshot, entries: string[], index?: number) {
+    renderWithStore(
+      <MemoryRouter initialEntries={entries} initialIndex={index}>
+        <Routes>
+          <Route path="/income" element={<IncomeScreen />} />
+          <Route path="/history" element={<p>The History page</p>} />
+          <Route path="/" element={<p>The Home page</p>} />
+        </Routes>
+      </MemoryRouter>,
+      createStubStore({ data, today: TODAY }),
+    );
+  }
+
+  it('has a round Back button before the title', () => {
+    renderIncome(filled());
+    const back = screen.getByRole('button', { name: 'Back' });
+    expect(back).toHaveClass('glass', 'rounded-full', 'size-11');
+    const heading = screen.getByRole('heading', { level: 1, name: 'Income' });
+    expect(back.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('has it with no income yet, too', () => {
+    renderIncome(emptySnapshot());
+    expect(screen.getByRole('button', { name: 'Back' })).toHaveClass('glass', 'size-11');
+  });
+
+  it('goes back to the screen it was opened from', async () => {
+    renderRouted(filled(), ['/', '/history', '/income'], 2);
+    await userEvent.click(screen.getByRole('button', { name: 'Back' }));
+    expect(screen.getByText('The History page')).toBeInTheDocument();
+  });
+
+  it('goes to History, which links to it, when it was the first screen', async () => {
+    renderRouted(filled(), ['/income']);
+    await userEvent.click(screen.getByRole('button', { name: 'Back' }));
+    expect(screen.getByText('The History page')).toBeInTheDocument();
+  });
+
+  it('goes to History from the empty page, too', async () => {
+    renderRouted(emptySnapshot(), ['/income']);
+    await userEvent.click(screen.getByRole('button', { name: 'Back' }));
+    expect(screen.getByText('The History page')).toBeInTheDocument();
+  });
+});
+
+describe('Income in glass', () => {
+  it('puts the bar chart, its legend and its readout in one glass tile', () => {
+    renderIncome(filled());
+    const chart = region('Last 12 months');
+    const tile = within(chart).getByRole('group', { name: 'Income per month' }).closest('.glass');
+    expect(tile).toHaveClass('glass', 'rounded-[24px]', 'p-4');
+    expect(tile).toContainElement(within(chart).getByRole('status'));
+    expect(tile).toContainElement(within(chart).getAllByRole('listitem')[0]!);
+  });
+
+  it('boxes nothing else: this month and this year are plain', () => {
+    renderIncome(filled());
+    expect(region('This month').querySelector('.glass')).toBeNull();
+    expect(region('This year').querySelector('.glass')).toBeNull();
+    expect(region('Biggest sources').querySelector('.glass')).toBeNull();
+  });
+
+  it('draws the sources of the year and the biggest sources as plain rows with hairlines', () => {
+    renderIncome(filled());
+    for (const lists of [
+      within(region('This year')).getByRole('list'),
+      within(region('Biggest sources')).getByRole('list'),
+    ]) {
+      expect(lists).toHaveClass('divide-y', 'divide-black/7', 'dark:divide-white/8');
+      expect(lists).not.toHaveClass('divide-border');
+    }
+  });
+
+  it('writes the amount of a source on the right of its row', () => {
+    renderIncome(filled());
+    const salary = within(region('Biggest sources')).getAllByRole('listitem')[0]!;
+    expect(salary).toHaveClass('flex', 'justify-between');
+    expect(within(salary).getByText(usd(6_000_00))).toHaveClass('font-extrabold', 'tabular-nums');
   });
 });

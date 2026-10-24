@@ -393,6 +393,30 @@ test('mobile: Goals and Debts have Back, which goes to Spending and to Cards whe
   await expect(page).toHaveURL(/\/cards$/);
 });
 
+test('mobile: Bills & cards, History and Income have Back, which goes to Cards, Profile and History when they were the first page', async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== 'mobile-chromium', 'mobile layout only');
+  await startFresh(page, '/subscriptions');
+  await expect(page.getByRole('heading', { level: 1, name: 'Bills & cards' })).toBeVisible();
+  await page.getByRole('button', { name: 'Back' }).click();
+  await expect(page).toHaveURL(/\/cards$/);
+
+  await page.goto('/history');
+  await page.getByRole('button', { name: 'Back' }).click();
+  await expect(page).toHaveURL(/\/profile$/);
+
+  await page.goto('/income');
+  await page.getByRole('button', { name: 'Back' }).click();
+  await expect(page).toHaveURL(/\/history$/);
+
+  // Income was opened from History here, so Back goes back in history: to History.
+  await page.getByRole('link', { name: 'Income stats' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Income' })).toBeVisible();
+  await page.getByRole('button', { name: 'Back' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'History' })).toBeVisible();
+});
+
 test("mobile: Spending's Goals section leads to the Goals page with View all", async ({
   page,
 }, testInfo) => {

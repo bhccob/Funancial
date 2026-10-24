@@ -5,7 +5,7 @@ import { archivedBy } from '@/domain/accounts';
 import { accountBalance } from '@/domain/balances';
 import type { Cycle } from '@/domain/entities';
 import { entryDate, historyEntries, type Entry } from '@/domain/history';
-import { CardFacts } from '@/features/goals/CardSheet';
+import { CardFacts, Fact } from '@/features/goals/CardSheet';
 import { PayDialog, type PayTarget } from '@/features/goals/PayDialog';
 import { ActualBalanceDialog } from '@/features/history/ActualBalanceDialog';
 import { EntryChip, EntryDetail } from '@/features/shared/EntryParts';
@@ -41,15 +41,6 @@ function names(entry: Entry, id: string): boolean {
     case 'transaction':
       return entry.item.fromAccountId === id || entry.item.toAccountId === id;
   }
-}
-
-function Fact({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <dt className="text-muted text-[13px] font-bold">{label}</dt>
-      <dd className="mt-0.5 text-[15px] font-extrabold tabular-nums">{value}</dd>
-    </div>
-  );
 }
 
 /**
@@ -140,7 +131,7 @@ export function AccountSheet({
             {credit ? (
               <CardFacts card={account} balance={balance} />
             ) : (
-              <dl className="my-4 grid grid-cols-2 gap-x-3 gap-y-3">
+              <dl className={cn('my-3', ROWS)}>
                 <Fact label="Balance" value={money(balance)} />
                 <Fact label="Opened" value={formatDate(account.openingDate)} />
                 <Fact label="In Available" value={account.inAvailable ? 'Yes' : 'No'} />

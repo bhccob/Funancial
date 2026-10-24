@@ -1,6 +1,6 @@
 import { fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router';
+import { MemoryRouter, Route, Routes } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Account, Subscription } from '@/domain/entities';
 import { formatMoney } from '@/domain/money';
@@ -432,22 +432,159 @@ describe('Paid with in the subscription dialog', () => {
   });
 });
 
-describe('the subscription dialog in the line style', () => {
-  it('has line fields, and underline tabs for the cycle', async () => {
+describe('Bills & cards header', () => {
+  /** The screen inside a router that has the places Back can go to. */
+  function renderRouted(entries: string[], index?: number) {
+    renderWithStore(
+      <MemoryRouter initialEntries={entries} initialIndex={index}>
+        <Routes>
+          <Route path="/subscriptions" element={<SubscriptionsScreen />} />
+          <Route path="/cards" element={<p>The Cards page</p>} />
+          <Route path="/" element={<p>The Home page</p>} />
+        </Routes>
+      </MemoryRouter>,
+      createStubStore({ data: monthData(), today: TODAY }),
+    );
+  }
+
+  it('has a round Back button before the title, and Add as a glass pill after it', () => {
+    renderSubs();
+    const back = screen.getByRole('button', { name: 'Back' });
+    expect(back).toHaveClass('glass', 'rounded-full', 'size-11');
+    const heading = screen.getByRole('heading', { level: 1, name: 'Bills & cards' });
+    expect(back.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // Add is not the page's main button: a glass pill, as Add goal is.
+    expect(screen.getByRole('button', { name: 'Add' })).toHaveClass('glass', 'rounded-full');
+    expect(screen.getByRole('button', { name: 'Add' })).not.toHaveClass('bg-primary');
+  });
+
+  it('goes back to the screen it was opened from', async () => {
+    renderRouted(['/', '/subscriptions'], 1);
+    await userEvent.click(screen.getByRole('button', { name: 'Back' }));
+    expect(screen.getByText('The Home page')).toBeInTheDocument();
+  });
+
+  it('goes to Cards, which lists the bills, when it was the first screen', async () => {
+    renderRouted(['/subscriptions']);
+    await userEvent.click(screen.getByRole('button', { name: 'Back' }));
+    expect(screen.getByText('The Cards page')).toBeInTheDocument();
+  });
+});
+
+describe('Bills & cards in glass', () => {
+  const expectPlainList = (list: Element | null) => {
+    expect(list).toHaveClass('divide-y', 'divide-black/7', 'dark:divide-white/8');
+    expect(list).not.toHaveClass('divide-border');
+  };
+  const listOf = (name: string) => within(screen.getByRole('region', { name })).getByRole('list');
+
+  it('draws the three sections as plain rows with hairlines', () => {
+    renderSubs();
+    for (const name of ['Card payments', 'Active', 'Cancelled']) expectPlainList(listOf(name));
+  });
+
+  it('gives a subscription a glass chip with its category icon, and its menu after it', () => {
+    renderSubs();
+    const item = screen.getByText('Streamflix').closest('li')!;
+    // Entertainment is drawn with the clapperboard, as Home draws it.
+    expect(item.querySelector('.glass.size-\\[38px\\] svg.lucide-clapperboard')).toBeTruthy();
+    expect(within(item).getByRole('button', { name: 'Actions for Streamflix' })).toBeEnabled();
+  });
+
+  it('draws the audit marks as glass pills, the chosen one solid, still toggles', () => {
+    const data = emptySnapshot();
+    data.tables.subscription.push(
+      makeSubscription({
+        id: 'Streamflix',
+        name: 'Streamflix',
+        audit: 'review',
+        auditedAt: localIso('2026-10-03'),
+        nextRenewal: '2026-10-20',
+      }),
+    );
+    renderWithStore(
+      <MemoryRouter>
+        <SubscriptionsScreen />
+      </MemoryRouter>,
+      createStubStore({ data, today: TODAY }),
+    );
+    const group = row('Streamflix').getByRole('group', { name: 'Audit Streamflix' });
+    const keep = within(group).getByRole('button', { name: 'Keep' });
+    const review = within(group).getByRole('button', { name: 'Review' });
+    expect(keep).toHaveClass('glass', 'rounded-full', 'h-8', 'text-text');
+    expect(keep).not.toHaveClass('bg-primary');
+    expect(keep).toHaveAttribute('aria-pressed', 'false');
+    expect(review).toHaveClass('bg-primary', 'text-primary-contrast', 'rounded-full', 'h-8');
+    expect(review).toHaveAttribute('aria-pressed', 'true');
+    // A 32px pill with a 44px tap area, as the add forms' pills have.
+    expect(keep).toHaveClass('hit-44');
+    expect(review).toHaveClass('hit-44');
+  });
+
+  it('draws Resume as a glass pill on a cancelled subscription, in a chip row', () => {
+    renderSubs();
+    const old = screen.getByText('Old Magazine').closest('li')!;
+    expect(within(old).getByRole('button', { name: 'Resume Old Magazine' })).toHaveClass(
+      'glass',
+      'rounded-full',
+    );
+    expect(old.querySelector('.glass.size-\\[38px\\]')).toBeTruthy();
+  });
+
+  it('says the month’s subscription total on the right of Active in muted words', () => {
+    renderSubs();
+    expect(
+      within(screen.getByRole('region', { name: 'Active' })).getByText(`${usd(25_99)} a month`),
+    ).toHaveClass('text-muted');
+  });
+});
+
+describe('the subscription dialog in glass', () => {
+  /** A `row` field: the label on the left, the value on the right, a hairline under it. */
+  const rowFields = (dialog: HTMLElement, labels: string[]) => {
+    for (const label of labels) {
+      const field = within(dialog).getByLabelText(label);
+      expect(field, label).toHaveClass('text-right', 'h-11');
+      expect(field, label).not.toHaveClass('rounded-md', 'border', 'border-b', 'font-extrabold');
+      expect(field.closest('.border-b'), label).toHaveClass(
+        'border-black/7',
+        'dark:border-white/8',
+      );
+    }
+  };
+
+  it('has row fields, a hero amount and pills for the cycle', async () => {
     renderSubs();
     await userEvent.click(screen.getByRole('button', { name: 'Add' }));
     const dialog = screen.getByRole('dialog', { name: 'Add a subscription' });
-    for (const label of ['Name', 'Amount', 'Next renewal', 'Category', 'Paid with']) {
-      expect(within(dialog).getByLabelText(label), label).toHaveClass('border-b', 'font-extrabold');
-      expect(within(dialog).getByLabelText(label), label).not.toHaveClass('rounded-md');
-    }
+    rowFields(dialog, ['Name', 'Next renewal', 'Category', 'Paid with']);
+    // The dialog is about one amount: the big figure, no box.
+    expect(within(dialog).getByLabelText('Amount')).toHaveClass('text-[40px]', 'font-bold');
     const tabs = (legend: string) =>
       within(within(dialog).getByRole('group', { name: legend }))
         .getAllByRole('radio')
         .map((r) => r.closest('label')?.textContent);
     expect(tabs('Cycle')).toEqual(['Weekly', 'Monthly', 'Quarterly', 'Yearly']);
-    expect(within(dialog).getByText('Monthly')).toHaveClass('border-b-2', 'border-text');
+    // The cycle is four short choices: pills, the chosen one solid, still radios.
+    expect(within(dialog).getByText('Monthly')).toHaveClass(
+      'bg-primary',
+      'text-primary-contrast',
+      'h-8',
+    );
+    expect(within(dialog).getByText('Weekly')).toHaveClass('glass', 'rounded-full');
+    expect(within(dialog).getByText('Weekly')).not.toHaveClass('bg-primary');
     expect(within(dialog).queryByRole('group', { name: 'Paid with' })).not.toBeInTheDocument();
+  });
+
+  it('has the same rows when editing, with Delete in danger and Save solid', async () => {
+    renderSubs();
+    await userEvent.click(screen.getByRole('button', { name: 'Actions for Cloud Drive' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Edit' }));
+    const dialog = screen.getByRole('dialog', { name: 'Edit subscription' });
+    rowFields(dialog, ['Name', 'Next renewal', 'Category', 'Paid with']);
+    expect(within(dialog).getByRole('button', { name: 'Delete' })).toHaveClass('text-danger');
+    expect(within(dialog).getByRole('button', { name: 'Save' })).toHaveClass('bg-primary');
+    expect(within(dialog).getByRole('button', { name: 'Cancel' })).toHaveClass('glass');
   });
 
   it('saves the cycle that was picked', async () => {

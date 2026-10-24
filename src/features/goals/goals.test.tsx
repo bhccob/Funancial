@@ -899,31 +899,61 @@ describe('the goal and debt dialogs in glass', () => {
   });
 });
 
-// A card is an account: its dialogs are `AccountDialog`'s, in the line style until the Cards pass.
-describe('the card dialogs in the line style', () => {
-  const LINE = ['border-b', 'font-extrabold'];
-  const lineFields = (dialog: HTMLElement, labels: string[]) => {
+// A card is an account: its dialogs are `AccountDialog`'s, shared with the Cards tab and Settings.
+describe('the card dialogs in glass', () => {
+  /** A `row` field: the label on the left, the value on the right, a hairline under it. */
+  const rowFields = (dialog: HTMLElement, labels: string[]) => {
     for (const label of labels) {
-      expect(within(dialog).getByLabelText(label), label).toHaveClass(...LINE);
-      expect(within(dialog).getByLabelText(label), label).not.toHaveClass('rounded-md');
+      const field = within(dialog).getByLabelText(label);
+      expect(field, label).toHaveClass('text-right', 'h-11');
+      expect(field, label).not.toHaveClass('rounded-md', 'border', 'border-b', 'font-extrabold');
+      expect(field.closest('.border-b'), label).toHaveClass(
+        'border-black/7',
+        'dark:border-white/8',
+      );
     }
   };
 
-  it('has line fields and a line select for a card', async () => {
+  it('has row fields, and a row switch, for a new card', async () => {
     renderDebts();
     await userEvent.click(screen.getByRole('button', { name: 'Add card' }));
     const dialog = screen.getByRole('dialog', { name: 'Add a card' });
-    lineFields(dialog, [
+    rowFields(dialog, [
       'Name',
+      'Last 4 digits',
       'Current balance',
       'Interest rate %',
       'Minimum payment',
       'Credit limit',
       'Due day',
     ]);
+    // The switch is a row of the list too: 54px, the title on the left and the switch on the right.
+    const pay = within(dialog).getByRole('switch', { name: 'Pay in full each month' });
+    expect(pay.closest('.min-h-\\[54px\\]')).toBeTruthy();
+    expect(within(dialog).getByRole('button', { name: 'Save' })).toHaveClass('bg-primary');
+    expect(within(dialog).getByRole('button', { name: 'Cancel' })).toHaveClass('glass');
   });
 
-  it('has a line select for where a deleted card sends its subscriptions', async () => {
+  it('has pills for the kind of an account, the chosen one solid, still radios', async () => {
+    renderDebts();
+    await userEvent.click(row('Visa').getByRole('button', { name: 'Edit Visa' }));
+    const dialog = screen.getByRole('dialog', { name: 'Edit card' });
+    rowFields(dialog, ['Name', 'Last 4 digits', 'Balance when added']);
+    expect(
+      within(dialog)
+        .getAllByRole('radio')
+        .map((r) => r.closest('label')?.textContent),
+    ).toEqual(['Debit', 'Credit', 'Savings', 'Cash']);
+    expect(within(dialog).getByText('Credit')).toHaveClass(
+      'bg-primary',
+      'text-primary-contrast',
+      'h-8',
+    );
+    expect(within(dialog).getByText('Cash')).toHaveClass('glass', 'rounded-full');
+    expect(within(dialog).getByRole('button', { name: 'Delete' })).toHaveClass('text-danger');
+  });
+
+  it('has a row select for where a deleted card sends its subscriptions', async () => {
     const data = filledData();
     data.tables.subscription.push(makeSubscription({ accountId: VISA, nextRenewal: '2026-11-05' }));
     renderDebts(data);
@@ -933,6 +963,6 @@ describe('the card dialogs in the line style', () => {
         name: 'Delete',
       }),
     );
-    lineFields(screen.getByRole('dialog', { name: 'Delete Visa?' }), ['Move its subscriptions to']);
+    rowFields(screen.getByRole('dialog', { name: 'Delete Visa?' }), ['Move its subscriptions to']);
   });
 });

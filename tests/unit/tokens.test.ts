@@ -787,6 +787,42 @@ it('measures the quiet bars in a model that bites', () => {
   }
 });
 
+/** The screen that draws its sources' bars on a glass tile, with the share of ink it mixes into their colours. */
+const INCOME_SCREEN = 'src/features/income/IncomeScreen.tsx';
+
+/** The series Income draws, salary, extra and dividends, which are the chart colours 1 to 3. */
+const INCOME_SERIES = [1, 2, 3];
+
+/** Whether a series colour with `share` (0-1) of the ink mixed in falls under `ratio` on the glass somewhere. */
+function incomeMarksFail(share: number, ratio: number): boolean {
+  return CASES.some(({ id, mode }) => {
+    const t = tokensFor(id, mode);
+    const [r, g, b] = parseColor(t('--color-text'));
+    return INCOME_SERIES.some((n) => {
+      // color-mix(in srgb, series, ink share%) is the ink at `share` over the series colour.
+      const mark = composite(`rgb(${r} ${g} ${b} / ${share})`, t(`--color-chart-${n}`));
+      return glassOnPage(t).some((glass) => contrast(mark, glass) < ratio);
+    });
+  });
+}
+
+it("mixes into Income's bars, legend dots and year split the share of ink that holds 3:1 on the glass, with room to spare", () => {
+  // The bars are the only mark of what came in each month until one is tapped: graphics (WCAG 1.4.11).
+  const match = /const MARK_INK = (\d+);/.exec(readFileSync(INCOME_SCREEN, 'utf8'));
+  expect(match, `MARK_INK in ${INCOME_SCREEN}`).not.toBeNull();
+  expect(incomeMarksFail(Number(match![1]) / 100, 3 + BAR_MARGIN), `MARK_INK ${match![1]}`).toBe(
+    false,
+  );
+});
+
+it("measures Income's marks in a model that bites", () => {
+  // The series colours as they are fail on the glass in light mode (the green is under 2:1), and a
+  // fifth of ink still falls short; a quarter reaches 3:1.
+  expect(incomeMarksFail(0, 3)).toBe(true);
+  expect(incomeMarksFail(0.2, 3)).toBe(true);
+  expect(incomeMarksFail(0.25, 3)).toBe(false);
+});
+
 /** The cards' veil and sheen on a light block, then on a dark one, as glass-card sets them. */
 function cardGlass(): Record<'light' | 'dark', { veil: string; sheen: string }> {
   const body = utility('glass-card');

@@ -6,6 +6,8 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { EmptyLink, Section } from '@/components/ui/Section';
 import { averageIncome, incomeByMonth, incomeThisYear, wholePercents } from '@/domain/income';
 import { minorDigits } from '@/domain/money';
+import { GlassTile, PlainSection, ROWS } from '@/features/shared/PlainSection';
+import { cn } from '@/lib/cn';
 import { formatMonthShort, formatMonthYear } from '@/lib/format';
 import { useApp } from '@/store/AppStoreProvider';
 import { useCurrency, useMoney, useToday } from '@/store/useFinance';
@@ -16,7 +18,16 @@ const SOURCES: Array<{ key: 'salary' | 'extra' | 'dividends'; label: string }> =
   { key: 'extra', label: 'Extra' },
   { key: 'dividends', label: 'Dividends' },
 ];
-const COLORS = sliceColors(SOURCES);
+/**
+ * The share of the page's ink mixed into each source's colour where it is drawn on the glass tile
+ * (the bars, the legend, the year's split). The series colours are 0.11's: the light green is 1.9:1 on
+ * the glass. With this much ink every mark holds 3:1 with room to spare, in every theme and both modes
+ * (tests/unit/tokens.test.ts reads this number). The same colours as the donut's, a little deeper.
+ */
+const MARK_INK = 30;
+const COLORS = sliceColors(SOURCES).map(
+  (color) => `color-mix(in srgb, ${color}, var(--color-text) ${MARK_INK}%)`,
+);
 
 const MONTHS = 12;
 const BIG_NUMBER = 'text-[34px] leading-tight font-extrabold tracking-[-0.035em] tabular-nums';
@@ -45,7 +56,7 @@ export function IncomeScreen() {
   if (rows.every((r) => r.total === 0)) {
     return (
       <div>
-        <PageHeader title="Income" />
+        <PageHeader title="Income" back backTo="/history" />
         <Section>
           <EmptyState
             title="No income yet"
@@ -77,54 +88,57 @@ export function IncomeScreen() {
 
   return (
     <div>
-      <PageHeader title="Income" />
+      {/* History links to the income stats: where Back goes when the app has no history to go back through. */}
+      <PageHeader title="Income" back backTo="/history" />
 
-      <Section title="This month" action={change}>
-        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+      <PlainSection title="This month" action={change}>
+        <div className="mx-1 flex flex-wrap items-baseline gap-x-3 gap-y-1">
           <span className={BIG_NUMBER}>{money(thisMonth.total)}</span>
           <span className="text-muted text-sm font-bold">{`Average: ${whole(average)} a month`}</span>
         </div>
-      </Section>
+      </PlainSection>
 
-      <Section title="Last 12 months">
-        <StackedBars
-          label="Income per month"
-          bars={rows.map((row, i) => ({
-            label: formatMonthShort(`${row.month}-01`),
-            name: formatMonthYear(row.month),
-            current: i === rows.length - 1,
-            parts: SOURCES.map((s, k) => ({ key: s.key, amount: row[s.key], color: COLORS[k]! })),
-          }))}
-          selected={selected}
-          onSelect={setSelected}
-          formatAmount={(minor) => money(minor)}
-        />
-        <ul className="text-muted mt-4 flex flex-wrap gap-x-4 gap-y-1.5 text-[13px] font-bold">
-          {SOURCES.map((s, k) => (
-            <li key={s.key} className="inline-flex items-center gap-1.5">
-              <Dot color={COLORS[k]!} />
-              {s.label}
-            </li>
-          ))}
-        </ul>
-        {/* Two lines tall, so a long month line does not push what is below down when a bar is tapped. */}
-        <p role="status" className="text-muted mt-3 min-h-10 text-sm font-bold">
-          {picked ? (
-            <>
-              <b className="text-text">{formatMonthYear(picked.month)}</b>
-              {SOURCES.map((s) => ` · ${s.label} ${money(picked[s.key])}`).join('')}
-            </>
-          ) : (
-            'Tap a month to see where it came from'
-          )}
-        </p>
-      </Section>
+      <PlainSection title="Last 12 months">
+        <GlassTile>
+          <StackedBars
+            label="Income per month"
+            bars={rows.map((row, i) => ({
+              label: formatMonthShort(`${row.month}-01`),
+              name: formatMonthYear(row.month),
+              current: i === rows.length - 1,
+              parts: SOURCES.map((s, k) => ({ key: s.key, amount: row[s.key], color: COLORS[k]! })),
+            }))}
+            selected={selected}
+            onSelect={setSelected}
+            formatAmount={(minor) => money(minor)}
+          />
+          <ul className="text-muted mt-4 flex flex-wrap gap-x-4 gap-y-1.5 text-[13px] font-bold">
+            {SOURCES.map((s, k) => (
+              <li key={s.key} className="inline-flex items-center gap-1.5">
+                <Dot color={COLORS[k]!} />
+                {s.label}
+              </li>
+            ))}
+          </ul>
+          {/* Two lines tall, so a long month line does not push what is below down when a bar is tapped. */}
+          <p role="status" className="text-muted mt-3 min-h-10 text-sm font-bold">
+            {picked ? (
+              <>
+                <b className="text-text">{formatMonthYear(picked.month)}</b>
+                {SOURCES.map((s) => ` · ${s.label} ${money(picked[s.key])}`).join('')}
+              </>
+            ) : (
+              'Tap a month to see where it came from'
+            )}
+          </p>
+        </GlassTile>
+      </PlainSection>
 
-      <Section title="This year">
+      <PlainSection title="This year">
         {year.total > 0 ? (
           <>
-            <p className={BIG_NUMBER}>{money(year.total)}</p>
-            <div aria-hidden="true" className="mt-3 flex h-1.5 gap-[3px]">
+            <p className={cn(BIG_NUMBER, 'mx-1')}>{money(year.total)}</p>
+            <div aria-hidden="true" className="mx-1 mt-3 flex h-1.5 gap-[3px]">
               {SOURCES.map((s, k) => (
                 <span
                   key={s.key}
@@ -133,9 +147,12 @@ export function IncomeScreen() {
                 />
               ))}
             </div>
-            <ul className="mt-2">
+            <ul className={cn('mt-2 px-1', ROWS)}>
               {SOURCES.map((s, k) => (
-                <li key={s.key} className="flex items-center justify-between gap-3 py-2.5">
+                <li
+                  key={s.key}
+                  className="flex min-h-[46px] items-center justify-between gap-3 py-2.5"
+                >
                   <span className="flex min-w-0 items-center gap-2 font-bold">
                     <Dot color={COLORS[k]!} />
                     {s.label}
@@ -155,19 +172,25 @@ export function IncomeScreen() {
             Income that arrives this year shows up here.
           </EmptyState>
         )}
-      </Section>
+      </PlainSection>
 
       {year.top.length > 0 && (
-        <Section title="Biggest sources" action="This year">
-          <ol>
+        <PlainSection
+          title="Biggest sources"
+          action={<span className="text-muted text-[13.5px] font-bold">This year</span>}
+        >
+          <ol className={cn('px-1', ROWS)}>
             {year.top.map((source, i) => (
-              <li key={i} className="flex items-center justify-between gap-3 py-2.5 font-bold">
+              <li
+                key={i}
+                className="flex min-h-[46px] items-center justify-between gap-3 py-2.5 font-bold"
+              >
                 <span className="min-w-0 truncate">{source.name}</span>
                 <span className="font-extrabold tabular-nums">{money(source.amount)}</span>
               </li>
             ))}
           </ol>
-        </Section>
+        </PlainSection>
       )}
     </div>
   );

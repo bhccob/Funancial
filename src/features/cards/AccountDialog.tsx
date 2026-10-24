@@ -122,86 +122,104 @@ function AccountForm({
 
   return (
     <form className="flex flex-col gap-5" onSubmit={submit} noValidate>
-      <TextField
-        variant="line"
-        label="Name"
-        autoComplete="off"
-        value={name}
-        error={errors.name}
-        onChange={(e) => setName(e.target.value)}
-      />
+      {/* Plain rows, one hairline under each: the label on the left, the value on the right. */}
+      <div>
+        <TextField
+          variant="row"
+          label="Name"
+          autoComplete="off"
+          value={name}
+          error={errors.name}
+          onChange={(e) => setName(e.target.value)}
+        />
+      </div>
       {fixedKind && !account ? null : hasHistory ? (
         <p className="text-muted text-sm font-semibold">
           {`${KIND_LABEL[kind]} · It has history, so it keeps its kind.`}
         </p>
       ) : (
-        <RadioGroup<AccountKind> legend="Kind" value={kind} options={KINDS} onChange={setKind} />
-      )}
-      <TextField
-        variant="line"
-        label="Last 4 digits"
-        inputMode="numeric"
-        autoComplete="off"
-        maxLength={4}
-        value={last4}
-        error={errors.last4}
-        hint={errors.last4 ? undefined : 'Optional. Only to tell your cards apart.'}
-        onChange={(e) => {
-          setLast4(e.target.value);
-          setErrors((x) => ({ ...x, last4: undefined }));
-        }}
-      />
-      <MoneyField
-        variant="line"
-        label={account ? 'Balance when added' : 'Current balance'}
-        currency={currency}
-        value={balance}
-        onChange={setBalance}
-        error={errors.balance}
-        hint={account ? sinceHint({ ...account, kind }) : undefined}
-      />
-      {isCredit ? (
-        <>
-          <TextField
-            variant="line"
-            label="Interest rate %"
-            inputMode="decimal"
-            autoComplete="off"
-            value={rate}
-            error={errors.rate}
-            onChange={(e) => setRate(e.target.value)}
-          />
-          <MoneyField
-            variant="line"
-            label="Minimum payment"
-            currency={currency}
-            value={minimum}
-            onChange={setMinimum}
-          />
-          <MoneyField
-            variant="line"
-            label="Credit limit"
-            currency={currency}
-            value={limit}
-            onChange={setLimit}
-            hint="Optional."
-          />
-          <Select
-            variant="line"
-            label="Due day"
-            value={dueDay}
-            onChange={setDueDay}
-            options={DAY_OPTIONS}
-          />
-          <Switch label="Pay in full each month" checked={payInFull} onChange={setPayInFull} />
-        </>
-      ) : (
-        <Switch
-          label="Count it in Available to spend"
-          checked={inAvailable}
-          onChange={setCounted}
+        // Four short choices, one tap each: pills, as in the add forms.
+        <RadioGroup<AccountKind>
+          variant="pills"
+          legend="Kind"
+          value={kind}
+          options={KINDS}
+          onChange={setKind}
         />
       )}
+      <div>
+        <TextField
+          variant="row"
+          label="Last 4 digits"
+          inputMode="numeric"
+          autoComplete="off"
+          maxLength={4}
+          value={last4}
+          error={errors.last4}
+          hint={errors.last4 ? undefined : 'Optional. Only to tell your cards apart.'}
+          onChange={(e) => {
+            setLast4(e.target.value);
+            setErrors((x) => ({ ...x, last4: undefined }));
+          }}
+        />
+        <MoneyField
+          variant="row"
+          label={account ? 'Balance when added' : 'Current balance'}
+          currency={currency}
+          value={balance}
+          onChange={setBalance}
+          error={errors.balance}
+          hint={account ? sinceHint({ ...account, kind }) : undefined}
+        />
+        {isCredit ? (
+          <>
+            <TextField
+              variant="row"
+              label="Interest rate %"
+              inputMode="decimal"
+              autoComplete="off"
+              value={rate}
+              error={errors.rate}
+              onChange={(e) => setRate(e.target.value)}
+            />
+            <MoneyField
+              variant="row"
+              label="Minimum payment"
+              currency={currency}
+              value={minimum}
+              onChange={setMinimum}
+            />
+            <MoneyField
+              variant="row"
+              label="Credit limit"
+              currency={currency}
+              value={limit}
+              onChange={setLimit}
+              hint="Optional."
+            />
+            <Select
+              variant="row"
+              label="Due day"
+              value={dueDay}
+              onChange={setDueDay}
+              options={DAY_OPTIONS}
+            />
+            <Switch
+              variant="row"
+              label="Pay in full each month"
+              checked={payInFull}
+              onChange={setPayInFull}
+            />
+          </>
+        ) : (
+          <Switch
+            variant="row"
+            label="Count it in Available to spend"
+            checked={inAvailable}
+            onChange={setCounted}
+          />
+        )}
+      </div>
       <div className="flex flex-wrap items-center justify-between gap-2">
         {account ? (
           <Button variant="danger-ghost" disabled={busy} onClick={onDelete}>
@@ -324,6 +342,7 @@ function DeleteAccountDialog({
     >
       {moved > 0 && (
         <AccountField
+          variant="row"
           label="Move its subscriptions to"
           value={moveTo}
           onChange={(id) => {

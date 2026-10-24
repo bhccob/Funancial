@@ -13,8 +13,8 @@ import { useApp } from '@/store/AppStoreProvider';
 import { useMoney, useToday } from '@/store/useFinance';
 import { PayDialog, type PayTarget } from './PayDialog';
 
-/** One fact as a plain row: the label on the left, the figure on the right. */
-function Fact({ label, value }: { label: string; value: string }) {
+/** One fact as a plain row: the label on the left, the figure on the right. The account sheet's too. */
+export function Fact({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex min-h-[46px] items-center justify-between gap-3 py-2">
       <dt className="text-muted text-sm font-bold">{label}</dt>

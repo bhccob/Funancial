@@ -731,6 +731,24 @@ describe('View card', () => {
     expect(screen.getByRole('dialog', { name: /balance/i })).toBeInTheDocument();
   });
 
+  it('writes a bank account’s facts as plain rows, as a credit card’s are', async () => {
+    renderCards();
+    await userEvent.click(action('View card'));
+    const facts = within(sheet('Main account')).getByText('Balance').closest('dl')!;
+    expect(facts).toHaveClass('divide-y', 'divide-black/7', 'dark:divide-white/8');
+    expect(facts).not.toHaveClass('grid', 'grid-cols-2');
+    expect(facts.children).toHaveLength(3);
+    for (const label of ['Balance', 'Opened', 'In Available']) {
+      const term = within(facts).getByText(label);
+      expect(term, label).toHaveClass('text-muted');
+      expect(term.parentElement, label).toHaveClass('flex', 'justify-between');
+      expect(term.nextElementSibling, label).toHaveClass('font-extrabold', 'tabular-nums');
+    }
+    // dl, dt and dd stay, so a screen reader still hears the pairs.
+    expect(within(facts).getByText('Balance').tagName).toBe('DT');
+    expect(within(facts).getByText('In Available').nextElementSibling?.tagName).toBe('DD');
+  });
+
   it('pays a credit card from its sheet', async () => {
     renderCards();
     await userEvent.click(card('Visa'));

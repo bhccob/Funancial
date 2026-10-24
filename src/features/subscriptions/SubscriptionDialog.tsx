@@ -82,58 +82,67 @@ function SubscriptionForm({ sub, onDone }: { sub: Subscription | null; onDone():
 
   return (
     <form className="flex flex-col gap-5" onSubmit={submit} noValidate>
-      <TextField
-        variant="line"
-        label="Name"
-        autoComplete="off"
-        value={name}
-        error={errors.name}
-        onChange={(e) => setName(e.target.value)}
-      />
+      {/* Plain rows, one hairline under each: the label on the left, the value on the right. */}
+      <div>
+        <TextField
+          variant="row"
+          label="Name"
+          autoComplete="off"
+          value={name}
+          error={errors.name}
+          onChange={(e) => setName(e.target.value)}
+        />
+      </div>
+      {/* The dialog is about one amount: the big figure, then how often it is charged. */}
       <MoneyField
-        variant="line"
+        size="hero"
         label="Amount"
         currency={currency}
         value={amount}
         onChange={setAmount}
         error={errors.amount}
       />
+      {/* Four short choices, one tap each: pills, as in the add forms, compact to fit one line. */}
       <RadioGroup<Cycle>
-        variant="underline"
+        variant="pills"
+        compact
         legend="Cycle"
         value={cycle}
         onChange={setCycle}
         options={CYCLE_OPTIONS}
       />
-      <TextField
-        variant="line"
-        label="Next renewal"
-        type="date"
-        min={today}
-        value={nextRenewal}
-        error={errors.nextRenewal}
-        onChange={(e) => setNextRenewal(e.target.value)}
-      />
-      <Select
-        variant="line"
-        label="Category"
-        value={category}
-        onChange={(v) => setCategory(v as Category)}
-        options={CATEGORY_OPTIONS}
-      />
-      <AccountField
-        label="Paid with"
-        value={accountId}
-        onChange={(id) => {
-          setAccountId(id);
-          setErrors((x) => ({ ...x, account: undefined }));
-        }}
-        filter={NOT_FROZEN}
-        keepId={sub?.accountId}
-        error={errors.account}
-      />
+      <div>
+        <TextField
+          variant="row"
+          label="Next renewal"
+          type="date"
+          min={today}
+          value={nextRenewal}
+          error={errors.nextRenewal}
+          onChange={(e) => setNextRenewal(e.target.value)}
+        />
+        <Select
+          variant="row"
+          label="Category"
+          value={category}
+          onChange={(v) => setCategory(v as Category)}
+          options={CATEGORY_OPTIONS}
+        />
+        <AccountField
+          variant="row"
+          label="Paid with"
+          value={accountId}
+          onChange={(id) => {
+            setAccountId(id);
+            setErrors((x) => ({ ...x, account: undefined }));
+          }}
+          filter={NOT_FROZEN}
+          keepId={sub?.accountId}
+          error={errors.account}
+        />
+      </div>
       {sub && (
-        <div className="border-border flex flex-wrap items-center gap-x-3 gap-y-1 border-t pt-4">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
           <Button variant="danger-ghost" size="sm" disabled={busy} onClick={remove}>
             Delete
           </Button>

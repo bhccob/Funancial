@@ -27,6 +27,11 @@ export interface RadioGroupProps<T extends string> {
   error?: string;
   /** Added to each choice, e.g. a width for one-character labels. */
   optionClassName?: string;
+  /**
+   * `pills` only: tighter pills, 8px in from each end with 12px type and 6px between them, so four
+   * short choices (a billing cycle) fit the row of a dialog on a 360px phone instead of wrapping.
+   */
+  compact?: boolean;
 }
 
 /** Native radios presented as a segmented control, as underline tabs, or as pills. */
@@ -39,6 +44,7 @@ export function RadioGroup<T extends string>({
   hint,
   error,
   optionClassName,
+  compact = false,
 }: RadioGroupProps<T>) {
   const name = useId();
   const hintId = `${name}-hint`;
@@ -60,7 +66,7 @@ export function RadioGroup<T extends string>({
               cn('flex max-w-full flex-wrap', options.length > 3 ? 'gap-x-3' : 'gap-x-5')
             : pills
               ? // 12px between rows of 32px pills puts their 44px tap areas edge to edge.
-                'flex max-w-full flex-wrap gap-x-2 gap-y-3'
+                cn('flex max-w-full flex-wrap gap-y-3', compact ? 'gap-x-1.5' : 'gap-x-2')
               : 'bg-surface-2 inline-flex max-w-full flex-wrap gap-1 self-start rounded-[14px] p-1'
         }
       >
@@ -75,7 +81,8 @@ export function RadioGroup<T extends string>({
                 ? underlineTab(value === o.value)
                 : pills
                   ? cn(
-                      'press inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-[12.5px] font-extrabold whitespace-nowrap',
+                      'press inline-flex h-8 items-center gap-1.5 rounded-full font-extrabold whitespace-nowrap',
+                      compact ? 'px-2 text-[12px]' : 'px-3 text-[12.5px]',
                       // Solid, not glass: the glass shorthand would paint over a fill.
                       value === o.value
                         ? 'bg-primary text-primary-contrast border-primary border'

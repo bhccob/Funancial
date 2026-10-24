@@ -68,6 +68,7 @@ function ActualBalanceForm({
     <form className="flex flex-col gap-5" onSubmit={submit} noValidate>
       {picking && (
         <AccountField
+          variant="row"
           label="Account"
           value={accountId}
           onChange={(id) => {
@@ -78,10 +79,13 @@ function ActualBalanceForm({
         />
       )}
       {row && (
-        <p className="text-sm font-semibold tabular-nums">{`Funcial thinks: ${money(computed)}`}</p>
+        <p className="text-muted text-[15px] font-semibold tabular-nums">
+          {`Funcial thinks: ${money(computed)}`}
+        </p>
       )}
+      {/* The dialog is about one amount: the big figure, no box. */}
       <MoneyField
-        variant="line"
+        size="hero"
         label="Actual balance"
         currency={currency}
         value={actual}
