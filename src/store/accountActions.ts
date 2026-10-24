@@ -430,7 +430,11 @@ export function createAccountActions(
   // ---- what the person does
 
   let working = false;
-  /** One of these at a time: a second tap before the first answers must not start a second sign-up. */
+  /**
+   * One of these at a time: a second tap before the first answers must not start a second sign-up.
+   * The flag is shared with `requestCode` on purpose: the service keeps only the newest code, so a
+   * resend during a sign-up would replace the code being submitted.
+   */
   function exclusive<A extends unknown[], R>(job: (...args: A) => Promise<R>) {
     return async (...args: A): Promise<R> => {
       if (working) throw new AccountError('busy', 'Funcial is still working on your last tap.');

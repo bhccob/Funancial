@@ -56,6 +56,32 @@ describe('the account service calls', () => {
     expect(JSON.parse(init.body as string)).toEqual({ who: 'robin' });
   });
 
+  it('ask for a code at /api/code with the shared token alone, and read its Retry-After', async () => {
+    const fetch = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ error: 'too many attempts' }), {
+          status: 429,
+          headers: { 'Retry-After': '30' },
+        }),
+    );
+    vi.stubGlobal('fetch', fetch);
+    const who = { username: 'robin', email: 'robin@example.com' };
+    expect(await accountApi.requestCode(who)).toEqual({
+      status: 429,
+      body: { error: 'too many attempts' },
+      retryAfter: 30,
+    });
+    const [url, init] = fetch.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe('/api/code');
+    expect(init.method).toBe('POST');
+    // Nobody is logged in: the shared token and the content type, and no Authorization.
+    expect(init.headers).toEqual({
+      'X-Funancial-Token': 'shared-token',
+      'Content-Type': 'application/json',
+    });
+    expect(JSON.parse(init.body as string)).toEqual(who);
+  });
+
   it('read an answer with no JSON as no body', async () => {
     vi.stubGlobal(
       'fetch',

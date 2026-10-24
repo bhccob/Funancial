@@ -629,6 +629,28 @@ describe('sign-up with a code', () => {
     expect(linkedState(actions)).toBeNull();
   });
 
+  it('does not let a resend start while the sign-up is on its way: the newest code is the only one the service keeps', async () => {
+    const { actions, server, code } = await codedSetup();
+    let release = () => {};
+    const held = new Promise<void>((resolve) => (release = resolve));
+    // The service has the sign-up but has not answered yet.
+    server.script('signUp', async (real) => {
+      await held;
+      return real();
+    });
+    const signing = actions.signUp({ ...ME, code });
+    await vi.waitFor(() => expect(server.sent('signUp')).toHaveLength(1));
+
+    await expect(actions.requestCode(ME)).rejects.toMatchObject({ code: 'busy' });
+    // Nothing was sent, so the code being submitted is still the live one.
+    expect(server.sent('requestCode')).toHaveLength(1);
+    expect(server.codeFor(ME.email)).toBe(code);
+
+    release();
+    await signing;
+    expect(linkedState(actions)).toMatchObject({ status: 'linked' });
+  });
+
   it('sends no code at all where the screen gives none (the sign-up of today)', async () => {
     const { actions, server } = await setup();
     await actions.signUp(ME);
