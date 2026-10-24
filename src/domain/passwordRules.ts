@@ -35,28 +35,28 @@ function namesOf({ username, email }: PasswordOwner): string[] {
 
 /**
  * What is wrong with a password, as a sentence to show, or `null` when it is fine. The first of these
- * that applies: shorter than 10 characters; one character repeated; on the list of common passwords
- * (ignoring case); the username or the email's name part (ignoring case and spaces round them).
+ * that applies: shorter than 10 characters; one character repeated; on the list of common passwords;
+ * the username or the email's name part. The last two read the password and the names as the service
+ * reads a username (spaces round them, full-width spellings and case ignored).
  */
 export function passwordProblem(password: string, who: PasswordOwner = {}): string | null {
   if (password.length < MIN_LENGTH) return `Use at least ${MIN_LENGTH} characters.`;
   if (new Set(password).size === 1) return 'Use more than one character.';
-  if (COMMON_PASSWORDS.has(password.toLowerCase())) {
-    return 'That password is too common. Pick another one.';
-  }
   const typed = fold(password);
+  if (COMMON_PASSWORDS.has(typed)) return 'That password is too common. Pick another one.';
   if (namesOf(who).includes(typed)) return "Don't use your username or email as your password.";
   return null;
 }
 
 /**
- * How strong a password is: `weak` when it is refused (`passwordProblem`), `strong` at 14 characters
+ * How strong a password is: `weak` when it is refused (`passwordProblem`, with the names it is given, so
+ * a password that is the username is weak however it looks), `strong` at 14 characters
  * or more with at least three of lower case, upper case, digits and symbols, else `okay`. A symbol is
  * anything that is not a cased letter or a digit: a space, punctuation, or a letter of a script with
  * no case.
  */
-export function passwordStrength(password: string): PasswordStrength {
-  if (passwordProblem(password) !== null) return 'weak';
+export function passwordStrength(password: string, who: PasswordOwner = {}): PasswordStrength {
+  if (passwordProblem(password, who) !== null) return 'weak';
   if (password.length < STRONG_LENGTH) return 'okay';
   const kinds = [/\p{Ll}/u, /[\p{Lu}\p{Lt}]/u, /\p{Nd}/u, /[^\p{Ll}\p{Lu}\p{Lt}\p{Nd}]/u];
   return kinds.filter((kind) => kind.test(password)).length >= STRONG_KINDS ? 'strong' : 'okay';

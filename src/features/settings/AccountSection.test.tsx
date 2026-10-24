@@ -117,6 +117,8 @@ describe('Settings → Account without an account', () => {
 
     await userEvent.clear(password);
     await userEvent.type(password, 'Robin.Smith1');
+    // The bar agrees with what sending will say, whatever the password looks like.
+    expect(within(dialog).getByText('Weak')).toBeInTheDocument();
     await userEvent.click(within(dialog).getByRole('button', { name: 'Create account' }));
     expect(
       within(dialog).getByText("Don't use your username or email as your password."),
@@ -474,7 +476,7 @@ describe('Settings → Account with an account', () => {
     expect(await within(dialog).findByRole('alert')).toHaveTextContent("You're offline.");
   });
 
-  it('shows the strength of the new password, and refuses a common one or the account email', async () => {
+  it('shows the strength of the new password, and refuses a common one, the account email or the username', async () => {
     const actions = show(fakeAccount(linkedAccount({ username: 'robin.smith1' })));
     await userEvent.click(button('Change password'));
     const dialog = screen.getByRole('dialog', { name: 'Change password' });
@@ -492,16 +494,33 @@ describe('Settings → Account with an account', () => {
       within(dialog).getByText('That password is too common. Pick another one.'),
     ).toBeInTheDocument();
 
+    // The account's email, as it was made: the bar says Weak before it is sent, and sending says why.
     await userEvent.clear(fresh);
-    await userEvent.type(fresh, 'Robin.Smith1');
+    await userEvent.type(fresh, 'Robin@Example.com');
+    expect(within(dialog).getByText('Weak')).toBeInTheDocument();
     await userEvent.click(within(dialog).getByRole('button', { name: 'Change password' }));
+    expect(
+      within(dialog).queryByText('That password is too common. Pick another one.'),
+    ).not.toBeInTheDocument();
     expect(
       within(dialog).getByText("Don't use your username or email as your password."),
     ).toBeInTheDocument();
 
+    // A good one clears the line (its confirmation is still the old one), then the username is refused alike.
     await userEvent.clear(fresh);
     await userEvent.type(fresh, 'Tr0ub4dor&3xyz');
     expect(within(dialog).getByText('Strong')).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Change password' }));
+    expect(
+      within(dialog).queryByText("Don't use your username or email as your password."),
+    ).not.toBeInTheDocument();
+    await userEvent.clear(fresh);
+    await userEvent.type(fresh, 'Robin.Smith1');
+    expect(within(dialog).getByText('Weak')).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Change password' }));
+    expect(
+      within(dialog).getByText("Don't use your username or email as your password."),
+    ).toBeInTheDocument();
     expect(actions.changePassword).not.toHaveBeenCalled();
   });
 

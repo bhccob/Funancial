@@ -2,9 +2,16 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { describe, expect, it } from 'vitest';
+import type { PasswordOwner } from '@/domain/passwordRules';
 import { PasswordField } from './parts';
 
-function Field({ strength, initial = '' }: { strength?: boolean; initial?: string }) {
+function Field({
+  strength,
+  initial = '',
+}: {
+  strength?: boolean | PasswordOwner;
+  initial?: string;
+}) {
   const [value, setValue] = useState(initial);
   return (
     <PasswordField
@@ -59,11 +66,18 @@ describe('PasswordField strength', () => {
     expect(marks()).toEqual(['off', 'off', 'off']);
   });
 
-  it('says the word politely, and leaves the marks out of the reading', async () => {
+  it('says the word politely with what it is the strength of, and leaves the marks out of the reading', async () => {
     render(<Field strength />);
+    expect(document.querySelector('[aria-live]')).toBeEmptyDOMElement();
     await userEvent.type(screen.getByLabelText('New password'), 'short');
+    // The visible word is its own element; the region reads it whole, with the words before it.
     const word = screen.getByText('Weak');
-    expect(word).toHaveAttribute('aria-live', 'polite');
+    const region = word.closest('[aria-live]');
+    expect(region).toHaveAttribute('aria-live', 'polite');
+    expect(region).toHaveAttribute('aria-atomic', 'true');
+    expect(region).toHaveTextContent('Password strength: Weak');
+    expect(screen.getByText('Password strength:')).toHaveClass('sr-only');
+    expect(word).not.toHaveClass('sr-only');
     expect(
       document.querySelector('[data-strength-mark]')?.closest('[aria-hidden="true"]'),
     ).not.toBe(null);
@@ -85,6 +99,29 @@ describe('PasswordField strength', () => {
     await userEvent.type(input, 'Tr0ub4dor&3xyz');
     expect(colours()).toEqual(['success', 'success', 'success']);
     expect(screen.getByText('Strong')).toHaveClass('text-muted');
+  });
+
+  it.each([
+    ['the username', { username: 'robin.smith1' }, 'robin.smith1'],
+    [
+      'the username, in another case and with spaces',
+      { username: ' Robin.Smith1 ' },
+      'robin.smith1',
+    ],
+    ['the name part of the email', { email: 'robin.smith1@example.com' }, 'Robin.Smith1'],
+    ['the whole email', { email: 'robin.smith1@example.com' }, 'robin.smith1@example.com'],
+  ])('shows a password that is %s as Weak, as submitting it is refused', async (_, who, typed) => {
+    render(<Field strength={who} />);
+    await userEvent.type(screen.getByLabelText('New password'), typed);
+    expect(screen.getByText('Weak')).toBeInTheDocument();
+    expect(marks()).toEqual(['on', 'off', 'off']);
+  });
+
+  it('shows the same password as it is without names when it is not one of them', async () => {
+    render(<Field strength={{ username: 'someone.else', email: 'x@example.com' }} />);
+    await userEvent.type(screen.getByLabelText('New password'), 'Tr0ub4dor&3xyz');
+    expect(screen.getByText('Strong')).toBeInTheDocument();
+    expect(marks()).toEqual(['on', 'on', 'on']);
   });
 
   it('keeps the Show toggle, and works in the row variant too', async () => {

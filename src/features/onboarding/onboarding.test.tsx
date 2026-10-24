@@ -172,6 +172,8 @@ describe('the account step', () => {
 
     await userEvent.clear(password);
     await userEvent.type(password, 'ROBIN.smith1');
+    // The bar agrees with what Next will say, whatever the password looks like.
+    expect(screen.getByText('Weak')).toBeInTheDocument();
     await next();
     expect(
       screen.getByText("Don't use your username or email as your password."),

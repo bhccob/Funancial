@@ -1,7 +1,11 @@
 import { ChevronLeft } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { TextField, type TextFieldProps } from '@/components/ui/TextField';
-import { passwordStrength, type PasswordStrength } from '@/domain/passwordRules';
+import {
+  passwordStrength,
+  type PasswordOwner,
+  type PasswordStrength,
+} from '@/domain/passwordRules';
 import { cn } from '@/lib/cn';
 
 export function Problem({ children }: { children?: string }) {
@@ -36,11 +40,12 @@ const STRENGTH: Record<PasswordStrength, { word: string; marks: number; fill: st
 /**
  * Three marks and a word for how strong a password is: one mark in danger for weak, two in warning
  * for okay, three in success for strong, the rest in the page's track. The marks are drawn only; the
- * word says it, politely, so a screen reader hears it change as the password is typed. Nothing
- * shows while nothing is typed.
+ * word says it, politely and whole ("Password strength: Weak"), so a screen reader hears it change as
+ * the password is typed. Nothing shows while nothing is typed. `who` is whose password it is: one that
+ * is their username or email is weak here, as submitting it is refused.
  */
-function StrengthBar({ password }: { password: string }) {
-  const level = password === '' ? null : passwordStrength(password);
+function StrengthBar({ password, who }: { password: string; who: PasswordOwner }) {
+  const level = password === '' ? null : passwordStrength(password, who);
   const strength = level && STRENGTH[level];
   return (
     <div className="flex items-center gap-2.5" data-strength={level ?? 'none'}>
@@ -56,8 +61,13 @@ function StrengthBar({ password }: { password: string }) {
           );
         })}
       </div>
-      <span aria-live="polite" className="text-muted min-w-12 text-sm font-bold">
-        {strength?.word}
+      <span aria-live="polite" aria-atomic="true" className="min-w-12">
+        {strength && (
+          <>
+            <span className="sr-only">Password strength: </span>
+            <span className="text-muted text-sm font-bold">{strength.word}</span>
+          </>
+        )}
       </span>
     </div>
   );
@@ -67,7 +77,9 @@ function StrengthBar({ password }: { password: string }) {
  * A password field with a Show toggle under it, to check what was typed on a small keyboard: the line
  * field of the setup and log-in screens, or with `variant="row"` the plain row of Settings. With
  * `strength` a bar and a word beside the toggle say how strong the typed password is, for a field that
- * chooses one (`passwordStrength`); it reads the field's `value`, so the field is controlled.
+ * chooses one (`passwordStrength`); it reads the field's `value`, so the field is controlled. Give it the
+ * username and email the password is for (`strength={{ username, email }}`) so the bar agrees with the
+ * check that refuses a password that is one of them; `true` is the bar with no names.
  */
 export function PasswordField({
   label = 'Password',
@@ -77,7 +89,7 @@ export function PasswordField({
 }: Omit<TextFieldProps, 'variant' | 'type' | 'label'> & {
   label?: string;
   variant?: 'line' | 'row';
-  strength?: boolean;
+  strength?: boolean | PasswordOwner;
 }) {
   const [shown, setShown] = useState(false);
   return (
@@ -91,7 +103,12 @@ export function PasswordField({
         {...rest}
       />
       <div className="-mb-1 flex items-center justify-between gap-3">
-        {strength && <StrengthBar password={typeof rest.value === 'string' ? rest.value : ''} />}
+        {strength && (
+          <StrengthBar
+            password={typeof rest.value === 'string' ? rest.value : ''}
+            who={strength === true ? {} : strength}
+          />
+        )}
         <button
           type="button"
           onClick={() => setShown(!shown)}

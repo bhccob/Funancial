@@ -379,7 +379,7 @@ export function OnboardingWizard({ onFinishing }: { onFinishing?(finishing: bool
               onChange={(e) => setEmail(e.target.value)}
             />
             <PasswordField
-              strength
+              strength={{ username, email }}
               autoComplete="new-password"
               hint="At least 10 characters"
               value={password}

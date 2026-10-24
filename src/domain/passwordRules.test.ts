@@ -30,6 +30,16 @@ describe('passwordProblem', () => {
     expect(passwordProblem('qwertyuiop')).toBe(COMMON);
   });
 
+  it('looks a common password up as it is read, so spaces round it and a full-width spelling do not hide it', () => {
+    expect(passwordProblem('Password123 ')).toBe(COMMON);
+    expect(passwordProblem(' password123')).toBe(COMMON);
+    expect(passwordProblem('Ｐａｓｓｗｏｒｄ１２３')).toBe(COMMON);
+    expect(passwordProblem('ＰＡＳＳＷＯＲＤ123')).toBe(COMMON);
+    // The length is the typed length, spaces and all: nine characters and a space are ten.
+    expect(passwordProblem('password1 ')).toBeNull();
+    expect(passwordProblem('password12 ')).toBe(COMMON);
+  });
+
   it('refuses the username, or the name part of the email, whatever its case', () => {
     expect(passwordProblem('robin.smith1', { username: 'robin.smith1' })).toBe(OWN_NAME);
     expect(passwordProblem('Robin.Smith1', { username: 'robin.smith1' })).toBe(OWN_NAME);
@@ -73,6 +83,20 @@ describe('passwordStrength', () => {
     expect(passwordStrength('Password123')).toBe('weak');
     // One of the common ones, so refused whatever its letters: weak, not okay.
     expect(passwordStrength('abcdefghij')).toBe('weak');
+  });
+
+  it('is weak when it is the username or the email it was given, however strong it looks', () => {
+    const name = 'correct-horse-battery-1';
+    expect(passwordStrength(name)).toBe('strong');
+    expect(passwordStrength(name, { username: name })).toBe('weak');
+    expect(passwordStrength(name, { username: ' Correct-Horse-Battery-1 ' })).toBe('weak');
+    expect(passwordStrength(name, { email: `${name}@example.com` })).toBe('weak');
+    // Containing the email is not being it.
+    expect(passwordStrength('Robin@Example.com1', { email: 'robin@example.com' })).toBe('strong');
+    expect(passwordStrength(name, { username: 'someone.else', email: 'x@example.com' })).toBe(
+      'strong',
+    );
+    expect(passwordStrength(name, {})).toBe('strong');
   });
 
   it('is okay when it is allowed but not both long and mixed', () => {
