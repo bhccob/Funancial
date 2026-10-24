@@ -316,6 +316,10 @@ export function createAccounts({ store, masterKey, now, mailer, waitUntil }: Acc
     retryAfter,
   });
 
+  /** Seconds before another code may be mailed to an address whose newest code is `last`; 0 or less when none. */
+  const gapLeft = (last: CodeRecord | null) =>
+    last ? Math.ceil((last.sentAt + CODE_GAP * 1000 - now()) / 1000) : 0;
+
   /** The 429 for a name still waiting after failed log-ins, else null. Counts nothing. */
   async function loginWaiting(name: string): Promise<Result | null> {
     const left = await store.ttl(loginWaitKey(name));
@@ -507,8 +511,10 @@ export function createAccounts({ store, masterKey, now, mailer, waitUntil }: Acc
    * the request whose write lands gives its verdict, so tries sent at once are each counted (no more
    * than 5 can ever be told they were wrong) and a right code is accepted once, whatever else is
    * reading it. A request that loses the write reads again and finds the record as it now is.
-   * The delete after is tidying: every reader already finds the record spent. A write leaves the
-   * key without a lifetime, so it is set again.
+   * What comes after the write is tidying, and a store that fails there must not turn the verdict
+   * into an outage: every reader already finds the record spent or counted. A write leaves the key
+   * without a lifetime, so it is set again; if that fails, the clock check on `sentAt` below ends
+   * the code at 10 minutes and the next send writes over the record.
    */
   async function takeCode(address: string, given: string): Promise<Result | null> {
     const key = K.code(address);
@@ -522,8 +528,8 @@ export function createAccounts({ store, masterKey, now, mailer, waitUntil }: Acc
       const right = sameText(record.hash, hash);
       const next = { ...record, tries: right ? CODE_TRIES : record.tries + 1 };
       if (!(await store.compareAndSet(key, record, next))) continue;
-      await store.expire(key, left);
-      if (next.tries >= CODE_TRIES) await store.del(key);
+      await store.expire(key, left).catch(() => {});
+      if (next.tries >= CODE_TRIES) await store.del(key).catch(() => {});
       return right ? null : fail(401, 'code');
     }
     // Others kept getting in first. No verdict was given, so none was counted.
@@ -532,9 +538,11 @@ export function createAccounts({ store, masterKey, now, mailer, waitUntil }: Acc
 
   /**
    * After a code's email failed: puts the record that was there before back (with what was left of
-   * its 10 minutes and the tries it had), or clears the key if there was none. It writes only over
-   * the record this send made, though a try counted on that record meanwhile doesn't stop it. Never
-   * throws: the person is told the email didn't go either way.
+   * its 10 minutes and the tries it had), or clears the key if there was none. `before` is exactly
+   * what this send's write replaced (it only lands over that), so the restore is exact. It writes
+   * only over the record this send made, known by its hash and its time, though a try counted on
+   * that record meanwhile doesn't stop it. Never throws: the person is told the email didn't go
+   * either way.
    */
   async function undoCode(address: string, sent: CodeRecord, before: CodeRecord | null) {
     const key = K.code(address);
@@ -543,7 +551,7 @@ export function createAccounts({ store, masterKey, now, mailer, waitUntil }: Acc
       for (let attempt = 0; attempt < WRITE_TRIES; attempt++) {
         const current = await store.get<CodeRecord>(key);
         // Gone, or another send's: not this send's to undo.
-        if (!current || current.hash !== sent.hash) return;
+        if (!current || current.hash !== sent.hash || current.sentAt !== sent.sentAt) return;
         if (!before || before.tries >= CODE_TRIES || !(left > 0)) {
           await store.del(key);
           return;
@@ -554,7 +562,8 @@ export function createAccounts({ store, masterKey, now, mailer, waitUntil }: Acc
         }
       }
     } catch {
-      // Whatever is left expires by itself in 10 minutes.
+      // Whatever is left is ended by the clock check on `sentAt` in takeCode after 10 minutes, and
+      // the next send writes over it.
     }
   }
 
@@ -632,8 +641,9 @@ export function createAccounts({ store, masterKey, now, mailer, waitUntil }: Acc
       if (await store.get<Account>(K.user(name))) return fail(409, 'taken');
 
       // Too soon after the last code. This counts nothing, so mashing the button uses up no mail.
-      const last = await store.get<CodeRecord>(K.code(address));
-      const wait = last ? Math.ceil((last.sentAt + CODE_GAP * 1000 - now()) / 1000) : 0;
+      const key = K.code(address);
+      const last = await store.get<CodeRecord>(key);
+      const wait = gapLeft(last);
       if (wait > 0) return tooSoon(wait);
 
       const limited = await throttle('code:email', address, 5, HOUR);
@@ -649,8 +659,17 @@ export function createAccounts({ store, masterKey, now, mailer, waitUntil }: Acc
       const code = String(randomInt(0, 1_000_000)).padStart(6, '0');
       const record: CodeRecord = { hash: codeHash(address, code), tries: 0, sentAt: now() };
       // Written before the email goes, so a second request for this address meets the 30 s gap even
-      // while this one's mail is out.
-      await store.set(K.code(address), record, CODE_SECONDS);
+      // while this one's mail is out, and written only over what the gap check read: of two requests
+      // that passed it together only one lands, and `last` is exactly what a failed send must put back
+      // (a code spent since is not here to be brought back). A request that loses sends nothing; it
+      // has used up one of the address's sends, which is the price of a race.
+      const written = last
+        ? await store.compareAndSet(key, last, record)
+        : await store.setNx(key, record, CODE_SECONDS);
+      if (!written) return tooSoon(Math.max(1, gapLeft(await store.get<CodeRecord>(key))));
+      // A write leaves the key without a lifetime. If this fails the person is told to try again; the
+      // clock check on `sentAt` in takeCode and the next send's write bound what is left.
+      if (last) await store.expire(key, CODE_SECONDS);
       try {
         await mailer.send(
           address,

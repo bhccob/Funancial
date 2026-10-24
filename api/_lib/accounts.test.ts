@@ -470,7 +470,7 @@ describe('the emailed code', () => {
   });
 
   it('replaces the old code with a new one: only the newest works', async () => {
-    const { accounts, mail } = setupMailed();
+    const { store, accounts, mail } = setupMailed();
     randomIntMock.mockReturnValueOnce(111111).mockReturnValueOnce(222222);
     await ask(accounts);
     advance(31);
@@ -479,6 +479,9 @@ describe('the emailed code', () => {
       'Your Funcial code is 111 111.',
       'Your Funcial code is 222 222.',
     ]);
+    // The new record has its own 10 minutes, from its own send.
+    expect(store.dump()[CODE_KEY]).toMatchObject({ sentAt: T0 + 31_000 });
+    expect(await store.ttl(CODE_KEY)).toBe(600);
 
     expect((await join(accounts, { code: '111111' })).res).toEqual(WRONG);
     expect((await join(accounts, { code: '222222' })).res.status).toBe(200);
@@ -673,6 +676,110 @@ describe('the emailed code', () => {
     });
     expect(await ask(accounts, {}, ipOf(1))).toEqual(NOT_SENT);
     expect(store.dump()[CODE_KEY]).toMatchObject({ hash: 'x'.repeat(64) });
+  });
+
+  it('knows its own record by its hash and its time, so a copy of the hash made later is not undone either', async () => {
+    const { store, accounts, mail } = setupMailed();
+    await ask(accounts);
+    advance(31);
+    vi.spyOn(mail, 'send').mockImplementationOnce(async () => {
+      const written = store.dump()[CODE_KEY] as { hash: string; tries: number; sentAt: number };
+      await store.set(CODE_KEY, { ...written, sentAt: written.sentAt + 1 }, 600);
+      throw Object.assign(new Error('refused'), { code: 'ECONNECTION' });
+    });
+    expect(await ask(accounts, {}, ipOf(1))).toEqual(NOT_SENT);
+    expect(store.dump()[CODE_KEY]).toMatchObject({ sentAt: T0 + 31_000 + 1 });
+  });
+
+  it('writes a new code only over the record the gap check saw: a code spent meanwhile is not brought back by a failed resend', async () => {
+    // The resend is held between its gap check and its write; the person spends the earlier code.
+    let armed = false;
+    const held = gate();
+    const { store, accounts, mail } = setupMailed((s) =>
+      around(s, 'incr', async (args, run) => {
+        if (armed && String(args[0]).startsWith('rl:code:email:')) {
+          armed = false;
+          held.hit();
+          await held.opened;
+        }
+        return run();
+      }),
+    );
+    await ask(accounts);
+    const first = sentCode(mail);
+    advance(31);
+    armed = true;
+    const resend = ask(accounts, {}, ipOf(1));
+    await held.reached;
+
+    expect((await join(accounts, { code: first }, ipOf(2))).res.status).toBe(200);
+    const refused = refuseNextMail(mail);
+    held.open();
+
+    // The key is not what it read, so it wrote nothing and sent nothing, and told the person to wait.
+    expect(await resend).toEqual(TOO_MANY(1));
+    expect(refused).not.toHaveBeenCalled();
+    expect(mail.sent).toHaveLength(1);
+    expect(store.dump()[CODE_KEY]).toBeUndefined();
+    // So the spent code stays spent.
+    const again = await join(accounts, { username: 'grace', code: first }, ipOf(3));
+    expect(again.res).toEqual(EXPIRED);
+    expect(store.dump()['acct:u:grace']).toBeUndefined();
+  });
+
+  it('sends one email when two requests for an address pass the 30 s gap together, with none before', async () => {
+    const { store, accounts, mail } = setupMailed(lagged);
+    const answers = await Promise.all([
+      ask(accounts, {}, ipOf(1)),
+      ask(accounts, {}, ipOf(2)),
+      ask(accounts, {}, ipOf(3)),
+    ]);
+    expect(answers.filter((r) => r.status === 200)).toHaveLength(1);
+    // The others are told when the one that won will have its 30 s up.
+    for (const r of answers.filter((r) => r.status !== 200)) expect(r).toEqual(TOO_MANY(30));
+    expect(mail.sent).toHaveLength(1);
+    expect(store.dump()[CODE_KEY]).toEqual({
+      hash: hashOf('ada@example.com', sentCode(mail)),
+      tries: 0,
+      sentAt: T0,
+    });
+    expect(await store.ttl(CODE_KEY)).toBe(600);
+  });
+
+  it('sends one email when two requests pass the gap together over an earlier code', async () => {
+    const { store, accounts, mail } = setupMailed(lagged);
+    await ask(accounts);
+    advance(31);
+    const answers = await Promise.all([ask(accounts, {}, ipOf(1)), ask(accounts, {}, ipOf(2))]);
+    expect(answers.map((r) => r.status).sort()).toEqual([200, 429]);
+    expect(mail.sent).toHaveLength(2);
+    expect(store.dump()[CODE_KEY]).toMatchObject({
+      hash: hashOf('ada@example.com', sentCode(mail)),
+      sentAt: T0 + 31_000,
+    });
+    // The write that took the key gave it a lifetime again.
+    expect(await store.ttl(CODE_KEY)).toBe(600);
+  });
+
+  it('answers a sign-up whose code was accepted even when tidying the key away fails', async () => {
+    // After the write that spends the code lands, the store refuses the lifetime and the delete.
+    const hiccup = (args: unknown[], run: () => Promise<unknown>) =>
+      args.includes(CODE_KEY) ? Promise.reject(new Error('store hiccup')) : run();
+    const { store, accounts, mail } = setupMailed((s) =>
+      around(around(s, 'expire', hiccup), 'del', hiccup),
+    );
+    await ask(accounts);
+    const code = sentCode(mail);
+    // A wrong try is answered as one, not as an outage.
+    expect((await join(accounts, { code: wrongOf(code) })).res).toEqual(WRONG);
+    expect(store.dump()[CODE_KEY]).toMatchObject({ tries: 1 });
+
+    const made = await join(accounts, { code });
+    expect(made.res.status).toBe(200);
+    expect(store.dump()['acct:u:ada']).toMatchObject({ emailVerified: true });
+    // The key could not be removed, and still the code is spent.
+    expect(store.dump()[CODE_KEY]).toMatchObject({ tries: 5 });
+    expect((await join(accounts, { username: 'grace', code }, ipOf(1))).res).toEqual(EXPIRED);
   });
 
   it('ends a code after five wrong tries: the sixth, even with the right code, is expired', async () => {
