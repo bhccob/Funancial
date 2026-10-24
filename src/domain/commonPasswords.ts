@@ -14,7 +14,7 @@
  * app, and with the reset page, which checks a new password the same way.
  */
 
-/** Lower-cased: a password is looked up as `password.toLowerCase()`. */
+/** Lower-cased: a password is looked up folded (trimmed, NFKC, lower case; `fold` in passwordRules). */
 export const COMMON_PASSWORDS: ReadonlySet<string> = new Set([
   'qwertyuiop',
   '1234567890',
