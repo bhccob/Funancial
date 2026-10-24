@@ -12,12 +12,16 @@ export class NetworkError extends Error {
 /** What the service answered. `body` is its JSON, or `null` when it sent none; `retryAfter` is in seconds. */
 export type Reply = { status: number; body: unknown; retryAfter: number | null };
 
+/** What `code` takes: the name to check is free, and the address to mail a code to. */
+export type CodeBody = { username: string; email: string };
 export type SignUpBody = {
   username: string;
   email: string;
   authKey: string;
   dek: string;
   wrappedPw: Sealed;
+  /** The six digits mailed to `email`. Left out, the account is made without proof of the address (an older app's sign-up). */
+  code?: string;
 };
 export type LogInBody = { username: string; authKey: string };
 export type CopyBody = Sealed & { baseVersion: number };
@@ -26,6 +30,8 @@ export type ForgotBody = { who: string };
 
 /** The account service, as the app's account layer uses it; tests hand it a fake. Each call throws `NetworkError` where nothing came back. */
 export type AccountApi = {
+  /** Mails a six-digit code to the address, if the username is free; for sign-up, and nobody is logged in. */
+  requestCode(body: CodeBody): Promise<Reply>;
   signUp(body: SignUpBody): Promise<Reply>;
   logIn(body: LogInBody): Promise<Reply>;
   putCopy(deviceToken: string, body: CopyBody): Promise<Reply>;
@@ -36,6 +42,8 @@ export type AccountApi = {
 };
 
 const sealed = z.object({ iv: z.string(), ciphertext: z.string() });
+/** `200` of `code`: the mail is on its way. Anything else that reads as 200 (a hotel Wi-Fi's page) is not the service. */
+export const CodeSent = z.object({ ok: z.literal(true) });
 /** `200` of sign-up. */
 export const SignedUp = z.object({ deviceToken: z.string().min(1) });
 /** `200` of log-in: the copy is `null` when the account has none; `email` and `savedAt` come from newer services. */
@@ -101,6 +109,7 @@ async function call(
 }
 
 export const accountApi: AccountApi = {
+  requestCode: (body) => call('POST', 'code', null, body),
   signUp: (body) => call('POST', 'signup', null, body),
   logIn: (body) => call('POST', 'login', null, body),
   putCopy: (token, body) => call('PUT', 'copy', token, body),

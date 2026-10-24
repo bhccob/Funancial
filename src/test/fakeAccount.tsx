@@ -23,6 +23,7 @@ export function fakeAccount(state: AccountState | null = null, loaded = true) {
   const actions = {
     view,
     start: vi.fn(() => () => {}),
+    requestCode: vi.fn<AccountActions['requestCode']>(async () => {}),
     signUp: vi.fn<AccountActions['signUp']>(async () => {}),
     logIn: vi.fn<AccountActions['logIn']>(async () => 'done'),
     changePassword: vi.fn<AccountActions['changePassword']>(async () => {}),

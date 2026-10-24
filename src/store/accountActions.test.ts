@@ -334,6 +334,309 @@ describe('sign-up', () => {
   });
 });
 
+describe('asking for a code', () => {
+  const who = { username: 'Robin', email: ' Robin@Example.com ' };
+
+  it('sends the canonical name and the trimmed address, and nothing else, and links nothing', async () => {
+    const { actions, server } = await setup();
+    await expect(actions.requestCode(who)).resolves.toBeUndefined();
+    expect(server.sent('requestCode')).toEqual([{ username: 'robin', email: 'Robin@Example.com' }]);
+    expect(server.codeFor('robin@example.com')).toBeDefined();
+    expect(server.sent('signUp')).toEqual([]);
+    expect(linkedState(actions)).toBeNull();
+  });
+
+  it('says a taken name is taken', async () => {
+    const { actions, server } = await setup();
+    await server.seed({ username: 'robin', password: 'someone elses password' });
+    await expect(actions.requestCode(who)).rejects.toMatchObject({
+      code: 'taken',
+      message: 'That username is taken. Try another one.',
+    });
+    expect(server.codeFor('robin@example.com')).toBeUndefined();
+  });
+
+  it('refuses a bad username or email before asking the service, with the sentences the fields show', async () => {
+    const { actions, server } = await setup();
+    await expect(actions.requestCode({ ...who, username: 'ab' })).rejects.toMatchObject({
+      code: 'invalid',
+      message: 'Use 3 to 30 letters, numbers, dots, dashes or underscores.',
+    });
+    await expect(actions.requestCode({ ...who, email: 'nobody' })).rejects.toMatchObject({
+      code: 'invalid',
+      message: 'Enter a valid email address.',
+    });
+    expect(server.calls).toEqual([]);
+  });
+
+  it('tells a rate limit with its wait in minutes, and keeps the seconds for the screen', async () => {
+    const { actions, server } = await setup();
+    server.script('requestCode', answers(429, { error: 'too many attempts' }, 1800));
+    const error = await actions.requestCode(who).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(AccountError);
+    expect(error).toMatchObject({
+      code: 'limited',
+      message: 'Too many tries. Try again in 30 minutes.',
+      retryAfter: 1800,
+    });
+  });
+
+  it('holds for the seconds it was told: the 30 s gap, a lost race, and an answer that names none', async () => {
+    const { actions, server } = await setup();
+    server.script(
+      'requestCode',
+      answers(429, { error: 'too many attempts' }, 30),
+      answers(429, { error: 'too many attempts' }, 1),
+      answers(429, { error: 'too many attempts' }),
+    );
+    await expect(actions.requestCode(who)).rejects.toMatchObject({
+      code: 'limited',
+      message: 'Too many tries. Try again in a minute.',
+      retryAfter: 30,
+    });
+    await expect(actions.requestCode(who)).rejects.toMatchObject({
+      code: 'limited',
+      retryAfter: 1,
+    });
+    await expect(actions.requestCode(who)).rejects.toMatchObject({
+      code: 'limited',
+      retryAfter: null,
+    });
+  });
+
+  it('has no wait to hold for any other refusal', async () => {
+    const { actions, server } = await setup();
+    server.script('requestCode', answers(503, { error: 'not sent' }));
+    const error = await actions.requestCode(who).catch((e: unknown) => e);
+    expect((error as AccountError).retryAfter).toBeNull();
+  });
+
+  it('says offline when nothing answers', async () => {
+    const { actions, server } = await setup();
+    server.script('requestCode', unreachable);
+    await expect(actions.requestCode(who)).rejects.toMatchObject({ code: 'offline' });
+  });
+
+  it('says the service is not answering when it has no mailer or the mail failed', async () => {
+    const { actions, server } = await setup();
+    server.script(
+      'requestCode',
+      answers(503, { error: 'not configured' }),
+      answers(503, { error: 'not sent' }),
+      answers(500),
+    );
+    for (let i = 0; i < 3; i++) {
+      await expect(actions.requestCode(who)).rejects.toMatchObject({ code: 'unavailable' });
+    }
+  });
+
+  it('does not take a 200 that is not the service for a mail on its way', async () => {
+    const { actions, server } = await setup();
+    // A hotel Wi-Fi's page: a 200 with no JSON.
+    server.script('requestCode', answers(200));
+    await expect(actions.requestCode(who)).rejects.toMatchObject({ code: 'unavailable' });
+  });
+
+  it('reads a 400 as what was typed being wrong', async () => {
+    const { actions, server } = await setup();
+    server.script('requestCode', answers(400, { error: 'bad request' }));
+    await expect(actions.requestCode(who)).rejects.toMatchObject({ code: 'invalid' });
+  });
+
+  it('takes one request at a time: a second tap does not ask for a second email', async () => {
+    const { actions, server } = await setup();
+    const first = actions.requestCode(who);
+    await expect(actions.requestCode(who)).rejects.toMatchObject({ code: 'busy' });
+    await first;
+    expect(server.sent('requestCode')).toHaveLength(1);
+    // And it is free again once the first has answered.
+    await actions.requestCode(who);
+    expect(server.sent('requestCode')).toHaveLength(2);
+  });
+
+  it('asks for nothing in the demo, from a phone that has an account, or before the link is read', async () => {
+    const { actions, server, store } = await setup();
+    await actions.signUp(ME);
+    await expect(actions.requestCode(who)).rejects.toMatchObject({ code: 'linked' });
+    await store.getState().startDemo();
+    await expect(actions.requestCode(who)).rejects.toMatchObject({ code: 'demo' });
+    expect(server.sent('requestCode')).toEqual([]);
+
+    const t = await freshRealStore();
+    const early = createAccountActions(t.store, fakeAccountApi().api, platform, { kdf: FAST });
+    await expect(early.requestCode(who)).rejects.toMatchObject({ code: 'locked' });
+  });
+});
+
+describe('sign-up with a code', () => {
+  /** A sign-up as the screens will make it: the code asked for, then typed. */
+  async function codedSetup() {
+    const t = await setup();
+    await t.actions.requestCode(ME);
+    return { ...t, code: t.server.codeFor(ME.email)! };
+  }
+
+  it('sends the code with the keys, and links when it is right', async () => {
+    const { actions, server, code } = await codedSetup();
+    await actions.signUp({ ...ME, code });
+    const [body] = server.sent('signUp') as Array<Record<string, unknown>>;
+    expect(body).toMatchObject({ username: 'robin', email: 'robin@example.com', code });
+    expect(Object.keys(body!).sort()).toEqual(
+      ['authKey', 'code', 'dek', 'email', 'username', 'wrappedPw'].sort(),
+    );
+    expect(JSON.stringify(body)).not.toContain(ME.password);
+    expect(linkedState(actions)).toMatchObject({ username: 'robin', status: 'linked' });
+    expect(server.accounts.has('robin')).toBe(true);
+    expect(puts(server)).toHaveLength(1);
+    // The code is spent.
+    expect(server.codeFor(ME.email)).toBeUndefined();
+  });
+
+  it('takes the code as it is read from the email, with a space in the middle', async () => {
+    const { actions, server, code } = await codedSetup();
+    await actions.signUp({ ...ME, code: ` ${code.slice(0, 3)} ${code.slice(3)} ` });
+    expect((server.sent('signUp') as Array<{ code: string }>)[0]!.code).toBe(code);
+    expect(linkedState(actions)).toMatchObject({ status: 'linked' });
+  });
+
+  it('says a wrong code is wrong, makes no account and links nothing', async () => {
+    const { actions, server, code } = await codedSetup();
+    const wrong = code === '000000' ? '111111' : '000000';
+    const error = await actions.signUp({ ...ME, code: wrong }).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(AccountError);
+    expect(error).toMatchObject({
+      code: 'code',
+      message: "That code isn't right. Check the email and try again.",
+    });
+    expect(server.accounts.has('robin')).toBe(false);
+    expect(linkedState(actions)).toBeNull();
+    expect(puts(server)).toEqual([]);
+    // The right one still works afterwards.
+    await actions.signUp({ ...ME, code });
+    expect(linkedState(actions)).toMatchObject({ status: 'linked' });
+  });
+
+  it('says a code that has run out has run out, and links nothing', async () => {
+    const { actions, server } = await codedSetup();
+    server.expireCode(ME.email);
+    await expect(actions.signUp({ ...ME, code: '123456' })).rejects.toMatchObject({
+      code: 'expired',
+      message: 'That code has expired. Send a new one.',
+    });
+    expect(server.accounts.has('robin')).toBe(false);
+    expect(linkedState(actions)).toBeNull();
+    // A new code brings it back.
+    await actions.requestCode(ME);
+    await actions.signUp({ ...ME, code: server.codeFor(ME.email)! });
+    expect(linkedState(actions)).toMatchObject({ status: 'linked' });
+  });
+
+  it('only reads a 401 that says code, and a 410 that says expired, as the code', async () => {
+    const { actions, server } = await setup();
+    server.script(
+      'signUp',
+      // The shared token refused, and a gone deployment: the service failing, not the code.
+      answers(401, { error: 'unauthorized' }),
+      answers(410),
+      answers(410, { error: 'gone' }),
+    );
+    for (let i = 0; i < 3; i++) {
+      await expect(actions.signUp({ ...ME, code: '123456' })).rejects.toMatchObject({
+        code: 'unavailable',
+      });
+    }
+  });
+
+  it('a lost reply after the code still links', async () => {
+    const { actions, server, code } = await codedSetup();
+    // The service makes the account and spends the code; the answer never comes back.
+    server.script('signUp', lostReply);
+    await actions.signUp({ ...ME, code });
+
+    // The retry carries the same code and is told the name is taken, before anything about the code.
+    const sent = server.sent('signUp') as Array<{ code: string }>;
+    expect(sent).toHaveLength(2);
+    expect(sent.map((b) => b.code)).toEqual([code, code]);
+    expect(server.codeFor(ME.email)).toBeUndefined();
+    // The log-in confirmed the name is ours, and the phone links to the account the first try made.
+    expect(server.sent('logIn')).toHaveLength(1);
+    expect(linkedState(actions)).toMatchObject({
+      status: 'linked',
+      dek: server.accounts.get('robin')!.dek,
+      deviceToken: server.accounts.get('robin')!.token,
+    });
+    expect(puts(server)).toHaveLength(1);
+  });
+
+  it('after a lost reply, a name that is someone elses is still taken, with the code', async () => {
+    const { actions, server, code } = await codedSetup();
+    server.script('signUp', unreachable);
+    await server.seed({ username: 'robin', password: 'someone elses password' });
+    await expect(actions.signUp({ ...ME, code })).rejects.toMatchObject({ code: 'taken' });
+    expect(linkedState(actions)).toBeNull();
+  });
+
+  it('says offline when nothing answers twice, and the code is still good', async () => {
+    const { actions, server, code } = await codedSetup();
+    server.script('signUp', unreachable, unreachable);
+    await expect(actions.signUp({ ...ME, code })).rejects.toMatchObject({ code: 'offline' });
+    expect(server.codeFor(ME.email)).toBe(code);
+    await actions.signUp({ ...ME, code });
+    expect(linkedState(actions)).toMatchObject({ status: 'linked' });
+  });
+
+  it('tells a rate limit with its wait, and keeps the seconds for the screen', async () => {
+    const { actions, server, code } = await codedSetup();
+    server.script('signUp', answers(429, { error: 'too many attempts' }, 3000));
+    await expect(actions.signUp({ ...ME, code })).rejects.toMatchObject({
+      code: 'limited',
+      message: 'Too many tries. Try again in 50 minutes.',
+      retryAfter: 3000,
+    });
+  });
+
+  it('applies the password rules with the username and the email, before asking the service', async () => {
+    const { actions, server, code } = await codedSetup();
+    server.calls.length = 0;
+    for (const [bad, message] of [
+      [{ ...ME, code, password: 'short' }, 'Use at least 10 characters.'],
+      [{ ...ME, code, password: 'Password123' }, 'That password is too common. Pick another one.'],
+      [
+        { ...ME, code, username: 'Robin.Smith1', password: 'robin.smith1' },
+        "Don't use your username or email as your password.",
+      ],
+      [
+        { ...ME, code, email: 'Longer.Name1@example.com', password: 'longer.name1' },
+        "Don't use your username or email as your password.",
+      ],
+    ] as const) {
+      await expect(actions.signUp(bad)).rejects.toMatchObject({ code: 'invalid', message });
+    }
+    expect(server.calls).toEqual([]);
+    expect(linkedState(actions)).toBeNull();
+  });
+
+  it('refuses what cannot be a code before the slow key work and before asking the service', async () => {
+    const { actions, server } = await codedSetup();
+    server.calls.length = 0;
+    for (const code of ['', '12345', '1234567', 'abcdef', '12 34 5x']) {
+      await expect(actions.signUp({ ...ME, code })).rejects.toMatchObject({
+        code: 'code',
+        message: "That code isn't right. Check the email and try again.",
+      });
+    }
+    expect(server.calls).toEqual([]);
+    expect(linkedState(actions)).toBeNull();
+  });
+
+  it('sends no code at all where the screen gives none (the sign-up of today)', async () => {
+    const { actions, server } = await setup();
+    await actions.signUp(ME);
+    expect(Object.keys(server.sent('signUp')[0] as object)).not.toContain('code');
+    expect(linkedState(actions)).toMatchObject({ status: 'linked' });
+  });
+});
+
 describe('demo', () => {
   it('never signs up and never uploads', async () => {
     const { actions, server, store } = await setup();

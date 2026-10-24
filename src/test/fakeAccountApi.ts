@@ -31,6 +31,9 @@ type Step = (real: () => Reply) => Reply | Promise<Reply>;
 /** The account service as Call 7 describes it, in memory, with the iteration count tests use. */
 export function fakeAccountApi() {
   const accounts = new Map<string, Account>();
+  /** The live code of each address (lower-cased), as the service holds it until it is used. */
+  const codes = new Map<string, string>();
+  let sends = 0;
   const calls: Array<{ route: keyof AccountApi; token: string | null; body: unknown }> = [];
   const steps: Partial<Record<keyof AccountApi, Step[]>> = {};
   const byToken = (token: string) => [...accounts.values()].find((a) => a.token === token);
@@ -49,9 +52,23 @@ export function fakeAccountApi() {
   }
 
   const api: AccountApi = {
+    // A name that is taken is answered first, as the service does; a new code replaces the last.
+    requestCode: (body) =>
+      respond('requestCode', null, body, () => {
+        if (accounts.has(body.username)) return reply(409, { error: 'taken' });
+        codes.set(body.email.toLowerCase(), String(100_001 + sends++));
+        return reply(200, { ok: true });
+      }),
+    // Taken first, then the code; a sign-up with none still works, as it does for an older app.
     signUp: (body) =>
       respond('signUp', null, body, () => {
         if (accounts.has(body.username)) return reply(409, { error: 'taken' });
+        if (body.code !== undefined) {
+          const live = codes.get(body.email.toLowerCase());
+          if (live === undefined) return reply(410, { error: 'expired' });
+          if (live !== body.code) return reply(401, { error: 'code' });
+          codes.delete(body.email.toLowerCase());
+        }
         const token = crypto.randomUUID();
         accounts.set(body.username, {
           authKey: body.authKey,
@@ -109,6 +126,10 @@ export function fakeAccountApi() {
     api,
     accounts,
     calls,
+    /** The code the service last mailed to `email`, if it is still live. */
+    codeFor: (email: string) => codes.get(email.trim().toLowerCase()),
+    /** The code runs out, as it does after ten minutes. */
+    expireCode: (email: string) => void codes.delete(email.trim().toLowerCase()),
     /** The bodies sent to one route, oldest first. */
     sent: (route: keyof AccountApi) => calls.filter((c) => c.route === route).map((c) => c.body),
     /** Makes the next call to `route` do `step` instead of what the service would. */

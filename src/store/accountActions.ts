@@ -18,6 +18,7 @@ import { migrateSnapshot, SchemaVersionError, type DataSnapshot } from '@/domain
 import { toast } from '@/lib/toast';
 import type { Platform } from '@/platform/types';
 import {
+  CodeSent,
   Conflict,
   LoggedIn,
   NetworkError,
@@ -80,6 +81,8 @@ export type AccountErrorCode =
   | 'offline'
   | 'taken'
   | 'wrong'
+  | 'code'
+  | 'expired'
   | 'limited'
   | 'busy'
   | 'unavailable'
@@ -98,6 +101,8 @@ const MESSAGES: Record<AccountErrorCode, string> = {
   offline: "You're offline. Try again when you're connected.",
   taken: 'That username is taken. Try another one.',
   wrong: "That username and password don't match.",
+  code: "That code isn't right. Check the email and try again.",
+  expired: 'That code has expired. Send a new one.',
   limited: 'Too many tries. Try again in a little while.',
   busy: 'Funcial is busy right now. Try again in a moment.',
   unavailable: "Funcial's service isn't answering right now. Try again in a moment.",
@@ -118,14 +123,22 @@ const MESSAGES: Record<AccountErrorCode, string> = {
 /** What a screen shows for a failed account action: `message` is plain words, `code` says which. */
 export class AccountError extends Error {
   readonly code: AccountErrorCode;
-  constructor(code: AccountErrorCode, message?: string) {
+  /**
+   * For `limited`: the seconds the service said to wait, or `null` where it named none. A screen that
+   * holds a button (such as "Send a new code") holds it for exactly this long. `null` for every other code.
+   */
+  readonly retryAfter: number | null;
+  constructor(code: AccountErrorCode, message?: string, retryAfter: number | null = null) {
     super(message ?? MESSAGES[code]);
     this.name = 'AccountError';
     this.code = code;
+    this.retryAfter = retryAfter;
   }
 }
 
 const USERNAME = /^[a-z0-9._-]{3,30}$/;
+/** What the service takes as a code: six digits. The email shows them as "481 529", so spaces are let go. */
+const CODE = /^\d{6}$/;
 
 /** The rules the service and the reset page keep, as a sentence to show, or `null` when the input is fine. */
 export const usernameProblem = (name: string): string | null =>
@@ -163,22 +176,28 @@ const errorName = (reply: Reply): unknown => (reply.body as { error?: unknown } 
 
 /**
  * The error to show for an answer that was not the one wanted. `wrong`: what a 401 that says `denied`
- * means for this call. Any other 401 (the shared token, say) is the service failing, not the person.
+ * means for this call. A 401 that says `code` is a sign-up's wrong code, and a 410 that says `expired`
+ * its code gone. Any other 401 (the shared token, say) or 410 (a deployment taken down) is the service
+ * failing, not the person.
  */
 function failed(reply: Reply, wrong?: string): AccountError {
   switch (reply.status) {
     case 400:
       return new AccountError('invalid');
     case 401:
+      if (errorName(reply) === 'code') return new AccountError('code');
       return wrong && errorName(reply) === 'denied'
         ? new AccountError('wrong', wrong)
         : new AccountError('unavailable');
     case 409:
       return new AccountError(errorName(reply) === 'taken' ? 'taken' : 'busy');
+    case 410:
+      return new AccountError(errorName(reply) === 'expired' ? 'expired' : 'unavailable');
     case 429:
       return new AccountError(
         'limited',
         `Too many tries. Try again in ${minutesText(reply.retryAfter)}.`,
+        reply.retryAfter,
       );
     default:
       return new AccountError('unavailable');
@@ -430,14 +449,49 @@ export function createAccountActions(
     if (app().phase !== 'unlocked' || !view.getState().loaded) throw new AccountError('locked');
   }
 
+  /**
+   * Has the service mail a six-digit code to `email`, once `username` is known to be free (a taken name
+   * is answered here, not after the code is typed). It makes no account and links nothing: `signUp`
+   * does, with the code. A refusal throws an `AccountError`: `taken`, `limited` (with `retryAfter`, the
+   * seconds the service said to wait: hold "Send a new code" that long), `offline`, `unavailable`.
+   * One at a time like the other actions, but the screen's button should be off while it runs.
+   */
+  async function requestCode({
+    username,
+    email,
+  }: {
+    username: string;
+    email: string;
+  }): Promise<void> {
+    requireOpen();
+    if (current()) throw new AccountError('linked');
+    const problem = usernameProblem(username) ?? emailProblem(email);
+    if (problem) throw new AccountError('invalid', problem);
+
+    const reply = await reach(() =>
+      api.requestCode({ username: canonicalUsername(username.trim()), email: email.trim() }),
+    );
+    if (reply.status !== 200) throw failed(reply);
+    // A 200 that is not the service's own (a captive portal's page) has sent nothing.
+    if (!CodeSent.safeParse(reply.body).success) throw new AccountError('unavailable');
+  }
+
+  /**
+   * Makes the account and links this phone to it. `code` is the six digits mailed by `requestCode`,
+   * as read from the email (a space in the middle is fine); the service makes the account only with
+   * it. Left out, the service makes an account it marks as unverified, as it does for an older app:
+   * only a screen that does not ask for a code yet should do that.
+   */
   async function signUp({
     username,
     email,
     password,
+    code,
   }: {
     username: string;
     email: string;
     password: string;
+    code?: string;
   }): Promise<void> {
     requireOpen();
     if (current()) throw new AccountError('linked');
@@ -446,6 +500,9 @@ export function createAccountActions(
       emailProblem(email) ??
       passwordProblem(password, { username, email });
     if (problem) throw new AccountError('invalid', problem);
+    // What cannot be a code is not sent: it would only spend a try, after the slow key work.
+    const digits = code?.replace(/\s/g, '');
+    if (digits !== undefined && !CODE.test(digits)) throw new AccountError('code');
 
     const name = canonicalUsername(username.trim());
     const address = email.trim();
@@ -459,6 +516,7 @@ export function createAccountActions(
       authKey,
       dek: dek.raw,
       wrappedPw: await wrapDek(dek.raw, kek),
+      ...(digits === undefined ? {} : { code: digits }),
     };
 
     let reply = await api.signUp(body).catch((e: unknown) => {
@@ -674,6 +732,7 @@ export function createAccountActions(
   return {
     view,
     start,
+    requestCode: exclusive(requestCode),
     signUp: exclusive(signUp),
     logIn: exclusive(logIn),
     changePassword: exclusive(changePassword),
