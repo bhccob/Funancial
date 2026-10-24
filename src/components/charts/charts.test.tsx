@@ -801,15 +801,33 @@ describe('StackedBars', () => {
     expect(again.onSelect).toHaveBeenLastCalledWith(null);
   });
 
-  it('fades the other bars while one is selected, and keeps the labels in text colours', () => {
+  it('outlines the picked bar in the ink and fades none of the others, and keeps the labels in text colours', () => {
     stacked({ selected: 0 });
-    expect(barOf('September 2026: $4.00').firstElementChild).not.toHaveClass('opacity-40');
-    expect(barOf('October 2026: $2.00').firstElementChild).toHaveClass('opacity-40');
+    // The marks not picked stay as drawn: a fade would take them under the 3:1 a graphic needs.
+    expect(barOf('September 2026: $4.00').firstElementChild).toHaveClass(
+      'outline-text',
+      'outline-2',
+      'outline-offset-2',
+    );
+    for (const name of ['October 2026: $2.00', 'November 2026: $0.00']) {
+      expect((barOf(name).firstElementChild as HTMLElement).className).not.toMatch(
+        /(?:^| )(?:outline|opacity)-/,
+      );
+    }
     for (const button of screen.getAllByRole('button')) {
       expect(button.lastElementChild!.className).toMatch(/\btext-(text|muted)\b/);
       expect((button.lastElementChild as HTMLElement).style.color).toBe('');
     }
     expect(screen.getByText('OCT')).toHaveClass('text-text'); // the current month
     expect(screen.getByText('SEP')).toHaveClass('text-muted');
+  });
+
+  it('outlines and fades nothing while no bar is selected', () => {
+    stacked();
+    for (const button of screen.getAllByRole('button')) {
+      expect((button.firstElementChild as HTMLElement).className).not.toMatch(
+        /(?:^| )(?:outline|opacity)-/,
+      );
+    }
   });
 });

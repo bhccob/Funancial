@@ -17,7 +17,13 @@
   --color-text-muted: #5a5a6c;
   --color-border: #e6e6ec;
   --color-border-strong: #d2d2db;
-  --color-track: #ececf1;
+  /*
+   * The empty part of a bar, a ring or a pie: the ink at 20% (17% in dark mode, where the lighter fills
+   * need the room), so it follows the mode and holds 1.5:1 on the page, on each shape behind it, on
+   * the page glass and on a sheet in every theme. The pale grey it was, #ececf1, was 1.1:1 on the
+   * light page, which left an empty bar invisible. The fill over it keeps its 3:1 (tests/unit/tokens.test.ts).
+   */
+  --color-track: color-mix(in srgb, var(--color-text) 20%, transparent);
   --color-primary: #0b0b12;
   --color-primary-contrast: #ffffff;
   /*
@@ -194,7 +200,7 @@
   --color-text-muted: #a0a0b2;
   --color-border: #24242e;
   --color-border-strong: #30303c;
-  --color-track: #24242e;
+  --color-track: color-mix(in srgb, var(--color-text) 17%, transparent);
   --color-primary: #f4f4f8;
   --color-primary-contrast: #0b0b10;
   --color-success: #4ade80;

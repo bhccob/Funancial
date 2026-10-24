@@ -65,7 +65,7 @@ export function ProfileScreen() {
                 className="press relative rounded-full focus-visible:outline-offset-[8px]"
               >
                 <Avatar item={cosmetics.avatar} frame={cosmetics.frame} size={92} tone="hero" />
-                <span className="btn-head absolute -bottom-[9px] left-1/2 -translate-x-1/2 rounded-full px-[9px] py-0.5 text-[11px] font-extrabold whitespace-nowrap">
+                <span className="btn-head-flat absolute -bottom-[9px] left-1/2 -translate-x-1/2 rounded-full px-[9px] py-0.5 text-[11px] font-extrabold whitespace-nowrap">
                   {`Lv ${level.level}`}
                 </span>
               </button>

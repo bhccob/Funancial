@@ -1,7 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import { readFileSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
-import { startDemo } from './helpers';
+import { startDemo, startFresh } from './helpers';
 
 /**
  * Text contrast on every screen, in three game themes (Black & White, Sunny Sky and Midnight Navy:
@@ -15,6 +15,12 @@ import { startDemo } from './helpers';
  * chart ring, where the drawing overlaps it. Those colors are held by the token tests
  * (tests/unit/tokens.test.ts) instead: the ink on the brightest glow of every theme's block, each
  * pair of a gradient's ends against its text, and the ink colors on the surfaces.
+ *
+ * Beyond every screen, the scans take the states that only show once something is done or opened: the
+ * Pay sheet's form and its done step, the "just now" badge a card wears after a payment, a Settings
+ * dialog, and Income with a month picked. Each screen is also proved to show what it was restyled to
+ * show (Home's strip and the "left" figure, the Cards tab's "On this card", the Invest pie's labels)
+ * before it is scanned, so a screen that drew without them cannot pass.
  *
  * The demo has no coins to buy a theme with, so a theme is worn through the app's own store: the
  * same two writes the Shop's Buy and Equip make (a purchase in the ledger, the theme in the
@@ -91,6 +97,34 @@ const SCREENS = [
 
 /** The routes with a parameter, each with the page that stands for it below. */
 const PARAM_ROUTES = ['/invest/holding/:id', '/help/:id'];
+
+/**
+ * What a screen has to show, before it is scanned, for the scan to count: the states 0.13 added to
+ * it. The demo fills them all; if one did not draw, the scan would pass over text that was never
+ * there. A screen with nothing listed has nothing new to prove.
+ */
+const SHOWS: Record<string, (page: Page) => Promise<void>> = {
+  // The Quests and Shop strip, and Recent's newest row saying what is left on its card.
+  '/': async (page) => {
+    await expect(page.getByTestId('quest-shop-strip')).toBeVisible();
+    await expect(
+      page.locator('li[data-entry] small').filter({ hasText: /\b(left|owed)$/ }),
+    ).toHaveCount(1);
+  },
+  // The 300px cards, with "On this card" under the chart.
+  '/cards': async (page) => {
+    const card = page
+      .getByRole('group', { name: 'Your cards' })
+      .getByRole('button', { name: /^Main account,/ });
+    await expect(card).toBeVisible();
+    expect(Math.round((await card.boundingBox())!.width), 'the card is 300px wide').toBe(300);
+    await expect(page.getByRole('heading', { level: 2, name: 'On this card' })).toBeVisible();
+  },
+  // The Holdings pie, with its badge labels standing round it.
+  '/invest': async (page) => {
+    await expect(page.locator('[data-label]').first()).toBeVisible();
+  },
+};
 
 test.beforeEach(() => {
   test.skip(test.info().project.name !== 'mobile-chromium', 'one phone width is enough for colors');
@@ -243,11 +277,13 @@ async function settle(page: Page) {
 /**
  * Scans the page, and fails with every node that is too faint: where it is, its colors and its
  * ratio. With a `look`, the theme and mode are proved on the page first; the welcome screen, which
- * wears no game theme (the app takes it off while locked), passes none.
+ * wears no game theme (the app takes it off while locked), passes none. `settled: false` scans
+ * without waiting for the page to hold still, for a state that goes away by itself within seconds
+ * (the "just now" badge); the caller then holds that state still.
  */
-async function expectReadable(page: Page, where: string, look: Look | null) {
+async function expectReadable(page: Page, where: string, look: Look | null, settled = true) {
   if (look) await expectWorn(page, look);
-  await settle(page);
+  if (settled) await settle(page);
   const { violations, passes } = await new AxeBuilder({ page })
     .withRules(['color-contrast'])
     .analyze();
@@ -303,6 +339,7 @@ for (const theme of GAME_THEMES) {
       for (const path of SCREENS) {
         test(`${path === '/' ? 'Home' : path}`, async ({ page }) => {
           await visit(page, path);
+          await SHOWS[path]?.(page);
           await expectReadable(page, path, look);
         });
       }
@@ -366,6 +403,75 @@ for (const theme of GAME_THEMES) {
         await page.getByRole('button', { name: /^Lv \d+, choose your border$/ }).click();
         await expect(page.getByRole('dialog', { name: 'Your border' })).toBeVisible();
         await expectReadable(page, 'the border sheet', look);
+      });
+
+      test("the Pay sheet's form, then its done step", async ({ page }) => {
+        await visit(page, '/cards');
+        await page
+          .getByRole('group', { name: 'Card actions' })
+          .getByRole('button', { name: 'Pay', exact: true })
+          .click();
+        const sheet = page.getByRole('dialog', { name: /^Pay with / });
+        await expect(sheet.getByLabel('Amount')).toBeVisible();
+        await expectReadable(page, 'the Pay sheet', look);
+        await sheet.getByLabel('Amount').fill('12.50');
+        await sheet.getByRole('radio', { name: 'Transport' }).check();
+        await sheet.getByRole('button', { name: 'Pay', exact: true }).click();
+        await expect(sheet.getByText('Paid $12.50', { exact: true })).toBeVisible();
+        await expect(sheet.getByText(/^Paid with /)).toBeVisible();
+        await expectReadable(page, "the Pay sheet's done step", look);
+      });
+
+      test('the "just now" badge a card wears after a payment', async ({ page }) => {
+        await visit(page, '/cards');
+        await page
+          .getByRole('group', { name: 'Card actions' })
+          .getByRole('button', { name: 'Pay', exact: true })
+          .click();
+        const sheet = page.getByRole('dialog', { name: /^Pay with / });
+        await sheet.getByLabel('Amount').fill('12.50');
+        await sheet.getByRole('button', { name: 'Pay', exact: true }).click();
+        await sheet.getByRole('button', { name: 'Done' }).click();
+        // The badge shows for four seconds and then leaves the page, so the scan is quick, and the
+        // badge is held at the middle of its animation, fully drawn, which is where it spends its time.
+        const badge = page.getByText('−$12.50 just now');
+        await expect(badge).toBeVisible();
+        await badge.evaluate((el) => {
+          for (const animation of el.getAnimations()) {
+            animation.pause();
+            animation.currentTime = 1500;
+          }
+        });
+        await expectReadable(page, 'the "just now" badge', look, false);
+        // Still there: the scan saw it.
+        await expect(badge).toBeVisible();
+      });
+
+      test("Settings' Change currency dialog, on a profile of one's own", async ({ page }) => {
+        // The demo has no profile, so no currency to change: this is a set-up one, with no demo banner.
+        await startFresh(page);
+        await wearTheme(page, theme);
+        await page.goto('/settings');
+        await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible();
+        await page.getByRole('button', { name: 'Change currency' }).click();
+        await expect(page.getByRole('dialog', { name: 'Change currency' })).toBeVisible();
+        await expectReadable(page, 'the Change currency dialog', look);
+      });
+
+      test("Settings' Leave demo dialog", async ({ page }) => {
+        await visit(page, '/settings');
+        await page.getByRole('button', { name: 'Start with my real data' }).click();
+        await expect(page.getByRole('dialog', { name: 'Leave demo?' })).toBeVisible();
+        await expectReadable(page, 'the Leave demo dialog', look);
+      });
+
+      test('Income with a month picked', async ({ page }) => {
+        await visit(page, '/income');
+        const bars = page.getByRole('group', { name: 'Income per month' }).getByRole('button');
+        const month = bars.last();
+        await month.click();
+        await expect(month).toHaveAttribute('aria-pressed', 'true');
+        await expectReadable(page, 'Income with a month picked', look);
       });
 
       test("the Shop's Avatars and Freezes", async ({ page }) => {

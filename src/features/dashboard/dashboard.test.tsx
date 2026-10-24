@@ -21,6 +21,7 @@ import {
   localIso,
   makeAccount,
   makeCheckIn,
+  makeDividend,
   makeExpense,
   makeIncome,
   makeLedgerEntry,
@@ -1047,6 +1048,43 @@ describe('Home Recent transactions name the card', () => {
     );
     renderHome(data);
     expect(rowOf('Old spend')).toHaveTextContent('Savings');
+    expect(recent()).not.toHaveTextContent(/ left| owed/);
+  });
+
+  it('says nothing is left on a reinvested dividend, which moved money on no account', () => {
+    const data = monthData();
+    data.tables.dividend.push(
+      makeDividend({
+        id: 'drip',
+        symbol: 'KO',
+        reinvested: true,
+        accountId: null,
+        sharesAdded: 0.2,
+        paidOn: TODAY,
+        createdAt: `${TODAY}T15:00:00.000Z`,
+      }),
+    );
+    renderHome(data);
+    // It is the newest row, the one that would say what is left.
+    const newest = within(recent()).getAllByRole('listitem')[0]!;
+    expect(newest).toHaveTextContent('Dividend · KO');
+    expect(newest).toHaveTextContent('Reinvested');
+    expect(recent()).not.toHaveTextContent(/ left| owed/);
+  });
+
+  it('says nothing is left on an entry on an account that was deleted', () => {
+    const data = monthData();
+    data.tables.expense.push(
+      makeExpense({
+        id: 'ghost',
+        note: 'Ghost spend',
+        accountId: 'deleted-account',
+        date: TODAY,
+        createdAt: `${TODAY}T14:30:00.000Z`,
+      }),
+    );
+    renderHome(data);
+    expect(within(recent()).getAllByRole('listitem')[0]).toHaveTextContent('Ghost spend');
     expect(recent()).not.toHaveTextContent(/ left| owed/);
   });
 

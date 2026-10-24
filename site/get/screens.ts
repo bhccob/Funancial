@@ -14,7 +14,7 @@ export const TOKENS = {
   '--color-border': '#e6e6ec',
   '--color-text': '#0b0b12',
   '--color-text-muted': '#5a5a6c',
-  '--color-track': '#ececf1',
+  '--color-track': 'color-mix(in srgb, #0b0b12 20%, transparent)',
   '--color-accent': '#0b0b0c',
   '--color-xp': '#0b0b0c',
   '--color-danger': '#af242b',
@@ -30,7 +30,17 @@ export const TOKENS = {
 const BG = TOKENS['--color-bg'];
 const INK = TOKENS['--color-text'];
 const MUTED = TOKENS['--color-text-muted'];
-const TRACK = TOKENS['--color-track'];
+/**
+ * A `color-mix(in srgb, #rrggbb N%, transparent)` token (the app's track: the ink at 20%) as the
+ * `rgb(r g b / a)` a canvas reads in every browser, `color-mix` being newer there than on a page.
+ */
+function mixed(token: string): string {
+  const match = /^color-mix\(in srgb, #([0-9a-f]{6}) (\d+)%, transparent\)$/.exec(token);
+  if (!match) return token;
+  const [r, g, b] = [0, 2, 4].map((i) => parseInt(match[1]!.slice(i, i + 2), 16));
+  return `rgb(${r} ${g} ${b} / ${Number(match[2]) / 100})`;
+}
+const TRACK = mixed(TOKENS['--color-track']);
 
 const FAMILY = '"Inter Tight Variable", system-ui, sans-serif';
 const font = (weight: 700 | 800, size: number) => `${weight} ${size}px ${FAMILY}`;

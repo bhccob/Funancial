@@ -63,10 +63,10 @@ export function NetWorthTile({ summary, onOpen }: { summary: NetWorthSummary; on
         {split.length === 2 && split[0]! + split[1]! > 0 ? (
           <>
             <i className="bg-accent block rounded-full" style={{ flexGrow: split[0] }} />
-            <i className="bg-text/15 block rounded-full" style={{ flexGrow: split[1] }} />
+            <i className="bg-track block rounded-full" style={{ flexGrow: split[1] }} />
           </>
         ) : (
-          <i className="bg-text/15 block flex-1 rounded-full" />
+          <i className="bg-track block flex-1 rounded-full" />
         )}
       </span>
       <span className="text-muted mt-2 flex justify-between gap-2 text-[12px] font-semibold">

@@ -121,7 +121,7 @@ describe('Profile screen: the block', () => {
     // Named from the words it shows, so a voice user can say what they see (WCAG 2.5.3).
     const open = header().getByRole('button', { name: 'Lv 2, choose your border' });
     const badge = within(open).getByText('Lv 2');
-    expect(badge).toHaveClass('btn-head');
+    expect(badge).toHaveClass('btn-head-flat');
     expect(open.querySelector('svg.lucide-rocket')).toBeInTheDocument();
 
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();

@@ -15,9 +15,9 @@ export interface QuestShopStripProps {
  * none is open; it opens the Quests screen. On the right the coins and "Shop", opening the Shop.
  * Each half is a link at least 44px tall.
  *
- * The bar is a mark, so its fill is the ink, which holds 3:1 on the glass in every theme; the track
- * behind it is only a hint (about 1.1:1 on the light page) and nothing relies on it: the words say
- * the same as the bar.
+ * The bar is a mark, so its fill is the ink, which holds 3:1 on the glass in every theme. Behind it is
+ * the page's track (`bg-track`, 1.5:1 on the glass), so a bar with nothing done yet still shows where
+ * it will fill; the words say the same as the bar.
  */
 export function QuestShopStrip({ progress, coins, className }: QuestShopStripProps) {
   const { done, open } = progress;
@@ -47,7 +47,7 @@ export function QuestShopStrip({ progress, coins, className }: QuestShopStripPro
             <b className="block truncate text-[13px] font-extrabold">{`Quests ${done}/${open}`}</b>
           )}
           {open > 0 && (
-            <span aria-hidden="true" className="bg-text/15 mt-1 block h-[5px] rounded-full">
+            <span aria-hidden="true" className="bg-track mt-1 block h-[5px] rounded-full">
               <i
                 data-testid="quests-bar-fill"
                 className="bg-text block h-full rounded-full"

@@ -95,7 +95,6 @@ const BASE_COLORS = {
   'text-muted': ['#5a5a6c', '#a0a0b2'],
   border: ['#e6e6ec', '#24242e'],
   'border-strong': ['#d2d2db', '#30303c'],
-  track: ['#ececf1', '#24242e'],
   primary: ['#0b0b12', '#f4f4f8'],
   'primary-contrast': ['#ffffff', '#0b0b10'],
   success: ['#116a33', '#4ade80'],
@@ -119,6 +118,18 @@ it('keeps the surface, text, status and chart tokens', () => {
     // A token that is the same in both is only written once, in the light block.
     expect(dark[`--color-${name}`] ?? light[`--color-${name}`], `${name} in dark`).toBe(darkValue);
   }
+});
+
+it('draws the track as the ink at 20%, and at 17% in dark mode', () => {
+  // The pale grey it was (#ececf1, and #24242e in dark mode) was 1.1:1 on the light page: an empty
+  // bar was not there. The ink follows the mode; the dark share is the least that holds 1.5:1 with
+  // room over (16% is 1.496 on the dark page) and the most the lighter fills of dark mode can spare.
+  expect(declarations('@theme static')['--color-track']).toBe(
+    'color-mix(in srgb, var(--color-text) 20%, transparent)',
+  );
+  expect(declarations(":root[data-theme='dark']")['--color-track']).toBe(
+    'color-mix(in srgb, var(--color-text) 17%, transparent)',
+  );
 });
 
 /**
@@ -565,6 +576,11 @@ function sheetBackdrops(t: (name: string) => string): string[] {
   return ['#000000', '#ffffff', page, ...peaks.map((peak) => composite(peak, page, strength))];
 }
 
+/** The empty track of a bar (the ink at 20%, `--color-track`) as the colour it paints over `backdrop`. */
+function trackOn(t: (name: string) => string, backdrop: string): string {
+  return composite(mutedInk(t, '--color-track'), backdrop);
+}
+
 describe.each(CASES)('the $id theme in $mode mode', ({ id, mode }) => {
   const t = tokensFor(id, mode);
 
@@ -724,7 +740,67 @@ describe.each(CASES)('the $id theme in $mode mode', ({ id, mode }) => {
     }
     expect(contrast(t('--av-ink'), t('--av'))).toBeGreaterThanOrEqual(4.5);
   });
+
+  it('keeps the empty track at 1.5:1 or better on the page, on every shape behind it, on the page glass and on a sheet', () => {
+    // A bar with nothing in it (a new loan, a quest not started, the strip's bar at 0) is only its
+    // track, so the track has to be seen on whatever the bar stands on. The ink at 20% is lighter or
+    // darker as the backdrop is, which no one grey is.
+    const onSheet = sheetBackdrops(t).map((backdrop) =>
+      composite(t('--color-glass-sheet'), backdrop),
+    );
+    for (const backdrop of [...pageBackdrops(t), ...glassOnPage(t), ...onSheet]) {
+      expect(
+        contrast(trackOn(t, backdrop), backdrop),
+        `track on ${backdrop}`,
+      ).toBeGreaterThanOrEqual(1.5);
+    }
+  });
 });
+
+/** Where, as a share of Profile's Lv badge's 22px height, its capitals begin (measured on the page). */
+const BADGE_GLYPH_TOP = 0.31;
+
+it("draws Profile's Lv badge in the main button's colours with no shine, which its glyphs begin inside of", () => {
+  expect(readFileSync('src/features/profile/ProfileScreen.tsx', 'utf8')).toMatch(
+    /btn-head-flat absolute/,
+  );
+  expect(utility('btn-head-flat')).toContain('background: var(--hmain)');
+  expect(utility('btn-head-flat')).toContain('color: var(--hmain-ink)');
+  expect(utility('btn-head-flat')).not.toContain('gradient');
+  // Under btn-head's shine at that height the label of lemon, peach and seafoam is 4.3:1 (found by
+  // measuring the pixels of the page); on the fill alone it is the 4.5:1 or better every theme keeps.
+  for (const id of ['lemon', 'peach', 'seafoam']) {
+    const t = tokensFor(id, 'light');
+    const shined = composite(
+      `rgb(255 255 255 / ${shineAt('btn-head', BADGE_GLYPH_TOP)})`,
+      t('--hmain'),
+    );
+    expect(contrast(t('--hmain-ink'), shined), `${id} under the shine`).toBeLessThan(4.5);
+    expect(contrast(t('--hmain-ink'), t('--hmain')), `${id} flat`).toBeGreaterThanOrEqual(4.5);
+  }
+});
+
+it('measures the empty track in a model that bites: the grey it was falls under 1.5:1 on the page of some theme', () => {
+  for (const [mode, old] of [
+    ['light', '#ececf1'],
+    ['dark', '#24242e'],
+  ] as const) {
+    const fails = THEMES.some((id) => {
+      const t = tokensFor(id, mode);
+      return pageBackdrops(t).some((backdrop) => contrast(old, backdrop) < 1.5);
+    });
+    expect(fails, `${old} in ${mode} mode`).toBe(true);
+  }
+});
+
+it.each(['src/features/dashboard/QuestShopStrip.tsx', 'src/features/dashboard/NetWorthTile.tsx'])(
+  'draws the bar tracks of %s in the page track colour, not a share of the ink of its own',
+  (file) => {
+    const source = readFileSync(file, 'utf8');
+    expect(source).toContain('bg-track');
+    expect(source).not.toMatch(/bg-text\/\d+/);
+  },
+);
 
 /**
  * The glass of a tile on the page over each backdrop it can sit on: the page, and the peak of each
@@ -779,10 +855,9 @@ it('measures the quiet bars in a model that bites', () => {
     const t = tokensFor(id, mode);
     const [r, g, b] = parseColor(t('--color-text'));
     for (const glass of glassOnPage(t)) {
-      expect(
-        contrast(t('--color-track'), glass),
-        `track on ${glass} (${id}, ${mode})`,
-      ).toBeLessThan(3);
+      expect(contrast(trackOn(t, glass), glass), `track on ${glass} (${id}, ${mode})`).toBeLessThan(
+        3,
+      );
       const tenth = composite(`rgb(${r} ${g} ${b} / 0.1)`, glass);
       expect(contrast(tenth, glass), `text/10 on ${glass} (${id}, ${mode})`).toBeLessThan(3);
     }
@@ -795,15 +870,20 @@ const INCOME_SCREEN = 'src/features/income/IncomeScreen.tsx';
 /** The series Income draws, salary, extra and dividends, which are the chart colours 1 to 3. */
 const INCOME_SERIES = [1, 2, 3];
 
-/** Whether a series colour with `share` (0-1) of the ink mixed in falls under `ratio` on the glass somewhere. */
-function incomeMarksFail(share: number, ratio: number): boolean {
+/**
+ * Whether a series colour with `share` (0-1) of the ink mixed in falls under `ratio` on the glass
+ * somewhere, drawn at `opacity` (1 unless it is faded).
+ */
+function incomeMarksFail(share: number, ratio: number, opacity = 1): boolean {
   return CASES.some(({ id, mode }) => {
     const t = tokensFor(id, mode);
     const [r, g, b] = parseColor(t('--color-text'));
     return INCOME_SERIES.some((n) => {
       // color-mix(in srgb, series, ink share%) is the ink at `share` over the series colour.
       const mark = composite(`rgb(${r} ${g} ${b} / ${share})`, t(`--color-chart-${n}`));
-      return glassOnPage(t).some((glass) => contrast(mark, glass) < ratio);
+      return glassOnPage(t).some(
+        (glass) => contrast(composite(mark, glass, opacity), glass) < ratio,
+      );
     });
   });
 }
@@ -823,6 +903,34 @@ it("measures Income's marks in a model that bites", () => {
   expect(incomeMarksFail(0, 3)).toBe(true);
   expect(incomeMarksFail(0.2, 3)).toBe(true);
   expect(incomeMarksFail(0.25, 3)).toBe(false);
+});
+
+/** The chart that stacks Income's bars, and the class it marks the picked month with. */
+const STACKED_BARS = 'src/components/charts/StackedBars.tsx';
+
+it("keeps Income's bars not picked as they are drawn, so the 3:1 above holds for them too, and marks the pick by an outline of the ink", () => {
+  const source = readFileSync(STACKED_BARS, 'utf8');
+  // Not a fade in any form: at `opacity-40`, which this once did, the marks are under 2:1 (below).
+  expect(source).not.toMatch(/\bopacity-\d+/);
+  const picked = /const PICKED = '([^']*)'/.exec(source)?.[1];
+  expect(picked, `PICKED in ${STACKED_BARS}`).toBe('outline-text outline-2 outline-offset-2');
+  // The outline is the ink, a mark held at 3:1 on the glass tile in every theme and both modes.
+  for (const { id, mode } of CASES) {
+    const t = tokensFor(id, mode);
+    for (const glass of glassOnPage(t)) {
+      expect(
+        contrast(t('--color-text'), glass),
+        `outline on ${glass} (${id}, ${mode})`,
+      ).toBeGreaterThanOrEqual(3);
+    }
+  }
+});
+
+it("measures the fade in a model that bites: Income's marks at 40% fall under 3:1 on the glass, as they did", () => {
+  const share =
+    Number(/const MARK_INK = (\d+);/.exec(readFileSync(INCOME_SCREEN, 'utf8'))![1]) / 100;
+  expect(incomeMarksFail(share, 3), 'drawn as they are').toBe(false);
+  expect(incomeMarksFail(share, 3, 0.4), 'faded to 40%').toBe(true);
 });
 
 /** The cards' veil and sheen on a light block, then on a dark one, as glass-card sets them. */
@@ -928,7 +1036,8 @@ it('measures the badge in a model that bites: the block ink it gives back would 
  * Home's hero sits straight on the block, dimmed as the wireframe dims it: the label, the account and
  * the currency at --color-head-dim, the cents of the big amount at --color-head-faint. The
  * wireframe's 60% and 35% fall under the bar on the brightest glows, so each is the least share of
- * the ink that holds in every theme: 4.5:1 for the small text, 3:1 for the cents, large text at 42px.
+ * the ink that holds in every theme: 4.5:1 for the small text, 3:1 for the cents, which are large
+ * text (the amount is 40 to 52px).
  */
 const HERO_INK = { '--color-head-dim': [84, 4.5], '--color-head-faint': [59, 3] } as const;
 
@@ -1029,7 +1138,27 @@ describe.each(CASES)('the other contrast in the $id theme in $mode mode', ({ id,
       expect(contrast(t('--color-focus'), t(surface)), surface).toBeGreaterThanOrEqual(3);
     }
     expect(contrast(t('--color-xp'), t('--color-bg'))).toBeGreaterThanOrEqual(3);
-    expect(contrast(t('--color-xp'), t('--color-track'))).toBeGreaterThanOrEqual(3);
+    // The fill sits in the track, which is the ink at a share over whatever the bar is on. On the page
+    // and on the page glass over it the fill holds 3:1 on the track, as it did on the grey one.
+    const [page, ...peaks] = pageBackdrops(t);
+    const glass = (backdrop: string) => composite(t('--color-glass'), backdrop);
+    for (const backdrop of [page!, glass(page!)]) {
+      expect(
+        contrast(t('--color-xp'), trackOn(t, backdrop)),
+        `xp on the track over ${backdrop}`,
+      ).toBeGreaterThanOrEqual(3);
+    }
+    // Over the very peak of a shape behind the page (a soft glow, which a bar seldom sits dead centre
+    // on) the track is a little lighter or darker, and the fill holds 2.8:1 there: the track's own
+    // 1.5:1 on every backdrop and the fill's 3:1 on it cannot both be had at the peak of every glow.
+    for (const peak of peaks) {
+      for (const backdrop of [peak, glass(peak)]) {
+        expect(
+          contrast(t('--color-xp'), trackOn(t, backdrop)),
+          `xp on the track over the shape's peak ${backdrop}`,
+        ).toBeGreaterThanOrEqual(2.8);
+      }
+    }
   });
 
   it('keeps an off switch visible: its track on the page, and its knob on the track, at 3:1', () => {

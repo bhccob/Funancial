@@ -27,6 +27,14 @@ const THINNEST = 4;
 /** The space between stacked parts. */
 const GAP = 2;
 
+/**
+ * The mark of the picked month: a 2px outline of the ink round its bar, 2px out (`aria-pressed` says it
+ * to a screen reader). The bars are the only mark of what came in each month, so the ones not picked
+ * stay as they are drawn, at the 3:1 they hold on the glass; fading them, as this once did, took them
+ * to under 2:1.
+ */
+const PICKED = 'outline-text outline-2 outline-offset-2';
+
 export function StackedBars({ label, bars, selected, onSelect, formatAmount }: StackedBarsProps) {
   const totals = bars.map((b) => b.parts.reduce((sum, p) => sum + p.amount, 0));
   const biggest = Math.max(0, ...totals);
@@ -49,9 +57,9 @@ export function StackedBars({ label, bars, selected, onSelect, formatAmount }: S
             <span
               aria-hidden="true"
               className={cn(
-                'flex w-3.5 flex-col-reverse gap-0.5 motion-safe:transition-opacity motion-safe:duration-150',
-                selected !== null && i !== selected && 'opacity-40',
-                total === 0 && 'bg-track rounded-full',
+                'flex w-3.5 flex-col-reverse gap-0.5 rounded-full',
+                i === selected && PICKED,
+                total === 0 && 'bg-track',
               )}
               style={total === 0 ? { height: SHORTEST } : undefined}
             >
