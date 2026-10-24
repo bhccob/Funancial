@@ -50,7 +50,7 @@ function DeleteAllButton() {
         title="Delete all data?"
         description={
           linked
-            ? `This erases everything you added, on this phone and in your account's copy, and it can't be undone. You stay logged in as ${account.username}, and your name, currency, lock and settings stay. Setup then asks for your cash, savings, salary and cards again.`
+            ? `This erases everything you added, on this phone and in your account's copy, and it can't be undone. You stay logged in as ${account.username}, and your name, currency, lock and settings stay. Setup then asks for your currency and name again.`
             : "This erases everything Funcial stores on this device, and it can't be undone. If you have an account, log in afterwards to get your data back."
         }
         onClose={() => setOpen(false)}

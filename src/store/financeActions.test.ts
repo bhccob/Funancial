@@ -689,80 +689,46 @@ describe('Salary freeze is gone', () => {
 });
 
 describe('onboarding', () => {
-  it('completeOnboarding creates the accounts and the default', async () => {
+  it('completeOnboarding makes Main account at 0 and nothing else', async () => {
     const t = await freshRealStore();
     const actions = createFinanceActions(t.store);
     const putMany = vi.spyOn(t.store.getState(), 'putMany');
-    await actions.completeOnboarding({
-      name: ' Alex ',
-      currency: 'EUR',
-      openingCash: 1_000_00,
-      openingSavings: 5_000_00,
-      salary: { monthlyAmount: 4_200_00, payDay: 25 },
-      cards: [
-        { name: ' Visa ', balance: 230_00, creditLimit: 2_000_00, dueDay: 21, payInFull: true },
-        { name: 'Amex', balance: 0, creditLimit: null, dueDay: null, payInFull: false },
-      ],
-    });
+    await actions.completeOnboarding({ name: ' Alex ', currency: 'EUR' });
+    // One write: the profile, the account and the settings together.
     expect(putMany).toHaveBeenCalledTimes(1);
     const data = t.store.getState().data;
     expect(data.tables.profile[0]).toMatchObject({
       name: 'Alex',
       currency: 'EUR',
       openingDate: TODAY,
-      salary: { monthlyAmount: 4_200_00, payDay: 25 },
+      // Setup asks nothing about money: a salary is added later, in Settings.
+      salary: null,
     });
     expect(data.tables.profile[0]).not.toHaveProperty('openingCash');
     expect(data.tables.profile[0]?.onboardedAt).not.toBeNull();
-    const [main, savings, visa, amex] = data.tables.account;
-    expect(main).toMatchObject({
+    // Main account, opening at 0, is the one account: no Savings, no cards.
+    expect(data.tables.account).toHaveLength(1);
+    expect(data.tables.account[0]).toMatchObject({
       id: MAIN,
       name: 'Main account',
       kind: 'debit',
       skin: 'midnight',
-      openingBalance: 1_000_00,
+      last4: null,
+      openingBalance: 0,
       openingDate: TODAY,
       inAvailable: true,
       frozen: false,
       order: 0,
       credit: null,
     });
-    expect(savings).toMatchObject({
-      id: SAVINGS,
-      name: 'Savings',
-      kind: 'savings',
-      skin: 'mint',
-      openingBalance: 5_000_00,
-      openingDate: TODAY,
-      inAvailable: false,
-      order: 1,
-      credit: null,
-    });
-    expect(visa).toMatchObject({
-      name: 'Visa',
-      kind: 'credit',
-      skin: 'violet',
-      openingBalance: 230_00,
-      openingDate: TODAY,
-      inAvailable: false,
-      order: 2,
-      credit: {
-        limit: 2_000_00,
-        statementDay: null,
-        dueDay: 21,
-        payInFull: true,
-        minimumPayment: 0,
-        interestRate: 0,
-      },
-    });
-    expect(amex).toMatchObject({
-      name: 'Amex',
-      order: 3,
-      credit: { limit: null, dueDay: null, payInFull: false },
-    });
-    expect(new Set([MAIN, SAVINGS, visa!.id, amex!.id]).size).toBe(4);
     expect(data.tables.debt).toEqual([]);
     expect(data.tables.settings[0]?.defaultAccountId).toBe(MAIN);
+  });
+
+  it('takes only a name and a currency', () => {
+    expectTypeOf<
+      Parameters<ReturnType<typeof createFinanceActions>['completeOnboarding']>[0]
+    >().toEqualTypeOf<{ name: string; currency: string }>();
   });
 });
 

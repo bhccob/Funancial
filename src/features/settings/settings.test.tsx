@@ -251,7 +251,7 @@ describe('Data', () => {
   it('with an account, starts over instead: the account copy too, keeping the person', async () => {
     const { store, dialog } = await deleteEverything(fakeAccount(linkedAccount()));
     expect(dialog).toHaveAccessibleDescription(
-      "This erases everything you added, on this phone and in your account's copy, and it can't be undone. You stay logged in as robin, and your name, currency, lock and settings stay. Setup then asks for your cash, savings, salary and cards again.",
+      "This erases everything you added, on this phone and in your account's copy, and it can't be undone. You stay logged in as robin, and your name, currency, lock and settings stay. Setup then asks for your currency and name again.",
     );
     await userEvent.click(within(dialog).getByRole('button', { name: 'Delete everything' }));
     expect(store.getState().startOver).toHaveBeenCalledTimes(1);

@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { onboard, startDemo } from './helpers';
+import { onboard, setStartingBalance, startDemo } from './helpers';
 
 // The "mobile:" cases run on the phone, the "wide:" ones on the desktop project, where the sidebar is.
 test.beforeEach(() => {
@@ -28,7 +28,8 @@ async function offCentre(page: Page, name: string): Promise<number> {
 async function openCards(page: Page) {
   await page.goto('/');
   await page.getByRole('button', { name: 'Create an account' }).click();
-  await onboard(page, { cash: '1000' });
+  await onboard(page);
+  await setStartingBalance(page, '1000');
   await page
     .getByRole('navigation', { name: 'Primary' })
     .getByRole('link', { name: 'Cards' })

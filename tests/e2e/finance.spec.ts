@@ -1,10 +1,14 @@
 import { expect, test, type Page } from '@playwright/test';
-import { onboard } from './helpers';
+import { addAccount, onboard, setSalary, setStartingBalance } from './helpers';
 
+/** Setup, then what it once asked for: 1,000 in Main account, a Savings account with 5,000, and a salary. */
 async function start(page: Page) {
   await page.goto('/');
   await page.getByRole('button', { name: 'Create an account' }).click();
-  await onboard(page, { cash: '1000', savings: '5000', salary: { amount: '4200', payDay: '25' } });
+  await onboard(page);
+  await setStartingBalance(page, '1000');
+  await addAccount(page, { name: 'Savings', kind: 'Savings', balance: '5000' });
+  await setSalary(page, { amount: '4200', payDay: '25' });
 }
 
 async function addExpense(

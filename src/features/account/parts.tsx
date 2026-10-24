@@ -16,7 +16,10 @@ export function Problem({ children }: { children?: string }) {
   ) : null;
 }
 
-/** The round 44px arrow at the top left of a screen that has a step before it. */
+/**
+ * The round 44px arrow at the top left of a screen that has a step before it: a piece of the page's
+ * glass, as `PageHeader`'s Back is.
+ */
 export function BackButton({ onClick, disabled }: { onClick(): void; disabled?: boolean }) {
   return (
     <button
@@ -24,7 +27,7 @@ export function BackButton({ onClick, disabled }: { onClick(): void; disabled?: 
       aria-label="Back"
       onClick={onClick}
       disabled={disabled}
-      className="border-border bg-bg/80 text-text hover:bg-surface-2 grid size-11 shrink-0 place-items-center rounded-full border disabled:pointer-events-none disabled:opacity-45 motion-safe:transition-transform motion-safe:active:scale-95"
+      className="glass press text-text grid size-11 shrink-0 place-items-center rounded-full disabled:pointer-events-none disabled:opacity-45"
     >
       <ChevronLeft aria-hidden className="size-5" />
     </button>
@@ -121,7 +124,7 @@ export function PasswordField({
   );
 }
 
-/** What heads a screen of welcome and setup: a small violet word, the 34px title, and a muted line. */
+/** What heads a screen of welcome and setup: a small violet word, the page's title, and a muted line. */
 export function ScreenHeader({
   eyebrow,
   title,
@@ -143,11 +146,7 @@ export function ScreenHeader({
       {eyebrow && (
         <p className="text-xp-text text-xs font-extrabold tracking-[0.12em] uppercase">{eyebrow}</p>
       )}
-      <h1
-        ref={heading}
-        tabIndex={-1}
-        className="text-[34px] leading-tight font-extrabold tracking-[-0.035em] outline-none"
-      >
+      <h1 ref={heading} tabIndex={-1} className="text-page outline-none">
         {title}
       </h1>
       {lead && <p className="text-muted font-semibold">{lead}</p>}

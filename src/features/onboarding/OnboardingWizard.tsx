@@ -1,8 +1,6 @@
 import { Check } from 'lucide-react';
-import { useRef, useState, type FormEvent } from 'react';
-import { Blobs } from '@/components/ui/Blobs';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Button } from '@/components/ui/Button';
-import { MoneyField } from '@/components/ui/MoneyField';
 import { RadioGroup } from '@/components/ui/RadioGroup';
 import { Select } from '@/components/ui/Select';
 import { StepMotion, type StepDirection } from '@/components/ui/StepMotion';
@@ -10,7 +8,7 @@ import { Switch } from '@/components/ui/Switch';
 import { TextField } from '@/components/ui/TextField';
 import { KeyDerivationError } from '@/data/accountCrypto';
 import { validateSecret, type SecretKind } from '@/data/keys';
-import { formatMoney, minorDigits } from '@/domain/money';
+import { CodeField } from '@/features/account/CodeField';
 import { ForgotScreen } from '@/features/account/ForgotScreen';
 import { LoginScreen } from '@/features/account/LoginScreen';
 import { BackButton, PasswordField, Problem, ScreenHeader } from '@/features/account/parts';
@@ -26,105 +24,51 @@ import {
   passwordProblem,
   usernameProblem,
 } from '@/store/accountActions';
-import type { CardInput } from '@/store/financeActions';
 import { useAccount, useAccountActions } from '@/store/useAccount';
-import { HIDDEN_AMOUNT, useAmountsHidden } from '@/store/useAmountsHidden';
 import { useFinanceActions } from '@/store/useFinance';
 
-const STEPS = 6;
+const STEPS = 4;
+/** The steps by name: the account, its emailed code, currency and name, the lock. */
+const ACCOUNT = 1;
+const CODE = 2;
+const YOU = 3;
+const LOCK = 4;
 /** A step, the last screen, or a way out of the first step to an account the person already has. */
 type Step = number | 'done' | 'login' | 'forgot';
 
-const DAY_OPTIONS = Array.from({ length: 31 }, (_, i) => ({
-  value: String(i + 1),
-  label: String(i + 1),
-}));
+/** The service mails a new code only this long after the last one. */
+const RESEND_SECONDS = 30;
+/** How long a code works, from the service's mail. One older than this is not gone back to. */
+const CODE_LIFETIME_MS = 10 * 60_000;
+/** What an emailed code is: six digits. */
+const CODE_LENGTH = 6;
 
 type LockChoice = 'none' | SecretKind;
 const LOCK_NAMES: Record<SecretKind, string> = { pin: 'PIN', passphrase: 'passphrase' };
 
-interface CardDraft {
-  key: number;
-  card: CardInput;
-}
-
-function CardForm({
-  currency,
-  onSave,
-  onCancel,
-}: {
-  currency: string;
-  onSave(card: CardInput): void;
-  onCancel(): void;
-}) {
-  const [name, setName] = useState('');
-  const [balance, setBalance] = useState<number | null>(null);
-  const [creditLimit, setCreditLimit] = useState<number | null>(null);
-  const [dueDay, setDueDay] = useState('1');
-  const [payInFull, setPayInFull] = useState(true);
-  const valid = name.trim() !== '' && balance !== null && balance >= 0;
-
-  return (
-    <div className="border-border flex flex-col gap-4 border-y py-5">
-      <TextField
-        variant="line"
-        label="Card name"
-        autoFocus
-        autoComplete="off"
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-      />
-      <MoneyField
-        variant="line"
-        label="Current balance"
-        currency={currency}
-        value={balance}
-        onChange={setBalance}
-        hint="What you owe on it today."
-      />
-      <MoneyField
-        variant="line"
-        label="Credit limit"
-        currency={currency}
-        value={creditLimit}
-        onChange={setCreditLimit}
-        hint="Optional."
-      />
-      <Select
-        variant="line"
-        label="Due day"
-        value={dueDay}
-        onChange={setDueDay}
-        options={DAY_OPTIONS}
-      />
-      <Switch label="I pay it in full each month" checked={payInFull} onChange={setPayInFull} />
-      <div className="flex gap-2">
-        <Button
-          disabled={!valid}
-          onClick={() =>
-            onSave({
-              name: name.trim(),
-              balance: balance ?? 0,
-              creditLimit,
-              dueDay: Number(dueDay),
-              payInFull,
-            })
-          }
-        >
-          Save card
-        </Button>
-        <Button variant="ghost" onClick={onCancel}>
-          Cancel
-        </Button>
-      </div>
-    </div>
-  );
-}
+/** Who a code was mailed for, and when: Back and Continue with the same details goes back to it. */
+type Sent = { username: string; email: string; at: number };
 
 /**
- * First-run setup for real data: six short steps (the account first), each rising in from below,
- * then "You're all set". `onFinishing(true)` asks the app to keep this screen up once the profile is
- * saved (which would otherwise switch to the Dashboard at once), and `onFinishing(false)` lets it go.
+ * A try that failed for a reason that isn't what was typed: nothing came back (as good as offline),
+ * the service failed, this phone couldn't make the keys, or the service is holding sign-ups back for
+ * a while. None of them may block setup, so each comes with "Skip for now".
+ */
+type Failure = 'offline' | 'service' | 'keys' | 'limited';
+
+const FAILURE_LINE: Record<Exclude<Failure, 'limited'>, string> = {
+  offline: "You're offline. Create your account later in Settings.",
+  keys: "This phone couldn't make your keys. Close other apps and try again, or make an account later in Settings.",
+  service:
+    "Funcial's service isn't answering right now. You can make an account later in Settings.",
+};
+
+/**
+ * First-run setup for real data in four short steps, each rising in from below: the account, the
+ * code emailed to prove its address (the account is made only with it), currency and name, and the
+ * lock; then "You're all set". Nothing about money is asked: Home asks for it afterwards.
+ * `onFinishing(true)` asks the app to keep this screen up once the profile is saved (which would
+ * otherwise switch to the Dashboard at once), and `onFinishing(false)` lets it go.
  */
 export function OnboardingWizard({ onFinishing }: { onFinishing?(finishing: boolean): void }) {
   const { completeOnboarding } = useFinanceActions();
@@ -140,14 +84,12 @@ export function OnboardingWizard({ onFinishing }: { onFinishing?(finishing: bool
   const [keptLock] = useState(() =>
     lockMode === 'pin' || lockMode === 'passphrase' ? lockMode : null,
   );
-  // The person's choice from Home's eye, which a card's balance below follows (no profile yet).
-  const amountsHidden = useAmountsHidden((s) => s.hidden);
-  const { signUp } = useAccountActions();
+  const { requestCode, signUp } = useAccountActions();
   const account = useAccount();
   const run = useAction();
   const [options] = useState(() => currencyOptions());
 
-  const [step, setStep] = useState(1);
+  const [step, setStep] = useState(ACCOUNT);
   const [direction, setDirection] = useState<StepDirection>('forward');
   // Log in (and its Forgot password) over the first step, for someone who already has an account.
   const [aside, setAside] = useState<'login' | 'forgot' | null>(null);
@@ -162,10 +104,21 @@ export function OnboardingWizard({ onFinishing }: { onFinishing?(finishing: bool
     password?: string;
     other?: string;
   }>({});
-  // The last try failed for a reason that isn't what was typed: nothing came back (as good as
-  // offline), the service failed, or this phone couldn't make the keys. None of them may block setup.
-  const [failure, setFailure] = useState<'offline' | 'service' | 'keys' | null>(null);
-  const { busy: signingUp, guard } = useBusy();
+  const [failure, setFailure] = useState<Failure | null>(null);
+  // Asking for a code (Continue, Send a new code) and making the account (Verify) are one at a time,
+  // as the account layer has them: a resend during a sign-up would replace the code being checked.
+  const { busy: sending, guard: guardSend } = useBusy();
+  const { busy: signingUp, guard: guardSignUp } = useBusy();
+
+  const [code, setCode] = useState('');
+  const [sent, setSent] = useState<Sent | null>(null);
+  // What the code step says went wrong: about the code itself (under it), or about the tries.
+  const [codeError, setCodeError] = useState<string>();
+  const [codeProblem, setCodeProblem] = useState<string>();
+  // "Send a new code" waits RESEND_SECONDS after each send, or as long as the service says.
+  const [resendHeld, setResendHeld] = useState(false);
+  const holdTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => () => clearTimeout(holdTimer.current), []);
 
   // A guess from where the phone is; the Select still offers every currency.
   const [currency, setCurrency] = useState(
@@ -174,14 +127,6 @@ export function OnboardingWizard({ onFinishing }: { onFinishing?(finishing: bool
       defaultCurrency(Intl.DateTimeFormat().resolvedOptions().timeZone, navigator.language),
   );
   const [name, setName] = useState(kept?.name ?? '');
-  const [cash, setCash] = useState<number | null>(null);
-  const [savings, setSavings] = useState<number | null>(null);
-  const [noSalary, setNoSalary] = useState(false);
-  const [salary, setSalary] = useState<number | null>(null);
-  const [payDay, setPayDay] = useState('25');
-  const [cards, setCards] = useState<CardDraft[]>([]);
-  const [addingCard, setAddingCard] = useState(false);
-  const nextCardKey = useRef(0);
   const [lock, setLock] = useState<LockChoice>('none');
   const [secret, setSecretText] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -191,6 +136,8 @@ export function OnboardingWizard({ onFinishing }: { onFinishing?(finishing: bool
 
   function go(to: number) {
     setDirection(to > step ? 'forward' : 'back');
+    // A failure belongs to the try on the step it was met on.
+    setFailure(null);
     setStep(to);
   }
 
@@ -200,28 +147,28 @@ export function OnboardingWizard({ onFinishing }: { onFinishing?(finishing: bool
     setAside(to);
   }
 
-  function changeCurrency(next: string) {
-    // Amounts are kept in minor units; a currency with different decimals would misread them.
-    if (minorDigits(next) !== minorDigits(currency)) {
-      setCash(null);
-      setSavings(null);
-      setSalary(null);
-      setCards([]);
-    }
-    setCurrency(next);
+  /** Holds "Send a new code" for `seconds`, or lets it go at once for 0. */
+  function holdResend(seconds: number) {
+    clearTimeout(holdTimer.current);
+    setResendHeld(seconds > 0);
+    if (seconds > 0) holdTimer.current = setTimeout(() => setResendHeld(false), seconds * 1000);
   }
 
-  const valid: Record<number, boolean> = {
-    // Not before the phone has read whether it already has an account.
-    1: account.loaded && !signingUp,
-    2: true,
-    3: cash !== null && savings !== null && savings >= 0,
-    4: noSalary || (salary !== null && salary > 0),
-    5: !addingCard,
-    6: !busy,
-  };
+  /** A code is on its way for these details: what was typed of an earlier one is no use now. */
+  function codeSent(who: { username: string; email: string }) {
+    setSent({ ...who, at: Date.now() });
+    setCode('');
+    setCodeError(undefined);
+    setCodeProblem(undefined);
+    holdResend(RESEND_SECONDS);
+  }
 
-  async function createAccount() {
+  /** Whether the last code went to `who`'s address and still works (it is under 10 minutes old). */
+  const liveCode = (who: { username: string; email: string }) =>
+    sent !== null && sent.email === who.email && Date.now() - sent.at < CODE_LIFETIME_MS;
+
+  /** Continue on the account step: checks what was typed, then has a code mailed to the address. */
+  async function askForCode() {
     const found = {
       username: usernameProblem(username) ?? undefined,
       email: emailProblem(email) ?? undefined,
@@ -229,29 +176,119 @@ export function OnboardingWizard({ onFinishing }: { onFinishing?(finishing: bool
     };
     setAccountErrors(found);
     if (found.username || found.email || found.password) return;
-    await guard(async () => {
+    const who = { username: username.trim(), email: email.trim() };
+    // Back from the code and on again with the same details: the code sent is still the one.
+    if (liveCode(who) && sent?.username === who.username) return go(CODE);
+    await guardSend(async () => {
       try {
-        // Slow on purpose (the password is stretched into keys): once per tap, behind the busy state.
-        await signUp({ username, email, password });
-        setPassword('');
-        go(2);
+        await requestCode({ username, email });
+        codeSent(who);
+        go(CODE);
       } catch (err) {
-        const code = err instanceof AccountError ? err.code : null;
-        if (code === 'taken' || code === 'invalid') {
+        const reason = err instanceof AccountError ? err.code : null;
+        if (reason === 'taken' || reason === 'invalid') {
           // The person's own input: theirs to fix, with no way round it.
           setFailure(null);
           setAccountErrors(
-            code === 'taken' ? { username: errorMessage(err) } : { other: errorMessage(err) },
+            reason === 'taken' ? { username: errorMessage(err) } : { other: errorMessage(err) },
           );
+        } else if (reason === 'limited' && liveCode(who)) {
+          // Only the name changed, too soon for another mail: the code sent to this address still
+          // works (the service checks the name again when the account is made).
+          setSent((last) => last && { ...last, username: who.username });
+          holdResend((err as AccountError).retryAfter ?? RESEND_SECONDS);
+          go(CODE);
         } else {
           // Say so once, in the one line that comes with the way on.
           setAccountErrors({});
+          setFailure(reason === 'offline' ? 'offline' : 'service');
+        }
+      }
+    });
+  }
+
+  /** "Send a new code" on the code step. */
+  async function resend() {
+    if (resendHeld || signingUp) return;
+    const who = { username: username.trim(), email: email.trim() };
+    setCodeProblem(undefined);
+    await guardSend(async () => {
+      try {
+        await requestCode({ username, email });
+        codeSent(who);
+        setFailure(null);
+        toast('success', 'We sent a new code.');
+      } catch (err) {
+        const reason = err instanceof AccountError ? err.code : null;
+        if (reason === 'taken') {
+          setAccountErrors({ username: errorMessage(err) });
+          go(ACCOUNT);
+        } else if (reason === 'limited') {
+          holdResend((err as AccountError).retryAfter ?? RESEND_SECONDS);
+          setCodeProblem(errorMessage(err));
+        } else if (reason === 'invalid') {
+          setCodeProblem(errorMessage(err));
+        } else {
+          // The service keeps the last code when a mail fails, so what was typed of it stays.
+          setFailure(reason === 'offline' ? 'offline' : 'service');
+        }
+      }
+    });
+  }
+
+  /** Verify on the code step: makes the account with the code. */
+  async function verify() {
+    setCodeError(undefined);
+    setCodeProblem(undefined);
+    // What cannot be a code is not sent: the account layer would refuse it the same way.
+    if (code.length !== CODE_LENGTH) return setCodeError(new AccountError('code').message);
+    await guardSignUp(async () => {
+      try {
+        // Slow on purpose (the password is stretched into keys): once per tap, behind the busy state.
+        await signUp({ username, email, password, code });
+        setPassword('');
+        setCode('');
+        setSent(null);
+        go(YOU);
+      } catch (err) {
+        const reason = err instanceof AccountError ? err.code : null;
+        setFailure(null);
+        if (reason === 'code') {
+          setCodeError(errorMessage(err));
+        } else if (reason === 'expired') {
+          // Gone: Continue asks for a new one too, and Send a new code may at once.
+          setSent(null);
+          holdResend(0);
+          setCodeError(errorMessage(err));
+        } else if (reason === 'taken') {
+          // Someone took the name since the code was sent: the account step is where it is fixed.
+          setAccountErrors({ username: errorMessage(err) });
+          go(ACCOUNT);
+        } else if (reason === 'invalid') {
+          setCodeProblem(errorMessage(err));
+        } else if (reason === 'limited') {
+          // The code may be spent by now (the service takes it before its sign-up limit): offer a
+          // new one, and the way on without an account.
+          holdResend(0);
+          setCodeProblem(errorMessage(err));
+          setFailure('limited');
+        } else {
           setFailure(
-            code === 'offline' ? 'offline' : err instanceof KeyDerivationError ? 'keys' : 'service',
+            reason === 'offline'
+              ? 'offline'
+              : err instanceof KeyDerivationError
+                ? 'keys'
+                : 'service',
           );
         }
       }
     });
+  }
+
+  function skip() {
+    setPassword('');
+    setCode('');
+    go(YOU);
   }
 
   async function finish() {
@@ -271,14 +308,7 @@ export function OnboardingWizard({ onFinishing }: { onFinishing?(finishing: bool
     const saved = await run(async () => {
       // Lock first: saving the profile switches to the Dashboard, so the chosen lock must already hold.
       if (lock !== 'none') await setSecret(secret, lock);
-      await completeOnboarding({
-        name,
-        currency,
-        openingCash: cash ?? 0,
-        openingSavings: savings ?? 0,
-        salary: noSalary ? null : { monthlyAmount: salary ?? 0, payDay: Number(payDay) },
-        cards: cards.map((d) => d.card),
-      });
+      await completeOnboarding({ name, currency });
       // Biometrics last, once set up: an extra that must never stop the person finishing, and
       // never left on by an attempt that did not finish.
       if (lock !== 'none' && biometricAvailable && alsoBiometric) {
@@ -292,11 +322,25 @@ export function OnboardingWizard({ onFinishing }: { onFinishing?(finishing: bool
     } else onFinishing?.(false);
   }
 
+  const working = busy || sending || signingUp;
+  const valid: Record<number, boolean> = {
+    // Not before the phone has read whether it already has an account.
+    [ACCOUNT]: account.loaded && !working,
+    [CODE]: !working,
+    [YOU]: true,
+    [LOCK]: !busy,
+  };
+
   function submit(e: FormEvent) {
     e.preventDefault();
     if (done) return onFinishing?.(false);
     if (!valid[step]) return;
-    if (step === 1 && account.status === 'none') void createAccount();
+    if (step === ACCOUNT) {
+      // An account the phone already has (a log-in over setup, or one kept by Delete all data) has
+      // nothing to prove: on past the code.
+      if (account.status === 'none') void askForCode();
+      else go(YOU);
+    } else if (step === CODE) void verify();
     else if (step < STEPS) go(step + 1);
     else void finish();
   }
@@ -305,12 +349,33 @@ export function OnboardingWizard({ onFinishing }: { onFinishing?(finishing: bool
   // Back on the first step undoes "Create an account", but only while the data it made is still
   // empty: no account (none made, none logged in to), nothing entered. Log in hides this row.
   const canLeave = account.loaded && account.status === 'none' && emptyData;
+  // Back from Currency and name goes to the account step: a code there is nothing to go back to
+  // once the account is made, or after the person skipped it.
+  const backTo = step === YOU ? ACCOUNT : step - 1;
 
   async function backToWelcome() {
     setBusy(true);
     // The Delete all data path, which boots to the Welcome screen.
     await run(deleteAllData);
     setBusy(false);
+  }
+
+  /** The way on without an account, and why, when the service or the phone let the person down. */
+  function skipOffer() {
+    if (!offline && failure === null) return null;
+    const line = offline
+      ? FAILURE_LINE.offline
+      : failure === 'limited'
+        ? null
+        : FAILURE_LINE[failure!];
+    return (
+      <div className="flex flex-col items-start gap-3">
+        {line && <p className="text-muted text-sm">{line}</p>}
+        <Button variant="secondary" disabled={working} onClick={skip}>
+          Skip for now
+        </Button>
+      </div>
+    );
   }
 
   function render(shown: Step) {
@@ -342,7 +407,7 @@ export function OnboardingWizard({ onFinishing }: { onFinishing?(finishing: bool
         );
       case 'forgot':
         return <ForgotScreen onBack={() => goAside('login')} />;
-      case 1:
+      case ACCOUNT:
         if (account.status !== 'none') {
           return (
             <ScreenHeader
@@ -359,67 +424,84 @@ export function OnboardingWizard({ onFinishing }: { onFinishing?(finishing: bool
               title="Create your account"
               lead="So you can move to a new phone and keep everything."
             />
-            <TextField
-              variant="line"
-              label="Username"
-              autoComplete="username"
-              autoCapitalize="none"
-              spellCheck={false}
-              value={username}
-              error={accountErrors.username}
-              onChange={(e) => setUsername(e.target.value)}
-            />
-            <TextField
-              variant="line"
-              label={'Email (for "forgot password")'}
-              type="email"
-              autoComplete="email"
-              value={email}
-              error={accountErrors.email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
-            <PasswordField
-              strength={{ username, email }}
-              autoComplete="new-password"
-              hint="At least 10 characters"
-              value={password}
-              error={accountErrors.password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
+            <div>
+              <TextField
+                variant="row"
+                label="Username"
+                autoComplete="username"
+                autoCapitalize="none"
+                spellCheck={false}
+                value={username}
+                error={accountErrors.username}
+                onChange={(e) => setUsername(e.target.value)}
+              />
+              <TextField
+                variant="row"
+                label="Email"
+                hint={'For "forgot password".'}
+                type="email"
+                autoComplete="email"
+                value={email}
+                error={accountErrors.email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+              <PasswordField
+                variant="row"
+                strength={{ username, email }}
+                autoComplete="new-password"
+                hint="At least 10 characters"
+                value={password}
+                error={accountErrors.password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+            </div>
             <p className="text-muted text-sm">{SAVE_NOTE}</p>
             <button
               type="button"
               onClick={() => goAside('login')}
-              disabled={!account.loaded || signingUp}
+              disabled={!account.loaded || working}
               className="text-accent-text -my-1 inline-flex min-h-11 items-center self-start font-bold underline underline-offset-4 disabled:pointer-events-none disabled:opacity-45"
             >
               I already have an account
             </button>
-            {(offline || failure !== null) && (
-              <div className="flex flex-col items-start gap-3">
-                <p className="text-muted text-sm">
-                  {offline
-                    ? "You're offline. Create your account later in Settings."
-                    : failure === 'keys'
-                      ? "This phone couldn't make your keys. Close other apps and try again, or make an account later in Settings."
-                      : "Funcial's service isn't answering right now. You can make an account later in Settings."}
-                </p>
-                <Button
-                  variant="secondary"
-                  disabled={signingUp}
-                  onClick={() => {
-                    setPassword('');
-                    go(2);
-                  }}
-                >
-                  Skip for now
-                </Button>
-              </div>
-            )}
+            {skipOffer()}
             <Problem>{accountErrors.other}</Problem>
           </>
         );
-      case 2:
+      case CODE:
+        return (
+          <>
+            <ScreenHeader
+              eyebrow="Security"
+              title="Check your email"
+              lead={`We sent a 6-digit code to ${sent?.email ?? email.trim()}. Your account is made once you type it.`}
+            />
+            <CodeField
+              value={code}
+              onChange={(next) => {
+                setCode(next);
+                setCodeError(undefined);
+              }}
+              error={codeError}
+            />
+            <div className="-mt-2 flex flex-col items-center gap-1 text-center">
+              <button
+                type="button"
+                onClick={() => void resend()}
+                disabled={resendHeld || working}
+                className="text-accent-text inline-flex min-h-11 items-center font-bold underline underline-offset-4 disabled:pointer-events-none disabled:opacity-45"
+              >
+                Send a new code
+              </button>
+              <p className="text-muted text-sm">
+                The code works for 10 minutes. Wrong email? Go back and fix it.
+              </p>
+            </div>
+            <Problem>{codeProblem}</Problem>
+            {skipOffer()}
+          </>
+        );
+      case YOU:
         return (
           <>
             <ScreenHeader
@@ -427,132 +509,23 @@ export function OnboardingWizard({ onFinishing }: { onFinishing?(finishing: bool
               title="Your currency and name"
               lead="Pick the money you use. Your name is optional."
             />
-            <Select
-              variant="line"
-              label="Currency"
-              value={currency}
-              onChange={changeCurrency}
-              options={options}
-            />
-            <TextField
-              variant="line"
-              label="What should we call you?"
-              hint="Optional."
-              autoComplete="given-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-            />
-          </>
-        );
-      case 3:
-        return (
-          <>
-            <ScreenHeader
-              eyebrow="Your money"
-              title="What you have now"
-              lead="Rough numbers are fine. You can correct them anytime."
-            />
-            <MoneyField
-              variant="line"
-              label="In your bank account"
-              currency={currency}
-              value={cash}
-              onChange={setCash}
-            />
-            <MoneyField
-              variant="line"
-              label="In savings"
-              currency={currency}
-              value={savings}
-              onChange={setSavings}
-            />
-          </>
-        );
-      case 4:
-        return (
-          <>
-            <ScreenHeader
-              eyebrow="Your income"
-              title="Your salary"
-              lead="So Funcial knows when money comes in."
-            />
-            <Switch
-              label="I don't have a regular salary"
-              checked={noSalary}
-              onChange={setNoSalary}
-            />
-            {!noSalary && (
-              <>
-                <MoneyField
-                  variant="line"
-                  label="Monthly take-home pay"
-                  currency={currency}
-                  value={salary}
-                  onChange={setSalary}
-                  hint="What actually lands in your account."
-                />
-                <Select
-                  variant="line"
-                  label="Pay day"
-                  value={payDay}
-                  onChange={setPayDay}
-                  options={DAY_OPTIONS}
-                  hint="Short months use their last day."
-                />
-              </>
-            )}
-          </>
-        );
-      case 5:
-        return (
-          <>
-            <ScreenHeader
-              eyebrow="Your cards"
-              title="Credit cards"
-              lead="Card spending counts toward your limits right away and is paid from your bank account later. Skip this if you don't use one."
-            />
-            {cards.length > 0 && (
-              <ul className="divide-border border-border divide-y border-y">
-                {cards.map(({ key, card: c }) => (
-                  <li key={key} className="flex items-center justify-between gap-3 py-3">
-                    <div className="min-w-0">
-                      <p className="truncate font-bold">{c.name}</p>
-                      <p className="text-muted text-sm tabular-nums">
-                        {amountsHidden ? HIDDEN_AMOUNT : formatMoney(c.balance, currency)} owed ·
-                        due day {c.dueDay}
-                        {c.payInFull ? ' · paid in full' : ''}
-                      </p>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      aria-label={`Remove ${c.name}`}
-                      onClick={() => setCards(cards.filter((x) => x.key !== key))}
-                    >
-                      Remove
-                    </Button>
-                  </li>
-                ))}
-              </ul>
-            )}
-            {addingCard ? (
-              <CardForm
-                currency={currency}
-                onCancel={() => setAddingCard(false)}
-                onSave={(card) => {
-                  setCards([...cards, { key: nextCardKey.current++, card }]);
-                  setAddingCard(false);
-                }}
+            <div>
+              <Select
+                variant="row"
+                label="Currency"
+                value={currency}
+                onChange={setCurrency}
+                options={options}
               />
-            ) : (
-              <Button
-                variant="secondary"
-                className="self-start"
-                onClick={() => setAddingCard(true)}
-              >
-                Add a card
-              </Button>
-            )}
+              <TextField
+                variant="row"
+                label="What should we call you?"
+                hint="Optional."
+                autoComplete="given-name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
+            </div>
           </>
         );
       default:
@@ -574,7 +547,7 @@ export function OnboardingWizard({ onFinishing }: { onFinishing?(finishing: bool
               lead="Without a lock, anyone using this device can open Funcial. You can change this later in Settings."
             />
             <RadioGroup<LockChoice>
-              variant="underline"
+              variant="pills"
               legend="Lock"
               value={lock}
               onChange={(v) => {
@@ -590,9 +563,9 @@ export function OnboardingWizard({ onFinishing }: { onFinishing?(finishing: bool
               ]}
             />
             {lock !== 'none' && (
-              <>
+              <div>
                 <TextField
-                  variant="line"
+                  variant="row"
                   label={`Choose a ${LOCK_NAMES[lock]}`}
                   type="password"
                   inputMode={lock === 'pin' ? 'numeric' : undefined}
@@ -603,7 +576,7 @@ export function OnboardingWizard({ onFinishing }: { onFinishing?(finishing: bool
                   onChange={(e) => setSecretText(e.target.value)}
                 />
                 <TextField
-                  variant="line"
+                  variant="row"
                   label={`Confirm ${LOCK_NAMES[lock]}`}
                   type="password"
                   inputMode={lock === 'pin' ? 'numeric' : undefined}
@@ -614,12 +587,13 @@ export function OnboardingWizard({ onFinishing }: { onFinishing?(finishing: bool
                 />
                 {biometricAvailable && (
                   <Switch
+                    variant="row"
                     label="Also unlock with fingerprint or face"
                     checked={alsoBiometric}
                     onChange={setAlsoBiometric}
                   />
                 )}
-              </>
+              </div>
             )}
           </>
         );
@@ -627,39 +601,41 @@ export function OnboardingWizard({ onFinishing }: { onFinishing?(finishing: bool
   }
 
   // The prototype's bar: empty on the first step, full at the end.
-  const progress = done ? 100 : Math.round(((step - 1) / STEPS) * 1000) / 10;
-  const working = busy || signingUp;
-  let label = 'Next';
+  const progress = done ? 100 : ((step - 1) / STEPS) * 100;
+  let label = 'Continue';
   if (done) label = 'Open Funcial';
-  else if (step === 1 && signingUp) label = 'Creating…';
+  else if (step === ACCOUNT && sending) label = 'Sending…';
+  else if (step === CODE) label = signingUp ? 'Verifying…' : 'Verify';
   else if (step === STEPS) label = busy ? 'Setting up…' : 'Start my adventure';
 
   return (
-    <main className="relative isolate flex min-h-dvh flex-col overflow-hidden">
-      <Blobs step={done ? STEPS : step - 1} />
+    <main className="page-blobs relative flex min-h-dvh flex-col overflow-hidden">
       <div className="mx-auto flex w-full max-w-lg flex-1 flex-col px-[22px] pt-[max(1.25rem,env(safe-area-inset-top))] pb-[max(1.5rem,env(safe-area-inset-bottom))] md:py-16">
         {!aside && (
-          <div className="flex items-center gap-3">
-            {step > 1 && !done ? (
-              <BackButton onClick={() => go(step - 1)} disabled={working} />
-            ) : step === 1 && canLeave ? (
-              <BackButton onClick={() => void backToWelcome()} disabled={working} />
-            ) : (
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center justify-between gap-3">
+              {step > ACCOUNT && !done ? (
+                <BackButton onClick={() => go(backTo)} disabled={working} />
+              ) : step === ACCOUNT && canLeave ? (
+                <BackButton onClick={() => void backToWelcome()} disabled={working} />
+              ) : (
+                <span aria-hidden className="size-11 shrink-0" />
+              )}
+              <p className="text-muted text-sm font-bold">
+                {done ? '' : `Step ${step} of ${STEPS}`}
+              </p>
               <span aria-hidden className="size-11 shrink-0" />
-            )}
-            <div aria-hidden className="bg-track h-1.5 flex-1 overflow-hidden rounded-full">
+            </div>
+            <div aria-hidden className="bg-track h-1.5 overflow-hidden rounded-full">
               <div
                 data-progress
                 className="bg-primary h-full rounded-full motion-safe:transition-[width] motion-safe:duration-700 motion-safe:ease-[cubic-bezier(0.2,0.8,0.2,1)]"
                 style={{ width: `${progress}%` }}
               />
             </div>
-            <p className="text-muted min-w-[5.25rem] text-right text-sm font-bold">
-              {done ? '' : `Step ${step} of ${STEPS}`}
-            </p>
           </div>
         )}
-        <div className={`flex flex-1 flex-col ${aside ? 'mt-1' : 'mt-8'}`}>
+        <div className={`flex flex-1 flex-col ${aside ? 'mt-1' : 'mt-7'}`}>
           {/* Each step is its own form (Enter submits it), as Log in has its own: no form inside a form. */}
           <StepMotion<Step>
             stepKey={aside ?? (done ? 'done' : step)}

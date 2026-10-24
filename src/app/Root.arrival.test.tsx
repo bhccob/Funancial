@@ -125,7 +125,7 @@ describe('after Log in', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Log in' }));
     await userEvent.click(await screen.findByRole('button', { name: 'Skip the lock' }));
     expect(await heading('Your account is ready')).toBeInTheDocument();
-    expect(screen.getByText('Step 1 of 6')).toBeInTheDocument();
+    expect(screen.getByText('Step 1 of 4')).toBeInTheDocument();
   });
 
   it('lets go of the app when the person goes back, so a later start is not held', async () => {
@@ -151,15 +151,8 @@ describe('at the end of setup', () => {
     renderWithStore(withAccount(fakeAccount(), <Root />), store);
 
     await userEvent.click(await screen.findByRole('button', { name: 'Skip for now' }));
-    const next = () => userEvent.click(screen.getByRole('button', { name: 'Next' }));
     await userEvent.type(screen.getByLabelText('What should we call you?'), 'Sam');
-    await next();
-    await userEvent.type(screen.getByLabelText('In your bank account'), '0');
-    await userEvent.type(screen.getByLabelText('In savings'), '0');
-    await next();
-    await userEvent.click(screen.getByRole('switch', { name: "I don't have a regular salary" }));
-    await next();
-    await next();
+    await userEvent.click(screen.getByRole('button', { name: 'Continue' }));
     await userEvent.click(screen.getByRole('button', { name: 'Start my adventure' }));
 
     // The profile is saved, which alone would have switched to Home.

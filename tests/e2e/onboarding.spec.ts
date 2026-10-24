@@ -1,23 +1,19 @@
 import { expect, test } from '@playwright/test';
 import { onboard, skipAccount } from './helpers';
 
-test('a new user sets up money, salary and a PIN, then lands on Home', async ({ page }) => {
+test('a new user sets up in four steps with a PIN, asked nothing about money, and lands on Home at zero', async ({
+  page,
+}) => {
   await page.goto('/');
   await page.getByRole('button', { name: 'Create an account' }).click();
-  await expect(page.getByText('Step 1 of 6')).toBeVisible();
+  await expect(page.getByText('Step 1 of 4')).toBeVisible();
   await expect(page.getByRole('heading', { level: 1, name: 'Create your account' })).toBeVisible();
-  await onboard(page, {
-    cash: '1,000',
-    savings: '5000',
-    salary: { amount: '4200', payDay: '25' },
-    pin: '2468',
-  });
-  // Home shows the bank account (1,000), the default; the savings (5,000) count in Net worth,
-  // what you have. No bills or debts yet.
-  await expect(page.getByRole('region', { name: 'Available balance' })).toContainText('$1,000.00');
+  await onboard(page, { pin: '2468' });
+  // Home starts from Main account at 0, the default, with nothing in Net worth. No bills or debts.
+  await expect(page.getByRole('region', { name: 'Available balance' })).toContainText('$0.00');
   const netWorth = page.getByRole('region', { name: 'Net worth' });
-  await expect(netWorth).toContainText('$6,000.00');
-  await expect(netWorth).toContainText('You have $6,000');
+  await expect(netWorth).toContainText('$0.00');
+  await expect(netWorth).toContainText('You have $0');
   await expect(netWorth).toContainText('You owe $0');
 
   // The PIN chosen during onboarding is in force from the next start.
@@ -33,7 +29,7 @@ test('Back on the first step returns to Welcome, where the demo can still be tri
 }) => {
   await page.goto('/');
   await page.getByRole('button', { name: 'Create an account' }).click();
-  await expect(page.getByText('Step 1 of 6')).toBeVisible();
+  await expect(page.getByText('Step 1 of 4')).toBeVisible();
   await page.getByRole('button', { name: 'Back' }).click();
   await expect(page.getByRole('button', { name: 'Create an account' })).toBeVisible();
 
@@ -63,7 +59,7 @@ test('onboarding survives a reload part-way through', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: 'Create an account' }).click();
   await skipAccount(page);
-  await expect(page.getByText('Step 2 of 6')).toBeVisible();
+  await expect(page.getByText('Step 3 of 4')).toBeVisible();
   await page.reload();
   await expect(page.getByRole('heading', { level: 1, name: 'Create your account' })).toBeVisible();
 });

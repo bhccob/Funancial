@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
-import { onboard, startDemo } from './helpers';
+import { onboard, setStartingBalance, startDemo } from './helpers';
 
 test('try demo → banner → leave demo → welcome', async ({ page }) => {
   await startDemo(page);
@@ -201,7 +201,8 @@ for (const [width, height] of [
     await page.setViewportSize({ width, height });
     await page.goto('/');
     await page.getByRole('button', { name: 'Create an account' }).click();
-    await onboard(page, { cash: '1000' });
+    await onboard(page);
+    await setStartingBalance(page, '1000');
     // Today's five rows: expenses (a chevron) and income (a delete button), mixed.
     await addExpense(page, { amount: '4.50', note: 'Coffee' });
     await addIncome(page, { amount: '1250', label: 'Side job' });
@@ -273,7 +274,8 @@ test.describe('a long card name, with Afl. amounts', () => {
       await page.setViewportSize({ width, height: 780 });
       await page.goto('/');
       await page.getByRole('button', { name: 'Create an account' }).click();
-      await onboard(page, { currency: 'AWG', cash: '2605' });
+      await onboard(page, { currency: 'AWG' });
+      await setStartingBalance(page, '2605');
 
       await page.goto('/cards');
       await page

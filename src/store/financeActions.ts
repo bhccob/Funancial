@@ -37,7 +37,7 @@ import { minorDigits } from '@/domain/money';
 import { dayOfMonth, monthKey } from '@/domain/periods';
 import { nextOccurrence } from '@/domain/recurrence';
 import type { DataSnapshot, EntityOf, TableName, TableRecord } from '@/domain/snapshot';
-import { MAIN_ACCOUNT_ID, SAVINGS_ACCOUNT_ID } from '@/domain/upgrades/v10Accounts';
+import { MAIN_ACCOUNT_ID } from '@/domain/upgrades/v10Accounts';
 import type { AppState } from './appStore';
 
 export interface ExpenseInput {
@@ -107,20 +107,10 @@ export interface DebtInput {
   dueDay: number | null;
   payInFull: boolean;
 }
-export interface CardInput {
-  name: string;
-  balance: number;
-  creditLimit: number | null;
-  dueDay: number | null;
-  payInFull: boolean;
-}
+/** What setup asks: no money. Balances, a salary and cards are added afterwards, where they live. */
 export interface OnboardingInput {
   name: string;
   currency: string;
-  openingCash: number;
-  openingSavings: number;
-  salary: { monthlyAmount: number; payDay: number } | null;
-  cards: CardInput[];
 }
 
 export const FUTURE = 'Use today or an earlier date.';
@@ -740,8 +730,10 @@ export function createFinanceActions(store: StoreApi<AppState>) {
     },
 
     /**
-     * Writes the profile, Main account (`openingCash`), Savings (`openingSavings`) and a credit
-     * account per card, all opened today, and names Main account the default, in one write.
+     * Writes the profile (no salary), Main account (debit, opening at 0 today) and the settings that
+     * name it the default, in one write. It is the one account: the forms that pick one (Pay, an
+     * expense, a subscription, …) need it, and Home asks afterwards what is in it. Savings and cards
+     * are added on the Cards tab.
      */
     async completeOnboarding(input: OnboardingInput) {
       const at = nowIso();
@@ -753,49 +745,27 @@ export function createFinanceActions(store: StoreApi<AppState>) {
         name: input.name.trim(),
         currency: input.currency,
         openingDate: opened,
-        salary: input.salary,
+        salary: null,
         onboardedAt: at,
       };
-      const account = (
-        id: string,
-        name: string,
-        kind: AccountKind,
-        openingBalance: number,
-        order: number,
-        credit: CreditTerms | null,
-      ): TableRecord => ({
-        table: 'account',
-        record: {
-          id,
-          createdAt: at,
-          updatedAt: at,
-          name,
-          kind,
-          ...defaultsFor(kind),
-          last4: null,
-          openingBalance,
-          openingDate: opened,
-          frozen: false,
-          order,
-          credit,
-        },
-      });
-      const cards = input.cards.map((c, i) =>
-        account(newId(), c.name.trim(), 'credit', c.balance, 2 + i, {
-          limit: c.creditLimit,
-          statementDay: null,
-          dueDay: c.dueDay,
-          payInFull: c.payInFull,
-          minimumPayment: 0,
-          interestRate: 0,
-        }),
-      );
+      const main: Account = {
+        id: MAIN_ACCOUNT_ID,
+        createdAt: at,
+        updatedAt: at,
+        name: 'Main account',
+        kind: 'debit',
+        ...defaultsFor('debit'),
+        last4: null,
+        openingBalance: 0,
+        openingDate: opened,
+        frozen: false,
+        order: 0,
+        credit: null,
+      };
       const settings = state().data.tables.settings[0] ?? defaultSettings(at);
       await state().putMany([
         { table: 'profile', record: profile },
-        account(MAIN_ACCOUNT_ID, 'Main account', 'debit', input.openingCash, 0, null),
-        account(SAVINGS_ACCOUNT_ID, 'Savings', 'savings', input.openingSavings, 1, null),
-        ...cards,
+        { table: 'account', record: main },
         {
           table: 'settings',
           record: { ...settings, defaultAccountId: MAIN_ACCOUNT_ID, updatedAt: at },
