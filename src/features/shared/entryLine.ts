@@ -1,4 +1,5 @@
 import { categoryLabel } from '@/domain/budget';
+import { cardMark, type CardMark } from '@/domain/cardMark';
 import type { Account, Debt } from '@/domain/entities';
 import type { Entry } from '@/domain/history';
 import { formatShares } from '@/lib/format';
@@ -10,12 +11,32 @@ import { accountName } from './AccountField';
  */
 export type EntryTone = 'in' | 'out' | 'plain';
 
+/**
+ * The account an entry moved money on, drawn as a card mark in its colour where `detail` says its
+ * name. `before` is what `detail` says up to the name ("Food · ", "Salary · to "), `after` what it
+ * says from the end of the name ("" or " · Subscription"). So `detail` is `before`, `name` and
+ * `after` run together; the mark and the card's last 4 digits only add to it.
+ */
+export interface LineMark extends CardMark {
+  /** The account's id, for what looks up its balance. */
+  accountId: string;
+  before: string;
+  after: string;
+}
+
 /** One History entry as every list writes it: History, Home's Recent and an account's sheet. */
 export interface EntryLine {
   /** What it was: "Groceries", "Skipped dividend · AAPL", "Main account → Savings". */
   title: string;
   /** The line under the title: its kind and the accounts it touched, or '' for none. */
   detail: string;
+  /**
+   * The account the entry moved money on, set when `detail` names it: an expense's or income's
+   * account, a transfer's or card payment's from-account, the account a purchase or a loan payment
+   * left, a dividend or a sale paid into, a correction is for. None for an entry with no account (a
+   * reinvested dividend), for an account that is gone, and on that account's own sheet.
+   */
+  mark?: LineMark;
   /** A sale's profit, negative for a loss, which the line writes after `detail` with ▲ or ▼. */
   profit?: number;
   /** The money, in minor units and never negative; 0 for what didn't arrive. */
@@ -25,6 +46,12 @@ export interface EntryLine {
   tone: EntryTone;
   /** Said beside the title for income not counted yet. */
   chip?: 'Expected' | "Didn't arrive";
+}
+
+/** A place in a line's detail for an account, with the words that lead its name ("to ", "From "). */
+interface Slot {
+  id: string | null;
+  lead: string;
 }
 
 export interface EntryLineContext {
@@ -51,7 +78,43 @@ export function entryLine(
   const nameOf = (id: string | null) => accountName(accounts, id);
   /** An account the line names, unless it is the one the list is seen from. */
   const other = (id: string | null) => (id !== null && id === perspective ? '' : nameOf(id));
-  const join = (...parts: string[]) => parts.filter(Boolean).join(' · ');
+  /** Where an account stands in a line's detail, with the words that lead its name. */
+  const at = (id: string | null, lead = ''): Slot => ({ id, lead });
+  /**
+   * The line under a title, from its pieces: the words and the account it names, in order, joined
+   * by " · " with the empty ones left out. The account in it, when it is one that exists, is its mark.
+   */
+  const detailOf = (...parts: Array<string | Slot>): Pick<EntryLine, 'detail' | 'mark'> => {
+    const written = parts
+      .map((part) => {
+        if (typeof part === 'string') return { text: part, slot: undefined };
+        const name = other(part.id);
+        return { text: name && `${part.lead}${name}`, slot: part };
+      })
+      .filter((piece) => piece.text);
+    const detail = written.map((piece) => piece.text).join(' · ');
+    const stands = written.findIndex(
+      (piece) => piece.slot && accounts.some((a) => a.id === piece.slot?.id),
+    );
+    const slot = written[stands]?.slot;
+    const account = accounts.find((a) => a.id === slot?.id);
+    if (!slot || !account) return { detail };
+    return {
+      detail,
+      mark: {
+        ...cardMark(account),
+        accountId: account.id,
+        before: `${written
+          .slice(0, stands)
+          .map((piece) => `${piece.text} · `)
+          .join('')}${slot.lead}`,
+        after: written
+          .slice(stands + 1)
+          .map((piece) => ` · ${piece.text}`)
+          .join(''),
+      },
+    };
+  };
 
   switch (entry.kind) {
     case 'expense': {
@@ -59,7 +122,7 @@ export function entryLine(
       const category = categoryLabel(e.category);
       return {
         title: e.note || category,
-        detail: join(category, other(e.accountId), e.subscriptionId ? 'Subscription' : ''),
+        ...detailOf(category, at(e.accountId), e.subscriptionId ? 'Subscription' : ''),
         amount: e.amount,
         sign: '−',
         tone: 'out',
@@ -67,12 +130,11 @@ export function entryLine(
     }
     case 'income': {
       const i = entry.item;
-      const to = other(i.accountId);
       const source = i.source === 'salary' ? 'Salary' : 'Extra income';
       const skipped = i.status === 'skipped';
       return {
         title: i.label,
-        detail: join(source, to && `to ${to}`),
+        ...detailOf(source, at(i.accountId, 'to ')),
         amount: skipped ? 0 : i.amount,
         sign: skipped ? '' : '+',
         tone: skipped ? 'plain' : 'in',
@@ -82,10 +144,11 @@ export function entryLine(
     case 'dividend': {
       const d = entry.item;
       const skipped = d.status === 'skipped';
-      const to = d.accountId === null ? '' : other(d.accountId);
       return {
         title: `${skipped ? 'Skipped dividend' : 'Dividend'} · ${d.symbol}`,
-        detail: d.reinvested ? 'Reinvested' : to && `To ${to}`,
+        ...detailOf(
+          d.reinvested ? 'Reinvested' : d.accountId === null ? '' : at(d.accountId, 'To '),
+        ),
         amount: skipped ? 0 : d.amount,
         sign: skipped ? '' : '+',
         tone: skipped ? 'plain' : 'in',
@@ -93,10 +156,9 @@ export function entryLine(
     }
     case 'sale': {
       const s = entry.item;
-      const to = other(s.toAccountId);
       return {
         title: `Sold ${formatShares(s.shares)} ${s.symbol}`,
-        detail: to && `To ${to}`,
+        ...detailOf(at(s.toAccountId, 'To ')),
         profit: s.proceeds - s.cost,
         amount: s.proceeds,
         sign: '+',
@@ -111,7 +173,7 @@ export function entryLine(
         if (from || into) {
           return {
             title: from ? `To ${nameOf(t.toAccountId)}` : `From ${nameOf(t.fromAccountId)}`,
-            detail: join('Transfer', t.note),
+            ...detailOf('Transfer', t.note),
             amount: t.amount,
             sign: from ? '−' : '+',
             tone: from ? 'out' : 'plain',
@@ -119,7 +181,8 @@ export function entryLine(
         }
         return {
           title: `${nameOf(t.fromAccountId)} → ${nameOf(t.toAccountId)}`,
-          detail: t.note,
+          // Which account the money left, first, then the note.
+          ...detailOf(at(t.fromAccountId), t.note),
           amount: t.amount,
           sign: '',
           tone: 'plain',
@@ -133,7 +196,8 @@ export function entryLine(
             : into
               ? `Payment from ${nameOf(t.fromAccountId)}`
               : `${nameOf(t.fromAccountId)} → ${nameOf(t.toAccountId)}`,
-          detail: 'Card payment',
+          // From either account's own side the title says the other; otherwise which account paid, first.
+          ...detailOf(from || into ? '' : at(t.fromAccountId), 'Card payment'),
           amount: t.amount,
           sign: into ? '+' : '−',
           tone: into ? 'plain' : 'out',
@@ -147,20 +211,19 @@ export function entryLine(
         const out = onCard ? t.amount > 0 : t.amount < 0;
         return {
           title,
-          detail: join(other(t.toAccountId), change, t.note === title ? '' : t.note),
+          ...detailOf(at(t.toAccountId), change, t.note === title ? '' : t.note),
           amount: Math.abs(t.amount),
           sign: out ? '−' : '+',
           tone: out ? 'out' : 'plain',
         };
       }
       // A purchase's note names what was bought ("Bought KO"); a loan payment names the loan.
-      const source = t.fromAccountId === null ? '' : other(t.fromAccountId);
       return {
         title:
           t.type === 'investment'
             ? t.note || 'Investment'
             : `Paid ${debts.find((d) => d.id === t.debtId)?.name ?? 'a loan'}`,
-        detail: source && `From ${source}`,
+        ...detailOf(t.fromAccountId === null ? '' : at(t.fromAccountId, 'From ')),
         amount: t.amount,
         sign: '−',
         tone: 'out',

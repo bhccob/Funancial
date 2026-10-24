@@ -1,6 +1,7 @@
 import { screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { describe, expect, it, vi } from 'vitest';
+import { SKIN_COLORS } from '@/domain/cardMark';
 import { historyEntries, type Entry } from '@/domain/history';
 import { formatMoney } from '@/domain/money';
 import { emptySnapshot, type DataSnapshot } from '@/domain/snapshot';
@@ -11,9 +12,12 @@ import { formatDay } from '@/lib/format';
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
 import {
   makeAccount,
+  makeDebt,
   makeDividend,
+  makeExpense,
   makeIncome,
   makeProfile,
+  makeSale,
   makeSettings,
   makeTransaction,
 } from '@/test/fixtures';
@@ -248,6 +252,15 @@ describe('entryLine', () => {
     expect(entryLine(salary, context)).toEqual({
       title: 'Salary',
       detail: 'Salary · to Main account',
+      // The account the money went to, drawn where its name stands.
+      mark: {
+        name: 'Main account',
+        last4: null,
+        color: SKIN_COLORS.midnight,
+        accountId: MAIN,
+        before: 'Salary · to ',
+        after: '',
+      },
       amount: 3_000_00,
       sign: '+',
       tone: 'in',
@@ -298,7 +311,8 @@ describe('entryLine', () => {
   it("reads a card payment as money out, or from the card's side as a payment onto it", () => {
     expect(entryLine(card, context)).toMatchObject({
       title: 'Main account → Visa',
-      detail: 'Card payment',
+      // The account that paid, first (and drawn as a mark in the lists).
+      detail: 'Main account · Card payment',
       sign: '−',
     });
     expect(entryLine(card, { ...context, perspective: MAIN }).title).toBe('Paid Visa');
@@ -313,5 +327,251 @@ describe('entryLine', () => {
     expect(entryLine(salary, { ...context, perspective: SAVINGS }).detail).toBe(
       'Salary · to Main account',
     );
+  });
+});
+
+describe('entryLine marks', () => {
+  const main = makeAccount({ id: MAIN, name: 'Main account', last4: '4312', skin: 'midnight' });
+  const savings = makeAccount({ id: SAVINGS, name: 'Savings', kind: 'savings', skin: 'mint' });
+  const visa = makeAccount({
+    id: VISA,
+    name: 'Visa',
+    kind: 'credit',
+    skin: 'violet',
+    last4: '4242',
+  });
+  const accounts = [main, savings, visa];
+  const context = { accounts, debts: [makeDebt({ id: 'car', name: 'Car loan' })] };
+  const entry = (kind: Entry['kind'], item: Entry['item']) => ({ kind, item }) as Entry;
+  const markOf = (e: Entry, c: Parameters<typeof entryLine>[1] = context) => entryLine(e, c).mark;
+
+  it("marks an expense with the account it was paid with, where the account's name stands", () => {
+    const e = entry(
+      'expense',
+      makeExpense({ accountId: VISA, category: 'food', subscriptionId: 'sub' }),
+    );
+    const line = entryLine(e, context);
+    expect(line.mark).toEqual({
+      name: 'Visa',
+      last4: '4242',
+      color: SKIN_COLORS.violet,
+      accountId: VISA,
+      before: 'Food · ',
+      after: ' · Subscription',
+    });
+    // The words are the same as they ever were; the mark and the last 4 only add to them.
+    expect(line.detail).toBe('Food · Visa · Subscription');
+  });
+
+  it('marks an income with the account it went to', () => {
+    const e = entry('income', makeIncome({ accountId: SAVINGS, source: 'extra' }));
+    expect(markOf(e)).toMatchObject({
+      name: 'Savings',
+      last4: null,
+      color: SKIN_COLORS.mint,
+      before: 'Extra income · to ',
+      after: '',
+    });
+  });
+
+  it('marks a transfer with the account it left, and a card payment with the one that paid', () => {
+    const move = entry(
+      'transaction',
+      makeTransaction({
+        type: 'transfer',
+        fromAccountId: MAIN,
+        toAccountId: SAVINGS,
+        note: 'Rainy day',
+      }),
+    );
+    // First in the line, so what the line said before still reads on from it.
+    expect(markOf(move)).toMatchObject({
+      name: 'Main account',
+      last4: '4312',
+      color: SKIN_COLORS.midnight,
+      before: '',
+      after: ' · Rainy day',
+    });
+    const pay = entry(
+      'transaction',
+      makeTransaction({ type: 'card_payment', fromAccountId: SAVINGS, toAccountId: VISA }),
+    );
+    expect(markOf(pay)).toMatchObject({
+      name: 'Savings',
+      color: SKIN_COLORS.mint,
+      before: '',
+      after: ' · Card payment',
+    });
+  });
+
+  it('marks a stock purchase and a loan payment with the account the money left', () => {
+    const buy = entry(
+      'transaction',
+      makeTransaction({
+        type: 'investment',
+        fromAccountId: SAVINGS,
+        toAccountId: null,
+        note: 'Bought KO',
+      }),
+    );
+    expect(markOf(buy)).toMatchObject({ name: 'Savings', before: 'From ', after: '' });
+    const loan = entry(
+      'transaction',
+      makeTransaction({
+        type: 'debt_payment',
+        fromAccountId: MAIN,
+        toAccountId: null,
+        debtId: 'car',
+      }),
+    );
+    expect(markOf(loan)).toMatchObject({ name: 'Main account', before: 'From ', after: '' });
+  });
+
+  it('marks a dividend paid into an account and a sale whose proceeds went to one', () => {
+    const paid = entry('dividend', makeDividend({ accountId: SAVINGS, reinvested: false }));
+    expect(markOf(paid)).toMatchObject({ name: 'Savings', before: 'To ', after: '' });
+    const sold = entry('sale', makeSale({ toAccountId: MAIN }));
+    expect(markOf(sold)).toMatchObject({ name: 'Main account', before: 'To ', after: '' });
+  });
+
+  it('marks a balance correction with the account it corrected', () => {
+    const fix = entry(
+      'transaction',
+      makeTransaction({
+        type: 'adjustment',
+        fromAccountId: null,
+        toAccountId: VISA,
+        amount: 20_00,
+        note: 'Fee',
+      }),
+    );
+    expect(markOf(fix)).toMatchObject({
+      name: 'Visa',
+      last4: '4242',
+      color: SKIN_COLORS.violet,
+      before: '',
+      after: ' · owed more · Fee',
+    });
+  });
+
+  it('marks nothing for an entry with no account: a reinvested dividend', () => {
+    const reinvested = entry('dividend', makeDividend({ accountId: null, reinvested: true }));
+    expect(entryLine(reinvested, context)).not.toHaveProperty('mark');
+    const skipped = entry(
+      'dividend',
+      makeDividend({ accountId: null, status: 'skipped', amount: 0 }),
+    );
+    expect(entryLine(skipped, context)).not.toHaveProperty('mark');
+  });
+
+  it('marks nothing for an account that is gone, which reads as Unknown account', () => {
+    const e = entry('expense', makeExpense({ accountId: 'gone', category: 'shopping' }));
+    const line = entryLine(e, context);
+    expect(line).not.toHaveProperty('mark');
+    expect(line.detail).toBe('Shopping · Unknown account');
+  });
+
+  it('colours an account by its skin, midnight for one it does not know', () => {
+    const odd = makeAccount({ id: 'odd', skin: 'neon' });
+    const e = entry('expense', makeExpense({ accountId: 'odd' }));
+    expect(markOf(e, { ...context, accounts: [...accounts, odd] })?.color).toBe(
+      SKIN_COLORS.midnight,
+    );
+  });
+
+  it("leaves the mark out of an account's own sheet, where the line leaves its name out", () => {
+    const e = entry('expense', makeExpense({ accountId: MAIN }));
+    expect(entryLine(e, { ...context, perspective: MAIN })).not.toHaveProperty('mark');
+    // Another account's sheet shows an entry it touches as History does.
+    expect(markOf(e, { ...context, perspective: SAVINGS })).toMatchObject({ name: 'Main account' });
+    const move = entry(
+      'transaction',
+      makeTransaction({ type: 'transfer', fromAccountId: MAIN, toAccountId: SAVINGS }),
+    );
+    // From either side the line is the account's own: "To Savings" and "From Main account".
+    expect(entryLine(move, { ...context, perspective: MAIN })).not.toHaveProperty('mark');
+    expect(entryLine(move, { ...context, perspective: SAVINGS })).not.toHaveProperty('mark');
+    expect(markOf(move, { ...context, perspective: VISA })).toMatchObject({ name: 'Main account' });
+  });
+});
+
+describe('the mark in the lists', () => {
+  /** The data above with Main account (4312) in violet and a cup of tea on it today. */
+  const marked = () => {
+    const d = data();
+    d.tables.account[0] = makeAccount({
+      id: MAIN,
+      openingDate: '2026-10-01',
+      last4: '4312',
+      skin: 'violet',
+    });
+    d.tables.expense.push(
+      makeExpense({
+        id: 'tea',
+        note: 'Tea',
+        accountId: MAIN,
+        category: 'food',
+        date: TODAY,
+        createdAt: `${TODAY}T09:00:00.000Z`,
+      }),
+    );
+    return d;
+  };
+  const teaRow = () => screen.getByText('Tea', { selector: 'b' }).closest('li')!;
+
+  /** The row of tea: the mark drawn in the account's colour, then "Main account ·· 4312". */
+  function expectMarked() {
+    const row = teaRow();
+    const mark = row.querySelector('[data-card-mark]');
+    expect(mark).not.toBeNull();
+    expect(mark).toHaveAttribute('aria-hidden', 'true');
+    expect(mark).toHaveStyle({ backgroundColor: SKIN_COLORS.violet });
+    // Drawn, not written: the row reads the name and last 4, the name carrying the meaning.
+    expect(mark).toBeEmptyDOMElement();
+    expect(row).toHaveTextContent('Food · Main account ·· 4312');
+  }
+
+  it("draws a card mark in the account's colour before its name and last 4, in History", () => {
+    renderWithStore(
+      <MemoryRouter>
+        <HistoryScreen />
+      </MemoryRouter>,
+      createStubStore({ data: marked(), today: TODAY }),
+    );
+    expectMarked();
+  });
+
+  it('draws it the same in Recent', () => {
+    const d = marked();
+    renderWithStore(
+      <MemoryRouter>
+        <RecentSection entries={historyEntries(d)} />
+      </MemoryRouter>,
+      createStubStore({ data: d, today: TODAY }),
+    );
+    expectMarked();
+  });
+
+  it('reads the name alone when the account has no last 4', () => {
+    const d = marked();
+    d.tables.account[0] = makeAccount({ id: MAIN, openingDate: '2026-10-01', last4: null });
+    renderWithStore(
+      <MemoryRouter>
+        <RecentSection entries={historyEntries(d)} />
+      </MemoryRouter>,
+      createStubStore({ data: d, today: TODAY }),
+    );
+    expect(teaRow()).toHaveTextContent('Food · Main account · Today');
+    expect(teaRow()).not.toHaveTextContent('··');
+  });
+
+  it("draws no mark on an account's sheet, whose lines leave the account out", () => {
+    renderWithStore(
+      <MemoryRouter>
+        <AccountSheet accountId={MAIN} onClose={vi.fn()} />
+      </MemoryRouter>,
+      createStubStore({ data: marked(), today: TODAY }),
+    );
+    expect(document.querySelector('[data-card-mark]')).toBeNull();
   });
 });

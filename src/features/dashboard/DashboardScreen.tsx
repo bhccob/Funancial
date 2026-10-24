@@ -10,6 +10,7 @@ import { Rise } from '@/components/ui/Rise';
 import type { Bill } from '@/domain/budget';
 import type { LocalDate } from '@/domain/dates';
 import type { Income } from '@/domain/entities';
+import { questProgress } from '@/domain/game/quests';
 import { historyEntries } from '@/domain/history';
 import { monthToDate, netWorthSummary } from '@/domain/overview';
 import { monthKey } from '@/domain/periods';
@@ -30,6 +31,7 @@ import { HomeTopLine } from './HomeTopLine';
 import { MoveMoneyDialog } from './MoveMoneyDialog';
 import { NetWorthSheet } from './NetWorthSheet';
 import { NetWorthTile } from './NetWorthTile';
+import { QuestShopStrip } from './QuestShopStrip';
 import { RecentSection } from './RecentSection';
 import { ReminderBanner } from './ReminderBanner';
 import { ShowOnHomeSheet } from './ShowOnHomeSheet';
@@ -154,6 +156,9 @@ function FlowTile({
  * the person picked (its figure, the account, Pay and ⋯), and "Coming up". Under it: the bills as
  * bubbles over the block's edge, the banners, Overview (income and expenses this month, each tile
  * adding one), Net worth, and the newest entries of History.
+ *
+ * One slim glass strip sits under the bubbles: the quests done out of the quests open, and the coins
+ * with the way to the Shop.
  */
 export function DashboardScreen() {
   const view = useFinanceView();
@@ -214,11 +219,16 @@ export function DashboardScreen() {
       </Rise>
 
       <div className="mx-auto max-w-3xl">
-        {view.bills.length > 0 && (
-          <Rise index={1}>
+        <Rise index={1}>
+          {view.bills.length > 0 && (
             <BillBubbles bills={view.bills} today={today} labelledBy={comingUp} />
-          </Rise>
-        )}
+          )}
+          <QuestShopStrip
+            progress={questProgress(game.quests)}
+            coins={Math.max(0, game.totals.coins)}
+            className={view.bills.length > 0 ? 'mt-3.5' : 'mt-[22px]'}
+          />
+        </Rise>
 
         <Rise index={2}>
           <div className="flex flex-col gap-2 pt-[22px] empty:hidden">

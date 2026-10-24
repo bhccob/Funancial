@@ -13,7 +13,7 @@ import {
 } from '@/test/fixtures';
 import type { Dividend } from '../entities';
 import { emptySnapshot, type DataSnapshot } from '../snapshot';
-import { currentQuests, QUEST_TITLES, questAwards, type QuestView } from './quests';
+import { currentQuests, QUEST_TITLES, questAwards, questProgress, type QuestView } from './quests';
 import type { GameContext, QuestId } from './types';
 
 // 2026-10-15 is a Thursday, so with weeks starting Monday the current week is 2026-10-12 to 10-18.
@@ -627,5 +627,33 @@ describe('questAwards', () => {
         'quest:week-limits:2026-10-05',
       ]);
     });
+  });
+});
+
+describe('questProgress', () => {
+  /** A quest with nothing but the part progress reads: `done`. */
+  const q = (done: boolean): QuestView => ({ ...quest(snap({}), 'log-today'), done });
+
+  it('counts the quests done out of the quests open', () => {
+    expect(questProgress([q(true), q(false), q(false)])).toEqual({ done: 1, open: 3 });
+    expect(questProgress([q(true), q(true)])).toEqual({ done: 2, open: 2 });
+    expect(questProgress([q(false)])).toEqual({ done: 0, open: 1 });
+  });
+
+  it('is 0 of 0 with no quest open', () => {
+    expect(questProgress([])).toEqual({ done: 0, open: 0 });
+  });
+
+  it('reads the set the Quests screen lists: daily, weekly and monthly together', () => {
+    const data = snap({
+      profile: [makeProfile()],
+      budgetLimit: [limitSince('2026-10-01')],
+      checkIn: [makeCheckIn({ kind: 'weekly', date: '2026-10-12' })],
+    });
+    const quests = currentQuests(data, ctx);
+    expect(new Set(quests.map((x) => x.cadence))).toEqual(new Set(['daily', 'weekly', 'monthly']));
+    // The week's check-in is done; the day's log, the week's limits and the month's salary are not.
+    expect(questProgress(quests)).toEqual({ done: 1, open: quests.length });
+    expect(quests.length).toBe(4);
   });
 });

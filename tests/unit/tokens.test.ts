@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { SKIN_COLORS } from '@/domain/cardMark';
 import { declarations, resolve, themesCss, tokensCss, varsOn } from './cssTokens';
 
 const indexCss = readFileSync('src/styles/index.css', 'utf8');
@@ -986,6 +987,98 @@ it('keeps the Other chart colour at 3:1 or better against the page, light and da
       contrast(t('--color-chart-other'), t('--color-bg')),
       `${id} in ${mode}`,
     ).toBeGreaterThanOrEqual(3);
+  }
+});
+
+/** The page, and the peak of each shape behind it at the mode's strength: what a mark on a plain row can sit on. */
+function pageBackdrops(t: (name: string) => string): string[] {
+  const page = t('--color-bg');
+  const strength = Number(t('--page-blobs-strength'));
+  const peaks = t('--page-blobs').match(/rgba?\([^)]*\)/g)!;
+  return [page, ...peaks.map((peak) => composite(peak, page, strength))];
+}
+
+/** The file that draws the card mark, whose outline `MARK_OUTLINE` is read from. */
+const CARD_MARK_FILE = 'src/features/shared/EntryParts.tsx';
+
+/**
+ * What the card mark's 1px outline is: the ink (`--color-text`) at the share its `border-text/NN`
+ * class gives. A border is painted over the element's own background, so on the mark's edge it is
+ * the ink over the skin's colour.
+ */
+function markOutline(): number {
+  const match = /border-text\/(\d+)/.exec(readFileSync(CARD_MARK_FILE, 'utf8'));
+  expect(match, `the mark's outline in ${CARD_MARK_FILE}`).not.toBeNull();
+  return Number(match![1]) / 100;
+}
+
+/** The mark of a card colour as the eye finds it on `backdrop`: its fill, and its edge (the outline over the fill). */
+function markAgainst(
+  t: (name: string) => string,
+  fill: string,
+  backdrop: string,
+  outline = markOutline(),
+): { fill: number; edge: number } {
+  const [r, g, b] = parseColor(t('--color-text'));
+  const edge = composite(`rgb(${r} ${g} ${b} / ${outline})`, fill);
+  return { fill: contrast(fill, backdrop), edge: contrast(edge, backdrop) };
+}
+
+describe.each(CASES)('the card marks in the $id theme in $mode mode', ({ id, mode }) => {
+  const t = tokensFor(id, mode);
+
+  it.each(Object.entries(SKIN_COLORS))(
+    'holds the %s mark at 3:1 or better on the page and on every shape behind it, by its fill or its outline',
+    (skin, fill) => {
+      // The mark is a graphic (WCAG 1.4.11): the colour only helps, as the card's name beside it says
+      // which card it is. Recent and History draw it on plain rows, so on the page and its shapes.
+      for (const backdrop of pageBackdrops(t)) {
+        const { fill: byFill, edge } = markAgainst(t, fill, backdrop);
+        expect(Math.max(byFill, edge), `${skin} ${fill} on ${backdrop}`).toBeGreaterThanOrEqual(3);
+      }
+    },
+  );
+
+  it.each(Object.entries(SKIN_COLORS))(
+    'needs no outline for the %s mark on the light page',
+    (skin, fill) => {
+      // The ink at 35% over the page is about 2.3:1, so in light mode the colour itself holds it.
+      if (mode !== 'light') return;
+      for (const backdrop of pageBackdrops(t)) {
+        expect(contrast(fill, backdrop), `${skin} ${fill} on ${backdrop}`).toBeGreaterThanOrEqual(
+          3,
+        );
+      }
+    },
+  );
+});
+
+it('measures the card marks in a model that bites: a colour too light for the light page, or too dark for the dark one, fails', () => {
+  const light = tokensFor('mono', 'light');
+  const dark = tokensFor('mono', 'dark');
+  // A pale amber (#fde68a) is under 3:1 on the light page, and its outline, the ink over that
+  // fill, cannot carry it.
+  const pale = markAgainst(light, '#fde68a', light('--color-bg'));
+  expect(Math.max(pale.fill, pale.edge), 'amber #fde68a on the light page').toBeLessThan(3);
+  // A near-black mark is lost on the dark page, outline and all.
+  const lost = markAgainst(dark, '#000000', dark('--color-bg'));
+  expect(Math.max(lost.fill, lost.edge), 'black on the dark page').toBeLessThan(3);
+});
+
+it('draws the card mark with a 1px outline of the ink at 35%', () => {
+  expect(markOutline()).toBe(0.35);
+});
+
+it("keeps the Quests strip's bar fill, the ink, at 3:1 or better on the page glass over the page and each shape behind it", () => {
+  // The track (about 1.1:1 on the light page) is not relied on: the fill and "Quests 2/3" say the same.
+  for (const { id, mode } of CASES) {
+    const t = tokensFor(id, mode);
+    for (const glass of glassOnPage(t)) {
+      expect(
+        contrast(t('--color-text'), glass),
+        `ink on ${glass} (${id}, ${mode})`,
+      ).toBeGreaterThanOrEqual(3);
+    }
   }
 });
 

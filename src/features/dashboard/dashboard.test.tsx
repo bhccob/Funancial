@@ -1,8 +1,9 @@
-import { act, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createMemoryRouter, MemoryRouter, RouterProvider } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppShell } from '@/app/AppShell';
+import { SKIN_COLORS } from '@/domain/cardMark';
 import type { Account, CreditTerms, ReminderSettings } from '@/domain/entities';
 import { purchaseEntry } from '@/domain/game/shop';
 import { historyEntries } from '@/domain/history';
@@ -11,7 +12,7 @@ import { emptySnapshot, type DataSnapshot } from '@/domain/snapshot';
 import { applyRecords, dueGenerated } from '@/domain/sync';
 import { formatDay, formatMonth, formatPercent } from '@/lib/format';
 import type { AppState } from '@/store/appStore';
-import { useAmountsHidden } from '@/store/useAmountsHidden';
+import { HIDDEN_AMOUNT, useAmountsHidden } from '@/store/useAmountsHidden';
 import { useSelectedAccount } from '@/store/useSelectedAccount';
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
 import { fakeAccount, withAccount } from '@/test/fakeAccount';
@@ -19,18 +20,23 @@ import { fakeNotifier, onPhone, type FakeNotifier } from '@/test/fakeNotifier';
 import {
   localIso,
   makeAccount,
+  makeCheckIn,
   makeExpense,
   makeIncome,
   makeLedgerEntry,
   makeLegacyPurchase,
   makeProfile,
+  makeSale,
   makeSettings,
   makeSubscription,
+  makeTransaction,
 } from '@/test/fixtures';
 import { INBOX_NOW, inboxData } from '@/test/inboxData';
 import { freshRealStore } from '@/test/realStore';
 import type { StoreApi } from 'zustand/vanilla';
+import { HistoryScreen } from '@/features/history/HistoryScreen';
 import { DashboardScreen } from './DashboardScreen';
+import { QuestShopStrip } from './QuestShopStrip';
 
 const actions = vi.hoisted(() => ({
   confirmIncome: vi.fn(async () => {}),
@@ -68,8 +74,8 @@ function renderHome(data: DataSnapshot | StoreApi<AppState>, today = TODAY) {
     ],
     { initialEntries: ['/'] },
   );
-  renderWithStore(<RouterProvider router={router} />, store);
-  return { router, store };
+  const { unmount } = renderWithStore(<RouterProvider router={router} />, store);
+  return { router, store, unmount };
 }
 
 /** Home inside the app's shell, which holds the Add expense and Add income sheet. */
@@ -319,7 +325,7 @@ describe('Home hero', () => {
     const hero = region('Available balance');
     const amount = within(hero).getByTestId('hero-amount');
     expect(amount.textContent).toBe(usd(3_680_00));
-    expect(amount).toHaveClass('text-[42px]', 'font-bold');
+    expect(amount).toHaveClass('text-[52px]', 'font-bold');
     const { currency, cents } = partsOf(3_680_00);
     expect(within(amount).getByText(currency)).toHaveClass('text-head-dim');
     expect(within(amount).getByText(cents)).toHaveClass('text-head-faint');
@@ -329,6 +335,63 @@ describe('Home hero', () => {
     expect(label.parentElement).toContainElement(
       within(hero).getByRole('button', { name: 'Hide amounts' }),
     );
+  });
+
+  /** Home with one account holding `minor`, and the size in px its big amount is written at. */
+  function heroPx(minor: number): number {
+    const data = emptySnapshot();
+    data.tables.profile = [makeProfile({ openingDate: OPENED, salary: null })];
+    data.tables.account = [mainAccount(minor)];
+    const { unmount } = renderHome(data);
+    const px = /text-\[(\d+)px\]/.exec(screen.getByTestId('hero-amount').className)?.[1];
+    unmount();
+    return Number(px);
+  }
+
+  it('writes the amount at 52px, down from 42px', () => {
+    expect(heroPx(3_680_00)).toBe(52);
+    expect(heroPx(0)).toBe(52);
+  });
+
+  it('shrinks a long amount to fit, a step at a time, never under 40px', () => {
+    // 123456789 minor units is 1,234,567.89: seven digits before the cents.
+    const long = heroPx(123_456_789);
+    expect(long).toBeLessThanOrEqual(52);
+    expect(long).toBeGreaterThanOrEqual(40);
+    expect(long).toBeLessThan(52);
+    // The longer the amount, the smaller the type, between 52px and the 40px it stops at.
+    const sizes = [12_34, 3_680_00, 123_456_78, 1_234_567_89, 12_345_678_90, 123_456_789_00].map(
+      heroPx,
+    );
+    expect(sizes[0]).toBe(52);
+    expect(sizes.at(-1)).toBe(40);
+    for (const [i, px] of sizes.entries()) {
+      expect(px, `${i}`).toBeGreaterThanOrEqual(40);
+      if (i > 0) expect(px, `${i}`).toBeLessThanOrEqual(sizes[i - 1]!);
+    }
+    expect(new Set(sizes).size, 'steps between 52 and 40').toBeGreaterThan(2);
+  });
+
+  it('lets the cents wrap under the whole number when even 40px is too wide', () => {
+    const data = emptySnapshot();
+    data.tables.account = [mainAccount(1_000_000_000_00)];
+    renderHome(data);
+    const amount = screen.getByTestId('hero-amount');
+    expect(amount).toHaveClass('text-[40px]');
+    // The whole number and its currency stay together; the cents may drop under them.
+    const row = amount.querySelector('.flex-wrap');
+    expect(row).not.toBeNull();
+    expect(row).toHaveClass('justify-center');
+    expect(row!.textContent).toBe(usd(1_000_000_000_00));
+  });
+
+  it('keeps the hidden amount at 52px whatever the balance is', async () => {
+    useAmountsHidden.setState({ hidden: true });
+    const data = emptySnapshot();
+    data.tables.account = [mainAccount(123_456_789_00)];
+    renderHome(data);
+    expect(screen.getByTestId('hero-amount')).toHaveClass('text-[52px]');
+    expect(screen.getByTestId('hero-amount')).toHaveTextContent('••••');
   });
 
   it('marks the account with a card when it has its last 4 digits, else a wallet', () => {
@@ -595,6 +658,126 @@ describe('Home bills coming up', () => {
   });
 });
 
+describe('Home Quests and Shop strip', () => {
+  /**
+   * Home with the quests of Wednesday 2026-10-14: today's log, this week's check-in and (with a
+   * salary) this month's reconciliation, `done` of them done, and 520 coins in the ledger.
+   */
+  function questHome({ log = false, checkin = false, salary = true, coins = 520 } = {}) {
+    const data = emptySnapshot();
+    data.tables.profile = [
+      makeProfile({
+        openingDate: OPENED,
+        salary: salary ? { monthlyAmount: 3_000_00, payDay: 25 } : null,
+      }),
+    ];
+    data.tables.account = [mainAccount()];
+    data.tables.ledger = [makeLedgerEntry({ key: 'seed', xp: 0, coins })];
+    if (log) {
+      data.tables.expense = [makeExpense({ date: TODAY, createdAt: localIso(TODAY) })];
+    }
+    if (checkin) data.tables.checkIn = [makeCheckIn({ kind: 'weekly', date: '2026-10-12' })];
+    return renderHome(data);
+  }
+  const strip = () => screen.getByTestId('quest-shop-strip');
+
+  it('shows the quests done out of the quests open, with a bar, and the coins with Shop', () => {
+    questHome({ log: true, checkin: true });
+    const quests = within(strip()).getByRole('link', { name: 'Quests 2/3' });
+    expect(quests).toHaveAttribute('href', '/quests');
+    // The bar is that fraction: 2 of 3.
+    const fill = quests.querySelector('[data-testid="quests-bar-fill"]');
+    expect(fill).toHaveStyle({ width: '67%' });
+    // The fill is the ink, which holds 3:1 on the glass; the track behind it is not relied on.
+    expect(fill).toHaveClass('bg-text');
+    const shop = within(strip()).getByRole('link', { name: '520 coins · Shop' });
+    expect(shop).toHaveAttribute('href', '/shop');
+    expect(shop.querySelector('svg.lucide-coins')).toBeInTheDocument();
+  });
+
+  it('counts every quest open, daily, weekly and monthly together, as the Quests screen lists them', () => {
+    questHome();
+    expect(within(strip()).getByRole('link', { name: 'Quests 0/3' })).toBeInTheDocument();
+    expect(
+      within(strip())
+        .getByRole('link', { name: 'Quests 0/3' })
+        .querySelector('[data-testid="quests-bar-fill"]'),
+    ).toHaveStyle({ width: '0%' });
+  });
+
+  it('says All done when every quest is done', () => {
+    questHome({ log: true, checkin: true, salary: false });
+    const link = within(strip()).getByRole('link', { name: /All done/ });
+    expect(link).toHaveAttribute('href', '/quests');
+    expect(within(link).getByText('All done')).toBeInTheDocument();
+    // Still the Quests link for a screen reader, which hears what is done.
+    expect(link).toHaveAccessibleName('Quests: All done');
+    expect(within(strip()).queryByText(/^Quests \d/)).not.toBeInTheDocument();
+  });
+
+  it('says 1 coin for one coin, and keeps its tap area 44px', () => {
+    questHome({ coins: 1 });
+    const shop = within(strip()).getByRole('link', { name: '1 coin · Shop' });
+    for (const link of [shop, within(strip()).getByRole('link', { name: /^Quests/ })]) {
+      expect(link).toHaveClass('min-h-11');
+    }
+  });
+
+  it('is one glass strip split in two, under the bubbles and above Overview', () => {
+    renderHome(monthData());
+    const bar = strip();
+    expect(bar).toHaveClass('glass');
+    expect(within(bar).getAllByRole('link')).toHaveLength(2);
+    const bubbles = screen.getByRole('list', { name: 'Coming up' });
+    expect(bubbles.compareDocumentPosition(bar) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(
+      bar.compareDocumentPosition(region('Overview')) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    // It is not a section of its own: Home keeps its sections.
+    expect(screen.queryByRole('region', { name: 'Quests' })).not.toBeInTheDocument();
+  });
+
+  it('opens Quests and the Shop', async () => {
+    const data = emptySnapshot();
+    data.tables.account = [mainAccount()];
+    const router = createMemoryRouter(
+      [
+        { path: '/', element: <DashboardScreen /> },
+        { path: '/quests', element: <h1>Quests page</h1> },
+        { path: '/shop', element: <h1>Shop page</h1> },
+      ],
+      { initialEntries: ['/'] },
+    );
+    renderWithStore(<RouterProvider router={router} />, createStubStore({ data, today: TODAY }));
+    await userEvent.click(within(strip()).getByRole('link', { name: /^Quests/ }));
+    expect(router.state.location.pathname).toBe('/quests');
+    await act(() => router.navigate('/'));
+    await userEvent.click(within(strip()).getByRole('link', { name: /Shop$/ }));
+    expect(router.state.location.pathname).toBe('/shop');
+  });
+
+  it('stands below the block when nothing is coming up', () => {
+    const data = monthData();
+    data.tables.subscription = [];
+    data.tables.account = data.tables.account.filter((a) => a.kind !== 'credit');
+    renderHome(data);
+    expect(screen.queryByRole('list', { name: 'Coming up' })).not.toBeInTheDocument();
+    expect(strip()).toBeInTheDocument();
+  });
+
+  it('says Quests alone, with no bar, when none is open', () => {
+    render(
+      <MemoryRouter>
+        <QuestShopStrip progress={{ done: 0, open: 0 }} coins={40} />
+      </MemoryRouter>,
+    );
+    const link = screen.getByRole('link', { name: 'Quests' });
+    expect(link).toHaveAttribute('href', '/quests');
+    expect(link.querySelector('[data-testid="quests-bar-fill"]')).toBeNull();
+    expect(screen.getByRole('link', { name: '40 coins · Shop' })).toHaveAttribute('href', '/shop');
+  });
+});
+
 describe('Home Overview', () => {
   /** monthData with 2,000 of income on Oct 2, and 1,600 of income and 1,200 spent early in September. */
   function withSeptember() {
@@ -719,13 +902,14 @@ describe('Home Recent transactions', () => {
     // The same five, in the same order.
     const newest = historyEntries(data).slice(0, 5);
     expect(newest.map((e) => e.item.id)).toEqual(rows.map((r) => r.dataset.entry));
-    // Written as History writes them, with the day after History's line.
+    // Written as History writes them (the card by its name and last 4), with the day after History's
+    // line, and what is left on the card after the newest row's amount.
     expect(rows.map((r) => r.textContent)).toEqual([
-      `FoodFood · Main account · Today−${usd(20_00)}`,
-      `FoodFood · Main account · Yesterday−${usd(50_00)}`,
-      `FoodFood · Main account · ${formatDay('2026-10-12')}−${usd(20_00)}`,
-      `FunFun · Main account · ${formatDay('2026-10-05')}−${usd(30_00)}`,
-      `SalarySalary · to Main account · ${formatDay('2026-10-02')}+${usd(2_000_00)}`,
+      `FoodFood · Main account ·· 4312 · Today−${usd(20_00)}${usd(5_680_00)} left`,
+      `FoodFood · Main account ·· 4312 · Yesterday−${usd(50_00)}`,
+      `FoodFood · Main account ·· 4312 · ${formatDay('2026-10-12')}−${usd(20_00)}`,
+      `FunFun · Main account ·· 4312 · ${formatDay('2026-10-05')}−${usd(30_00)}`,
+      `SalarySalary · to Main account ·· 4312 · ${formatDay('2026-10-02')}+${usd(2_000_00)}`,
     ]);
     expect(within(rows[4]!).getByText(`+${usd(2_000_00)}`)).toHaveClass('text-success');
     expect(within(rows[0]!).getByText(`−${usd(20_00)}`)).toHaveClass('text-danger');
@@ -745,6 +929,251 @@ describe('Home Recent transactions', () => {
     expect(
       within(region('Recent transactions')).getByText('Nothing here yet.'),
     ).toBeInTheDocument();
+  });
+});
+
+describe('Home Recent transactions name the card', () => {
+  const recent = () => region('Recent transactions');
+  const rowOf = (title: string) =>
+    within(recent()).getByText(title, { selector: 'b' }).closest('li')!;
+
+  /** monthData with `extra` entries added, the Visa's limit set. */
+  function withNewest(make: (data: DataSnapshot) => void, limit: number | null = null) {
+    const data = monthData();
+    data.tables.account[2] = visaCard({ limit });
+    make(data);
+    return data;
+  }
+
+  it('draws a mark in each card’s colour before its name and last 4', () => {
+    const data = monthData();
+    data.tables.expense.push(
+      makeExpense({
+        id: 'swim',
+        note: 'Swim',
+        accountId: 'visa',
+        category: 'health',
+        date: TODAY,
+        createdAt: `${TODAY}T11:00:00.000Z`,
+      }),
+    );
+    renderHome(data);
+    const swim = rowOf('Swim');
+    const mark = swim.querySelector('[data-card-mark]');
+    expect(mark).toHaveAttribute('aria-hidden', 'true');
+    expect(mark).toHaveStyle({ backgroundColor: SKIN_COLORS.violet });
+    expect(swim).toHaveTextContent('Health · Visa ·· 4242 · Today');
+    // Main account's is midnight, drawn the same way.
+    const food = within(recent()).getAllByText('Food', { selector: 'b' })[0]!.closest('li')!;
+    expect(food.querySelector('[data-card-mark]')).toHaveStyle({
+      backgroundColor: SKIN_COLORS.midnight,
+    });
+  });
+
+  it('says what is left on the card on the newest row only', () => {
+    renderHome(monthData());
+    const rows = within(recent()).getAllByRole('listitem');
+    expect(rows[0]).toHaveTextContent(`${usd(3_680_00)} left`);
+    for (const row of rows.slice(1)) expect(row).not.toHaveTextContent(/ left| owed/);
+  });
+
+  it('says what a card owes, or what is left to spend on one, from the same figure as Home', () => {
+    const spend = (data: DataSnapshot) =>
+      data.tables.expense.push(
+        makeExpense({
+          id: 'visa-spend',
+          note: 'Visa spend',
+          accountId: 'visa',
+          amount: 25_00,
+          date: TODAY,
+          createdAt: `${TODAY}T12:00:00.000Z`,
+        }),
+      );
+    // No limit: it owes 230 and now 25 more.
+    const { unmount } = renderHome(withNewest(spend));
+    expect(rowOf('Visa spend')).toHaveTextContent(`${usd(255_00)} owed`);
+    unmount();
+    // A 1,000 limit: 1,000 less the 255 owed.
+    renderHome(withNewest(spend, 1_000_00));
+    expect(rowOf('Visa spend')).toHaveTextContent(`${usd(745_00)} left`);
+    expect(rowOf('Visa spend')).not.toHaveTextContent('owed');
+  });
+
+  it('says nothing is left on a row that moved no money: an income not counted yet', () => {
+    const data = monthData();
+    data.tables.income.push(
+      makeIncome({
+        id: 'pending',
+        label: 'Pending pay',
+        status: 'expected',
+        date: TODAY,
+        createdAt: `${TODAY}T13:00:00.000Z`,
+        accountId: 'acct-main',
+      }),
+    );
+    renderHome(data);
+    expect(rowOf('Pending pay')).toHaveTextContent('Expected');
+    expect(recent()).not.toHaveTextContent(/ left| owed/);
+  });
+
+  it('says nothing is left on an income that did not arrive', () => {
+    const data = monthData();
+    data.tables.income.push(
+      makeIncome({
+        id: 'missed',
+        label: 'Missed pay',
+        status: 'skipped',
+        date: TODAY,
+        createdAt: `${TODAY}T13:00:00.000Z`,
+        accountId: 'acct-main',
+      }),
+    );
+    renderHome(data);
+    expect(rowOf('Missed pay')).toHaveTextContent("Didn't arrive");
+    expect(recent()).not.toHaveTextContent(/ left| owed/);
+  });
+
+  it('says nothing is left on an account no longer in use', () => {
+    const data = monthData();
+    data.tables.account[1] = { ...savingsAccount(), archivedOn: '2026-10-10' };
+    data.tables.expense.push(
+      makeExpense({
+        id: 'old',
+        note: 'Old spend',
+        accountId: 'acct-savings',
+        date: TODAY,
+        createdAt: `${TODAY}T14:00:00.000Z`,
+      }),
+    );
+    renderHome(data);
+    expect(rowOf('Old spend')).toHaveTextContent('Savings');
+    expect(recent()).not.toHaveTextContent(/ left| owed/);
+  });
+
+  it('masks the figure with the eye, as every amount is', async () => {
+    renderHome(monthData());
+    await userEvent.click(screen.getByRole('button', { name: 'Hide amounts' }));
+    const newest = within(recent()).getAllByRole('listitem')[0]!;
+    expect(newest).toHaveTextContent(`${HIDDEN_AMOUNT} left`);
+    expect(newest).not.toHaveTextContent('3,680');
+    await userEvent.click(screen.getByRole('button', { name: 'Hide amounts' }));
+    expect(newest).toHaveTextContent(`${usd(3_680_00)} left`);
+  });
+
+  it('starts hidden when the amounts were hidden before', () => {
+    useAmountsHidden.setState({ hidden: true });
+    renderHome(monthData());
+    expect(within(recent()).getAllByRole('listitem')[0]).toHaveTextContent(`${HIDDEN_AMOUNT} left`);
+  });
+});
+
+describe('Home Recent transactions, edited and deleted as History does', () => {
+  /** Home and History over a real store: a cup of tea (12.50) today and a stock buy (500.00) yesterday. */
+  async function recentHome() {
+    const { store } = await freshRealStore();
+    const { put } = store.getState();
+    await put('profile', makeProfile({ openingDate: OPENED, salary: null }));
+    await put('account', mainAccount(1_000_00));
+    await put(
+      'expense',
+      makeExpense({
+        id: 'tea',
+        note: 'Tea',
+        amount: 12_50,
+        category: 'food',
+        date: TODAY,
+        accountId: 'acct-main',
+        createdAt: `${TODAY}T09:00:00.000Z`,
+      }),
+    );
+    await put(
+      'transaction',
+      makeTransaction({
+        id: 'buy',
+        type: 'investment',
+        note: 'Bought KO',
+        amount: 500_00,
+        date: '2026-10-13',
+        fromAccountId: 'acct-main',
+        toAccountId: null,
+        createdAt: '2026-10-13T09:00:00.000Z',
+      }),
+    );
+    const router = createMemoryRouter(
+      [
+        { path: '/', element: <DashboardScreen /> },
+        { path: '/history', element: <HistoryScreen /> },
+      ],
+      { initialEntries: ['/'] },
+    );
+    renderWithStore(<RouterProvider router={router} />, store);
+    return { store, router };
+  }
+  const recent = () => region('Recent transactions');
+
+  it('opens the edit form History uses from an expense, and History shows the change', async () => {
+    const { store, router } = await recentHome();
+    await userEvent.click(within(recent()).getByRole('button', { name: /^Tea/ }));
+    const dialog = screen.getByRole('dialog', { name: 'Edit expense' });
+    const amount = within(dialog).getByLabelText('Amount');
+    expect(amount).toHaveValue('12.50');
+    await userEvent.clear(amount);
+    await userEvent.type(amount, '15');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'Edit expense' })).not.toBeInTheDocument(),
+    );
+    expect(store.getState().data.tables.expense).toEqual([
+      expect.objectContaining({ id: 'tea', amount: 15_00 }),
+    ]);
+    // Recent counts it at once, and so does History.
+    expect(within(recent()).getByText(`−${usd(15_00)}`)).toBeInTheDocument();
+    await userEvent.click(within(recent()).getByRole('link', { name: 'View all' }));
+    expect(router.state.location.pathname).toBe('/history');
+    const tea = screen.getByRole('button', { name: /^Tea/ });
+    expect(within(tea).getByText(`−${usd(15_00)}`)).toBeInTheDocument();
+  });
+
+  it('offers a delete on every other row, and an expense none, as History does', async () => {
+    await recentHome();
+    const buy = within(recent()).getByText('Bought KO', { selector: 'b' }).closest('li')!;
+    expect(within(buy).getByRole('button', { name: 'Delete Bought KO' })).toHaveClass('size-11');
+    const tea = within(recent()).getByRole('button', { name: /^Tea/ }).closest('li')!;
+    expect(within(tea).queryByRole('button', { name: /^Delete/ })).toBeNull();
+  });
+
+  it('deletes a stock buy after asking with the words History asks', async () => {
+    const { store } = await recentHome();
+    await userEvent.click(within(recent()).getByRole('button', { name: 'Delete Bought KO' }));
+    const dialog = screen.getByRole('dialog', { name: 'Delete this entry?' });
+    expect(dialog).toHaveTextContent('Bought KO will be removed from your history.');
+    // Cancel keeps it.
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    expect(store.getState().data.tables.transaction).toHaveLength(1);
+    await userEvent.click(within(recent()).getByRole('button', { name: 'Delete Bought KO' }));
+    await userEvent.click(
+      within(screen.getByRole('dialog', { name: 'Delete this entry?' })).getByRole('button', {
+        name: 'Delete',
+      }),
+    );
+    await waitFor(() => expect(store.getState().data.tables.transaction).toEqual([]));
+    expect(within(recent()).queryByText('Bought KO')).not.toBeInTheDocument();
+  });
+
+  it('says the shares go back before deleting a sale, as History does', async () => {
+    const { store } = await freshRealStore();
+    const { put } = store.getState();
+    await put('profile', makeProfile({ openingDate: OPENED, salary: null }));
+    await put('account', mainAccount(1_000_00));
+    await put(
+      'sale',
+      makeSale({ id: 'sold', symbol: 'AAPL', shares: 2, soldOn: TODAY, toAccountId: 'acct-main' }),
+    );
+    renderHome(store);
+    await userEvent.click(within(recent()).getByRole('button', { name: 'Delete Sold 2 AAPL' }));
+    expect(screen.getByRole('dialog', { name: 'Delete this entry?' })).toHaveTextContent(
+      'its shares go back to your AAPL holding',
+    );
   });
 });
 

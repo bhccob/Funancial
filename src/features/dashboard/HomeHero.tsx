@@ -4,20 +4,58 @@ import { Link } from 'react-router';
 import { CountUp } from '@/components/ui/CountUp';
 import { Menu } from '@/components/ui/Menu';
 import { heroFigure, type AccountRow } from '@/domain/balances';
+import { cardLabel } from '@/domain/cardMark';
 import { moneyParts } from '@/domain/money';
 import { cn } from '@/lib/cn';
 import { HIDDEN_AMOUNT, useAmountsHidden } from '@/store/useAmountsHidden';
 import { useCurrency } from '@/store/useFinance';
 import { HideAmountsButton } from './HideAmountsButton';
 
-/** "Main account ·· 4312": an account by its name and, when it has them, its last 4 digits. */
-const accountTitle = ({ name, last4 }: AccountRow['account']) =>
-  last4 ? `${name} ·· ${last4}` : name;
+/**
+ * The sizes the big amount steps down through, in px: 52 for an amount that fits, 40 at the least.
+ * Written out whole, as Tailwind finds a class only by its full name.
+ */
+const SIZES = [
+  [52, 'text-[52px]'],
+  [48, 'text-[48px]'],
+  [44, 'text-[44px]'],
+  [40, 'text-[40px]'],
+] as const;
+
+/**
+ * The room the amount has, in px: a 360px phone less the page's 20px on each side. Every phone the
+ * app runs on is at least that wide, so an amount that fits here fits on all of them.
+ */
+const ROOM = 320;
+
+/**
+ * How wide the amount's characters are, in em of its size, as Inter Tight Bold measures them with the
+ * hero's tracking and tabular digits: a digit .61, a comma or a point .23, a minus .4. The currency
+ * is written at .38em, so a character of it is .23, and it keeps 5px (.1em at 52px) from the number.
+ */
+const EM = { digit: 0.61, mark: 0.23, minus: 0.4, symbol: 0.23, gap: 0.1 };
+
+/**
+ * The size of the big amount: 52px, or the largest step down to 40px at which the amount, written
+ * out, fits in `ROOM`. It is worked out from the amount the number arrives at, not from the number
+ * counting up to it, so the size never changes while it counts. Hidden amounts are four bullets, so
+ * they keep 52px. Past 40px the cents may wrap under the whole number (see `Amount`).
+ */
+function sizeOf(minor: number, currency: string, hidden: boolean): string {
+  if (hidden) return SIZES[0][1];
+  const { lead, currency: symbol, units, cents } = moneyParts(minor, currency);
+  let em = symbol.length * EM.symbol + EM.gap;
+  for (const ch of `${lead}${units}${cents}`) {
+    em += /\d/.test(ch) ? EM.digit : /[-−]/.test(ch) ? EM.minus : EM.mark;
+  }
+  return (SIZES.find(([px]) => em * px <= ROOM) ?? SIZES[SIZES.length - 1]!)[1];
+}
 
 /**
  * The big amount as the wireframe writes it: the currency small, raised and dimmed beside the whole
  * units, and the cents dimmed further (head-dim and head-faint, the least shares of the ink that hold
- * on every block). One flex row, so it stays whole while CountUp moves the number.
+ * on every block). One flex row, so it stays whole while CountUp moves the number; it wraps only when
+ * even the smallest size is too wide for the screen, and then the cents drop under the whole number.
  */
 function Amount({ minor, currency }: { minor: number; currency: string }) {
   const { lead, currency: symbol, units, cents, currencyFirst } = moneyParts(minor, currency);
@@ -32,7 +70,7 @@ function Amount({ minor, currency }: { minor: number; currency: string }) {
     </span>
   );
   return (
-    <span className="inline-flex items-baseline">
+    <span className="inline-flex flex-wrap items-baseline justify-center">
       {lead}
       {currencyFirst && mark}
       {units}
@@ -95,7 +133,10 @@ export function HomeHero({ row, frozenNote, onPick, onPay, onMove, onCorrect }: 
       </div>
       <p
         data-testid="hero-amount"
-        className="mt-1 text-[42px] leading-[1.05] font-bold tracking-[-0.04em] tabular-nums"
+        className={cn(
+          'mt-1 leading-[1.05] font-bold tracking-[-0.04em] tabular-nums',
+          sizeOf(figure.amount, currency, hidden),
+        )}
       >
         <CountUp
           value={figure.amount}
@@ -108,7 +149,7 @@ export function HomeHero({ row, frozenNote, onPick, onPay, onMove, onCorrect }: 
         className="press hit-44 text-head-dim mt-0.5 inline-flex min-h-8 items-center gap-[5px] px-1 text-[13px] font-semibold"
       >
         <Icon aria-hidden="true" className="size-[15px]" />
-        {accountTitle(account)}
+        {cardLabel(account)}
         <ChevronDown aria-hidden="true" className="size-[13px]" />
         <span className="sr-only">, change account</span>
       </button>

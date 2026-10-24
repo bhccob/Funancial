@@ -190,3 +190,12 @@ export function questAwards(data: DataSnapshot, ctx: GameContext): Award[] {
   }
   return awards;
 }
+
+/**
+ * How far through the quests the person is: how many are done out of how many are open right now.
+ * Takes `currentQuests` (daily, weekly and monthly together, the set the Quests screen lists), so
+ * the one quest that is only ever won once its week has closed counts as open all week.
+ */
+export function questProgress(quests: readonly QuestView[]): { done: number; open: number } {
+  return { done: quests.filter((q) => q.done).length, open: quests.length };
+}

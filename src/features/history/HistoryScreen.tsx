@@ -1,26 +1,23 @@
-import { ChevronDown, ChevronRight, Trash2 } from 'lucide-react';
+import { ChevronDown } from 'lucide-react';
 import { useId, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/Button';
-import { Dialog } from '@/components/ui/Dialog';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { RadioGroup } from '@/components/ui/RadioGroup';
 import { SectionLink } from '@/components/ui/Section';
 import { lineLabel } from '@/components/ui/lineField';
-import { type Category, type Expense } from '@/domain/entities';
+import { type Category } from '@/domain/entities';
 import { entryDate, historyEntries, type Entry } from '@/domain/history';
 import { monthKey } from '@/domain/periods';
-import { ExpenseForm } from '@/features/add/ExpenseForm';
 import { CATEGORY_OPTIONS } from '@/features/shared/categories';
-import { EntryChip, EntryDetail } from '@/features/shared/EntryParts';
-import { entryLine, type EntryLine } from '@/features/shared/entryLine';
+import { entryLine } from '@/features/shared/entryLine';
+import { EntryRow } from '@/features/shared/EntryRow';
 import { ROWS } from '@/features/shared/PlainSection';
+import { useEntryActions } from '@/features/shared/useEntryActions';
 import { cn } from '@/lib/cn';
 import { formatDate, formatMonthYear } from '@/lib/format';
-import { useAction } from '@/lib/useAction';
 import { useApp } from '@/store/AppStoreProvider';
-import { useFinanceActions, useMoney, useToday } from '@/store/useFinance';
-import { useInvestActions } from '@/store/useInvest';
+import { useToday } from '@/store/useFinance';
 import { ActualBalanceDialog } from './ActualBalanceDialog';
 
 type Show = 'all' | 'spending' | 'income' | 'transfers';
@@ -33,126 +30,6 @@ const SHOWS: Record<Show, Array<Entry['kind']> | null> = {
   income: ['income', 'dividend', 'sale'],
   transfers: ['transaction'],
 };
-
-/** An entry's amount, with its sign; money in reads in the success color. */
-function Amount({ line }: { line: EntryLine }) {
-  const money = useMoney();
-  return (
-    <span
-      className={`shrink-0 text-[14.5px] font-extrabold tabular-nums ${line.tone === 'in' ? 'text-success' : ''}`}
-    >
-      {`${line.sign}${money(line.amount)}`}
-    </span>
-  );
-}
-
-/** What an entry is called, a chip beside it for income not counted yet, and the line under it. */
-function EntryText({ line }: { line: EntryLine }) {
-  return (
-    <span className="min-w-0 flex-1">
-      <span className="flex min-w-0 items-center gap-2">
-        <b className="truncate text-[14.5px] font-extrabold">{line.title}</b>
-        <EntryChip line={line} />
-      </span>
-      {(line.detail || line.profit !== undefined) && (
-        <span className="text-muted block truncate text-[12px] font-semibold">
-          <EntryDetail line={line} />
-        </span>
-      )}
-    </span>
-  );
-}
-
-/**
- * One entry as a plain row (under `ROWS`): its words and its amount, then a 44px place for what
- * can be done with it. With `onOpen` the whole row is the button that does it (an expense opens its
- * edit form) and the place holds a chevron; with `onDelete` the place holds a delete button. The
- * row knows nothing of what opening or deleting does: that is the caller's.
- */
-function EntryRow({
-  line,
-  onOpen,
-  onDelete,
-}: {
-  line: EntryLine;
-  onOpen?(): void;
-  onDelete?(): void;
-}) {
-  if (onOpen) {
-    return (
-      <li>
-        <button
-          type="button"
-          onClick={onOpen}
-          className="hover:bg-surface-2 -mx-2 flex min-h-[54px] w-[calc(100%+1rem)] items-center gap-3 rounded-xl px-2 py-2 text-left"
-        >
-          <EntryText line={line} />
-          <Amount line={line} />
-          <span
-            aria-hidden="true"
-            className="text-muted -mr-2 grid size-11 shrink-0 place-items-center"
-          >
-            <ChevronRight className="size-[18px]" />
-          </span>
-        </button>
-      </li>
-    );
-  }
-  return (
-    <li className="flex min-h-[54px] items-center gap-3 py-2">
-      <EntryText line={line} />
-      <Amount line={line} />
-      {onDelete && (
-        <button
-          type="button"
-          aria-label={`Delete ${line.title}`}
-          onClick={onDelete}
-          className="text-muted hover:text-danger hover:bg-surface-2 press -mr-2 grid size-11 shrink-0 place-items-center rounded-full"
-        >
-          <Trash2 aria-hidden className="size-4" />
-        </button>
-      )}
-    </li>
-  );
-}
-
-/** What the person is asked before an entry is deleted, and what deleting it does. */
-interface Removal {
-  title: string;
-  /** Said in place of the usual "removed from your history", when deleting does more. */
-  description?: string;
-  remove(): Promise<unknown>;
-}
-
-/** The actions that delete the entries History lists, bar an expense, which is deleted from its edit form. */
-interface RemovalActions {
-  deleteIncome(id: string): Promise<unknown>;
-  deleteTransaction(id: string): Promise<unknown>;
-  deleteDividend(id: string): Promise<unknown>;
-  undoSale(id: string): Promise<unknown>;
-}
-
-/** What deleting `entry` asks and does: a sale is undone, its shares going back to the holding. */
-function removalOf(
-  entry: Exclude<Entry, { kind: 'expense' }>,
-  title: string,
-  actions: RemovalActions,
-): Removal {
-  switch (entry.kind) {
-    case 'income':
-      return { title, remove: () => actions.deleteIncome(entry.item.id) };
-    case 'dividend':
-      return { title, remove: () => actions.deleteDividend(entry.item.id) };
-    case 'sale':
-      return {
-        title,
-        description: `${title} will be removed from your history, and its shares go back to your ${entry.item.symbol} holding.`,
-        remove: () => actions.undoSale(entry.item.id),
-      };
-    case 'transaction':
-      return { title, remove: () => actions.deleteTransaction(entry.item.id) };
-  }
-}
 
 /**
  * A choice among a few (a month, a category) as a glass pill saying what is chosen, with its label
@@ -201,26 +78,24 @@ function PillSelect({
 export function HistoryScreen() {
   const data = useApp((s) => s.data);
   const today = useToday();
-  const { deleteIncome, deleteTransaction } = useFinanceActions();
-  const { deleteDividend, undoSale } = useInvestActions();
-  const run = useAction();
+  const { actionsOf, dialogs } = useEntryActions();
 
   const [month, setMonth] = useState(() => monthKey(today));
   const [show, setShow] = useState<Show>('all');
   const [category, setCategory] = useState<'all' | Category>('all');
-  const [editing, setEditing] = useState<Expense | null>(null);
-  const [deleting, setDeleting] = useState<Removal | null>(null);
   const [correcting, setCorrecting] = useState(false);
 
   const { expense, income, transaction, dividend, sale, debt, account } = data.tables;
 
   const months = useMemo(() => {
-    const keys = new Set([monthKey(today)]);
+    // The month picked stays among them: its last entry may have been deleted just now, and the
+    // pill would otherwise have nothing to say.
+    const keys = new Set([monthKey(today), month]);
     for (const r of [...expense, ...income, ...transaction]) keys.add(monthKey(r.date));
     for (const d of dividend) keys.add(monthKey(d.paidOn));
     for (const s of sale) keys.add(monthKey(s.soldOn));
     return [...keys].sort().reverse();
-  }, [expense, income, transaction, dividend, sale, today]);
+  }, [expense, income, transaction, dividend, sale, today, month]);
 
   const everything = useMemo(() => historyEntries(data), [data]);
 
@@ -241,26 +116,7 @@ export function HistoryScreen() {
   function renderEntry(entry: Entry) {
     // Archived accounts are in the table too, so old rows keep their names.
     const line = entryLine(entry, { accounts: account, debts: debt });
-    if (entry.kind === 'expense') {
-      const e = entry.item;
-      return <EntryRow key={e.id} line={line} onOpen={() => setEditing(e)} />;
-    }
-    return (
-      <EntryRow
-        key={entry.item.id}
-        line={line}
-        onDelete={() =>
-          setDeleting(
-            removalOf(entry, line.title, {
-              deleteIncome,
-              deleteTransaction,
-              deleteDividend,
-              undoSale,
-            }),
-          )
-        }
-      />
-    );
+    return <EntryRow key={entry.item.id} line={line} {...actionsOf(entry, line.title)} />;
   }
 
   return (
@@ -325,39 +181,7 @@ export function HistoryScreen() {
         </div>
       )}
 
-      <Dialog open={editing !== null} title="Edit expense" onClose={() => setEditing(null)}>
-        {editing && (
-          <ExpenseForm key={editing.id} expense={editing} onDone={() => setEditing(null)} />
-        )}
-      </Dialog>
-
-      <Dialog
-        open={deleting !== null}
-        title="Delete this entry?"
-        description={
-          deleting
-            ? (deleting.description ?? `${deleting.title} will be removed from your history.`)
-            : undefined
-        }
-        onClose={() => setDeleting(null)}
-        actions={
-          <>
-            <Button variant="secondary" onClick={() => setDeleting(null)}>
-              Cancel
-            </Button>
-            <Button
-              variant="danger"
-              onClick={async () => {
-                const target = deleting;
-                setDeleting(null);
-                if (target) await run(target.remove, { success: 'Deleted.' });
-              }}
-            >
-              Delete
-            </Button>
-          </>
-        }
-      />
+      {dialogs}
 
       <ActualBalanceDialog open={correcting} onClose={() => setCorrecting(false)} />
     </div>

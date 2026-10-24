@@ -1,9 +1,9 @@
-import { screen, within } from '@testing-library/react';
+import { act, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { EXAMPLES } from '@/domain/examples';
-import { historyEntries } from '@/domain/history';
+import { entryDate, historyEntries } from '@/domain/history';
 import { formatMoney } from '@/domain/money';
 import { emptySnapshot, type DataSnapshot } from '@/domain/snapshot';
 import { formatMonthYear, formatShares } from '@/lib/format';
@@ -148,7 +148,8 @@ describe('HistoryScreen', () => {
     // A transfer and a card payment are named by the accounts the money moved between.
     expect(row('Main account → Savings').getByText(usd(500_00))).toBeInTheDocument();
     expect(row('Main account → Visa').getByText(`−${usd(30_00)}`)).toBeInTheDocument();
-    expect(row('Main account → Visa').getByText('Card payment')).toBeInTheDocument();
+    // The account that paid comes first in the line under it.
+    expect(row('Main account → Visa').getByText('Main account · Card payment')).toBeInTheDocument();
     expect(row('Balance correction').getByText(`−${usd(20_00)}`)).toBeInTheDocument();
     expect(row('Balance correction').getByText('Main account · Bank fee I forgot')).toBeVisible();
     expect(row('Groceries').getByText(`−${usd(120_00)}`)).toBeInTheDocument();
@@ -533,6 +534,30 @@ describe('History in glass', () => {
     expect(screen.getByLabelText('Month').closest('.glass')).toHaveTextContent(
       formatMonthYear('2026-08'),
     );
+  });
+
+  it('keeps the month on its pill, and in its select, when its last entry has gone', async () => {
+    const store = createStubStore({ data: withDividends(), today: bal?.today });
+    renderWithStore(
+      <MemoryRouter>
+        <HistoryScreen />
+      </MemoryRouter>,
+      store,
+    );
+    await userEvent.selectOptions(screen.getByLabelText('Month'), formatMonthYear('2026-08'));
+    // The only entry of August is deleted (BAL-1 has none in August): the month is no longer listed.
+    expect(historyEntries(bal!.data).some((e) => entryDate(e).startsWith('2026-08'))).toBe(false);
+    act(() => store.setState({ data: bal!.data }));
+    const pill = screen.getByLabelText('Month').closest('.glass');
+    // What the pill says is its visible label (the select's options are text in it too).
+    const said = () => pill!.querySelector(':scope > span[aria-hidden]')!;
+    // Never an empty pill: the month stays what is chosen, and says so, with nothing in it.
+    expect(said()).toHaveTextContent(formatMonthYear('2026-08'));
+    expect(screen.getByLabelText('Month')).toHaveValue('2026-08');
+    expect(screen.getByText(`No entries match for ${formatMonthYear('2026-08')}.`)).toBeVisible();
+    // And it can be left: October is still there to go back to.
+    await userEvent.selectOptions(screen.getByLabelText('Month'), formatMonthYear('2026-10'));
+    expect(said()).toHaveTextContent(formatMonthYear('2026-10'));
   });
 
   it('lists each day as plain rows with hairlines, none of them boxed', () => {
