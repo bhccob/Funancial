@@ -231,7 +231,8 @@ for (const width of [360, 375]) {
     for (const b of boxes) expect(b.width, 'Cycle tab width').toBeGreaterThanOrEqual(43.9);
 
     // Paid with is a select of the accounts, not tabs: one 44px line inside the dialog, naming the
-    // demo's accounts in carousel order (a card is told apart by "(credit card)").
+    // demo's accounts in carousel order (a card is told apart by "(credit card)"), then "+ New card",
+    // which only this form offers.
     const paidWith = dialog.getByLabel('Paid with');
     await expect(paidWith).toHaveJSProperty('tagName', 'SELECT');
     await expect(dialog.getByRole('group', { name: 'Paid with' })).toHaveCount(0);
@@ -241,6 +242,7 @@ for (const width of [360, 375]) {
       'Savings',
       'Cash wallet',
       'Passive income',
+      '+ New card',
     ]);
     const line = (await paidWith.boundingBox())!;
     const frame = (await dialog.boundingBox())!;

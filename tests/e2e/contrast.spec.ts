@@ -1,7 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import { readFileSync } from 'node:fs';
-import { expect, test, type Page } from '@playwright/test';
-import { startDemo, startFresh, startLocked } from './helpers';
+import { expect, test, type Locator, type Page } from '@playwright/test';
+import { setOnline, startDemo, startFresh, startLocked } from './helpers';
 
 /**
  * Text contrast on every screen, in three game themes (Black & White, Sunny Sky and Midnight Navy:
@@ -18,9 +18,11 @@ import { startDemo, startFresh, startLocked } from './helpers';
  *
  * Beyond every screen, the scans take the states that only show once something is done or opened: the
  * Pay sheet's form and its done step, the "just now" badge a card wears after a payment, a Settings
- * dialog, and Income with a month picked. Each screen is also proved to show what it was restyled to
- * show (Home's strip and the "left" figure, the Cards tab's "On this card", the Invest pie's labels)
- * before it is scanned, so a screen that drew without them cannot pass.
+ * dialog, and Income with a month picked; and the states of the shorter sign-up (setup's steps, the
+ * code step and its error, log-in, Home's first-time cards, the subscription form making a card).
+ * Each screen is also proved to show what it was restyled to show (Home's strip and the "left"
+ * figure, the Cards tab's "On this card", the Invest pie's labels) before it is scanned, so a screen
+ * that drew without them cannot pass.
  *
  * The demo has no coins to buy a theme with, so a theme is worn through the app's own store: the
  * same two writes the Shop's Buy and Equip make (a purchase in the ledger, the theme in the
@@ -320,6 +322,34 @@ async function expectReadable(
   expect(report, `${where}: text under contrast`).toEqual([]);
 }
 
+/**
+ * Axe does not judge a single character (it reports each as "shortTextContent", incomplete), so the
+ * digits typed into the code field's boxes are in no scan. They are the page ink on the page's glass,
+ * which tests/unit/tokens.test.ts holds at 4.5:1 over every point of the page and a sheet; this proves
+ * the digits are drawn so: the ones typed, each box on glass, each in the ink.
+ */
+async function expectCodeDigitsInInk(scope: Locator, digits: string) {
+  const boxes = await scope.locator('[data-code-box]').evaluateAll((all) => {
+    const probe = document.createElement('i');
+    probe.style.color = 'var(--color-text)';
+    document.body.append(probe);
+    const ink = getComputedStyle(probe).color;
+    probe.remove();
+    return all
+      .filter((box) => box.textContent)
+      .map((box) => ({
+        digit: box.textContent,
+        onGlass: box.classList.contains('glass'),
+        inInk: getComputedStyle(box).color === ink,
+      }));
+  });
+  expect(boxes.map((b) => b.digit).join(''), 'the digits in the boxes').toBe(digits);
+  expect(
+    boxes.filter((b) => !b.onGlass || !b.inInk),
+    'digits not in the ink on glass',
+  ).toEqual([]);
+}
+
 for (const theme of GAME_THEMES) {
   for (const mode of MODES) {
     const look: Look = { theme, mode };
@@ -358,6 +388,94 @@ for (const theme of GAME_THEMES) {
             page.getByRole('heading', { level: 1, name: 'Forgot password?' }),
           ).toBeVisible();
           await expectReadable(page, 'forgot password', null);
+        });
+
+        // Setup comes before any theme can be bought (nothing is owned yet), so it wears Black & White,
+        // which the scan proves; the other themes have no setup to scan. Its four steps, the code step
+        // with an error among them, the log-in that rises over its first step, and "You're all set"
+        // are scanned in the light and the dark.
+        test('setup: each step, the code step with an error, and all set', async ({ page }) => {
+          // A code is "mailed" for any name. No account is made: the code step's error is the one it
+          // finds itself, a code that is too short (said before any sign-up, so no key work runs and
+          // the scan cannot be slowed by it). The way on is the one a phone with no connection takes.
+          await page.route('**/api/code', (route) => route.fulfill({ json: { ok: true } }));
+          await page.goto('/');
+          await page.getByRole('button', { name: 'Create an account' }).click();
+          const heading = (name: string) =>
+            expect(page.getByRole('heading', { level: 1, name })).toBeVisible();
+          const step = page.locator('[data-motion="current"]');
+
+          // Step 1: the account.
+          await heading('Create your account');
+          await expectReadable(page, 'setup, the account step', look);
+
+          // Log in, over this step, for someone who has an account already; and its Forgot password.
+          await page.getByRole('button', { name: 'I already have an account' }).click();
+          await heading('Log in');
+          await expectReadable(page, 'setup, log in', look);
+          await page.getByRole('button', { name: 'Forgot password?' }).click();
+          await heading('Forgot password?');
+          await expectReadable(page, 'setup, forgot password', look);
+          await page.getByRole('button', { name: 'Back' }).click();
+          await heading('Log in');
+          await page.getByRole('button', { name: 'Back' }).click();
+          await heading('Create your account');
+
+          // A password typed, so its strength bar and word are in the scan, and a bad email beside it.
+          await step.getByLabel('Username').fill('robin');
+          await step.getByLabel('Password', { exact: true }).fill('Tr0ub4dor&3xyz');
+          await step.getByLabel('Email', { exact: true }).fill('robin');
+          await page.getByRole('button', { name: 'Continue' }).click();
+          await expect(page.getByText('Enter a valid email address.')).toBeVisible();
+          await expectReadable(page, 'setup, the account step with an error', look);
+
+          // Step 2: the code, and a short one tried.
+          await step.getByLabel('Email', { exact: true }).fill('robin@example.com');
+          await page.getByRole('button', { name: 'Continue' }).click();
+          await heading('Check your email');
+          await expect(step.getByLabel('Code', { exact: true })).toBeVisible();
+          await expectReadable(page, 'setup, the code step', look);
+          await step.getByLabel('Code', { exact: true }).fill('4815');
+          await page.getByRole('button', { name: 'Verify' }).click();
+          await expect(step.getByRole('alert')).toBeVisible();
+          await expectCodeDigitsInInk(step, '4815');
+          await expectReadable(page, 'setup, the code step with an error', look);
+
+          // Back to the first step, now offline: its line and "Skip for now" are in the scan, then
+          // the way on past the account.
+          await page.getByRole('button', { name: 'Back' }).click();
+          await heading('Create your account');
+          await setOnline(page, false);
+          await expect(
+            step.getByText("You're offline. Create your account later in Settings."),
+          ).toBeVisible();
+          await expectReadable(page, 'setup, the account step offline', look);
+          await page.getByRole('button', { name: 'Skip for now' }).click();
+          await setOnline(page, true);
+
+          // Step 3: currency and name.
+          await heading('Your currency and name');
+          await expectReadable(page, 'setup, currency and name', look);
+          await page.getByRole('button', { name: 'Continue' }).click();
+
+          // Step 4: the lock, with a PIN chosen that is too short.
+          await heading('Lock Funcial?');
+          await expectReadable(page, 'setup, the lock step', look);
+          await page.getByRole('radio', { name: 'PIN' }).click();
+          await step.getByLabel('Choose a PIN').fill('12');
+          await step.getByLabel('Confirm PIN').fill('13');
+          await expectReadable(page, 'setup, the lock step with a PIN', look);
+          await page.getByRole('button', { name: 'Start my adventure' }).click();
+          await expect(step.getByText('Use 4 to 8 digits.')).toBeVisible();
+          await expectReadable(page, 'setup, the lock step with an error', look);
+
+          // No lock after all (so no key work runs for the PIN), and the last screen.
+          await page.getByRole('radio', { name: 'No lock' }).click();
+          await page.getByRole('button', { name: 'Start my adventure' }).click();
+          await expect(
+            page.getByRole('heading', { level: 1, name: /^You're all set/ }),
+          ).toBeVisible();
+          await expectReadable(page, "setup, You're all set", look);
         });
 
         // The lock stands on the theme's block (Black & White while locked: the app wears no game
@@ -537,6 +655,27 @@ for (const theme of GAME_THEMES) {
         await expectReadable(page, 'Move money with one account', look);
       });
 
+      test('the subscription form with "+ New card" open, then with its errors', async ({
+        page,
+      }) => {
+        // The demo has accounts to pick from, so "Paid with" ends with "+ New card".
+        await visit(page, '/subscriptions');
+        await page.getByRole('button', { name: 'Add', exact: true }).click();
+        const dialog = page.getByRole('dialog', { name: 'Add a subscription' });
+        await expect(dialog.getByLabel('Card name')).toHaveCount(0);
+        await dialog.getByLabel('Paid with').selectOption({ label: '+ New card' });
+        await expect(dialog.getByLabel('Card name')).toBeVisible();
+        await expect(dialog.getByRole('radio', { name: 'Debit' })).toBeChecked();
+        await expectReadable(page, 'the subscription form with + New card open', look);
+
+        // Saved with nothing filled in (and a last 4 that is too short): every field says so.
+        await dialog.getByLabel('Last 4 digits').fill('12');
+        await dialog.getByRole('button', { name: 'Save', exact: true }).click();
+        await expect(dialog.getByText('Name the card.')).toBeVisible();
+        await expect(dialog.getByText('Give it a name.')).toBeVisible();
+        await expectReadable(page, 'the subscription form with + New card and its errors', look);
+      });
+
       test("Settings' Create account sheet, on its account step and on its code step", async ({
         page,
       }) => {
@@ -570,6 +709,7 @@ for (const theme of GAME_THEMES) {
         await code.getByLabel('Code', { exact: true }).fill('4815');
         await code.getByRole('button', { name: 'Verify' }).click();
         await expect(code.getByRole('alert')).toBeVisible();
+        await expectCodeDigitsInInk(code, '4815');
         await expectReadable(page, "the Create account sheet's code step with an error", look);
       });
 
