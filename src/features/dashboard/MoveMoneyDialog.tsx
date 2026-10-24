@@ -6,7 +6,12 @@ import { TextField } from '@/components/ui/TextField';
 import { activeAccounts } from '@/domain/accounts';
 import { DateField } from '@/features/add/DateField';
 import { pastDateProblem } from '@/features/add/pastDate';
-import { AccountField, NOT_CREDIT, useStartAccountId } from '@/features/shared/AccountField';
+import {
+  AccountField,
+  NO_OTHER_ACCOUNT,
+  NOT_CREDIT,
+  useStartAccountId,
+} from '@/features/shared/AccountField';
 import { useAction } from '@/lib/useAction';
 import { useApp } from '@/store/AppStoreProvider';
 import { SAME_ACCOUNT } from '@/store/financeActions';
@@ -21,7 +26,9 @@ type Errors = { amount?: string; from?: string; to?: string; date?: string };
  * The form: how much, from where, to where, when and a note. Money moves between a bank account, cash
  * and savings, never a credit card (`transfer`'s rules, whose words the store gives for an account
  * gone since). It starts from `fromId` when that can pay, else the default account, and goes to the
- * first savings account in use that is not where it comes from, else the first other one.
+ * first savings account in use that is not where it comes from, else the first other one. With only
+ * one account that can hold money there is nowhere to move it: "To" says to add another on the Cards
+ * tab, where it would otherwise ask to pick one, and Move stays off.
  */
 function MoveMoneyForm({ fromId, onDone }: { fromId: string | null; onDone(): void }) {
   const { transfer } = useFinanceActions();
@@ -31,6 +38,7 @@ function MoveMoneyForm({ fromId, onDone }: { fromId: string | null; onDone(): vo
   const run = useAction();
   const accounts = useApp((s) => s.data.tables.account);
   const holding = activeAccounts(accounts, today).filter(NOT_CREDIT);
+  const nowhere = holding.length < 2;
   const startFrom = useStartAccountId(NOT_CREDIT);
   const [from, setFrom] = useState(
     holding.some((a) => a.id === fromId) ? (fromId as string) : startFrom,
@@ -47,6 +55,7 @@ function MoveMoneyForm({ fromId, onDone }: { fromId: string | null; onDone(): vo
 
   async function submit(e: FormEvent) {
     e.preventDefault();
+    if (nowhere) return;
     const found: Errors = {
       amount: amount === null || amount <= 0 ? ENTER : undefined,
       from: from ? undefined : PICK,
@@ -96,6 +105,7 @@ function MoveMoneyForm({ fromId, onDone }: { fromId: string | null; onDone(): vo
           setErrors((x) => ({ ...x, to: undefined }));
         }}
         filter={NOT_CREDIT}
+        hint={nowhere ? NO_OTHER_ACCOUNT : undefined}
         error={errors.to}
       />
       <DateField
@@ -119,7 +129,7 @@ function MoveMoneyForm({ fromId, onDone }: { fromId: string | null; onDone(): vo
         <Button variant="secondary" onClick={onDone}>
           Cancel
         </Button>
-        <Button type="submit" disabled={busy}>
+        <Button type="submit" disabled={busy || nowhere}>
           Move
         </Button>
       </div>

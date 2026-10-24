@@ -101,25 +101,23 @@ async function openCards(page: Page) {
 }
 
 /**
- * Sets Main account's starting balance (its opening balance) to `amount`, as typed, then comes back
- * to Home. It goes through the Cards tab: Main account, its Settings, "Balance when added". (Home's
- * first-time card asks for the same number once it is there.)
+ * Sets Main account's starting balance (its opening balance) to `amount`, as typed, on Home's own
+ * first-time card: Set balance, the sheet's Starting balance, Save. It is for a spec just after
+ * `onboard`, while the card is there (it goes once anything is logged or the balance is set), and it
+ * comes back to Home when it is done.
  */
 export async function setStartingBalance(page: Page, amount: string) {
-  await openCards(page);
-  await page
-    .getByRole('group', { name: 'Your cards' })
-    .getByRole('button', { name: /^Main account,/ })
-    .click();
-  await page
-    .getByRole('group', { name: 'Card actions' })
-    .getByRole('button', { name: 'Settings' })
-    .click();
-  const dialog = page.getByRole('dialog', { name: 'Edit card' });
-  await dialog.getByLabel('Balance when added').fill(amount);
-  await dialog.getByRole('button', { name: 'Save', exact: true }).click();
-  await expect(dialog).toBeHidden();
   await goHome(page);
+  await page
+    .getByRole('group', { name: "What's in your Main account?" })
+    .getByRole('button', { name: 'Set balance' })
+    .click();
+  const sheet = page.getByRole('dialog', { name: "What's in your Main account?" });
+  await sheet.getByLabel('Starting balance').fill(amount);
+  await sheet.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(sheet).toBeHidden();
+  // The card is done with: the balance is set, so it is not asked for again.
+  await expect(page.getByRole('group', { name: "What's in your Main account?" })).toBeHidden();
 }
 
 /** Adds an account of `kind` (its pill's word: Debit, Credit, Savings or Cash) on the Cards tab, then comes back to Home. */

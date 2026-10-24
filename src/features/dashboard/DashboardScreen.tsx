@@ -17,6 +17,7 @@ import { monthKey } from '@/domain/periods';
 import { PaySheet } from '@/features/cards/PaySheet';
 import { ActualBalanceDialog } from '@/features/history/ActualBalanceDialog';
 import { PlainSection, SectionPillButton } from '@/features/shared/PlainSection';
+import { SubscriptionDialog } from '@/features/subscriptions/SubscriptionDialog';
 import { cn } from '@/lib/cn';
 import { daysUntil, formatMonth, formatPercent } from '@/lib/format';
 import { useAction } from '@/lib/useAction';
@@ -26,6 +27,7 @@ import { useGameView } from '@/store/useGame';
 import { useSelectedAccountRow } from '@/store/useSelectedAccount';
 import { AccountReminder } from './AccountReminder';
 import { ConfirmSalaryDialog } from './ConfirmSalaryDialog';
+import { FirstSteps } from './FirstSteps';
 import { HomeHero } from './HomeHero';
 import { HomeTopLine } from './HomeTopLine';
 import { MoveMoneyDialog } from './MoveMoneyDialog';
@@ -35,6 +37,7 @@ import { QuestShopStrip } from './QuestShopStrip';
 import { RecentSection } from './RecentSection';
 import { ReminderBanner } from './ReminderBanner';
 import { ShowOnHomeSheet } from './ShowOnHomeSheet';
+import { StartBalanceSheet } from './StartBalanceSheet';
 
 /** How many of the newest History entries Recent shows. */
 const RECENT = 5;
@@ -154,7 +157,8 @@ function FlowTile({
 /**
  * Home, as in the glass wireframe. On the theme's block: the top line, then the hero for the account
  * the person picked (its figure, the account, Pay and ⋯), and "Coming up". Under it: the bills as
- * bubbles over the block's edge, the banners, Overview (income and expenses this month, each tile
+ * bubbles over the block's edge, the banners (and, until answered, the first-time cards: the starting
+ * balance and subscriptions), Overview (income and expenses this month, each tile
  * adding one), Net worth, and the newest entries of History.
  *
  * One slim glass strip sits under the bubbles: the quests done out of the quests open, and the coins
@@ -179,6 +183,8 @@ export function DashboardScreen() {
   const [moving, setMoving] = useState(false);
   const [correcting, setCorrecting] = useState(false);
   const [worth, setWorth] = useState(false);
+  const [settingBalance, setSettingBalance] = useState(false);
+  const [addingSubscription, setAddingSubscription] = useState(false);
 
   const overview = useMemo(() => monthToDate(data, today), [data, today]);
   const summary = useMemo(() => netWorthSummary(data, today, view), [data, today, view]);
@@ -268,6 +274,10 @@ export function DashboardScreen() {
             })}
             <ReminderBanner />
             <AccountReminder />
+            <FirstSteps
+              onSetBalance={() => setSettingBalance(true)}
+              onAddSubscription={() => setAddingSubscription(true)}
+            />
           </div>
         </Rise>
 
@@ -320,6 +330,12 @@ export function DashboardScreen() {
       />
       <NetWorthSheet open={worth} view={view} onClose={() => setWorth(false)} />
       <ConfirmSalaryDialog income={confirming} onClose={() => setConfirming(null)} />
+      <StartBalanceSheet open={settingBalance} onClose={() => setSettingBalance(false)} />
+      {/* null is a new one: the form Bills & cards opens from its own Add. */}
+      <SubscriptionDialog
+        sub={addingSubscription ? null : undefined}
+        onClose={() => setAddingSubscription(false)}
+      />
     </>
   );
 }

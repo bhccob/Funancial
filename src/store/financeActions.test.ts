@@ -1377,6 +1377,35 @@ describe('money only lands on accounts in use', () => {
   });
 });
 
+describe('setting an opening balance', () => {
+  const GONE = "That account doesn't exist.";
+  const ARCHIVED = 'That account is no longer in use.';
+
+  it('setOpeningBalance changes only the opening balance', async () => {
+    const { store, actions } = await setup();
+    const before = store.getState().data.tables.account.find((a) => a.id === MAIN)!;
+    const saved = await actions.setOpeningBalance(MAIN, 2_500_00);
+    expect(saved).toEqual({ ...before, openingBalance: 2_500_00, updatedAt: saved.updatedAt });
+    expect(saved.updatedAt >= before.updatedAt).toBe(true);
+    // The stored row is that one, and no other account or table was touched.
+    expect(store.getState().data.tables.account.find((a) => a.id === MAIN)).toEqual(saved);
+    expect(store.getState().data.tables.account.find((a) => a.id === SAVINGS)?.openingBalance).toBe(
+      5_000_00,
+    );
+    expect(store.getState().data.tables.transaction).toEqual([]);
+    expect(balanceOf(store.getState().data, MAIN)).toBe(2_500_00);
+  });
+
+  it('setOpeningBalance refuses an account that is gone or archived, and writes nothing', async () => {
+    const { store, actions } = await setup();
+    await store.getState().put('account', makeCard({ archivedOn: '2026-10-02' }));
+    const before = store.getState().data;
+    await expect(actions.setOpeningBalance('acct-gone', 1_00)).rejects.toThrow(GONE);
+    await expect(actions.setOpeningBalance('card-1', 1_00)).rejects.toThrow(ARCHIVED);
+    expect(store.getState().data).toBe(before);
+  });
+});
+
 describe('freezing an account', () => {
   const FROZEN = 'That card is frozen. Unfreeze it to use it.';
   const GONE = "That account doesn't exist.";

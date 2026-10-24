@@ -5,7 +5,13 @@ import { MoneyField } from '@/components/ui/MoneyField';
 import { activeAccounts } from '@/domain/accounts';
 import { cardPayment } from '@/domain/budget';
 import type { Account, Debt, Goal } from '@/domain/entities';
-import { AccountField, NOT_CREDIT, useStartAccountId } from '@/features/shared/AccountField';
+import {
+  AccountField,
+  NO_OTHER_ACCOUNT,
+  NOT_CREDIT,
+  useAccountOptions,
+  useStartAccountId,
+} from '@/features/shared/AccountField';
 import { useAction } from '@/lib/useAction';
 import { useApp } from '@/store/AppStoreProvider';
 import { SAME_ACCOUNT } from '@/store/financeActions';
@@ -42,6 +48,8 @@ function GoalForm({ goal, onDone }: { goal: Goal; onDone(): void }) {
   const run = useAction();
   const startFrom = useStartAccountId(NOT_CREDIT);
   const startTo = useStartSavingsId(startFrom);
+  // With one account that can hold money there is nowhere to move it: say so, and keep Add off.
+  const nowhere = useAccountOptions(NOT_CREDIT).length < 2;
   const [amount, setAmount] = useState<number | null>(null);
   const [from, setFrom] = useState(startFrom);
   const [to, setTo] = useState(startTo);
@@ -50,6 +58,7 @@ function GoalForm({ goal, onDone }: { goal: Goal; onDone(): void }) {
 
   async function submit(e: FormEvent) {
     e.preventDefault();
+    if (nowhere) return;
     const found = {
       amount: amount === null || amount <= 0 ? ENTER : undefined,
       from: from ? undefined : PICK,
@@ -102,6 +111,7 @@ function GoalForm({ goal, onDone }: { goal: Goal; onDone(): void }) {
             setErrors((e) => ({ ...e, to: undefined }));
           }}
           filter={NOT_CREDIT}
+          hint={nowhere ? NO_OTHER_ACCOUNT : undefined}
           error={errors.to}
         />
       </div>
@@ -109,7 +119,7 @@ function GoalForm({ goal, onDone }: { goal: Goal; onDone(): void }) {
         <Button variant="secondary" onClick={onDone}>
           Cancel
         </Button>
-        <Button type="submit" disabled={busy}>
+        <Button type="submit" disabled={busy || nowhere}>
           Add
         </Button>
       </div>

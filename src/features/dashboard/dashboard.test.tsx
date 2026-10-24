@@ -34,6 +34,7 @@ import {
 } from '@/test/fixtures';
 import { INBOX_NOW, inboxData } from '@/test/inboxData';
 import { freshRealStore } from '@/test/realStore';
+import { createFinanceActions } from '@/store/financeActions';
 import type { StoreApi } from 'zustand/vanilla';
 import { HistoryScreen } from '@/features/history/HistoryScreen';
 import { DashboardScreen } from './DashboardScreen';
@@ -616,6 +617,283 @@ describe('Home More menu', () => {
       'Enter an amount like 12.50',
     );
     expect(store.getState().data.tables.transaction).toEqual([]);
+  });
+});
+
+describe('Home Move money', () => {
+  const NOWHERE = 'Add another account on the Cards tab to move money between them.';
+
+  /** What setup leaves: Main account is the one account in use. */
+  function onlyMain() {
+    const data = emptySnapshot();
+    data.tables.profile = [makeProfile({ openingDate: OPENED, salary: null })];
+    data.tables.account = [mainAccount(1_000_00)];
+    data.tables.settings = [makeSettings({ defaultAccountId: 'acct-main' })];
+    return data;
+  }
+
+  async function openMoveMoney(data: DataSnapshot) {
+    const { store } = renderHome(data);
+    await userEvent.click(screen.getByRole('button', { name: 'More' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Move money' }));
+    return { store, dialog: screen.getByRole('dialog', { name: 'Move money' }) };
+  }
+
+  it('Move money with one account explains why, in place of Pick an account, and Move stays off', async () => {
+    const { store, dialog } = await openMoveMoney(onlyMain());
+    expect(within(dialog).getByLabelText('To')).toHaveAccessibleDescription(NOWHERE);
+    expect(within(dialog).getByText(NOWHERE)).toBeInTheDocument();
+    const move = within(dialog).getByRole('button', { name: 'Move' });
+    expect(move).toBeDisabled();
+
+    // Nothing can send it: not a tap, and not Enter in the amount.
+    await userEvent.type(within(dialog).getByLabelText('Amount'), '50{Enter}');
+    await userEvent.click(move);
+    expect(within(dialog).queryByText('Pick an account.')).not.toBeInTheDocument();
+    expect(within(dialog).getByLabelText('To')).not.toBeInvalid();
+    expect(store.getState().put).not.toHaveBeenCalled();
+    expect(store.getState().putMany).not.toHaveBeenCalled();
+  });
+
+  it('counts a credit card and an archived account as no other account to move to', async () => {
+    const data = onlyMain();
+    data.tables.account.push(visaCard(), { ...savingsAccount(), archivedOn: '2026-10-01' });
+    const { dialog } = await openMoveMoney(data);
+    expect(within(dialog).getByLabelText('To')).toHaveAccessibleDescription(NOWHERE);
+    expect(within(dialog).getByRole('button', { name: 'Move' })).toBeDisabled();
+  });
+
+  it('says nothing about it, and saves, with a second account to move to', async () => {
+    const data = onlyMain();
+    data.tables.account.push(savingsAccount());
+    const { dialog } = await openMoveMoney(data);
+    expect(within(dialog).queryByText(NOWHERE)).not.toBeInTheDocument();
+    expect(within(dialog).getByLabelText('To')).toHaveValue('acct-savings');
+    expect(within(dialog).getByRole('button', { name: 'Move' })).toBeEnabled();
+  });
+});
+
+describe('Home first steps', () => {
+  const BALANCE = "What's in your Main account?";
+  const BALANCE_LINE = 'Set its starting balance so Funcial starts from the right number.';
+  const SUBSCRIPTIONS = 'Got subscriptions?';
+  const SUBSCRIPTIONS_LINE =
+    'Add Netflix, Spotify and the rest. You pick the card each one is paid with right there.';
+  const BALANCE_KEY = 'funancial.first.balance';
+  const SUBSCRIPTIONS_KEY = 'funancial.first.subscriptions';
+
+  const balanceCard = () => screen.queryByRole('group', { name: BALANCE });
+  const subscriptionsCard = () => screen.queryByRole('group', { name: SUBSCRIPTIONS });
+
+  /** What setup leaves: the profile, Main account at 0 as the default, no subscriptions. */
+  function afterSetup(): DataSnapshot {
+    const data = emptySnapshot();
+    data.tables.profile = [makeProfile({ openingDate: TODAY, salary: null })];
+    data.tables.account = [mainAccount(0)];
+    data.tables.settings = [makeSettings({ defaultAccountId: 'acct-main' })];
+    return data;
+  }
+
+  /** The real thing: setup's own write into a real store, then Home over it. */
+  async function realAfterSetup() {
+    const { store } = await freshRealStore();
+    await createFinanceActions(store).completeOnboarding({ name: 'Alex', currency: 'USD' });
+    renderHome(store);
+    return store;
+  }
+
+  it('asks for the starting balance after setup', async () => {
+    await realAfterSetup();
+    const balance = balanceCard()!;
+    expect(within(balance).getByRole('heading', { name: BALANCE })).toBeInTheDocument();
+    expect(within(balance).getByText(BALANCE_LINE)).toBeInTheDocument();
+    expect(within(balance).getByRole('button', { name: 'Set balance' })).toBeInTheDocument();
+    expect(within(balance).getByRole('button', { name: 'Not now' })).toBeInTheDocument();
+
+    const subscriptions = subscriptionsCard()!;
+    expect(within(subscriptions).getByRole('heading', { name: SUBSCRIPTIONS })).toBeInTheDocument();
+    expect(within(subscriptions).getByText(SUBSCRIPTIONS_LINE)).toBeInTheDocument();
+    expect(
+      within(subscriptions).getByRole('button', { name: 'Add a subscription' }),
+    ).toBeInTheDocument();
+    expect(within(subscriptions).getByRole('button', { name: 'Not now' })).toBeInTheDocument();
+
+    // Under the bills and the strip, with the banners, above Overview; the balance first.
+    const overview = region('Overview');
+    expect(
+      balance.compareDocumentPosition(subscriptions) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      subscriptions.compareDocumentPosition(overview) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      region('Available balance').compareDocumentPosition(balance) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it('draws each card as a quiet glass tile: a solid action and a quiet Not now', async () => {
+    await realAfterSetup();
+    const balance = balanceCard()!;
+    expect(balance).toHaveClass('glass', 'rounded-[24px]');
+    expect(within(balance).getByRole('button', { name: 'Set balance' })).toHaveClass('bg-primary');
+    expect(within(balance).getByRole('button', { name: 'Not now' })).toHaveClass(
+      'underline',
+      'min-h-11',
+    );
+  });
+
+  it('the balance card goes once it is set', async () => {
+    const store = await realAfterSetup();
+    await userEvent.click(within(balanceCard()!).getByRole('button', { name: 'Set balance' }));
+    const sheet = screen.getByRole('dialog', { name: BALANCE });
+    const amount = within(sheet).getByLabelText('Starting balance');
+    // The hero amount of the add forms.
+    expect(amount).toHaveClass('text-[40px]');
+    await userEvent.type(amount, '1250');
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(balanceCard()).not.toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: BALANCE })).not.toBeInTheDocument(),
+    );
+    expect(store.getState().data.tables.account).toEqual([
+      expect.objectContaining({ id: 'acct-main', openingBalance: 1_250_00 }),
+    ]);
+    expect(within(region('Available balance')).getByText(whole(usd(1_250_00)))).toBeInTheDocument();
+    // Setting it is not dismissing it: the other card is untouched, and nothing is kept.
+    expect(subscriptionsCard()).toBeInTheDocument();
+    expect(localStorage.getItem(SUBSCRIPTIONS_KEY)).toBeNull();
+  });
+
+  it('asks for an amount before it saves a balance', async () => {
+    const store = await realAfterSetup();
+    await userEvent.click(within(balanceCard()!).getByRole('button', { name: 'Set balance' }));
+    const sheet = screen.getByRole('dialog', { name: BALANCE });
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Save' }));
+    expect(within(sheet).getByLabelText('Starting balance')).toHaveAccessibleDescription(
+      /Enter an amount like 12\.50/,
+    );
+    expect(store.getState().data.tables.account[0]?.openingBalance).toBe(0);
+    expect(balanceCard()).toBeInTheDocument();
+  });
+
+  it('shows the balance card only for Main account in use, opened at 0', () => {
+    const rich = afterSetup();
+    rich.tables.account = [mainAccount(1_000_00)];
+    const archived = afterSetup();
+    archived.tables.account = [{ ...mainAccount(0), archivedOn: '2026-10-01' }];
+    const other = afterSetup();
+    other.tables.account = [makeAccount({ id: 'acct-other', name: 'Other', openingBalance: 0 })];
+    for (const [what, data] of [
+      ['an opening balance already set', rich],
+      ['Main account archived', archived],
+      ['no Main account', other],
+    ] as const) {
+      const view = renderHome(data);
+      expect(balanceCard(), what).not.toBeInTheDocument();
+      view.unmount();
+    }
+
+    renderHome(afterSetup());
+    expect(balanceCard()).toBeInTheDocument();
+  });
+
+  it('no first steps once something is logged', () => {
+    // The 0.13 upgrader: an expense and a subscription, Main account still opened at 0.
+    const upgrader = afterSetup();
+    upgrader.tables.expense = [makeExpense({ date: TODAY })];
+    upgrader.tables.subscription = [makeSubscription()];
+    const view = renderHome(upgrader);
+    expect(balanceCard()).not.toBeInTheDocument();
+    expect(subscriptionsCard()).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Not now' })).not.toBeInTheDocument();
+    view.unmount();
+
+    // Each kind of entry on its own takes the balance card, and only that one.
+    const logged: Array<[string, (data: DataSnapshot) => void]> = [
+      ['an expense', (d) => void (d.tables.expense = [makeExpense({ date: TODAY })])],
+      ['an income', (d) => void (d.tables.income = [makeIncome({ date: TODAY })])],
+      [
+        'a transfer',
+        (d) => {
+          d.tables.account.push(savingsAccount());
+          d.tables.transaction = [makeTransaction({ date: TODAY })];
+        },
+      ],
+    ];
+    for (const [what, log] of logged) {
+      const data = afterSetup();
+      log(data);
+      const entry = renderHome(data);
+      expect(balanceCard(), what).not.toBeInTheDocument();
+      expect(subscriptionsCard(), what).toBeInTheDocument();
+      entry.unmount();
+    }
+  });
+
+  it('the subscriptions card goes once there is a subscription', () => {
+    const data = afterSetup();
+    data.tables.subscription = [makeSubscription()];
+    renderHome(data);
+    expect(subscriptionsCard()).not.toBeInTheDocument();
+    expect(balanceCard()).toBeInTheDocument();
+  });
+
+  it('Not now is remembered', async () => {
+    const first = renderHome(afterSetup());
+    await userEvent.click(within(balanceCard()!).getByRole('button', { name: 'Not now' }));
+    expect(balanceCard()).not.toBeInTheDocument();
+    expect(localStorage.getItem(BALANCE_KEY)).toBe('1');
+    // The other card is its own answer.
+    expect(subscriptionsCard()).toBeInTheDocument();
+    expect(localStorage.getItem(SUBSCRIPTIONS_KEY)).toBeNull();
+
+    await userEvent.click(within(subscriptionsCard()!).getByRole('button', { name: 'Not now' }));
+    expect(subscriptionsCard()).not.toBeInTheDocument();
+    expect(localStorage.getItem(SUBSCRIPTIONS_KEY)).toBe('1');
+
+    // Kept on the phone, so a later visit to Home does not bring them back.
+    first.unmount();
+    renderHome(afterSetup());
+    expect(balanceCard()).not.toBeInTheDocument();
+    expect(subscriptionsCard()).not.toBeInTheDocument();
+  });
+
+  it('stays gone for what was dismissed on the phone before', () => {
+    localStorage.setItem(BALANCE_KEY, '1');
+    renderHome(afterSetup());
+    expect(balanceCard()).not.toBeInTheDocument();
+    expect(subscriptionsCard()).toBeInTheDocument();
+  });
+
+  it('the subscriptions card opens the form', async () => {
+    const store = await realAfterSetup();
+    await userEvent.click(
+      within(subscriptionsCard()!).getByRole('button', { name: 'Add a subscription' }),
+    );
+    const dialog = screen.getByRole('dialog', { name: 'Add a subscription' });
+    await userEvent.type(within(dialog).getByLabelText('Name'), 'Streamflix');
+    await userEvent.type(within(dialog).getByLabelText('Amount'), '15.99');
+    await userEvent.type(within(dialog).getByLabelText('Next renewal'), '2026-11-02');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'Add a subscription' })).not.toBeInTheDocument(),
+    );
+    expect(store.getState().data.tables.subscription).toEqual([
+      expect.objectContaining({ name: 'Streamflix', amount: 15_99, accountId: 'acct-main' }),
+    ]);
+    // Done, so the card is gone without being dismissed.
+    expect(subscriptionsCard()).not.toBeInTheDocument();
+    expect(localStorage.getItem(SUBSCRIPTIONS_KEY)).toBeNull();
+  });
+
+  it('the demo shows no first steps', () => {
+    const data = afterSetup();
+    renderHome(createStubStore({ data, today: TODAY, namespace: 'demo' }));
+    expect(balanceCard()).not.toBeInTheDocument();
+    expect(subscriptionsCard()).not.toBeInTheDocument();
   });
 });
 

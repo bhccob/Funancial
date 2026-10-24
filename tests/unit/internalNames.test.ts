@@ -35,6 +35,11 @@ const PINNED: Array<[file: string, why: string, literals: string[]]> = [
     'the account reminder',
     ["'funancial.account.reminded'"],
   ],
+  [
+    'src/features/dashboard/FirstSteps.tsx',
+    'the dismissed first-time cards on Home',
+    ["'funancial.first.balance'", "'funancial.first.subscriptions'"],
+  ],
   ['src/features/invest/ProfitAndLoss.tsx', 'the profit toggle', ["'funancial.invest.showPnl'"]],
   ['src/lib/broadcast.ts', 'the tab channel', ["name = 'funancial'"]],
   [

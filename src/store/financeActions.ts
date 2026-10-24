@@ -459,6 +459,19 @@ export function createFinanceActions(store: StoreApi<AppState>) {
     },
 
     /**
+     * Sets what an account held when it was opened, for Home's "What's in your Main account?": the
+     * opening balance and when it was written, and nothing else (not its name, look, kind or date,
+     * and no entry is added), so every balance since is that figure with the history on top. Only an
+     * account in use can be set.
+     */
+    async setOpeningBalance(accountId: string, amount: number): Promise<Account> {
+      const account = accountInUse(state().data, accountId, today());
+      const next: Account = { ...account, openingBalance: amount, updatedAt: nowIso() };
+      await state().put('account', next);
+      return next;
+    },
+
+    /**
      * Freezes an account, or unfreezes it, for the Freeze button on the Cards tab. A frozen account
      * takes no new expense (`addExpense`, an expense or a subscription moved onto it) and is left out
      * of the pickers for one. Everything else goes on: money still arrives on it and leaves it, what

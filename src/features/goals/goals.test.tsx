@@ -220,6 +220,38 @@ describe('Goals', () => {
     expect(actions.contributeToGoal).toHaveBeenCalledWith('g1', 20_00, TODAY, SAVINGS, MAIN);
   });
 
+  it('Move money with one account explains why, and Add stays off', async () => {
+    const data = filledData();
+    // Main account alone can hold money: Savings is archived and the Visa is a credit card.
+    data.tables.account = [
+      mainAccount(),
+      { ...savingsAccount(), archivedOn: '2026-10-01' },
+      visaCard(),
+    ];
+    renderGoals(data);
+    const dialog = await openAddMoney();
+    const to = within(dialog).getByLabelText('To');
+    expect(to).toHaveAccessibleDescription(
+      'Add another account on the Cards tab to move money between them.',
+    );
+    const add = within(dialog).getByRole('button', { name: 'Add' });
+    expect(add).toBeDisabled();
+
+    // Not even Enter in the amount sends it, and no "Pick an account." is raised.
+    await userEvent.type(within(dialog).getByLabelText('Amount'), '50{Enter}');
+    await userEvent.click(add);
+    expect(within(dialog).queryByText('Pick an account.')).not.toBeInTheDocument();
+    expect(to).not.toBeInvalid();
+    expect(actions.contributeToGoal).not.toHaveBeenCalled();
+  });
+
+  it('says nothing about it when there is another account to move to', async () => {
+    renderGoals();
+    const dialog = await openAddMoney();
+    expect(within(dialog).queryByText(/Add another account/)).not.toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'Add' })).toBeEnabled();
+  });
+
   it('refuses the same account on both sides, saying so by the field', async () => {
     renderGoals();
     const dialog = await openAddMoney();

@@ -507,6 +507,36 @@ for (const theme of GAME_THEMES) {
         await expectReadable(page, 'the Change currency dialog', look);
       });
 
+      test("Home's first-time cards, the starting balance sheet and Move money with one account, on a profile of one's own", async ({
+        page,
+      }) => {
+        // The demo has none of these: this is a set-up profile, Main account at 0 with nothing logged.
+        await startFresh(page);
+        await wearTheme(page, theme);
+        const balance = page.getByRole('group', { name: "What's in your Main account?" });
+        await expect(balance).toBeVisible();
+        await expect(page.getByRole('group', { name: 'Got subscriptions?' })).toBeVisible();
+        await expectReadable(page, "Home's first-time cards", look);
+
+        await balance.getByRole('button', { name: 'Set balance' }).click();
+        const sheet = page.getByRole('dialog', { name: "What's in your Main account?" });
+        await expect(sheet.getByLabel('Starting balance')).toBeVisible();
+        await expectReadable(page, 'the starting balance sheet', look);
+        await sheet.getByRole('button', { name: 'Save', exact: true }).click();
+        await expect(sheet.getByText('Enter an amount like 12.50')).toBeVisible();
+        await expectReadable(page, 'the starting balance sheet with an error', look);
+        await page.keyboard.press('Escape');
+        await expect(sheet).toBeHidden();
+
+        await page.getByRole('button', { name: 'More' }).click();
+        await page.getByRole('menuitem', { name: 'Move money' }).click();
+        const move = page.getByRole('dialog', { name: 'Move money' });
+        await expect(
+          move.getByText('Add another account on the Cards tab to move money between them.'),
+        ).toBeVisible();
+        await expectReadable(page, 'Move money with one account', look);
+      });
+
       test("Settings' Create account sheet, on its account step and on its code step", async ({
         page,
       }) => {
