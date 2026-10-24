@@ -3,6 +3,12 @@ import '@testing-library/jest-dom/vitest';
 import { afterEach } from 'vitest';
 
 if (typeof window !== 'undefined') {
+  // A sign-up waiting on its emailed code is kept outside the screens, in memory and on the phone, so
+  // a lock or a reload does not lose it: each test starts with none, whatever the last one left.
+  // (Registered first, so it runs after the cleanup below has taken the screens down.)
+  const { keepPendingCode } = await import('@/features/account/pendingCode');
+  afterEach(() => keepPendingCode(null));
+
   const { cleanup } = await import('@testing-library/react');
   afterEach(() => cleanup());
 

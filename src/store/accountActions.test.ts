@@ -3,7 +3,7 @@ import { deriveAccountKeys, openCopy, UnsupportedError, unwrapDek } from '@/data
 import { base64ToBytes } from '@/data/crypto';
 import { emptySnapshot, type DataSnapshot } from '@/domain/snapshot';
 import { toastStore } from '@/lib/toast';
-import type { CopyBody } from '@/services/account';
+import { NetworkError, type CopyBody } from '@/services/account';
 import {
   answers,
   fakeAccountApi,
@@ -23,6 +23,13 @@ import {
   type AccountActions,
 } from './accountActions';
 import { createAppStore } from './appStore';
+
+// The key work as it is, watched: a Verify again with the same details must not do it twice.
+vi.mock('@/data/accountCrypto', async (importOriginal) => {
+  const real = await importOriginal<typeof import('@/data/accountCrypto')>();
+  return { ...real, deriveAccountKeys: vi.fn(real.deriveAccountKeys) };
+});
+const keyWork = vi.mocked(deriveAccountKeys);
 
 const ME = { username: 'Robin', email: 'robin@example.com', password: 'a long enough password' };
 /** A well-formed code the service never mailed: for what is refused before it is asked, or answered first. */
@@ -63,6 +70,11 @@ const quiet = () => new Promise<void>((resolve) => void realSetTimeout(resolve, 
 async function elapse(ms: number) {
   vi.advanceTimersByTime(ms);
   await quiet();
+}
+/** Waits on the real clock until `check` holds, whatever the fake one says (it does not move it). */
+async function until(check: () => boolean) {
+  for (let i = 0; i < 250 && !check(); i++) await quiet();
+  expect(check()).toBe(true);
 }
 
 /** Time moves only when a test says so; the storage underneath keeps its own clock. */
@@ -112,10 +124,18 @@ async function setup() {
   return { ...t, ...(await follow(t.store)) };
 }
 
-/** A sign-up as a screen makes it: the code asked for, then typed. */
+/** Waits for the first copy a sign-up sends behind it to be saved. */
+const firstCopySaved = (actions: AccountActions) =>
+  vi.waitFor(() => expect(actions.view.getState().state).toMatchObject({ dirty: false }));
+
+/**
+ * A sign-up as a screen makes it: the code asked for, then typed. It resolves before its first copy
+ * is saved; this waits for that too, so a test starts from a linked phone with nothing to upload.
+ */
 async function signUp(actions: AccountActions, server: FakeAccountApi, who = ME) {
   await actions.requestCode(who);
   await actions.signUp({ ...who, code: server.codeFor(who.email)! });
+  await firstCopySaved(actions);
 }
 
 const linkedState = (a: AccountActions) => a.view.getState().state;
@@ -521,7 +541,8 @@ describe('sign-up with a code', () => {
     expect(JSON.stringify(body)).not.toContain(ME.password);
     expect(linkedState(actions)).toMatchObject({ username: 'robin', status: 'linked' });
     expect(server.accounts.has('robin')).toBe(true);
-    expect(puts(server)).toHaveLength(1);
+    // The first copy goes up behind it.
+    await waitForPuts(server, 1);
     // The code is spent.
     expect(server.codeFor(ME.email)).toBeUndefined();
   });
@@ -559,6 +580,8 @@ describe('sign-up with a code', () => {
     });
     expect(server.accounts.has('robin')).toBe(false);
     expect(linkedState(actions)).toBeNull();
+    // An answer that came back is believed: nothing is looked for under the name.
+    expect(server.sent('logIn')).toEqual([]);
     // A new code brings it back.
     await actions.requestCode(ME);
     await actions.signUp({ ...ME, code: server.codeFor(ME.email)! });
@@ -599,7 +622,176 @@ describe('sign-up with a code', () => {
       dek: server.accounts.get('robin')!.dek,
       deviceToken: server.accounts.get('robin')!.token,
     });
-    expect(puts(server)).toHaveLength(1);
+    await waitForPuts(server, 1);
+  });
+
+  it('after a lost reply, finds the account the first try was still making when the retry heard the code was spent', async () => {
+    const { actions, server, code } = await codedSetup();
+    // The first try reaches the service, which takes the code and is still making the account when
+    // the retry arrives: the code is spent and the name is no one's yet, so the retry hears
+    // "expired". The account is there a second after that answer.
+    let finish = () => {};
+    server.script(
+      'signUp',
+      (real) => {
+        finish = () => void real();
+        throw new NetworkError();
+      },
+      (real) => {
+        setTimeout(finish, 1_000);
+        return answers(410, { error: 'expired' })(real);
+      },
+    );
+    clock();
+    const signing = actions.signUp({ ...ME, code });
+    signing.catch(() => {});
+    await until(() => server.sent('signUp').length === 2);
+    // It gives the first try a moment before it looks.
+    await elapse(1_000);
+    expect(server.accounts.has('robin')).toBe(true);
+    expect(server.sent('logIn')).toEqual([]);
+    await elapse(500);
+    await signing;
+
+    // The log-in found the name is ours, and the phone links to the account the first try made.
+    expect(server.sent('logIn')).toHaveLength(1);
+    expect(linkedState(actions)).toMatchObject({
+      status: 'linked',
+      dek: server.accounts.get('robin')!.dek,
+      deviceToken: server.accounts.get('robin')!.token,
+    });
+  });
+
+  it('after a lost reply, says a code that really ran out has run out, once it has looked for the account', async () => {
+    const { actions, server, code } = await codedSetup();
+    // Nothing reached the service the first time, and the code ran out before the retry.
+    server.script('signUp', unreachable);
+    server.expireCode(ME.email);
+    clock();
+    const signing = actions.signUp({ ...ME, code });
+    signing.catch(() => {});
+    await until(() => server.sent('signUp').length === 2);
+    await elapse(1_500);
+    await expect(signing).rejects.toMatchObject({
+      code: 'expired',
+      message: 'That code has expired. Send a new one.',
+    });
+    // It looked once: there is no account of ours, so the code is what failed.
+    expect(server.sent('logIn')).toHaveLength(1);
+    expect(server.accounts.size).toBe(0);
+    expect(linkedState(actions)).toBeNull();
+  });
+
+  it('after a lost reply, says the code ran out when the name it finds is someone else', async () => {
+    const { actions, server, code } = await codedSetup();
+    // The retry hears "expired", and by the time it looks someone else has the name.
+    server.script('signUp', unreachable, (real) => {
+      void server.seed({ username: 'robin', password: 'someone elses password' });
+      return answers(410, { error: 'expired' })(real);
+    });
+    clock();
+    const signing = actions.signUp({ ...ME, code });
+    signing.catch(() => {});
+    await until(() => server.sent('signUp').length === 2);
+    await elapse(1_500);
+    await expect(signing).rejects.toMatchObject({ code: 'expired' });
+    expect(linkedState(actions)).toBeNull();
+  });
+
+  it('resolves once the link is kept, without waiting for the first copy to go up', async () => {
+    const { actions, server, code } = await codedSetup();
+    let release = () => {};
+    const held = new Promise<void>((resolve) => (release = resolve));
+    server.script('putCopy', async (real) => {
+      await held;
+      return real();
+    });
+    let done = false;
+    const signing = actions.signUp({ ...ME, code }).then(() => (done = true));
+    await waitForPuts(server, 1);
+    await quiet();
+    // The upload is still on its way, and the sign-up is done: linked, with its copy to come.
+    expect(done).toBe(true);
+    expect(linkedState(actions)).toMatchObject({ status: 'linked', version: 0, dirty: true });
+    release();
+    await signing;
+    await vi.waitFor(() =>
+      expect(linkedState(actions)).toMatchObject({ version: 1, dirty: false }),
+    );
+  });
+
+  it('is not undone by a first copy that fails to go up: the copy is tried again later', async () => {
+    const { actions, server, code } = await codedSetup();
+    server.script('putCopy', answers(503, { error: 'not configured' }));
+    await actions.signUp({ ...ME, code });
+    expect(linkedState(actions)).toMatchObject({ status: 'linked' });
+    await waitForPuts(server, 1);
+    await vi.waitFor(() =>
+      expect(toastStore.getState().toasts.map((t) => t.message)).toEqual([SAVE_NOTICE]),
+    );
+    expect(linkedState(actions)).toMatchObject({ status: 'linked', dirty: true });
+  });
+
+  describe('the keys, kept for a Verify again', () => {
+    const wrongOf = (code: string) => (code === '000000' ? '111111' : '000000');
+
+    it('makes them once for two Verifies with the same name and password, a mistyped code first', async () => {
+      const { actions, server, code } = await codedSetup();
+      keyWork.mockClear();
+      await expect(actions.signUp({ ...ME, code: wrongOf(code) })).rejects.toMatchObject({
+        code: 'code',
+      });
+      // The name as typed another way is the same name.
+      await actions.signUp({ ...ME, username: ' ROBIN ', code });
+      expect(keyWork).toHaveBeenCalledTimes(1);
+      expect(linkedState(actions)).toMatchObject({ status: 'linked' });
+      // The same keys went with both, and still with the code: the service checks it with them.
+      const [first, second] = server.sent('signUp') as Array<Record<string, unknown>>;
+      expect(second!.authKey).toBe(first!.authKey);
+      expect(second).toMatchObject({ code });
+    });
+
+    it('makes them again for another password or name, and after they were let go', async () => {
+      const { actions, server, code } = await codedSetup();
+      const wrong = wrongOf(code);
+      keyWork.mockClear();
+      const tryWith = (who: typeof ME) =>
+        expect(actions.signUp({ ...who, code: wrong })).rejects.toMatchObject({ code: 'code' });
+      await tryWith(ME);
+      await tryWith({ ...ME, password: 'another long password' });
+      expect(keyWork).toHaveBeenCalledTimes(2);
+      await tryWith({ ...ME, username: 'robin2', password: 'another long password' });
+      expect(keyWork).toHaveBeenCalledTimes(3);
+
+      actions.forgetKeys();
+      await tryWith({ ...ME, username: 'robin2', password: 'another long password' });
+      expect(keyWork).toHaveBeenCalledTimes(4);
+      expect(server.sent('signUp')).toHaveLength(4);
+    });
+
+    it('lets them go when the app locks', async () => {
+      const { actions, server, store, code } = await codedSetup();
+      await store.getState().setSecret('2468', 'pin');
+      keyWork.mockClear();
+      await expect(actions.signUp({ ...ME, code: wrongOf(code) })).rejects.toMatchObject({
+        code: 'code',
+      });
+      store.getState().lock();
+      await store.getState().unlock('2468');
+      await loaded(actions);
+      await actions.signUp({ ...ME, code: server.codeFor(ME.email)! });
+      expect(keyWork).toHaveBeenCalledTimes(2);
+    });
+
+    it('does not keep keys that could not be made', async () => {
+      const { actions, code } = await codedSetup();
+      keyWork.mockClear();
+      keyWork.mockRejectedValueOnce(new Error('out of memory'));
+      await expect(actions.signUp({ ...ME, code })).rejects.toThrow('out of memory');
+      await actions.signUp({ ...ME, code });
+      expect(keyWork).toHaveBeenCalledTimes(2);
+      expect(linkedState(actions)).toMatchObject({ status: 'linked' });
+    });
   });
 
   it('after a lost reply, a name that is someone elses is still taken, with the code', async () => {

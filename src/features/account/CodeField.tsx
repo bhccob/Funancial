@@ -43,7 +43,11 @@ export function CodeField({
   onChange(value: string): void;
   error?: string;
   label?: string;
-  /** Takes focus as it appears: for a step that is reached by a tap, whose own button is gone. */
+  /**
+   * Takes focus as it appears, without scrolling the screen to it (the step may still be rising in):
+   * the code step is reached by a tap whose button is gone, and the code is what comes next. A screen
+   * reader hears the field with what `describedBy` says.
+   */
   autoFocus?: boolean;
   /**
    * The id of what tells where the code went ("We sent a 6-digit code to…"), read with the field: a
@@ -90,6 +94,15 @@ export function CodeField({
     return () => field.removeEventListener('beforeinput', listener);
   }, []);
 
+  // As it appears only: a later change of the prop is not a new step. Not in a step that is leaving
+  // (a picture of it, made inert), which is drawn anew as it goes.
+  const focusFirst = useRef(autoFocus);
+  useEffect(() => {
+    const field = input.current;
+    if (focusFirst.current && field && !field.closest('[inert]'))
+      field.focus({ preventScroll: true });
+  }, []);
+
   function caretToEnd(e: SyntheticEvent<HTMLInputElement>) {
     const field = e.currentTarget;
     // A selection (to paste over) stays; a bare caret goes after the last digit.
@@ -128,7 +141,6 @@ export function CodeField({
           inputMode="numeric"
           autoComplete="one-time-code"
           maxLength={LENGTH}
-          autoFocus={autoFocus}
           spellCheck={false}
           autoCorrect="off"
           aria-invalid={error ? true : undefined}

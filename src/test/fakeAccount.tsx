@@ -30,6 +30,7 @@ export function fakeAccount(state: AccountState | null = null, loaded = true) {
     deleteAccount: vi.fn<AccountActions['deleteAccount']>(async () => 'deleted'),
     unlink: vi.fn<AccountActions['unlink']>(async () => {}),
     forgot: vi.fn<AccountActions['forgot']>(async () => {}),
+    forgetKeys: vi.fn<AccountActions['forgetKeys']>(),
     saveNow: vi.fn<AccountActions['saveNow']>(async () => {}),
   } satisfies AccountActions;
   return actions;

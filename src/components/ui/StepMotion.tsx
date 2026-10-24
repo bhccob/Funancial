@@ -28,7 +28,8 @@ export interface StepMotionProps<K extends string | number> {
  * Setup's slide, from the approved prototype: the new step rises 70px from below while it fades in,
  * the old one lifts 70px and fades out, and the step's lines come in 80 ms apart. Going `back`
  * reverses it. Everything moves under `motion-safe:`; for reduced motion the two steps only cross-fade.
- * When the step changes, focus goes to the new step's heading so a screen reader announces it.
+ * When the step changes, focus goes to the new step's heading so a screen reader announces it, unless
+ * the new step took it to a field of its own as it came (setup's code step, its code).
  */
 export function StepMotion<K extends string | number>({
   stepKey,
@@ -58,7 +59,10 @@ export function StepMotion<K extends string | number>({
   useEffect(() => {
     if (shown.current === stepKey) return;
     shown.current = stepKey;
-    const heading = root.current?.querySelector<HTMLElement>('[data-motion="current"] h1');
+    const step = root.current?.querySelector<HTMLElement>('[data-motion="current"]');
+    // A step that took the focus to a field of its own as it came (the code step's code) keeps it.
+    if (!step || step.contains(document.activeElement)) return;
+    const heading = step.querySelector<HTMLElement>('h1');
     if (!heading) return;
     // Focusable by script only; the screen is not scrolled to it while it is still rising.
     if (!heading.hasAttribute('tabindex')) heading.tabIndex = -1;

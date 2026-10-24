@@ -108,6 +108,33 @@ describe('StepMotion', () => {
     expect(screen.getByRole('heading', { name: 'First' })).toHaveFocus();
   });
 
+  it('leaves the focus on a field the new step took it to as it came', () => {
+    /** A step whose field takes the focus as it appears, as the code step's code does. */
+    function Field() {
+      return <input aria-label="Code" ref={(el) => el?.focus()} />;
+    }
+    const { rerender } = render(
+      <StepMotion<string> stepKey="a" render={(k) => <h1>{k === 'a' ? 'First' : 'Second'}</h1>} />,
+    );
+    rerender(
+      <StepMotion<string>
+        stepKey="b"
+        render={(k) =>
+          k === 'a' ? (
+            <h1>First</h1>
+          ) : (
+            <>
+              <h1>Second</h1>
+              <Field />
+            </>
+          )
+        }
+      />,
+    );
+    expect(screen.getByRole('textbox', { name: 'Code' })).toHaveFocus();
+    expect(screen.getByRole('heading', { name: 'Second' })).not.toHaveFocus();
+  });
+
   it("can make a step's box a form, which a button outside it submits, and never the leaving one", () => {
     const onSubmit = vi.fn((e: FormEvent) => e.preventDefault());
     function Formed({ at }: { at: Key }) {

@@ -43,6 +43,11 @@ export const BUSY_RETRY = { first: 5_000, cap: 60_000 };
 const FAILURE_RETRY = { first: 30_000, cap: 300_000 };
 /** Stale answers in a row that one upload follows before it waits for a later try. */
 const MAX_REBASES = 3;
+/**
+ * How long a sign-up retried after a lost reply waits, when the retry hears its code is spent, before
+ * it looks for the account the first try may still be making.
+ */
+export const SPENT_CODE_WAIT_MS = 1_500;
 
 export type AccountState = {
   username: string;
@@ -297,9 +302,38 @@ export function createAccountActions(
   function unload() {
     session++;
     stopTimers();
+    forgetKeys();
     failures = 0;
     noticed = false;
     view.setState({ loaded: false, state: null });
+  }
+
+  // ---- the keys of a sign-up, kept for a Verify again
+
+  type Keys = Awaited<ReturnType<typeof deriveAccountKeys>>;
+  /**
+   * The keys the last sign-up made, with the canonical name and the password they were made from: a
+   * Verify again with the same ones (after a mistyped code) takes them rather than spend the seconds
+   * again. In memory only; let go by a sign-up that worked, by `forgetKeys` (a screen calls it when
+   * the name or password changes, at Skip and as it closes) and by the data closing (a lock).
+   */
+  let kept: { name: string; password: string; keys: Keys } | null = null;
+  /** Counts lettings-go, so keys that finish being made after one are not kept. */
+  let keyEpoch = 0;
+
+  function forgetKeys() {
+    keyEpoch++;
+    kept = null;
+  }
+
+  async function signUpKeys(name: string, password: string): Promise<Keys> {
+    if (kept?.name === name && kept.password === password) return kept.keys;
+    forgetKeys();
+    const epoch = keyEpoch;
+    // Slow on purpose: once per name and password.
+    const keys = await deriveAccountKeys(name, password, kdf);
+    if (epoch === keyEpoch) kept = { name, password, keys };
+    return keys;
   }
 
   // ---- saving the copy
@@ -481,9 +515,31 @@ export function createAccountActions(
   }
 
   /**
+   * After a sign-up whose first answer was lost: whether the account under `name` is the one that
+   * first try made, found by logging in with its keys. An account of ours has no copy yet; one that
+   * has is someone's. `null` when it is not ours (not our password, or it has a copy). A log-in that
+   * fails otherwise throws: that is the service, not the name.
+   */
+  async function claimOwn(name: string, { authKey, kek }: Keys) {
+    const again = await reach(() => api.logIn({ username: name, authKey }));
+    if (again.status !== 200) {
+      if (errorName(again) === 'denied') return null;
+      throw failed(again);
+    }
+    const parsed = LoggedIn.safeParse(again.body);
+    if (!parsed.success) throw new AccountError('unavailable');
+    const key = parsed.data.copy
+      ? null
+      : await unwrapDek(parsed.data.wrappedPw, kek).catch(() => null);
+    return key ? { deviceToken: parsed.data.deviceToken, dekRaw: key.raw } : null;
+  }
+
+  /**
    * Makes the account and links this phone to it. `code` is the six digits mailed by `requestCode`,
    * as read from the email (a space in the middle is fine); the service makes the account only with
    * it. Every screen that makes an account asks for one (setup and Settings), so it is never left out.
+   * The keys are made once for a name and password and kept for a Verify again (`signUpKeys`). It
+   * resolves once the link is kept: the first copy goes up after it (`flush`, which never rejects).
    */
   async function signUp({
     username,
@@ -511,8 +567,8 @@ export function createAccountActions(
     const name = canonicalUsername(username.trim());
     const address = email.trim();
     const mine = session;
-    // Slow on purpose: once per submit.
-    const { authKey, kek } = await deriveAccountKeys(name, password, kdf);
+    const keys = await signUpKeys(name, password);
+    const { authKey, kek } = keys;
     const dek = await newDek();
     const body = {
       username: name,
@@ -530,33 +586,33 @@ export function createAccountActions(
     const lostReply = reply === null;
     reply ??= await reach(() => api.signUp(body));
 
-    let deviceToken: string | undefined;
+    let deviceToken: string;
     let dekRaw = dek.raw;
+    const refused = reply.status === 200 ? null : failed(reply).code;
     if (reply.status === 200) {
       const parsed = SignedUp.safeParse(reply.body);
       if (!parsed.success) throw new AccountError('unavailable');
       deviceToken = parsed.data.deviceToken;
-    } else if (lostReply && failed(reply).code === 'taken') {
+    } else if (lostReply && (refused === 'taken' || refused === 'expired')) {
       // The first try may have landed with its answer lost: then this name is ours, with the same
-      // keys. An account of ours has no copy yet; one that has is someone's, and the name is taken.
-      const again = await reach(() => api.logIn({ username: name, authKey }));
-      // Not our password: the name is someone else's. Anything else is the service, not the name.
-      if (again.status !== 200) {
-        throw errorName(again) === 'denied' ? new AccountError('taken') : failed(again);
+      // keys. The retry hears "taken" once that account is made. It hears its code spent ("expired")
+      // while the first try, which took the code, is still making it (the name is no one's yet), so
+      // then it gives the first try a moment before it looks. An account that is not ours leaves
+      // the answer as it was: the name taken, or the code spent.
+      if (refused === 'expired') {
+        await new Promise((resolve) => setTimeout(resolve, SPENT_CODE_WAIT_MS));
+        if (mine !== session) throw new AccountError('locked');
       }
-      const parsed = LoggedIn.safeParse(again.body);
-      if (!parsed.success) throw new AccountError('unavailable');
-      const key = parsed.data.copy
-        ? null
-        : await unwrapDek(parsed.data.wrappedPw, kek).catch(() => null);
-      if (!key) throw new AccountError('taken');
-      deviceToken = parsed.data.deviceToken;
-      dekRaw = key.raw;
+      const own = await claimOwn(name, keys);
+      if (!own) throw new AccountError(refused);
+      ({ deviceToken, dekRaw } = own);
     } else {
       throw failed(reply);
     }
 
     if (mine !== session) throw new AccountError('locked');
+    // Made and ours: the keys are not needed again.
+    forgetKeys();
     await commit({
       username: name,
       email: address,
@@ -568,7 +624,9 @@ export function createAccountActions(
       dirty: true,
       tooBig: false,
     });
-    await flush();
+    // The first copy goes up behind this, as a log-in's does: the person is not kept waiting for it,
+    // and a failed upload is tried again like any other (it never rejects).
+    void flush();
   }
 
   /**
@@ -743,6 +801,8 @@ export function createAccountActions(
     deleteAccount: exclusive(deleteAccount),
     unlink: exclusive(unlink),
     forgot,
+    /** Lets go of the keys a sign-up keeps for a Verify again: the name or password changed, or the screen is left. */
+    forgetKeys,
     /** Saves a copy now if something changed since the last one. Resolves when that is done; never rejects. */
     saveNow: flush,
   };

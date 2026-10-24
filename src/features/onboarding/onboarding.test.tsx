@@ -8,6 +8,7 @@ import { KeyDerivationError } from '@/data/accountCrypto';
 import { AccountError } from '@/store/accountActions';
 import { createFinanceActions, type OnboardingInput } from '@/store/financeActions';
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
+import { lacksClasses } from '@/test/classes';
 import { fakeAccount, linkedAccount, withAccount } from '@/test/fakeAccount';
 import { makeProfile } from '@/test/fixtures';
 import { freshRealStore } from '@/test/realStore';
@@ -685,13 +686,12 @@ describe('the code step', () => {
     expect(await screen.findByText('Step 3 of 4')).toBeInTheDocument();
   });
 
-  it('says so for a code that is not six digits, before the slow work', async () => {
+  it('asks for all six digits of a code that is short, before the slow work', async () => {
     const { account } = renderWizard();
     await toCode();
     await enterCode('4815');
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      "That code isn't right. Check the email and try again.",
-    );
+    expect(await screen.findByRole('alert')).toHaveTextContent('Type all 6 digits.');
+    expect(nowShowing().getByLabelText('Code')).toHaveAttribute('aria-invalid', 'true');
     expect(account.signUp).not.toHaveBeenCalled();
   });
 
@@ -838,6 +838,8 @@ describe('the code step', () => {
     await toCode();
     await enterCode();
     expect(await screen.findByText(SERVICE_DOWN)).toBeInTheDocument();
+    // Said politely, with the way on: not as an error in what was typed.
+    expect(screen.getByRole('status')).toHaveTextContent(SERVICE_DOWN);
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     await press('Skip for now');
     expect(screen.getByText('Step 3 of 4')).toBeInTheDocument();
@@ -897,6 +899,134 @@ describe('the code step', () => {
     expect(screen.getByText('Step 3 of 4')).toBeInTheDocument();
     expect(account.requestCode).toHaveBeenCalledTimes(1);
     expect(account.signUp).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('the code step, after the person went to their email app', () => {
+  it('comes back after a lock took setup down: the name and address are there, and the code sent is gone back to', async () => {
+    fakeClock();
+    const account = fakeAccount();
+    const first = renderWizard({ account });
+    await toCodeOnTheClock();
+    advance(12_000);
+    // The phone locks while the person reads their email: every screen is taken down.
+    first.unmount();
+
+    renderWizard({ account });
+    expect(screen.getByText('Step 1 of 4')).toBeInTheDocument();
+    expect(nowShowing().getByLabelText('Username')).toHaveValue('Robin');
+    expect(nowShowing().getByLabelText('Email')).toHaveValue('robin@example.com');
+    // Never the password: it is typed again.
+    expect(nowShowing().getByLabelText('Password')).toHaveValue('');
+    typeIn('Password', PASSWORD);
+    await tap(screen.getByRole('button', { name: 'Continue' }));
+    expect(screen.getByText('Step 2 of 4')).toBeInTheDocument();
+    // No second mail: the one sent is the code to type, and a new one waits out the rest of its 30 s.
+    expect(account.requestCode).toHaveBeenCalledTimes(1);
+    expect(resendButton()).toBeDisabled();
+    advance(17_999);
+    expect(resendButton()).toBeDisabled();
+    advance(1);
+    expect(resendButton()).toBeEnabled();
+
+    typeIn('Code', '481529');
+    await tap(screen.getByRole('button', { name: 'Verify' }));
+    expect(account.signUp).toHaveBeenCalledWith({
+      username: 'Robin',
+      email: 'robin@example.com',
+      password: PASSWORD,
+      code: '481529',
+    });
+  });
+
+  it('comes back after the app reloaded, from what the phone kept', async () => {
+    const first = renderWizard();
+    await toCode();
+    first.unmount();
+
+    // A reload: the app's modules start again, with nothing in memory.
+    vi.resetModules();
+    const { OnboardingWizard: Fresh } = await import('./OnboardingWizard');
+    const fresh = await import('@/test/fakeAccount');
+    const stub = await import('@/test/appStoreStub');
+    const account = fresh.fakeAccount();
+    stub.renderWithStore(fresh.withAccount(account, <Fresh />));
+
+    expect(screen.getByLabelText('Username')).toHaveValue('Robin');
+    expect(screen.getByLabelText('Email')).toHaveValue('robin@example.com');
+    expect(screen.getByLabelText('Password')).toHaveValue('');
+    await user.type(screen.getByLabelText('Password'), PASSWORD);
+    await next();
+    expect(await screen.findByText('Step 2 of 4')).toBeInTheDocument();
+    expect(account.requestCode).not.toHaveBeenCalled();
+    (await import('@/features/account/pendingCode')).keepPendingCode(null);
+  });
+
+  it('forgets the code sent once the person skips, and starts empty next time', async () => {
+    const { unmount } = renderWizard();
+    await toCode();
+    await press('Back');
+    await skipAccount();
+    expect(screen.getByText('Step 3 of 4')).toBeInTheDocument();
+    unmount();
+
+    renderWizard();
+    expect(nowShowing().getByLabelText('Username')).toHaveValue('');
+    expect(nowShowing().getByLabelText('Email')).toHaveValue('');
+  });
+
+  it('forgets the code sent once the address is changed', async () => {
+    const { account, unmount } = renderWizard();
+    await toCode();
+    await press('Back');
+    await user.type(nowShowing().getByLabelText('Email'), 'x');
+    unmount();
+
+    renderWizard({ account });
+    expect(nowShowing().getByLabelText('Email')).toHaveValue('');
+  });
+
+  it('takes the 30 s gap on an address it sent nothing to as a code that just went there', async () => {
+    fakeClock();
+    const account = fakeAccount();
+    // A code went to this address 20 s ago, and this phone never heard back (or has since reloaded).
+    account.requestCode.mockRejectedValueOnce(
+      new AccountError('limited', 'Too many tries. Try again in a minute.', 10),
+    );
+    renderWizard({ account });
+    await toCodeOnTheClock();
+    expect(screen.queryByText(/Too many tries/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Skip for now' })).not.toBeInTheDocument();
+    expect(screen.getByText(CODE_LEAD)).toBeInTheDocument();
+    // A new code may be sent once the gap is over, and not before.
+    expect(resendButton()).toHaveTextContent('Send a new code (0:10)');
+    advance(9_999);
+    expect(resendButton()).toBeDisabled();
+    advance(1);
+    expect(resendButton()).toBeEnabled();
+  });
+});
+
+describe('Send a new code', () => {
+  it('counts down the seconds until it may be sent, with its name kept for a screen reader', async () => {
+    fakeClock();
+    renderWizard();
+    await toCodeOnTheClock();
+    expect(resendButton()).toHaveTextContent('Send a new code (0:30)');
+    expect(resendButton()).toHaveAccessibleName('Send a new code');
+    advance(1_000);
+    expect(resendButton()).toHaveTextContent('Send a new code (0:29)');
+    advance(22_000);
+    expect(resendButton()).toHaveTextContent('Send a new code (0:07)');
+    advance(7_000);
+    expect(resendButton()).toHaveTextContent(/^Send a new code$/);
+    expect(resendButton()).toBeEnabled();
+  });
+
+  it('says where else to look for the email', async () => {
+    renderWizard();
+    await toCode();
+    expect(screen.getByText('Not there? Check your spam folder.')).toBeInTheDocument();
   });
 });
 
@@ -1207,10 +1337,20 @@ describe('the steps move', () => {
     );
   });
 
-  it('moves focus to the new step so it is announced', async () => {
+  it('moves focus to the new step so it is announced, and on the code step to the code', async () => {
     renderWizard();
     await toCode();
-    expect(screen.getByRole('heading', { level: 1, name: 'Check your email' })).toHaveFocus();
+    // The code is what comes next: its field has the focus, heard with where the code went.
+    const code = nowShowing().getByLabelText('Code');
+    expect(code).toHaveFocus();
+    expect(code).toHaveAccessibleDescription(CODE_LEAD);
+
+    await press('Back');
+    expect(screen.getByRole('heading', { level: 1, name: 'Create your account' })).toHaveFocus();
+    // And again when the step comes back.
+    await next();
+    expect(await screen.findByText('Step 2 of 4')).toBeInTheDocument();
+    expect(nowShowing().getByLabelText('Code')).toHaveFocus();
   });
 
   it('glides the progress bar over four steps, and brings the lines in one by one', async () => {
@@ -1236,7 +1376,7 @@ describe('OnboardingWizard in the glass look', () => {
   const isRow = (label: string) => {
     const field = nowShowing().getByLabelText(label);
     expect(field, label).toHaveClass('text-right', 'h-11');
-    expect(field, label).not.toHaveClass('rounded-md', 'border-b', 'font-extrabold');
+    lacksClasses(field, 'rounded-md', 'border-b', 'font-extrabold');
     expect(rowOf(label), label).toHaveClass('border-black/7', 'dark:border-white/8');
   };
 

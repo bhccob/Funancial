@@ -782,13 +782,15 @@ describe('the emailed code', () => {
     expect((await join(accounts, { username: 'grace', code }, ipOf(1))).res).toEqual(EXPIRED);
   });
 
-  it('ends a code after five wrong tries: the sixth, even with the right code, is expired', async () => {
+  it('ends a code after five wrong tries: the fifth says so, and the sixth, even with the right code, is expired', async () => {
     const { store, accounts, mail } = setupMailed();
     await ask(accounts);
     const code = sentCode(mail);
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < 4; i++) {
       expect((await join(accounts, { code: wrongOf(code) })).res, `try ${i + 1}`).toEqual(WRONG);
     }
+    // The fifth spends the code: it is answered as the code gone, so the phone stops offering it.
+    expect((await join(accounts, { code: wrongOf(code) })).res, 'try 5').toEqual(EXPIRED);
     expect(store.dump()[CODE_KEY]).toBeUndefined();
     expect((await join(accounts, { code })).res).toEqual(EXPIRED);
     expect(store.dump()['acct:u:ada']).toBeUndefined();
@@ -817,10 +819,12 @@ describe('the emailed code', () => {
     );
     const told = tries.filter(({ res }) => res.status === 401).length;
     expect(told).toBeGreaterThan(0);
-    expect(told).toBeLessThanOrEqual(5);
-    // Each wrong answer was a try that was counted; the rest were turned away without a verdict.
+    expect(told).toBeLessThanOrEqual(4);
+    // Each wrong answer was a try that was counted, and so was the fifth, which spent the code and
+    // was answered as expired; the rest were turned away without a verdict.
     const record = store.dump()[CODE_KEY] as { tries: number } | undefined;
-    expect(record?.tries ?? 5).toBe(told);
+    const counted = record?.tries ?? 5;
+    expect(counted).toBe(told + (counted === 5 ? 1 : 0));
     for (const { res } of tries.filter(({ res }) => res.status !== 401)) {
       expect([410, 429]).toContain(res.status);
     }
@@ -977,8 +981,11 @@ describe('the emailed code', () => {
     const { store, accounts, mail } = setupMailed();
     for (let round = 0; round < 4; round++) {
       await ask(accounts, {}, ipOf(round));
+      // Five wrong tries each round: four told so, and the fifth that the code is spent.
       for (let i = 0; i < 5; i++) {
-        expect((await join(accounts, { code: wrongOf(sentCode(mail)) })).res.status).toBe(401);
+        expect((await join(accounts, { code: wrongOf(sentCode(mail)) })).res.status).toBe(
+          i < 4 ? 401 : 410,
+        );
       }
       advance(31);
     }

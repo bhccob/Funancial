@@ -5,6 +5,7 @@ import { RadioGroup } from '@/components/ui/RadioGroup';
 import { Select } from '@/components/ui/Select';
 import { StepMotion, type StepDirection } from '@/components/ui/StepMotion';
 import { Switch } from '@/components/ui/Switch';
+import { TextButton } from '@/components/ui/TextButton';
 import { TextField } from '@/components/ui/TextField';
 import { validateSecret, type SecretKind } from '@/data/keys';
 import { CodeField } from '@/features/account/CodeField';
@@ -112,8 +113,10 @@ export function OnboardingWizard({ onFinishing }: { onFinishing?(finishing: bool
   const [aside, setAside] = useState<'login' | 'forgot' | null>(null);
   const [done, setDone] = useState(false);
 
-  const [username, setUsername] = useState('');
-  const [email, setEmail] = useState('');
+  // A sign-up a lock or a reload left waiting on its code comes back with its name and address: the
+  // password is typed again, and Continue goes back to the code that was sent.
+  const [username, setUsername] = useState(emailCode.restored?.username ?? '');
+  const [email, setEmail] = useState(emailCode.restored?.email ?? '');
   const [password, setPassword] = useState('');
   const [accountErrors, setAccountErrors] = useState<{
     username?: string;
@@ -147,6 +150,8 @@ export function OnboardingWizard({ onFinishing }: { onFinishing?(finishing: bool
   function goAside(to: 'login' | 'forgot' | null) {
     // Further in (log in, then forgot) rises; back out comes down.
     setDirection(to === null || (to === 'login' && aside === 'forgot') ? 'back' : 'forward');
+    // Off to log in instead: keys kept for a Verify again are not needed.
+    if (to !== null) emailCode.forgetKeys();
     setAside(to);
   }
 
@@ -217,7 +222,8 @@ export function OnboardingWizard({ onFinishing }: { onFinishing?(finishing: bool
 
   function skip() {
     setPassword('');
-    emailCode.setCode('');
+    // On without an account: the code waiting, what was typed of it and the keys are let go.
+    emailCode.forget();
     go(YOU);
   }
 
@@ -297,7 +303,12 @@ export function OnboardingWizard({ onFinishing }: { onFinishing?(finishing: bool
     const line = offline ? FAILURE_LINE.offline : (failure?.line ?? null);
     return (
       <div className="flex flex-col items-start gap-3">
-        {line && <p className="text-muted text-sm">{line}</p>}
+        {/* Said politely: it comes with the way on, and is not an error in what was typed. */}
+        {line && (
+          <p role="status" className="text-muted text-sm">
+            {line}
+          </p>
+        )}
         <Button variant="secondary" disabled={working} onClick={skip}>
           Skip for now
         </Button>
@@ -356,7 +367,10 @@ export function OnboardingWizard({ onFinishing }: { onFinishing?(finishing: bool
                 spellCheck={false}
                 value={username}
                 error={accountErrors.username}
-                onChange={(e) => setUsername(e.target.value)}
+                onChange={(e) => {
+                  setUsername(e.target.value);
+                  emailCode.forgetKeys();
+                }}
               />
               <TextField
                 variant="row"
@@ -366,7 +380,10 @@ export function OnboardingWizard({ onFinishing }: { onFinishing?(finishing: bool
                 autoComplete="email"
                 value={email}
                 error={accountErrors.email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  emailCode.addressChanged(e.target.value);
+                }}
               />
               <PasswordField
                 variant="row"
@@ -375,18 +392,20 @@ export function OnboardingWizard({ onFinishing }: { onFinishing?(finishing: bool
                 hint={PASSWORD_HINT}
                 value={password}
                 error={accountErrors.password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  emailCode.forgetKeys();
+                }}
               />
             </div>
             <SaveNote />
-            <button
-              type="button"
+            <TextButton
               onClick={() => goAside('login')}
               disabled={!account.loaded || working}
-              className="text-accent-text -my-1 inline-flex min-h-11 items-center self-start font-bold underline underline-offset-4 disabled:pointer-events-none disabled:opacity-45"
+              className="-my-1 self-start"
             >
               I already have an account
-            </button>
+            </TextButton>
             {skipOffer()}
             <Problem>{accountErrors.other}</Problem>
           </>
@@ -400,13 +419,19 @@ export function OnboardingWizard({ onFinishing }: { onFinishing?(finishing: bool
               lead={codeLead(emailCode.sentTo ?? email.trim())}
               leadId={codeLeadId}
             />
+            {/* The code is what comes next: the field takes the focus, and is heard with the lead. */}
             <CodeField
+              autoFocus
               describedBy={codeLeadId}
               value={emailCode.code}
               onChange={emailCode.setCode}
               error={emailCode.codeError}
             />
-            <ResendCode onResend={() => void resend()} disabled={emailCode.resendHeld || working} />
+            <ResendCode
+              onResend={() => void resend()}
+              disabled={emailCode.resendHeld || working}
+              secondsLeft={emailCode.resendLeft}
+            />
             <Problem>{emailCode.problem}</Problem>
             {skipOffer()}
           </>

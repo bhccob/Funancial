@@ -509,7 +509,8 @@ export function createAccounts({ store, masterKey, now, mailer, waitUntil }: Acc
    * spent), else the answer to send. The verdict is decided inside the write that records it, one
    * write at a time: a wrong try is written as one more try, a right one as all five spent. Only
    * the request whose write lands gives its verdict, so tries sent at once are each counted (no more
-   * than 5 can ever be told they were wrong) and a right code is accepted once, whatever else is
+   * than 4 can ever be told they were wrong: the fifth, which spends the code, is told it is gone,
+   * 410 `expired`, as every try after it is) and a right code is accepted once, whatever else is
    * reading it. A request that loses the write reads again and finds the record as it now is.
    * What comes after the write is tidying, and a store that fails there must not turn the verdict
    * into an outage: every reader already finds the record spent or counted. A write leaves the key
@@ -530,7 +531,10 @@ export function createAccounts({ store, masterKey, now, mailer, waitUntil }: Acc
       if (!(await store.compareAndSet(key, record, next))) continue;
       await store.expire(key, left).catch(() => {});
       if (next.tries >= CODE_TRIES) await store.del(key).catch(() => {});
-      return right ? null : fail(401, 'code');
+      if (right) return null;
+      // The wrong try that made the fifth spent the code: it is answered as gone, as the next would
+      // be, so the phone offers a new code rather than another try at this one.
+      return next.tries >= CODE_TRIES ? fail(410, 'expired') : fail(401, 'code');
     }
     // Others kept getting in first. No verdict was given, so none was counted.
     return tooSoon(1);

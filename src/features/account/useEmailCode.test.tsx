@@ -173,6 +173,212 @@ describe('useEmailCode', () => {
     expect(current().resendHeld).toBe(false);
   });
 
+  it('counts the hold down a second at a time', async () => {
+    const { run, advance, current } = setup();
+    expect(current().resendLeft).toBe(0);
+    await run((c) => c.request(ROBIN));
+    expect(current().resendLeft).toBe(30);
+    advance(1);
+    expect(current().resendLeft).toBe(30);
+    advance(999);
+    expect(current().resendLeft).toBe(29);
+    advance(28_000);
+    expect(current().resendLeft).toBe(1);
+    advance(1_000);
+    expect(current().resendLeft).toBe(0);
+    expect(current().resendHeld).toBe(false);
+  });
+
+  describe('a code that went to the address a moment ago, unseen', () => {
+    it('goes on to the code for a refusal that is the 30 s gap, held for what is left of it', async () => {
+      const account = fakeAccount();
+      // A code went to this address 12 s ago (its answer was lost, or a reload forgot it).
+      account.requestCode.mockRejectedValueOnce(
+        new AccountError('limited', 'Too many tries. Try again in a minute.', 18),
+      );
+      const { run, advance, current } = setup(account);
+      expect(await run((c) => c.request(ROBIN))).toEqual({ kind: 'ok' });
+      expect(current().sentTo).toBe('robin@example.com');
+      expect(current().problem).toBeUndefined();
+      expect(current().resendLeft).toBe(18);
+      advance(17_999);
+      expect(current().resendHeld).toBe(true);
+      advance(1);
+      expect(current().resendHeld).toBe(false);
+      // The code to type is that one: Back and on again does not ask for another.
+      expect(await run((c) => c.request(ROBIN))).toEqual({ kind: 'ok' });
+      expect(account.requestCode).toHaveBeenCalledTimes(1);
+      act(() => current().setCode('481529'));
+      expect(await run((c) => c.verify(SIGN_UP))).toEqual({ kind: 'ok' });
+      expect(account.signUp).toHaveBeenCalledWith({ ...SIGN_UP, code: '481529' });
+    });
+
+    it('takes the code to have gone when it was sent, for how long it works', async () => {
+      const account = fakeAccount();
+      account.requestCode.mockRejectedValueOnce(new AccountError('limited', 'Too many tries.', 30));
+      const { run, advance, current } = setup(account);
+      await run((c) => c.request(ROBIN));
+      expect(current().resendLeft).toBe(30);
+      // Ten minutes from then, it is gone: Continue asks for a new one.
+      advance(10 * 60_000);
+      await run((c) => c.request(ROBIN));
+      expect(account.requestCode).toHaveBeenCalledTimes(2);
+    });
+
+    it.each([
+      ['a longer hold (the hour)', 31],
+      ['one that names no wait', null],
+    ])('says too many tries for %s, and goes nowhere', async (_, wait) => {
+      const account = fakeAccount();
+      account.requestCode.mockRejectedValueOnce(
+        new AccountError('limited', 'Too many tries. Try again in a minute.', wait),
+      );
+      const { run, current } = setup(account);
+      expect(await run((c) => c.request(ROBIN))).toEqual({
+        kind: 'failed',
+        failure: 'limited',
+        message: 'Too many tries. Try again in a minute.',
+      });
+      expect(current().sentTo).toBeNull();
+      expect(current().resendHeld).toBe(false);
+    });
+  });
+
+  describe('kept outside the screen, for a lock or a reload', () => {
+    /** What the phone keeps for a sign-up waiting on its code. */
+    const kept = () =>
+      JSON.parse(localStorage.getItem('funancial.signup.code') ?? 'null') as unknown;
+
+    it('keeps who the code went to and when, and never the password or the code', async () => {
+      const { run, current } = setup();
+      await run((c) => c.request({ username: ' Robin ', email: ' robin@example.com' }));
+      act(() => current().setCode('481529'));
+      expect(kept()).toEqual({ username: 'Robin', email: 'robin@example.com', sentAt: Date.now() });
+      const stored = localStorage.getItem('funancial.signup.code')!;
+      expect(stored).not.toContain('481529');
+      expect(stored).not.toContain(SIGN_UP.password);
+    });
+
+    it('is there for the screen that opens next, which goes back to the code without a new mail', async () => {
+      const first = setup();
+      await first.run((c) => c.request(ROBIN));
+      act(() => first.current().setCode('48'));
+      first.advance(12_000);
+      // The lock takes the screen down: what was typed goes with it.
+      first.hook.unmount();
+
+      const again = setup(first.account);
+      expect(again.current().restored).toEqual(ROBIN);
+      expect(again.current().sentTo).toBe('robin@example.com');
+      expect(again.current().code).toBe('');
+      // Send a new code is held for what is left of the 30 s.
+      expect(again.current().resendLeft).toBe(18);
+      again.advance(17_999);
+      expect(again.current().resendHeld).toBe(true);
+      again.advance(1);
+      expect(again.current().resendHeld).toBe(false);
+
+      expect(await again.run((c) => c.request(ROBIN))).toEqual({ kind: 'ok' });
+      expect(first.account.requestCode).toHaveBeenCalledTimes(1);
+    });
+
+    it('is read back from the phone after a reload', async () => {
+      const first = setup();
+      await first.run((c) => c.request(ROBIN));
+      first.advance(5_000);
+      first.hook.unmount();
+
+      // The app starts again: nothing in memory, only what the phone kept.
+      vi.resetModules();
+      const fresh = await import('./useEmailCode');
+      const providers = await import('@/test/fakeAccount');
+      const account = providers.fakeAccount();
+      const hook = renderHook(() => fresh.useEmailCode(), {
+        wrapper: ({ children }: { children: ReactNode }) =>
+          providers.withAccount(account, children),
+      });
+      expect(hook.result.current.restored).toEqual(ROBIN);
+      expect(hook.result.current.resendLeft).toBe(25);
+      await act(async () => {
+        expect(await hook.result.current.request(ROBIN)).toEqual({ kind: 'ok' });
+      });
+      expect(account.requestCode).not.toHaveBeenCalled();
+      hook.unmount();
+      (await import('./pendingCode')).keepPendingCode(null);
+    });
+
+    it('is gone once the code has run out, on the phone too', async () => {
+      const first = setup();
+      await first.run((c) => c.request(ROBIN));
+      first.hook.unmount();
+      act(() => void vi.advanceTimersByTime(10 * 60_000));
+
+      const again = setup(first.account);
+      expect(again.current().restored).toBeNull();
+      expect(await again.run((c) => c.request(ROBIN))).toEqual({ kind: 'ok' });
+      expect(first.account.requestCode).toHaveBeenCalledTimes(2);
+
+      // And after a reload, one that ran out is not read back, and is cleared away.
+      localStorage.setItem(
+        'funancial.signup.code',
+        JSON.stringify({ ...ROBIN, sentAt: Date.now() - 10 * 60_000 }),
+      );
+      vi.resetModules();
+      const fresh = await import('./pendingCode');
+      expect(fresh.pendingCode()).toBeNull();
+      expect(localStorage.getItem('funancial.signup.code')).toBeNull();
+    });
+
+    it('reads nothing back from what is not one of its records', async () => {
+      for (const stored of ['not json', '{"username":"Robin"}', '[1,2]']) {
+        localStorage.setItem('funancial.signup.code', stored);
+        vi.resetModules();
+        const fresh = await import('./pendingCode');
+        expect(fresh.pendingCode(), stored).toBeNull();
+      }
+    });
+
+    it('is let go once the account is made', async () => {
+      const first = setup();
+      await first.run((c) => c.request(ROBIN));
+      act(() => first.current().setCode('481529'));
+      await first.run((c) => c.verify(SIGN_UP));
+      expect(kept()).toBeNull();
+      first.hook.unmount();
+      expect(setup().current().restored).toBeNull();
+    });
+
+    it('is let go, with the keys, when the person goes on without an account', async () => {
+      const first = setup();
+      await first.run((c) => c.request(ROBIN));
+      act(() => first.current().forget());
+      expect(kept()).toBeNull();
+      expect(first.current().sentTo).toBeNull();
+      expect(first.account.forgetKeys).toHaveBeenCalled();
+    });
+
+    it('is let go when the address changes, and kept while it does not', async () => {
+      const { run, current } = setup();
+      await run((c) => c.request(ROBIN));
+      act(() => current().addressChanged(' robin@example.com '));
+      expect(current().sentTo).toBe('robin@example.com');
+      act(() => current().addressChanged('robin@example.co'));
+      expect(current().sentTo).toBeNull();
+      expect(kept()).toBeNull();
+    });
+
+    it('is still kept when the phone can keep nothing', async () => {
+      vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+        throw new DOMException('blocked', 'SecurityError');
+      });
+      const first = setup();
+      await first.run((c) => c.request(ROBIN));
+      first.hook.unmount();
+      expect(setup(first.account).current().restored).toEqual(ROBIN);
+      vi.restoreAllMocks();
+    });
+  });
+
   describe('a refused Send a new code', () => {
     it('hands a name that has been taken meanwhile back to the screen, and keeps the code it has', async () => {
       const account = fakeAccount();
@@ -255,12 +461,14 @@ describe('useEmailCode', () => {
       expect(current().sentTo).toBeNull();
     });
 
-    it('says an incomplete code is not right under it, and sends nothing', async () => {
+    it('asks for all six digits of an incomplete code, under it, and sends nothing', async () => {
       const { account, run, current } = setup();
       await run((c) => c.request(ROBIN));
-      act(() => current().setCode('4815'));
-      expect(await run((c) => c.verify(SIGN_UP))).toEqual({ kind: 'incomplete' });
-      expect(current().codeError).toBe("That code isn't right. Check the email and try again.");
+      for (const typed of ['', '4815']) {
+        act(() => current().setCode(typed));
+        expect(await run((c) => c.verify(SIGN_UP))).toEqual({ kind: 'incomplete' });
+        expect(current().codeError).toBe('Type all 6 digits.');
+      }
       expect(account.signUp).not.toHaveBeenCalled();
     });
 

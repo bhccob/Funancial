@@ -266,10 +266,10 @@ describe('Settings → Create account, in two steps', () => {
     expect(await screen.findByText('Your account is ready.')).toBeInTheDocument();
   });
 
-  it('says a code that is not six digits is not right, and sends nothing', async () => {
+  it('asks for all six digits of a code that is short, and sends nothing', async () => {
     const { actions, dialog } = await toCode();
     await enterCode(dialog, '4815');
-    expect(await within(dialog).findByRole('alert')).toHaveTextContent(WRONG_CODE);
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Type all 6 digits.');
     expect(actions.signUp).not.toHaveBeenCalled();
   });
 
@@ -503,6 +503,104 @@ describe('Settings → Create account, in two steps', () => {
       close(accountStep());
       expect(screen.queryByRole('dialog', { name: 'Create your account' })).not.toBeInTheDocument();
     }
+  });
+
+  it('focuses the code each time the code step comes, heard with where the code went', async () => {
+    const { dialog } = await toCode();
+    expect(within(dialog).getByLabelText('Code')).toHaveFocus();
+    await press(dialog, 'Back');
+    await press(dialog, 'Continue');
+    await codeStep();
+    expect(within(dialog).getByLabelText('Code')).toHaveFocus();
+    expect(within(dialog).getByLabelText('Code')).toHaveAccessibleDescription(CODE_LEAD);
+  });
+
+  it('says where else to look for the email, and counts down until a new code may be sent', async () => {
+    const { dialog } = await toCode();
+    expect(within(dialog).getByText('Not there? Check your spam folder.')).toBeInTheDocument();
+    const resend = within(dialog).getByRole('button', { name: 'Send a new code' });
+    expect(resend).toHaveTextContent(/^Send a new code \(0:(30|29)\)$/);
+  });
+
+  it('comes back after a lock took Settings down: the sheet opens with the name and address, and goes back to the code sent', async () => {
+    const actions = fakeAccount();
+    const first = renderWithStore(withAccount(actions, <AccountSection />), createStubStore());
+    await press(await fillAccount(), 'Continue');
+    await codeStep();
+    // The phone locks while the person reads their email: every screen is taken down.
+    first.unmount();
+
+    show(actions);
+    await userEvent.click(button('Create account'));
+    const again = accountStep();
+    expect(within(again).getByLabelText('Username')).toHaveValue('robin');
+    expect(within(again).getByLabelText('Email')).toHaveValue('robin@example.com');
+    // Never the password: it is typed again.
+    expect(within(again).getByLabelText('Password')).toHaveValue('');
+    await userEvent.type(within(again).getByLabelText('Password'), PASSWORD);
+    await press(again, 'Continue');
+    await codeStep();
+    expect(actions.requestCode).toHaveBeenCalledTimes(1);
+    expect(within(again).getByRole('button', { name: 'Send a new code' })).toBeDisabled();
+
+    await enterCode(again);
+    expect(actions.signUp).toHaveBeenCalledWith({
+      username: 'robin',
+      email: 'robin@example.com',
+      password: PASSWORD,
+      code: '481529',
+    });
+    expect(await screen.findByText('Your account is ready.')).toBeInTheDocument();
+  });
+
+  it('comes back after the app reloaded, from what the phone kept', async () => {
+    const first = renderWithStore(
+      withAccount(fakeAccount(), <AccountSection />),
+      createStubStore(),
+    );
+    await press(await fillAccount(), 'Continue');
+    await codeStep();
+    first.unmount();
+
+    // A reload: the app's modules start again, with nothing in memory.
+    vi.resetModules();
+    const { AccountSection: Fresh } = await import('./AccountSection');
+    const fresh = await import('@/test/fakeAccount');
+    const stub = await import('@/test/appStoreStub');
+    const actions = fresh.fakeAccount();
+    stub.renderWithStore(fresh.withAccount(actions, <Fresh />), stub.createStubStore());
+    await userEvent.click(button('Create account'));
+    const again = accountStep();
+    expect(within(again).getByLabelText('Username')).toHaveValue('robin');
+    expect(within(again).getByLabelText('Email')).toHaveValue('robin@example.com');
+    await userEvent.type(within(again).getByLabelText('Password'), PASSWORD);
+    await press(again, 'Continue');
+    await codeStep();
+    expect(actions.requestCode).not.toHaveBeenCalled();
+    (await import('@/features/account/pendingCode')).keepPendingCode(null);
+  });
+
+  it('takes the 30 s gap on an address it sent nothing to as a code that just went there', async () => {
+    const actions = fakeAccount();
+    actions.requestCode.mockRejectedValueOnce(
+      new AccountError('limited', 'Too many tries. Try again in a minute.', 25),
+    );
+    const { dialog } = await toCode(actions);
+    expect(within(dialog).queryByText(/Too many tries/)).not.toBeInTheDocument();
+    expect(within(dialog).getByText(CODE_LEAD)).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'Send a new code' })).toBeDisabled();
+  });
+
+  it('lets go of the keys kept for a Verify again when the name or password changes, and on closing', async () => {
+    const actions = show();
+    const dialog = await fillAccount();
+    actions.forgetKeys.mockClear();
+    await userEvent.type(within(dialog).getByLabelText('Password'), '!');
+    expect(actions.forgetKeys).toHaveBeenCalledTimes(1);
+    await userEvent.type(within(dialog).getByLabelText('Username'), 's');
+    expect(actions.forgetKeys).toHaveBeenCalledTimes(2);
+    await press(dialog, 'Cancel');
+    expect(actions.forgetKeys).toHaveBeenCalledTimes(3);
   });
 
   it('opens on the account step again after it was closed on the code step, and goes back to the code sent', async () => {

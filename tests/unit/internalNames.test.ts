@@ -40,6 +40,11 @@ const PINNED: Array<[file: string, why: string, literals: string[]]> = [
     'the answers to the first-time cards on Home',
     ["'funancial.first.balance'", "'funancial.first.subscriptions'"],
   ],
+  [
+    'src/features/account/pendingCode.ts',
+    'a sign-up waiting on its emailed code, kept for a reload',
+    ["'funancial.signup.code'"],
+  ],
   ['src/features/invest/ProfitAndLoss.tsx', 'the profit toggle', ["'funancial.invest.showPnl'"]],
   ['src/lib/broadcast.ts', 'the tab channel', ["name = 'funancial'"]],
   [

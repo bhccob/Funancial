@@ -1,5 +1,6 @@
 import { ChevronLeft } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import { TextButton } from '@/components/ui/TextButton';
 import { TextField, type TextFieldProps } from '@/components/ui/TextField';
 import {
   passwordStrength,
@@ -40,21 +41,38 @@ export function BackButton({ onClick, disabled }: { onClick(): void; disabled?: 
   );
 }
 
+/** A wait as a clock shows it: "0:23", "2:00". */
+const clockOf = (seconds: number) =>
+  `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+
 /**
- * Under the code field: Send a new code (held, while the last one was just sent, by `disabled`) and
- * how long a code works. Setup and Settings' Create account say it the same.
+ * Under the code field: Send a new code (off by `disabled`, as while the last one was just sent, with
+ * the seconds until it may be sent again, `secondsLeft`, beside it), where else to look for the email,
+ * and how long a code works. Setup and Settings' Create account say it the same. The count is drawn
+ * only: the button's name stays "Send a new code", which a screen reader would otherwise hear change
+ * every second.
  */
-export function ResendCode({ onResend, disabled }: { onResend(): void; disabled?: boolean }) {
+export function ResendCode({
+  onResend,
+  disabled,
+  secondsLeft = 0,
+}: {
+  onResend(): void;
+  disabled?: boolean;
+  secondsLeft?: number;
+}) {
   return (
     <div className="-mt-2 flex flex-col items-center gap-1 text-center">
-      <button
-        type="button"
-        onClick={onResend}
-        disabled={disabled}
-        className="text-accent-text inline-flex min-h-11 items-center font-bold underline underline-offset-4 disabled:pointer-events-none disabled:opacity-45"
-      >
+      {/* The gap draws the space between the words and the count; the space is for its text. */}
+      <TextButton onClick={onResend} disabled={disabled} className="gap-1">
         Send a new code
-      </button>
+        {secondsLeft > 0 && (
+          <span aria-hidden="true" className="tabular-nums">
+            {` (${clockOf(secondsLeft)})`}
+          </span>
+        )}
+      </TextButton>
+      <p className="text-muted text-sm">Not there? Check your spam folder.</p>
       <p className="text-muted text-sm">
         The code works for 10 minutes. Wrong email? Go back and fix it.
       </p>

@@ -262,7 +262,10 @@ test('setup makes the account only with the emailed code, and turns a wrong one 
   await expect(
     page.getByText(`We sent a 6-digit code to ${ME.email}. Your account is made once you type it.`),
   ).toBeVisible();
-  await expect(page.getByRole('heading', { level: 1, name: 'Check your email' })).toBeFocused();
+  // The code is what comes next: its field has the focus.
+  await expect(
+    page.locator('[data-motion="current"]').getByLabel('Code', { exact: true }),
+  ).toBeFocused();
 
   await codeStep(page, '000000');
   await expect(page.getByRole('alert')).toHaveText(
@@ -299,6 +302,38 @@ test('setup makes the account only with the emailed code, and turns a wrong one 
     '000000',
     CODE,
   ]);
+});
+
+test('setup comes back to the code sent after the app reloads, without a second email', async ({
+  page,
+}) => {
+  const service = await mockAccountService(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Create an account' }).click();
+  await createAccountStep(page, ME);
+
+  // The person goes to their email app for the code, and the phone reloads the app meanwhile.
+  await page.reload();
+  await expect(page.getByText('Step 1 of 4')).toBeVisible();
+  await expect(page.getByLabel('Username')).toHaveValue(ME.username);
+  await expect(page.getByLabel('Email', { exact: true })).toHaveValue(ME.email);
+  // Never the password, nor the code: the password is typed again.
+  await expect(page.getByLabel('Password', { exact: true })).toHaveValue('');
+  const kept = await page.evaluate(() => localStorage.getItem('funancial.signup.code') ?? '');
+  expect(kept).not.toContain(ME.password);
+  await page.getByLabel('Password', { exact: true }).fill(ME.password);
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await expect(page.getByText('Step 2 of 4')).toBeVisible();
+
+  // The code that was mailed is the one: no second email.
+  await codeStep(page, CODE);
+  await expect(
+    page.getByRole('heading', { level: 1, name: 'Your currency and name' }),
+  ).toBeVisible();
+  expect(service.seen.filter((s) => s.route === 'code')).toHaveLength(1);
+  expect([...service.accounts.keys()]).toEqual(['robin']);
+  // Made: nothing is kept for a code any more.
+  expect(await page.evaluate(() => localStorage.getItem('funancial.signup.code'))).toBeNull();
 });
 
 test('a service that is down shows a calm line with Skip, and setup goes on once it answers', async ({

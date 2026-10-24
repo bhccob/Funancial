@@ -58,16 +58,17 @@ function StepHeader({
  * password), whose Continue has a code mailed to the address, then the code, whose Verify makes the
  * account with it. Back returns to the first step with everything kept; the code step is
  * `useEmailCode`, which setup uses too. Closing starts over from the first step, with the name and
- * address kept and the password and the code typed gone, and a code sent a moment ago is gone back to
- * rather than mailed again.
+ * address kept and the password, the code typed and the keys gone, and a code sent a moment ago is
+ * gone back to rather than mailed again. So is one sent before a lock took Settings down, or before
+ * a reload: the sheet opens with that name and address.
  */
 export function CreateAccountSheet({ open, onClose }: { open: boolean; onClose(): void }) {
   const emailCode = useEmailCode();
   // The code step's lead, which its field is described by.
   const codeLeadId = useId();
   const [step, setStep] = useState<Step>('account');
-  const [username, setUsername] = useState('');
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState(emailCode.restored?.username ?? '');
+  const [email, setEmail] = useState(emailCode.restored?.email ?? '');
   const [password, setPassword] = useState('');
   const [errors, setErrors] = useState<{
     username?: string;
@@ -87,13 +88,15 @@ export function CreateAccountSheet({ open, onClose }: { open: boolean; onClose()
     setStep('account');
     setCodeProblem(undefined);
     emailCode.setCode('');
+    emailCode.forgetKeys();
     onClose();
   };
   // Not while a call is under way: a close that left the call running would have its answer land in
-  // a sheet nobody is looking at. A Verify can take about two minutes at its very worst (the keys,
-  // then a sign-up of up to 30 s, a retry after a lost reply of up to 30 s, the log-in that claims
-  // the name of up to 30 s, and the first copy's upload, which the sign-up waits for, of up to 30 s),
-  // so the buttons that would leave are off meanwhile, as setup's Back is.
+  // a sheet nobody is looking at. A Verify can take about a minute and a half at its very worst (the
+  // keys, then a sign-up of up to 30 s, a retry after a lost reply of up to 30 s, and the log-in that
+  // claims the name of up to 30 s, after a moment's wait when the retry found its code spent; the
+  // first copy goes up after it, not inside it), so the buttons that would leave are off meanwhile,
+  // as setup's Back is.
   const closeUnlessWorking = () => {
     if (!working) close();
   };
@@ -183,7 +186,10 @@ export function CreateAccountSheet({ open, onClose }: { open: boolean; onClose()
                   autoFocus
                   value={username}
                   error={errors.username}
-                  onChange={(e) => setUsername(e.target.value)}
+                  onChange={(e) => {
+                    setUsername(e.target.value);
+                    emailCode.forgetKeys();
+                  }}
                 />
                 <TextField
                   variant="row"
@@ -193,7 +199,10 @@ export function CreateAccountSheet({ open, onClose }: { open: boolean; onClose()
                   autoComplete="email"
                   value={email}
                   error={errors.email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={(e) => {
+                    setEmail(e.target.value);
+                    emailCode.addressChanged(e.target.value);
+                  }}
                 />
                 <PasswordField
                   variant="row"
@@ -202,7 +211,10 @@ export function CreateAccountSheet({ open, onClose }: { open: boolean; onClose()
                   hint={PASSWORD_HINT}
                   value={password}
                   error={errors.password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    emailCode.forgetKeys();
+                  }}
                 />
               </div>
               <SaveNote />
@@ -225,6 +237,7 @@ export function CreateAccountSheet({ open, onClose }: { open: boolean; onClose()
                 lead={codeLead(emailCode.sentTo ?? email.trim())}
                 leadId={codeLeadId}
               />
+              {/* The code is what comes next: the field takes the focus, and is heard with the lead. */}
               <CodeField
                 autoFocus
                 describedBy={codeLeadId}
@@ -235,6 +248,7 @@ export function CreateAccountSheet({ open, onClose }: { open: boolean; onClose()
               <ResendCode
                 onResend={() => void resend()}
                 disabled={emailCode.resendHeld || working}
+                secondsLeft={emailCode.resendLeft}
               />
               <Problem>{emailCode.problem ?? codeProblem}</Problem>
               <Button type="submit" size="lg" disabled={working}>
