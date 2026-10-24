@@ -900,6 +900,8 @@ describe.each(CASES)(
       expect(badgeClasses().split(' ')).toEqual(
         expect.arrayContaining(['glass-strong', 'page-ink', 'text-text']),
       );
+      // What the pin below measures the words in: page-ink gives the page's ink (primary) back.
+      expect(utility('page-ink')).toContain('--color-text: var(--color-primary)');
     });
 
     it('keeps its words at 4.5:1 or better on its glass, over every face a card can have', () => {

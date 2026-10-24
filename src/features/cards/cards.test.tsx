@@ -39,7 +39,22 @@ const KEY = 'funancial.selectedAccount';
 // Expected text is built with the app's formatter: the test machine's locale decides "$" vs "US$".
 const usd = (minor: number) => formatMoney(minor, 'USD');
 
+// What the payment service refuses with while a test sets it; with none, the real service answers.
+const refusal = vi.hoisted(() => ({ message: null as string | null }));
+vi.mock('@/store/useFinance', async (importOriginal) => {
+  const real = await importOriginal<typeof import('@/store/useFinance')>();
+  return {
+    ...real,
+    usePaymentService: () => {
+      const service = real.usePaymentService();
+      const message = refusal.message;
+      return message === null ? service : { pay: () => Promise.reject(new Error(message)) };
+    },
+  };
+});
+
 afterEach(() => {
+  refusal.message = null;
   localStorage.clear();
   useSelectedAccount.setState({ id: null });
   useAmountsHidden.setState({ hidden: false });
@@ -622,6 +637,29 @@ describe('the done step of Pay', () => {
     );
     expect(useLastSpend.getState().last).toBeNull();
   });
+
+  it('records nothing and shows no done step when the payment service refuses, and stays on the form', async () => {
+    const store = await renderReal();
+    refusal.message = 'The payment was declined.';
+    await userEvent.click(action('Pay'));
+    const pay = within(sheet('Main account'));
+    await userEvent.type(pay.getByLabelText('Amount'), '12.50');
+    await userEvent.click(pay.getByRole('button', { name: 'Pay' }));
+    // Today's error behaviour: the reason is said in a toast, and nothing else happens.
+    await toasted('The payment was declined.');
+    expect(useLastSpend.getState().last).toBeNull();
+    expect(store.getState().data.tables.expense).toEqual([]);
+    expect(pay.queryByText(`Paid ${usd(12_50)}`)).toBeNull();
+    expect(pay.queryByText(/^Paid with /)).toBeNull();
+    expect(pay.queryByRole('button', { name: 'Done' })).toBeNull();
+    // Still the form, with what was typed, and Pay offered again.
+    expect(pay.getByLabelText('Amount')).toHaveValue('12.50');
+    expect(pay.getByRole('button', { name: 'Pay' })).toBeEnabled();
+    expect(card('Main account')).toHaveAttribute(
+      'aria-label',
+      `Main account, debit, ${usd(1_000_00)}`,
+    );
+  });
 });
 
 describe('just now', () => {
@@ -710,7 +748,7 @@ describe('just now', () => {
     expect(badge(/just now/)).toBeNull();
   });
 
-  it('waits for the card to come on screen, and counts its 30 seconds from then', () => {
+  it('waits for its card to come on screen, then shows once and not again on going back', () => {
     clock();
     const centre = stubObservers();
     spend(VISA, 45_00, 20_000);
