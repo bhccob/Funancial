@@ -11,6 +11,7 @@ const modules = vi.hoisted(() => ({
   password: ['OPTIONS', 'POST'],
   forgot: ['OPTIONS', 'POST'],
   reset: ['POST'],
+  code: ['OPTIONS', 'POST'],
 }));
 
 // Each stub answers with who was reached and what query came with it.
@@ -29,6 +30,7 @@ vi.mock('../_account/copy.js', () => stub('copy'));
 vi.mock('../_account/password.js', () => stub('password'));
 vi.mock('../_account/forgot.js', () => stub('forgot'));
 vi.mock('../_account/reset.js', () => stub('reset'));
+vi.mock('../_account/code.js', () => stub('code'));
 
 const send = (method: keyof typeof METHODS, path: string) =>
   METHODS[method](new Request(`http://localhost${path}`, { method }));
@@ -63,6 +65,14 @@ describe('api/[op].ts', () => {
     const res = await send('GET', '/api/reset?token=x');
     expect(res.status).toBe(405);
     expect(await res.text()).toBe('');
+  });
+
+  it('answers GET /api/code with 405: the code route is only ever sent a body', async () => {
+    const res = await send('GET', '/api/code?username=ada');
+    expect(res.status).toBe(405);
+    expect(await res.text()).toBe('');
+    // It is a route of the catch-all, not a 404.
+    expect(await (await send('POST', '/api/code')).text()).toBe('code POST');
   });
 
   it("reads Vercel's op parameter when the function sees its rewritten path", async () => {

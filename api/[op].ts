@@ -1,3 +1,4 @@
+import * as code from './_account/code.js';
 import * as copy from './_account/copy.js';
 import * as forgot from './_account/forgot.js';
 import * as login from './_account/login.js';
@@ -7,7 +8,7 @@ import * as signup from './_account/signup.js';
 
 type Handler = (req: Request) => Response | Promise<Response>;
 
-// Vercel's free plan allows 12 functions and every file in api/ is one, so the six account routes
+// Vercel's free plan allows 12 functions and every file in api/ is one, so the seven account routes
 // share this one. A static file (quote, fx, ...) still takes its own path before this catch-all.
 const routes: Record<string, Partial<Record<string, Handler>>> = {
   signup,
@@ -16,6 +17,7 @@ const routes: Record<string, Partial<Record<string, Handler>>> = {
   password,
   forgot,
   reset,
+  code,
 };
 
 const dispatch =

@@ -6,7 +6,7 @@ import { kvStoreFromEnv } from './store.js';
 
 type Context = { token: string | null; body: unknown; ip: string };
 
-/** Read at call time; null when the database or the master key (base64 of 32 bytes) is missing. Without Gmail only `forgot` is unavailable. */
+/** Read at call time; null when the database or the master key (base64 of 32 bytes) is missing. Without Gmail only `forgot` and `code` are unavailable. */
 function accountsFromEnv(): Accounts | null {
   const store = kvStoreFromEnv();
   const masterKey = Buffer.from(process.env.SERVER_MASTER_KEY ?? '', 'base64');

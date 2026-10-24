@@ -4,12 +4,18 @@ import { DELETE, OPTIONS, POST, PUT } from '../[op].js';
 import { accountRoute } from './accountRoute.js';
 import { unwrapServer, type Account } from './accounts.js';
 import { clientIp } from './http.js';
+import { fakeMailer, gmailMailerFromEnv } from './mailer.js';
 import { kvStoreFromEnv, memoryKvStore, type KvStore } from './store.js';
 
-// The routes build their store from the environment; here that is a memory store.
+// The routes build their store and mailer from the environment; here the store is a memory store,
+// and there is no mailer unless a test seats one.
 vi.mock('./store.js', async (orig) => ({
   ...(await orig<typeof import('./store.js')>()),
   kvStoreFromEnv: vi.fn(),
+}));
+vi.mock('./mailer.js', async (orig) => ({
+  ...(await orig<typeof import('./mailer.js')>()),
+  gmailMailerFromEnv: vi.fn(),
 }));
 
 const TOKEN = 'test-token';
@@ -37,6 +43,7 @@ const account = () => ({
 
 beforeEach(() => {
   vi.mocked(kvStoreFromEnv).mockReturnValue(memoryKvStore());
+  vi.mocked(gmailMailerFromEnv).mockReturnValue(null);
   vi.stubEnv('FUNANCIAL_ACCESS_TOKEN', TOKEN);
   vi.stubEnv('SERVER_MASTER_KEY', b64(32));
 });
@@ -53,6 +60,7 @@ const routes: Array<[string, Method, string]> = [
   ['delete copy', 'DELETE', '/api/copy'],
   ['password', 'POST', '/api/password'],
   ['forgot', 'POST', '/api/forgot'],
+  ['code', 'POST', '/api/code'],
 ];
 
 describe('account routes', () => {
@@ -72,7 +80,7 @@ describe('account routes', () => {
   });
 
   it('answer the preflight with every method and header the phone uses', async () => {
-    for (const name of ['signup', 'login', 'copy', 'password', 'forgot']) {
+    for (const name of ['signup', 'login', 'copy', 'password', 'forgot', 'code']) {
       const res = await OPTIONS(
         new Request(`http://localhost/api/${name}`, {
           method: 'OPTIONS',
@@ -215,6 +223,78 @@ describe('account routes', () => {
     expect(lower.status).toBe(200);
   });
 
+  it('send an emailed code and take it at sign-up, by the real URLs', async () => {
+    const mail = fakeMailer();
+    vi.mocked(gmailMailerFromEnv).mockReturnValue(mail);
+    const a = account();
+    const who = { username: a.username, email: a.email };
+
+    const sent = await call('POST', '/api/code', who, { Origin: ORIGIN });
+    expect(sent.status).toBe(200);
+    expect(sent.headers.get('Cache-Control')).toBe('no-store');
+    expect(sent.headers.get('Access-Control-Allow-Origin')).toBe(ORIGIN);
+    expect(await sent.json()).toEqual({ ok: true });
+    expect(mail.sent).toHaveLength(1);
+    expect(mail.sent[0]).toMatchObject({ to: 'ada@example.com', subject: 'Your Funcial code' });
+
+    // Another at once: 30 seconds between codes, told in Retry-After.
+    const soon = await call('POST', '/api/code', who);
+    expect(soon.status).toBe(429);
+    expect(soon.headers.get('Retry-After')).toMatch(/^(29|30)$/);
+    expect(soon.headers.get('Access-Control-Expose-Headers')).toBe('Retry-After');
+    expect(await soon.json()).toEqual({ error: 'too many attempts' });
+    expect(mail.sent).toHaveLength(1);
+
+    const code =
+      /is (\d{3}) (\d{3})\./
+        .exec(mail.sent[0]?.text ?? '')
+        ?.slice(1)
+        .join('') ?? '';
+    const wrong = await call('POST', '/api/signup', {
+      ...a,
+      code: code === '000000' ? '000001' : '000000',
+    });
+    expect(wrong.status).toBe(401);
+    expect(await wrong.json()).toEqual({ error: 'code' });
+
+    const made = await call('POST', '/api/signup', { ...a, code });
+    expect(made.status).toBe(200);
+    expect(((await made.json()) as { deviceToken: string }).deviceToken).toMatch(
+      /^[A-Za-z0-9_-]{43}$/,
+    );
+
+    // The name is taken now, and the code route says so, as sign-up does.
+    const taken = await call('POST', '/api/code', who);
+    expect(taken.status).toBe(409);
+    expect(await taken.json()).toEqual({ error: 'taken' });
+    const again = await call('POST', '/api/signup', { ...a, code });
+    expect(again.status).toBe(409);
+
+    const bad = await call('POST', '/api/code', { username: 'ab', email: a.email });
+    expect(bad.status).toBe(400);
+    expect(await bad.json()).toEqual({ error: 'bad request' });
+  });
+
+  it('answer the code route 503 not configured without Gmail, and 503 not sent when the email fails', async () => {
+    const a = account();
+    const who = { username: a.username, email: a.email };
+    const none = await call('POST', '/api/code', who);
+    expect(none.status).toBe(503);
+    expect(none.headers.get('Cache-Control')).toBe('no-store');
+    expect(await none.text()).toBe('{"error":"not configured"}');
+
+    vi.mocked(gmailMailerFromEnv).mockReturnValue({
+      send: () => Promise.reject(Object.assign(new Error('boom'), { code: 'ETIMEDOUT' })),
+    });
+    const spies = (['error', 'log', 'info', 'warn', 'debug'] as const).map((m) =>
+      vi.spyOn(console, m).mockImplementation(() => {}),
+    );
+    const failed = await call('POST', '/api/code', who);
+    expect(failed.status).toBe(503);
+    expect(await failed.text()).toBe('{"error":"not sent"}');
+    expect(spies[0]?.mock.calls).toEqual([['[api] code email failed:', 'ETIMEDOUT']]);
+  });
+
   it('send Retry-After with a 429, and count each address by the first X-Forwarded-For entry', async () => {
     const send = (ip: string, username: string) =>
       call(
@@ -322,12 +402,15 @@ describe('account routes', () => {
       ]),
     ) as unknown as KvStore;
     vi.mocked(kvStoreFromEnv).mockReturnValue(failing);
+    // The code route is unavailable without Gmail; with it, it reaches the store.
+    vi.mocked(gmailMailerFromEnv).mockReturnValue(fakeMailer());
     const spies = spiedConsole();
 
     const a = account();
     const auth = bearer(randomBytes(32).toString('base64url'));
     const bodies: Array<[Method, string, unknown]> = [
       ['POST', '/api/signup', a],
+      ['POST', '/api/code', { username: 'ada', email: 'ada@example.com' }],
       ['POST', '/api/login', { username: 'ada', authKey: a.authKey }],
       ['PUT', '/api/copy', { baseVersion: 0, iv: b64(12), ciphertext: b64(100) }],
       ['DELETE', '/api/copy', undefined],

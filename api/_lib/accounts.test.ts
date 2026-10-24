@@ -1,6 +1,6 @@
 import * as nodeCrypto from 'node:crypto';
-import { createHash, createHmac, hkdfSync, randomBytes, scrypt } from 'node:crypto';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createHash, createHmac, hkdfSync, randomBytes, randomInt, scrypt } from 'node:crypto';
+import { afterEach, beforeEach, describe, expect, it, vi, type MockedFunction } from 'vitest';
 // The phone's own module, by relative path: the cross tests below hold the server to its formats.
 import {
   canonicalUsername as phoneCanonical,
@@ -24,13 +24,15 @@ import {
   type Result,
   type Sealed,
 } from './accounts.js';
+import { fakeMailer } from './mailer.js';
 import { rateLimit } from './rateLimit.js';
 import { memoryKvStore, type KvStore } from './store.js';
 
-// The real scrypt, watched: a log-in that must wait is answered before any of its work.
+// The real scrypt, watched: a log-in that must wait is answered before any of its work. The real
+// randomInt too, which a test can set for one call to know the code a send will make.
 vi.mock('node:crypto', async (real) => {
   const crypto = await real<typeof import('node:crypto')>();
-  return { ...crypto, scrypt: vi.fn(crypto.scrypt) };
+  return { ...crypto, scrypt: vi.fn(crypto.scrypt), randomInt: vi.fn(crypto.randomInt) };
 });
 
 const T0 = Date.parse('2026-10-17T12:00:00.000Z');
@@ -90,6 +92,19 @@ function setup(through: (store: KvStore) => KvStore = (store) => store) {
   const store = memoryKvStore(() => clock);
   const accounts = createAccounts({ store: through(store), masterKey: MASTER, now: () => clock });
   return { store, accounts };
+}
+
+// The same, with a mailer that keeps what it is asked to send, for the routes that send.
+function setupMailed(through: (store: KvStore) => KvStore = (store) => store) {
+  const store = memoryKvStore(() => clock);
+  const mail = fakeMailer();
+  const accounts = createAccounts({
+    store: through(store),
+    masterKey: MASTER,
+    now: () => clock,
+    mailer: mail,
+  });
+  return { store, accounts, mail };
 }
 
 const acctKeys = (store: { dump(): Record<string, unknown> }) =>
@@ -264,6 +279,449 @@ describe('sign-up', () => {
     expect(email).toHaveLength(254);
     const { res } = await join(accounts, { username: 'a'.repeat(30), email });
     expect(res.status).toBe(200);
+  });
+});
+
+describe('the emailed code', () => {
+  const HOUR = 3600;
+  const DAY = 24 * HOUR;
+  const CODE_KEY = 'acct:v:ada@example.com';
+  const TOO_MANY = (retryAfter: number) => ({
+    status: 429,
+    body: { error: 'too many attempts' },
+    retryAfter,
+  });
+  const WRONG = { status: 401, body: { error: 'code' } };
+  const EXPIRED = { status: 410, body: { error: 'expired' } };
+  const TAKEN = { status: 409, body: { error: 'taken' } };
+
+  const spied = () => {
+    const all = (['log', 'info', 'warn', 'error', 'debug'] as const).map((m) =>
+      vi.spyOn(console, m).mockImplementation(() => {}),
+    );
+    return { all, error: all[3] };
+  };
+  afterEach(() => vi.restoreAllMocks());
+
+  // randomInt is the real one, set for a call only where a test needs to know the code.
+  const randomIntMock = vi.mocked(randomInt) as unknown as MockedFunction<
+    (min: number, max: number) => number
+  >;
+
+  const ask = (accounts: Accounts, over: Record<string, unknown> = {}, ip = IP) =>
+    accounts.code({ username: 'Ada', email: 'Ada@Example.com', ...over }, ip);
+  /** The code in the newest email: "481 529" is 481529. */
+  const sentCode = (mail: ReturnType<typeof fakeMailer>) =>
+    /is (\d{3}) (\d{3})\./
+      .exec(mail.sent.at(-1)?.text ?? '')
+      ?.slice(1)
+      .join('') ?? '';
+  const wrongOf = (code: string) => (code === '000000' ? '000001' : '000000');
+  /** An address of its own for the nth request, so no per-address limit gets in the way. */
+  const ipOf = (n: number) => `10.1.${Math.floor(n / 250)}.${n % 250}`;
+
+  it('sends a code: one email, in the words of the brief, and keeps only its hash for 10 minutes', async () => {
+    const { store, accounts, mail } = setupMailed();
+    expect(await ask(accounts)).toEqual({ status: 200, body: { ok: true } });
+
+    expect(mail.sent).toHaveLength(1);
+    const [sent] = mail.sent;
+    expect(sent?.to).toBe('ada@example.com');
+    expect(sent?.subject).toBe('Your Funcial code');
+    expect(sent?.text).toMatch(
+      /^Your Funcial code is \d{3} \d{3}\. It works for 10 minutes\. If you didn't ask for it, ignore this email\.$/,
+    );
+
+    const code = sentCode(mail);
+    expect(code).toMatch(/^\d{6}$/);
+    expect(randomInt).toHaveBeenCalledWith(0, 1_000_000);
+    expect(store.dump()[CODE_KEY]).toEqual({ hash: sha(code), tries: 0, sentAt: T0 });
+    expect(await store.ttl(CODE_KEY)).toBe(600);
+  });
+
+  it('writes a code with leading zeros in full, in two groups of three', async () => {
+    const { mail, accounts } = setupMailed();
+    randomIntMock.mockReturnValueOnce(42);
+    await ask(accounts);
+    expect(mail.sent[0]?.text).toContain('Your Funcial code is 000 042.');
+  });
+
+  it('gives a taken name no code, in any spelling of it, and sends nothing', async () => {
+    const { store, accounts, mail } = setupMailed();
+    await join(accounts);
+    for (const username of ['ada', 'ADA', 'ＡＤＡ']) {
+      expect(await ask(accounts, { username, email: 'x@example.com' }, ipOf(1))).toEqual(TAKEN);
+    }
+    expect(mail.sent).toEqual([]);
+    expect(Object.keys(store.dump()).filter((k) => k.startsWith('acct:v:'))).toEqual([]);
+  });
+
+  it('counts a taken name against the address like any request, so it cannot be probed without limit', async () => {
+    const { accounts } = setupMailed();
+    await join(accounts);
+    for (let i = 0; i < 5; i++) expect(await ask(accounts)).toEqual(TAKEN);
+    expect(await ask(accounts)).toEqual(TOO_MANY(HOUR));
+  });
+
+  it('refuses a bad body with 400, sending and counting nothing', async () => {
+    const { store, accounts, mail } = setupMailed();
+    const bad: Array<Record<string, unknown>> = [
+      { username: 'ab' },
+      { username: 'has space' },
+      { username: undefined },
+      { email: 'nope' },
+      { email: `${'a'.repeat(250)}@x.io` },
+      { email: undefined },
+      { authKey: b64(32) },
+      { code: '123456' },
+    ];
+    for (const over of bad) {
+      expect(await ask(accounts, over), JSON.stringify(over)).toEqual({
+        status: 400,
+        body: { error: 'bad request' },
+      });
+    }
+    for (const body of [null, 'x', 7, [], {}]) {
+      expect((await accounts.code(body, IP)).status).toBe(400);
+    }
+    expect(mail.sent).toEqual([]);
+    expect(Object.keys(store.dump())).toEqual([]);
+  });
+
+  it('is not configured without a mailer, and touches nothing', async () => {
+    const { store, accounts } = setup();
+    expect(await ask(accounts)).toEqual({ status: 503, body: { error: 'not configured' } });
+    expect(Object.keys(store.dump())).toEqual([]);
+  });
+
+  it('replaces the old code with a new one: only the newest works', async () => {
+    const { accounts, mail } = setupMailed();
+    randomIntMock.mockReturnValueOnce(111111).mockReturnValueOnce(222222);
+    await ask(accounts);
+    advance(31);
+    await ask(accounts);
+    expect(mail.sent.map((m) => m.text.slice(0, 29))).toEqual([
+      'Your Funcial code is 111 111.',
+      'Your Funcial code is 222 222.',
+    ]);
+
+    expect((await join(accounts, { code: '111111' })).res).toEqual(WRONG);
+    expect((await join(accounts, { code: '222222' })).res.status).toBe(200);
+  });
+
+  it('makes a new send start the tries again', async () => {
+    const { accounts, mail } = setupMailed();
+    await ask(accounts);
+    for (let i = 0; i < 4; i++) {
+      expect((await join(accounts, { code: wrongOf(sentCode(mail)) })).res).toEqual(WRONG);
+    }
+    advance(31);
+    await ask(accounts);
+    for (let i = 0; i < 4; i++) {
+      expect((await join(accounts, { code: wrongOf(sentCode(mail)) })).res).toEqual(WRONG);
+    }
+    expect((await join(accounts, { code: sentCode(mail) })).res.status).toBe(200);
+  });
+
+  it('keeps 30 seconds between codes for an address, and says how long is left', async () => {
+    const { store, accounts, mail } = setupMailed();
+    await ask(accounts);
+    advance(10);
+    expect(await ask(accounts, {}, ipOf(1))).toEqual(TOO_MANY(20));
+    advance(19);
+    expect(await ask(accounts, {}, ipOf(2))).toEqual(TOO_MANY(1));
+    expect(mail.sent).toHaveLength(1);
+    // A refusal for being too soon uses up none of the day's emails.
+    expect(store.dump()['rl:code:global:all']).toBe(1);
+
+    advance(1);
+    expect((await ask(accounts, {}, ipOf(3))).status).toBe(200);
+    expect(mail.sent).toHaveLength(2);
+    // Another address has its own gap.
+    expect((await ask(accounts, { username: 'bob', email: 'bob@example.com' })).status).toBe(200);
+  });
+
+  it('sends five codes an hour to one address, then makes it wait out the hour', async () => {
+    const { accounts, mail } = setupMailed();
+    for (let i = 0; i < 5; i++) {
+      expect((await ask(accounts, {}, ipOf(i))).status).toBe(200);
+      advance(31);
+    }
+    // 155 s into the hour.
+    expect(await ask(accounts, {}, ipOf(9))).toEqual(TOO_MANY(HOUR - 155));
+    expect(mail.sent).toHaveLength(5);
+
+    advance(HOUR - 155);
+    expect((await ask(accounts, {}, ipOf(10))).status).toBe(200);
+    expect(mail.sent).toHaveLength(6);
+  });
+
+  it('sends five codes an hour from one address, however many emails they are for', async () => {
+    const { accounts, mail } = setupMailed();
+    for (let i = 0; i < 5; i++) {
+      const who = { username: `user${i}`, email: `user${i}@example.com` };
+      expect((await ask(accounts, who)).status).toBe(200);
+    }
+    const sixth = { username: 'user5', email: 'user5@example.com' };
+    expect(await ask(accounts, sixth)).toEqual(TOO_MANY(HOUR));
+    expect(mail.sent).toHaveLength(5);
+    expect((await ask(accounts, sixth, '198.51.100.2')).status).toBe(200);
+  });
+
+  it('has a daily cap of its own, inside the one it shares with forgot-password', async () => {
+    const spies = spied();
+    const { store, accounts, mail } = setupMailed();
+    await join(accounts, { username: 'grace', email: 'grace@example.com' });
+    for (let i = 0; i < 150; i++) {
+      const who = { username: `user${i}`, email: `user${i}@example.com` };
+      expect((await ask(accounts, who, ipOf(i))).status, `code ${i + 1}`).toBe(200);
+    }
+    expect(mail.sent).toHaveLength(150);
+    expect(spies.error).not.toHaveBeenCalled();
+
+    // The 151st is turned away, and uses none of forgot-password's share.
+    const who = { username: 'user150', email: 'user150@example.com' };
+    expect(await ask(accounts, who, ipOf(150))).toEqual(TOO_MANY(DAY));
+    expect(mail.sent).toHaveLength(150);
+    expect(store.dump()['rl:forgot:global:all']).toBe(150);
+    expect(spies.error?.mock.calls).toEqual([['[api] code email skipped: cap']]);
+
+    // Forgot-password still has the other 150.
+    expect(await accounts.forgot({ who: 'grace' }, IP)).toEqual({
+      status: 200,
+      body: { ok: true },
+    });
+    expect(mail.sent).toHaveLength(151);
+    expect(mail.sent[150]?.subject).toBe('Choose a new Funcial password');
+
+    // A day later codes go again.
+    advance(DAY + 1);
+    expect((await ask(accounts, who, ipOf(151))).status).toBe(200);
+  });
+
+  it('stops when the daily cap it shares with forgot-password is used up', async () => {
+    const { store, accounts, mail } = setupMailed();
+    for (let i = 0; i < 300; i++) await rateLimit(store, 'forgot:global', 'all', 300, DAY);
+    expect(await ask(accounts)).toEqual(TOO_MANY(DAY));
+    expect(mail.sent).toEqual([]);
+    expect(store.dump()[CODE_KEY]).toBeUndefined();
+  });
+
+  it('counts a code against both daily caps', async () => {
+    const { store, accounts } = setupMailed();
+    await ask(accounts);
+    expect(store.dump()['rl:code:global:all']).toBe(1);
+    expect(store.dump()['rl:forgot:global:all']).toBe(1);
+  });
+
+  it('answers 503 not sent, and keeps no code, when the email cannot go; the person can ask again at once', async () => {
+    const spies = spied();
+    const { store, accounts, mail } = setupMailed();
+    const failure = Object.assign(new Error('refused for ada@example.com, 123456'), {
+      code: 'ECONNECTION',
+    });
+    vi.spyOn(mail, 'send').mockRejectedValueOnce(failure);
+
+    expect(await ask(accounts)).toEqual({ status: 503, body: { error: 'not sent' } });
+    expect(store.dump()[CODE_KEY]).toBeUndefined();
+    // Only the kind of failure is logged: no address, no code, no message.
+    expect(spies.error?.mock.calls).toEqual([['[api] code email failed:', 'ECONNECTION']]);
+
+    // There is no code to wait for, so there is no gap.
+    expect((await ask(accounts)).status).toBe(200);
+    expect(mail.sent).toHaveLength(1);
+    expect(store.dump()[CODE_KEY]).toBeDefined();
+  });
+
+  it('ends a code after five wrong tries: the sixth, even with the right code, is expired', async () => {
+    const { store, accounts, mail } = setupMailed();
+    await ask(accounts);
+    const code = sentCode(mail);
+    for (let i = 0; i < 5; i++) {
+      expect((await join(accounts, { code: wrongOf(code) })).res, `try ${i + 1}`).toEqual(WRONG);
+    }
+    expect(store.dump()[CODE_KEY]).toBeUndefined();
+    expect((await join(accounts, { code })).res).toEqual(EXPIRED);
+    expect(store.dump()['acct:u:ada']).toBeUndefined();
+
+    // A new code starts afresh.
+    advance(31);
+    await ask(accounts);
+    expect((await join(accounts, { code: sentCode(mail) })).res.status).toBe(200);
+  });
+
+  it('still takes the right code after four wrong tries', async () => {
+    const { store, accounts, mail } = setupMailed();
+    await ask(accounts);
+    const code = sentCode(mail);
+    for (let i = 0; i < 4; i++) await join(accounts, { code: wrongOf(code) });
+    expect(store.dump()[CODE_KEY]).toMatchObject({ tries: 4 });
+    expect((await join(accounts, { code })).res.status).toBe(200);
+  });
+
+  it('counts every wrong try even when they arrive at once, so the five tries cannot be raced', async () => {
+    const { store, accounts, mail } = setupMailed(lagged);
+    await ask(accounts);
+    const code = sentCode(mail);
+    const tries = await Promise.all(
+      Array.from({ length: 30 }, (_, i) => join(accounts, { code: wrongOf(code) }, ipOf(i))),
+    );
+    const told = tries.filter(({ res }) => res.status === 401).length;
+    expect(told).toBeGreaterThan(0);
+    expect(told).toBeLessThanOrEqual(5);
+    // Each wrong answer was a try that was counted; the rest were turned away without a verdict.
+    const record = store.dump()[CODE_KEY] as { tries: number } | undefined;
+    expect(record?.tries ?? 5).toBe(told);
+    for (const { res } of tries.filter(({ res }) => res.status !== 401)) {
+      expect([410, 429]).toContain(res.status);
+    }
+    expect(store.dump()['acct:u:ada']).toBeUndefined();
+  });
+
+  it('expires a code after 10 minutes', async () => {
+    const { store, accounts, mail } = setupMailed();
+    await ask(accounts);
+    const code = sentCode(mail);
+    advance(599);
+    expect((await join(accounts, { code: wrongOf(code) })).res).toEqual(WRONG);
+    // The wrong try did not give it a new lifetime.
+    expect(await store.ttl(CODE_KEY)).toBe(1);
+    advance(2);
+    expect((await join(accounts, { code })).res).toEqual(EXPIRED);
+    expect(store.dump()['acct:u:ada']).toBeUndefined();
+  });
+
+  it('says expired for an address that was sent no code at all', async () => {
+    const { accounts } = setupMailed();
+    expect((await join(accounts, { code: '123456' })).res).toEqual(EXPIRED);
+  });
+
+  it('makes a verified account with the right code, and uses the code up', async () => {
+    const { store, accounts, mail } = setupMailed();
+    await ask(accounts);
+    const code = sentCode(mail);
+    const first = await join(accounts, { code });
+    expect(first.res.status).toBe(200);
+    expect(store.dump()['acct:u:ada']).toMatchObject({ emailVerified: true });
+    expect(store.dump()[CODE_KEY]).toBeUndefined();
+
+    // The same code does not make a second account.
+    const again = await join(accounts, { username: 'grace', code });
+    expect(again.res).toEqual(EXPIRED);
+    expect(store.dump()['acct:u:grace']).toBeUndefined();
+  });
+
+  it('refuses a code that is not for the address in the sign-up', async () => {
+    const { store, accounts, mail } = setupMailed();
+    await ask(accounts);
+    const code = sentCode(mail);
+    const other = await join(accounts, { email: 'eve@example.com', code });
+    expect(other.res).toEqual(EXPIRED);
+    expect(store.dump()['acct:u:ada']).toBeUndefined();
+    // Its own address's code is untouched by the try.
+    expect(store.dump()[CODE_KEY]).toMatchObject({ tries: 0 });
+  });
+
+  it('still makes an account without a code, marked unverified', async () => {
+    const { store, accounts } = setup();
+    const { res } = await join(accounts);
+    expect(res.status).toBe(200);
+    expect(store.dump()['acct:u:ada']).toMatchObject({ emailVerified: false });
+  });
+
+  it('answers a retried sign-up with taken before it looks at the code', async () => {
+    const { store, accounts, mail } = setupMailed();
+    await ask(accounts);
+    const code = sentCode(mail);
+    expect((await join(accounts, { code })).res.status).toBe(200);
+    const before = JSON.stringify(store.dump()['acct:u:ada']);
+
+    // The reply was lost and the phone sends it again: the code is long gone, and still it is taken.
+    expect((await join(accounts, { code })).res).toEqual(TAKEN);
+    expect((await join(accounts, { code: wrongOf(code) })).res).toEqual(TAKEN);
+    expect((await join(accounts)).res).toEqual(TAKEN);
+    expect(JSON.stringify(store.dump()['acct:u:ada'])).toBe(before);
+    // Nothing about a code was looked at, so no try was counted after the first.
+    expect(store.dump()['rl:code:try:' + IP]).toBe(1);
+  });
+
+  it('counts wrong codes in their own bucket: six wrong ones do not use up the sign-up limit', async () => {
+    const { store, accounts, mail } = setupMailed();
+    await ask(accounts);
+    for (let i = 0; i < 4; i++) {
+      expect((await join(accounts, { code: wrongOf(sentCode(mail)) })).res).toEqual(WRONG);
+    }
+    advance(31);
+    await ask(accounts);
+    for (let i = 0; i < 2; i++) {
+      expect((await join(accounts, { code: wrongOf(sentCode(mail)) })).res).toEqual(WRONG);
+    }
+    // Six wrong tries from this address; sign-up's five an hour are untouched.
+    expect(store.dump()['rl:code:try:' + IP]).toBe(6);
+    expect(store.dump()['rl:signup:ip:' + IP]).toBeUndefined();
+
+    const right = await join(accounts, { code: sentCode(mail) });
+    expect(right.res.status).toBe(200);
+    expect(store.dump()['rl:signup:ip:' + IP]).toBe(1);
+  });
+
+  it('stops a flood of codes tried at 20 an hour per address, before it looks at any code', async () => {
+    const { store, accounts, mail } = setupMailed();
+    for (let round = 0; round < 4; round++) {
+      await ask(accounts, {}, ipOf(round));
+      for (let i = 0; i < 5; i++) {
+        expect((await join(accounts, { code: wrongOf(sentCode(mail)) })).res.status).toBe(401);
+      }
+      advance(31);
+    }
+    await ask(accounts, {}, ipOf(9));
+    const code = sentCode(mail);
+    const blocked = await join(accounts, { code });
+    expect(blocked.res).toEqual(TOO_MANY(HOUR - 124));
+    // The key was not touched: the code is whole, and the account is not made.
+    expect(store.dump()[CODE_KEY]).toMatchObject({ tries: 0 });
+    expect(store.dump()['acct:u:ada']).toBeUndefined();
+    // Another address is not held up.
+    expect((await join(accounts, { code }, '198.51.100.9')).res.status).toBe(200);
+  });
+
+  it('refuses a code that is not six digits with 400, counting nothing', async () => {
+    const { store, accounts } = setupMailed();
+    const bad = ['12345', '1234567', 'abcdef', '12 3456', ' 123456', '١٢٣٤٥٦', 123456, null];
+    for (const code of bad) {
+      expect((await join(accounts, { code })).res, String(code)).toEqual({
+        status: 400,
+        body: { error: 'bad request' },
+      });
+    }
+    expect(Object.keys(store.dump())).toEqual([]);
+  });
+
+  it('still limits sign-ups to five an hour per address, after the code', async () => {
+    const { store, accounts, mail } = setupMailed();
+    for (let i = 0; i < 5; i++) {
+      const who = { username: `user${i}`, email: `user${i}@example.com` };
+      await ask(accounts, who, ipOf(i));
+      expect((await join(accounts, { ...who, code: sentCode(mail) })).res.status).toBe(200);
+    }
+    const who = { username: 'user5', email: 'user5@example.com' };
+    await ask(accounts, who, ipOf(5));
+    expect((await join(accounts, { ...who, code: sentCode(mail) })).res).toEqual(TOO_MANY(HOUR));
+    expect(store.dump()['acct:u:user5']).toBeUndefined();
+  });
+
+  it('never writes the code or the address in the log, or returns the code in an answer', async () => {
+    const spies = spied();
+    const { accounts, mail } = setupMailed();
+    const answers = [await ask(accounts), await ask(accounts)];
+    const code = sentCode(mail);
+    answers.push((await join(accounts, { code: wrongOf(code) })).res);
+    answers.push((await join(accounts, { code })).res);
+    answers.push(await ask(accounts));
+    const seen = JSON.stringify([answers, spies.all.map((spy) => spy.mock.calls)]);
+    expect(seen).not.toContain(code);
+    expect(seen).not.toContain('ada@example.com');
+    for (const spy of spies.all) expect(spy).not.toHaveBeenCalled();
   });
 });
 

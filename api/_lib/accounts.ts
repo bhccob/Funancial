@@ -5,6 +5,7 @@ import {
   createHmac,
   hkdfSync,
   randomBytes,
+  randomInt,
   scrypt,
   timingSafeEqual,
 } from 'node:crypto';
@@ -37,7 +38,15 @@ export type Account = {
   /** Record format. */
   version: number;
   createdAt: string;
+  /**
+   * Whether the email was proved at sign-up with a code mailed to it. False for a sign-up that sent
+   * no code (an older app); absent on an account made before codes, which was never asked.
+   */
+  emailVerified?: boolean;
 };
+
+/** `acct:v:{email}`: the newest code mailed to an address. Only a hash of it is kept; `sentAt` is epoch ms. */
+type CodeRecord = { hash: string; tries: number; sentAt: number };
 
 /** `createdAt` is the account's: a copy left by an earlier account of the same name never counts. */
 type Copy = Sealed & { version: number; savedAt: string; createdAt: string };
@@ -71,6 +80,14 @@ const HOUR = 60 * 60;
 const DAY = 24 * HOUR;
 /** Reset emails the owner's Gmail sends a day, for everyone: it is not for anyone to use as a relay. */
 const SENDS_PER_DAY = 300;
+/** Code emails a day, for everyone. They count in SENDS_PER_DAY too, so a flood of them can't use up the reset links. */
+const CODES_PER_DAY = 150;
+/** How long a mailed code works. */
+const CODE_SECONDS = 10 * 60;
+/** The wrong tries a code takes; the one that makes the fifth spends it, and the next needs a new code. */
+const CODE_TRIES = 5;
+/** The least time, in seconds, between two codes mailed to one address. */
+const CODE_GAP = 30;
 /** Accounts one email address can be mailed about in one request. */
 const MAIL_PER_ADDRESS = 3;
 /** Tries at writing the account record against others changing it, before it answers busy. */
@@ -115,7 +132,13 @@ const signupBody = z.strictObject({
   authKey: key32,
   dek: key32,
   wrappedPw: wrappedKey,
+  // Optional while an older app, which signs up without one, is still out there.
+  code: z
+    .string()
+    .regex(/^\d{6}$/)
+    .optional(),
 });
+const codeBody = z.strictObject({ username, email });
 const loginBody = z.strictObject({ username, authKey: key32 });
 const copyBody = z.strictObject({
   baseVersion: z.int().min(0),
@@ -240,6 +263,8 @@ const K = {
   copy: (name: string) => `acct:c:${name}`,
   token: (hash: string) => `acct:t:${hash}`,
   claim: (name: string, since: string, version: number) => `acct:cl:${name}:${since}:${version}`,
+  /** The newest code mailed to an address. */
+  code: (address: string) => `acct:v:${address}`,
   /** A reset link, by the hash of its token. */
   reset: (hash: string) => `acct:r:${hash}`,
   /** Marks a reset link as taken by one request, so two at once can't both use it. */
@@ -396,11 +421,11 @@ export function createAccounts({ store, masterKey, now, mailer, waitUntil }: Acc
     return link && account && linkFits(hash, link, account) ? { hash, link, account } : null;
   }
 
-  /** Says in the log that a mail did not go, in one word: no address, no link, no message. */
-  function logMailFailure(err: unknown) {
+  /** Says in the log that a mail did not go, in one word: no address, no link, no code, no message. */
+  function logMailFailure(err: unknown, kind: 'reset' | 'code' = 'reset') {
     const code = (err as { code?: unknown } | null)?.code;
     console.error(
-      '[api] reset email failed:',
+      `[api] ${kind} email failed:`,
       typeof code === 'string' && /^[A-Z_]{3,20}$/.test(code) ? code : 'unknown',
     );
   }
@@ -464,11 +489,52 @@ export function createAccounts({ store, masterKey, now, mailer, waitUntil }: Acc
     }
   }
 
+  /**
+   * Checks `given` against the newest code mailed to `address`: null when it is right (and now
+   * spent), else the answer to send. Every try is counted before the code is looked at, one write at
+   * a time, so tries sent at once are counted too: no more than 5 can ever be told they were wrong.
+   * A write leaves the key without a lifetime, so it is set again.
+   */
+  async function takeCode(address: string, given: string): Promise<Result | null> {
+    const key = K.code(address);
+    for (let attempt = 0; attempt < WRITE_TRIES; attempt++) {
+      const record = await store.get<CodeRecord>(key);
+      // The store lets the key go at 10 minutes; the clock is checked too, as the write below
+      // leaves it without a lifetime for a moment.
+      const left = record ? CODE_SECONDS - Math.floor((now() - record.sentAt) / 1000) : 0;
+      if (!record || left <= 0 || record.tries >= CODE_TRIES) return fail(410, 'expired');
+      if (!(await store.compareAndSet(key, record, { ...record, tries: record.tries + 1 })))
+        continue;
+      await store.expire(key, left);
+      if (sameText(record.hash, sha256(given))) {
+        await store.del(key);
+        return null;
+      }
+      if (record.tries + 1 >= CODE_TRIES) await store.del(key);
+      return fail(401, 'code');
+    }
+    // Others kept getting in first. No verdict was given, so none was counted.
+    return tooSoon(1);
+  }
+
   return {
     async signup(body: unknown, ip: string): Promise<Result> {
       const parsed = signupBody.safeParse(body);
       if (!parsed.success) return badRequest();
-      const { username: name, email: address, authKey, dek, wrappedPw } = parsed.data;
+      const { username: name, email: address, authKey, dek, wrappedPw, code } = parsed.data;
+
+      // A taken name is answered before anything about the code: a sign-up whose reply was lost is
+      // sent again with a code that is spent by now, and must hear "taken" (the phone then logs in),
+      // not "wrong code". It counts against the caller's IP as it always did, so names can't be probed.
+      if (await store.get<Account>(K.user(name))) {
+        return (await throttle('signup:ip', ip, 5, HOUR)) ?? fail(409, 'taken');
+      }
+      // Wrong codes have a bucket of their own, so a fumbled one doesn't use up the sign-up limit
+      // below. It is counted before the key is read, so a flood costs the store nothing more.
+      if (code !== undefined) {
+        const wrong = (await throttle('code:try', ip, 20, HOUR)) ?? (await takeCode(address, code));
+        if (wrong) return wrong;
+      }
       const over = await throttle('signup:ip', ip, 5, HOUR);
       if (over) return over;
 
@@ -490,6 +556,7 @@ export function createAccounts({ store, masterKey, now, mailer, waitUntil }: Acc
         deviceTokenHash: sha256(token),
         version: 1,
         createdAt,
+        emailVerified: code !== undefined,
       };
       // One step, so two sign-ups for a name can't both win. A retried write that already took
       // effect sees the name taken; this attempt's token hash is its nonce, so an account with it is ours.
@@ -506,6 +573,55 @@ export function createAccounts({ store, masterKey, now, mailer, waitUntil }: Acc
         throw err;
       }
       return { status: 200, body: { deviceToken: token } };
+    },
+
+    /**
+     * Mails a six-digit code to prove an email address before sign-up, after checking the name is free
+     * (the answer sign-up gives, counted as it counts). Only the newest code works. Every limit is
+     * checked before anything is sent: the IP, the email address, the day's codes, and the day's mail
+     * that reset links share.
+     */
+    async code(body: unknown, ip: string): Promise<Result> {
+      if (!mailer) return fail(503, 'not configured');
+      const parsed = codeBody.safeParse(body);
+      if (!parsed.success) return badRequest();
+      const { username: name, email: address } = parsed.data;
+      const over = await throttle('code:ip', ip, 5, HOUR);
+      if (over) return over;
+      if (await store.get<Account>(K.user(name))) return fail(409, 'taken');
+
+      // Too soon after the last code. This counts nothing, so mashing the button uses up no mail.
+      const last = await store.get<CodeRecord>(K.code(address));
+      const wait = last ? Math.ceil((last.sentAt + CODE_GAP * 1000 - now()) / 1000) : 0;
+      if (wait > 0) return tooSoon(wait);
+
+      const limited = await throttle('code:email', address, 5, HOUR);
+      if (limited) return limited;
+      const capped =
+        (await throttle('code:global', 'all', CODES_PER_DAY, DAY)) ??
+        (await throttle('forgot:global', 'all', SENDS_PER_DAY, DAY));
+      if (capped) {
+        console.error('[api] code email skipped: cap');
+        return capped;
+      }
+
+      const code = String(randomInt(0, 1_000_000)).padStart(6, '0');
+      const record: CodeRecord = { hash: sha256(code), tries: 0, sentAt: now() };
+      await store.set(K.code(address), record, CODE_SECONDS);
+      try {
+        await mailer.send(
+          address,
+          'Your Funcial code',
+          `Your Funcial code is ${code.slice(0, 3)} ${code.slice(3)}. It works for 10 minutes. ` +
+            "If you didn't ask for it, ignore this email.",
+        );
+      } catch (err) {
+        logMailFailure(err, 'code');
+        // No code is kept for an email that never went, and none holds the person back for 30 s.
+        await store.del(K.code(address)).catch(() => {});
+        return fail(503, 'not sent');
+      }
+      return { status: 200, body: { ok: true } };
     },
 
     async login(body: unknown, ip: string): Promise<Result> {
