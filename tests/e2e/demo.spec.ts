@@ -1,5 +1,5 @@
-import { expect, test } from '@playwright/test';
-import { startDemo } from './helpers';
+import { expect, test, type Locator, type Page } from '@playwright/test';
+import { onboard, startDemo } from './helpers';
 
 test('try demo → banner → leave demo → welcome', async ({ page }) => {
   await startDemo(page);
@@ -114,7 +114,8 @@ for (const [width, room] of [
     const measured = await rows.evaluateAll((els) =>
       els.map((li) => {
         const words = li.querySelector('b')!.closest('span.min-w-0.flex-1')!;
-        const line = words.querySelector<HTMLElement>('.line-clamp-2')!;
+        // The words' second line is the one under the title, whatever its clamp.
+        const line = words.children[1] as HTMLElement;
         const button = li.querySelector('button')!;
         return {
           title: li.querySelector('b')!.textContent,
@@ -143,3 +144,181 @@ for (const [width, room] of [
     await expect(rows.first().locator('small')).toHaveText(/^\D*[\d,]+ (left|owed)$/);
   });
 }
+
+/** Saves an expense, from the Add page. */
+async function addExpense(page: Page, opts: { amount: string; note: string }) {
+  await page.goto('/add');
+  await page.getByLabel('Amount', { exact: true }).fill(opts.amount);
+  await page.getByLabel('Note', { exact: true }).fill(opts.note);
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.getByText('Expense saved.')).toBeVisible();
+}
+
+/** Saves extra income, from the Add page, and waits for Home to show it as the newest row. */
+async function addIncome(page: Page, opts: { amount: string; label: string }) {
+  await page.goto('/add');
+  await page.getByRole('radio', { name: 'Income' }).click();
+  // The income form replaces the expense form; fill the one that stays.
+  await expect(page.getByRole('group', { name: 'Source' })).toBeVisible();
+  await page.getByLabel('Amount', { exact: true }).fill(opts.amount);
+  await page.getByLabel('Label').fill(opts.label);
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(
+    page.getByRole('region', { name: 'Recent transactions' }).locator('li[data-entry]').first(),
+  ).toContainText(opts.label);
+}
+
+/** What a list of entry rows measures: where each row's amount ends, and what its last control is. */
+function measureAmounts(rows: Locator) {
+  return rows.evaluateAll((els) =>
+    els.map((li) => {
+      const right = (el: Element) => el.getBoundingClientRect().right;
+      const del = li.querySelector('button[aria-label^="Delete"]');
+      const box = del?.getBoundingClientRect();
+      return {
+        title: li.querySelector('b')!.textContent,
+        kind: del ? 'delete' : 'open',
+        // From the row's right edge, so the lists compare wherever each one stands.
+        amountEnd: right(li) - right(li.querySelector('.tabular-nums')!),
+        target: box && { width: box.width, height: box.height, left: box.left, right: box.right },
+        page: { width: window.innerWidth, scrolls: document.documentElement.scrollWidth },
+      };
+    }),
+  );
+}
+
+// An expense row ends in a 16px chevron and every other row in a 44px delete button; the delete
+// button gives back what its box is wider than the chevron's, so the amounts stand in one column.
+for (const [width, height] of [
+  [360, 780],
+  [375, 812],
+] as const) {
+  test(`mobile: at ${width}px the amounts line up in Recent and History`, async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== 'mobile-chromium', 'mobile layout only');
+    await page.setViewportSize({ width, height });
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Create an account' }).click();
+    await onboard(page, { cash: '1000' });
+    // Today's five rows: expenses (a chevron) and income (a delete button), mixed.
+    await addExpense(page, { amount: '4.50', note: 'Coffee' });
+    await addIncome(page, { amount: '1250', label: 'Side job' });
+    await addExpense(page, { amount: '12', note: 'Lunch' });
+    await addIncome(page, { amount: '20', label: 'Gift' });
+    await addExpense(page, { amount: '3', note: 'Bakery' });
+
+    await page.goto('/');
+    const recent = page
+      .getByRole('region', { name: 'Recent transactions' })
+      .locator('li[data-entry]');
+    await expect(recent).toHaveCount(5);
+    const inRecent = await measureAmounts(recent);
+
+    await page.goto('/history');
+    const history = page.getByRole('main').locator('section ul > li');
+    await expect(history.first()).toBeVisible();
+    const inHistory = await measureAmounts(history);
+
+    for (const [where, rows] of [
+      ['Recent', inRecent],
+      ['History', inHistory],
+    ] as const) {
+      for (const kind of ['open', 'delete']) {
+        expect(
+          rows.filter((r) => r.kind === kind).length,
+          `${where}: rows with ${kind}`,
+        ).toBeGreaterThan(0);
+      }
+      for (const row of rows) {
+        expect(row.page.scrolls, `${where}: the page does not scroll sideways`).toBeLessThanOrEqual(
+          width,
+        );
+        if (!row.target) continue;
+        // The target stays a whole 44px box, on the screen.
+        expect(row.target.width, `${where}: ${row.title}: delete target`).toBe(44);
+        expect(row.target.height, `${where}: ${row.title}: delete target`).toBe(44);
+        expect(row.target.left, `${where}: ${row.title}: target on screen`).toBeGreaterThanOrEqual(
+          0,
+        );
+        expect(row.target.right, `${where}: ${row.title}: target on screen`).toBeLessThanOrEqual(
+          width,
+        );
+      }
+    }
+    const ends = [...inRecent, ...inHistory].map((r) => r.amountEnd);
+    expect(
+      Math.max(...ends) - Math.min(...ends),
+      `the amounts' distance from the row's end: ${ends.map((e) => e.toFixed(1)).join(', ')}`,
+    ).toBeLessThanOrEqual(1);
+  });
+}
+
+// "Afl." (Aruban florin, in Dutch) is the widest amount the owner reads. The newest row also says
+// what is left on its card, so the amount column is as wide as "Afl. 2.605 left", and the words
+// have what is left of 360px: the card's name and last 4 digits must still be there whole.
+test.describe('a long card name, with Afl. amounts', () => {
+  test.use({ locale: 'nl-AW' });
+  for (const width of [360, 375]) {
+    test(`mobile: at ${width}px a long card name shows whole with Afl. amounts`, async ({
+      page,
+    }, testInfo) => {
+      test.skip(testInfo.project.name !== 'mobile-chromium', 'mobile layout only');
+      await page.setViewportSize({ width, height: 780 });
+      await page.goto('/');
+      await page.getByRole('button', { name: 'Create an account' }).click();
+      await onboard(page, { currency: 'AWG', cash: '2605' });
+
+      await page.goto('/cards');
+      await page
+        .getByRole('group', { name: 'Card actions' })
+        .getByRole('button', { name: 'Settings' })
+        .click();
+      const dialog = page.getByRole('dialog');
+      await dialog.getByLabel('Name').fill('Everyday checking');
+      await dialog.getByLabel('Last 4 digits').fill('4312');
+      await dialog.getByRole('button', { name: /^Save/ }).click();
+      await expect(dialog).toBeHidden();
+
+      await addExpense(page, { amount: '1234.50', note: 'Groceries' });
+      await page.goto('/');
+      const row = page
+        .getByRole('region', { name: 'Recent transactions' })
+        .locator('li[data-entry]')
+        .first();
+      await expect(row).toContainText('Everyday checking ·· 4312');
+      await expect(row).toContainText('Afl.');
+
+      const shown = await row.evaluate((li) => {
+        const words = li.querySelector('b')!.closest('span.min-w-0.flex-1')!;
+        // The title is the words' first line, the line under it their second.
+        const line = words.children[1] as HTMLElement;
+        const box = line.getBoundingClientRect();
+        const range = document.createRange();
+        range.selectNodeContents(line);
+        const glyphs = [...range.getClientRects()];
+        const wordsBox = words.getBoundingClientRect();
+        return {
+          text: line.textContent,
+          words: wordsBox.width,
+          // A clamped line keeps its hidden lines in the box, past its bottom, and ends in an ellipsis.
+          clipped: line.scrollHeight > line.clientHeight + 1,
+          outside: glyphs.filter(
+            (g) =>
+              g.left < wordsBox.left - 0.5 ||
+              g.right > wordsBox.right + 0.5 ||
+              g.top < box.top - 0.5 ||
+              g.bottom > box.bottom + 0.5,
+          ).length,
+          height: li.getBoundingClientRect().height,
+          scrolls: document.documentElement.scrollWidth,
+        };
+      });
+      console.log(`${width}px: words ${shown.words.toFixed(1)}px wide, row ${shown.height}px tall`);
+      expect(shown.text).toContain('Everyday checking ·· 4312');
+      expect(shown.clipped, 'the line under the title is cut').toBe(false);
+      expect(shown.outside, 'glyphs outside the words').toBe(0);
+      expect(shown.scrolls, 'the page does not scroll sideways').toBeLessThanOrEqual(width);
+    });
+  }
+});

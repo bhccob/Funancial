@@ -33,7 +33,9 @@ function Amount({ line, danger, left }: { line: EntryLine; danger: boolean; left
 /**
  * What an entry is called, a chip beside it for income not counted yet, and the line under it: its
  * detail and the card it moved money on (a mark and the card's name), then `day` where the list
- * runs days together. A long line wraps to a second line rather than cut the card's name off.
+ * runs days together. A long line wraps to a second and a third line rather than cut the card's name
+ * off: with "Afl." amounts the words have 124px at 360px (139px at 375px), and "Food · Everyday
+ * checking ·· 4312 · Today" takes three lines of the one and two of the other.
  */
 function EntryText({ line, day }: { line: EntryLine; day?: string }) {
   return (
@@ -43,7 +45,7 @@ function EntryText({ line, day }: { line: EntryLine; day?: string }) {
         <EntryChip line={line} />
       </span>
       {(line.detail || line.profit !== undefined || day) && (
-        <span className="text-muted line-clamp-2 text-[12px] font-semibold">
+        <span className="text-muted line-clamp-3 text-[12px] font-semibold">
           <EntryDetail line={line} day={day} />
         </span>
       )}
@@ -69,12 +71,18 @@ export interface EntryRowProps {
   entryId?: string;
 }
 
+/** The room between a row's parts: the wireframe draws 11px, and the words are what need the pixel. */
+const GAP = 'gap-2.5';
+
 /**
  * One entry as a plain row (under `ROWS`): its words and its amount, then a place for what can be
  * done with it. With `onOpen` the whole row is the button that does it and the place holds a 16px
- * chevron, a sign and not a target; with `onDelete` the place holds a 44px delete button. The row
- * knows nothing of what opening or deleting does: that is the caller's (`useEntryActions`, for
- * History and Home's Recent).
+ * chevron, a sign and not a target; with `onDelete` the place holds a 44px delete button, which
+ * takes only 16px of the row too: it gives back the 28px its box is wider than the chevron's, 10px
+ * of them the row's gap, so an amount ends at the same place whichever the row ends in, and the
+ * button is still a whole 44px target (it reaches 18px past the row, into the page's gutter).
+ * The row knows nothing of what opening or deleting does: that is the caller's
+ * (`useEntryActions`, for History and Home's Recent).
  */
 export function EntryRow({
   line,
@@ -88,7 +96,7 @@ export function EntryRow({
 }: EntryRowProps) {
   const tall = Icon !== undefined;
   const chip = Icon && (
-    <span className="glass grid size-11 flex-none place-items-center rounded-full">
+    <span className="glass grid size-10 flex-none place-items-center rounded-full">
       <Icon aria-hidden="true" className="size-[19px]" />
     </span>
   );
@@ -99,7 +107,8 @@ export function EntryRow({
           type="button"
           onClick={onOpen}
           className={cn(
-            'hover:bg-surface-2 -mx-2 flex w-[calc(100%+1rem)] items-center gap-3 rounded-xl px-2 text-left',
+            'hover:bg-surface-2 -mx-2 flex w-[calc(100%+1rem)] items-center rounded-xl px-2 text-left',
+            GAP,
             tall ? 'min-h-[62px] py-[9px]' : 'min-h-[54px] py-2',
           )}
         >
@@ -118,10 +127,7 @@ export function EntryRow({
   return (
     <li
       data-entry={entryId}
-      className={cn(
-        'flex items-center gap-3',
-        tall ? 'min-h-[62px] py-[9px]' : 'min-h-[54px] py-2',
-      )}
+      className={cn('flex items-center', GAP, tall ? 'min-h-[62px] py-[9px]' : 'min-h-[54px] py-2')}
     >
       {chip}
       <EntryText line={line} day={day} />
@@ -131,7 +137,7 @@ export function EntryRow({
           type="button"
           aria-label={`Delete ${line.title}`}
           onClick={onDelete}
-          className="text-muted hover:text-danger hover:bg-surface-2 press -mr-2 grid size-11 shrink-0 place-items-center rounded-full"
+          className="text-muted hover:text-danger hover:bg-surface-2 press -mr-4.5 -ml-2.5 grid size-11 shrink-0 place-items-center rounded-full"
         >
           <Trash2 aria-hidden className="size-4" />
         </button>
