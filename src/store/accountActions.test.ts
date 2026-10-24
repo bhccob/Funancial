@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { deriveAccountKeys, openCopy, UnsupportedError, unwrapDek } from '@/data/accountCrypto';
 import { base64ToBytes } from '@/data/crypto';
 import { emptySnapshot, type DataSnapshot } from '@/domain/snapshot';
+import { keepPendingCode, PENDING_CODE_KEY, pendingCode } from '@/lib/pendingCode';
 import { toastStore } from '@/lib/toast';
 import { NetworkError, type CopyBody } from '@/services/account';
 import {
@@ -61,7 +62,24 @@ afterEach(() => {
   vi.restoreAllMocks();
   vi.useRealTimers();
   vi.unstubAllGlobals();
+  keepPendingCode(null);
 });
+
+/**
+ * A sign-up the phone is waiting on a code for, in memory and on the phone, whose storage (the browser's,
+ * which node has none of) is returned to look in.
+ */
+function waitingOnACode() {
+  const phone = new Map<string, string>();
+  vi.stubGlobal('localStorage', {
+    getItem: (k: string) => phone.get(k) ?? null,
+    setItem: (k: string, v: string) => void phone.set(k, String(v)),
+    removeItem: (k: string) => void phone.delete(k),
+  });
+  keepPendingCode({ username: 'Robin', email: 'robin@example.com', sentAt: Date.now() });
+  expect(phone.has(PENDING_CODE_KEY)).toBe(true);
+  return phone;
+}
 
 const realSetTimeout = globalThis.setTimeout;
 /** Lets what is already under way (sealing, storage) run on the real clock. */
@@ -438,22 +456,37 @@ describe('asking for a code', () => {
     const { actions, server } = await setup();
     server.script(
       'requestCode',
-      answers(429, { error: 'too many attempts' }, 30),
-      answers(429, { error: 'too many attempts' }, 1),
+      answers(429, { error: 'too soon' }, 30),
+      answers(429, { error: 'too soon' }, 1),
       answers(429, { error: 'too many attempts' }),
     );
+    // The gap, and a request that lost the race to another's code: a code went a moment ago.
     await expect(actions.requestCode(who)).rejects.toMatchObject({
       code: 'limited',
       message: 'Too many tries. Try again in a minute.',
       retryAfter: 30,
+      justSent: true,
     });
     await expect(actions.requestCode(who)).rejects.toMatchObject({
       code: 'limited',
       retryAfter: 1,
+      justSent: true,
     });
     await expect(actions.requestCode(who)).rejects.toMatchObject({
       code: 'limited',
       retryAfter: null,
+      justSent: false,
+    });
+  });
+
+  it('tells the gap after a code from a limit, however little of the limit is left', async () => {
+    const { actions, server } = await setup();
+    // An hourly limit with ten seconds to go: no code went, whatever the wait.
+    server.script('requestCode', answers(429, { error: 'too many attempts' }, 10));
+    await expect(actions.requestCode(who)).rejects.toMatchObject({
+      code: 'limited',
+      retryAfter: 10,
+      justSent: false,
     });
   });
 
@@ -698,6 +731,14 @@ describe('sign-up with a code', () => {
     expect(linkedState(actions)).toBeNull();
   });
 
+  it('forgets the sign-up it was waiting on the code for, once the account is made', async () => {
+    const { actions, code } = await codedSetup();
+    const phone = waitingOnACode();
+    await actions.signUp({ ...ME, code });
+    expect(pendingCode()).toBeNull();
+    expect(phone.has(PENDING_CODE_KEY)).toBe(false);
+  });
+
   it('resolves once the link is kept, without waiting for the first copy to go up', async () => {
     const { actions, server, code } = await codedSetup();
     let release = () => {};
@@ -934,6 +975,24 @@ describe('demo', () => {
 
 describe('log-in', () => {
   const creds = { username: 'Robin', password: ME.password };
+
+  it('forgets a sign-up the phone was waiting on a code for: it has its account now', async () => {
+    const { actions, server } = await setup();
+    await server.seed({ username: 'robin', password: ME.password });
+    const phone = waitingOnACode();
+    await actions.logIn(creds, { replace: true });
+    expect(linkedState(actions)).toMatchObject({ status: 'linked' });
+    expect(pendingCode()).toBeNull();
+    expect(phone.has(PENDING_CODE_KEY)).toBe(false);
+  });
+
+  it('keeps it when the log-in fails', async () => {
+    const { actions } = await setup();
+    const phone = waitingOnACode();
+    await expect(actions.logIn(creds, { replace: true })).rejects.toMatchObject({ code: 'wrong' });
+    expect(pendingCode()).not.toBeNull();
+    expect(phone.has(PENDING_CODE_KEY)).toBe(true);
+  });
 
   it('on an empty install restores the account copy through the restore path and links', async () => {
     const { actions, server, store, deps } = await setup();

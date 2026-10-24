@@ -727,7 +727,8 @@ describe('the code step', () => {
       username: 'Robin',
       email: 'robin@example.com',
     });
-    expect(screen.getByRole('status')).toHaveTextContent('We sent a new code.');
+    // Said by the toast, a status of its own.
+    expect(screen.getByText('We sent a new code.').closest('[role="status"]')).not.toBeNull();
     // The code typed so far was the old one's.
     expect(nowShowing().getByLabelText('Code')).toHaveValue('');
     expect(resendButton()).toBeDisabled();
@@ -846,6 +847,31 @@ describe('the code step', () => {
     expect(account.signUp).toHaveBeenCalledTimes(1);
   });
 
+  it('says the line over Skip in a region that was on the step, empty, before it filled', async () => {
+    const account = fakeAccount();
+    account.requestCode.mockRejectedValueOnce(new AccountError('unavailable'));
+    account.signUp.mockRejectedValueOnce(new AccountError('unavailable'));
+    renderWizard({ account });
+    // On the account step before anything went wrong: there, and empty.
+    const accountRegion = nowShowing().getByRole('status');
+    expect(accountRegion).toBeEmptyDOMElement();
+    await fillAccount();
+    await next();
+    expect(await screen.findByText(SERVICE_DOWN)).toBeInTheDocument();
+    // The same region filled, so a screen reader hears it.
+    expect(accountRegion).toHaveTextContent(SERVICE_DOWN);
+    expect(nowShowing().getByRole('status')).toBe(accountRegion);
+
+    // And on the code step the same way.
+    await next();
+    expect(await screen.findByText('Step 2 of 4')).toBeInTheDocument();
+    const codeRegion = nowShowing().getByRole('status');
+    expect(codeRegion).toBeEmptyDOMElement();
+    await enterCode();
+    expect(await screen.findByText(SERVICE_DOWN)).toBeInTheDocument();
+    expect(codeRegion).toHaveTextContent(SERVICE_DOWN);
+  });
+
   it("says plainly when this phone couldn't make the keys, and still offers the skip", async () => {
     const account = fakeAccount();
     account.signUp.mockRejectedValueOnce(
@@ -959,7 +985,7 @@ describe('the code step, after the person went to their email app', () => {
     await next();
     expect(await screen.findByText('Step 2 of 4')).toBeInTheDocument();
     expect(account.requestCode).not.toHaveBeenCalled();
-    (await import('@/features/account/pendingCode')).keepPendingCode(null);
+    (await import('@/lib/pendingCode')).keepPendingCode(null);
   });
 
   it('forgets the code sent once the person skips, and starts empty next time', async () => {
@@ -975,15 +1001,33 @@ describe('the code step, after the person went to their email app', () => {
     expect(nowShowing().getByLabelText('Email')).toHaveValue('');
   });
 
-  it('forgets the code sent once the address is changed', async () => {
-    const { account, unmount } = renderWizard();
+  it('goes back to the code sent when the address was edited and put back as it was', async () => {
+    const { account } = renderWizard();
     await toCode();
     await press('Back');
-    await user.type(nowShowing().getByLabelText('Email'), 'x');
-    unmount();
+    // A slip, put right: the address is the one the code went to.
+    const email = nowShowing().getByLabelText('Email');
+    await user.type(email, 'x');
+    await user.type(email, '{Backspace}');
+    expect(email).toHaveValue('robin@example.com');
+    await next();
+    expect(await screen.findByText('Step 2 of 4')).toBeInTheDocument();
+    // No second mail, which would have ended the first.
+    expect(account.requestCode).toHaveBeenCalledTimes(1);
+  });
 
+  it('takes a limit with seconds to go for what it is: too many tries, with the skip', async () => {
+    const account = fakeAccount();
+    // An hourly limit near its end: no code went, so there is no code step to go to.
+    account.requestCode.mockRejectedValueOnce(
+      new AccountError('limited', 'Too many tries. Try again in a minute.', 10),
+    );
     renderWizard({ account });
-    expect(nowShowing().getByLabelText('Email')).toHaveValue('');
+    await fillAccount();
+    await next();
+    expect(await screen.findByText('Too many tries. Try again in a minute.')).toBeInTheDocument();
+    expect(screen.getByText('Step 1 of 4')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Skip for now' })).toBeEnabled();
   });
 
   it('takes the 30 s gap on an address it sent nothing to as a code that just went there', async () => {
@@ -991,7 +1035,9 @@ describe('the code step, after the person went to their email app', () => {
     const account = fakeAccount();
     // A code went to this address 20 s ago, and this phone never heard back (or has since reloaded).
     account.requestCode.mockRejectedValueOnce(
-      new AccountError('limited', 'Too many tries. Try again in a minute.', 10),
+      new AccountError('limited', 'Too many tries. Try again in a minute.', 10, {
+        justSent: true,
+      }),
     );
     renderWizard({ account });
     await toCodeOnTheClock();

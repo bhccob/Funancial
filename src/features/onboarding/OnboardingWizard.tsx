@@ -32,6 +32,7 @@ import {
 } from '@/features/account/shared';
 import { useEmailCode, type CodeFailure, type CodeOutcome } from '@/features/account/useEmailCode';
 import { currencyOptions, defaultCurrency } from '@/features/shared/currencies';
+import { cn } from '@/lib/cn';
 import { toast } from '@/lib/toast';
 import { useAction } from '@/lib/useAction';
 import { useApp } from '@/store/AppStoreProvider';
@@ -299,19 +300,21 @@ export function OnboardingWizard({ onFinishing }: { onFinishing?(finishing: bool
 
   /** The way on without an account, and why, when the service or the phone let the person down. */
   function skipOffer() {
-    if (!offline && failure === null) return null;
+    const offered = offline || failure !== null;
     const line = offline ? FAILURE_LINE.offline : (failure?.line ?? null);
     return (
-      <div className="flex flex-col items-start gap-3">
-        {/* Said politely: it comes with the way on, and is not an error in what was typed. */}
-        {line && (
-          <p role="status" className="text-muted text-sm">
-            {line}
-          </p>
+      // Always on the step, so the line is announced when it fills: politely, as it comes with the
+      // way on and is not an error in what was typed. With nothing in it, it takes back the step's
+      // gap before it (-mt-5), so the step stands as it would without it.
+      <div className={cn('flex flex-col items-start', !offered && '-mt-5')}>
+        <div role="status">
+          {offered && line && <p className="text-muted mb-3 text-sm">{line}</p>}
+        </div>
+        {offered && (
+          <Button variant="secondary" disabled={working} onClick={skip}>
+            Skip for now
+          </Button>
         )}
-        <Button variant="secondary" disabled={working} onClick={skip}>
-          Skip for now
-        </Button>
       </div>
     );
   }
@@ -380,10 +383,7 @@ export function OnboardingWizard({ onFinishing }: { onFinishing?(finishing: bool
                 autoComplete="email"
                 value={email}
                 error={accountErrors.email}
-                onChange={(e) => {
-                  setEmail(e.target.value);
-                  emailCode.addressChanged(e.target.value);
-                }}
+                onChange={(e) => setEmail(e.target.value)}
               />
               <PasswordField
                 variant="row"

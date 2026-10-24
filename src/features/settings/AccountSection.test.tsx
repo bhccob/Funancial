@@ -577,13 +577,15 @@ describe('Settings → Create account, in two steps', () => {
     await press(again, 'Continue');
     await codeStep();
     expect(actions.requestCode).not.toHaveBeenCalled();
-    (await import('@/features/account/pendingCode')).keepPendingCode(null);
+    (await import('@/lib/pendingCode')).keepPendingCode(null);
   });
 
   it('takes the 30 s gap on an address it sent nothing to as a code that just went there', async () => {
     const actions = fakeAccount();
     actions.requestCode.mockRejectedValueOnce(
-      new AccountError('limited', 'Too many tries. Try again in a minute.', 25),
+      new AccountError('limited', 'Too many tries. Try again in a minute.', 25, {
+        justSent: true,
+      }),
     );
     const { dialog } = await toCode(actions);
     expect(within(dialog).queryByText(/Too many tries/)).not.toBeInTheDocument();

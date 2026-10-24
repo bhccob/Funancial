@@ -242,7 +242,7 @@ describe('account routes', () => {
     expect(soon.status).toBe(429);
     expect(soon.headers.get('Retry-After')).toMatch(/^(29|30)$/);
     expect(soon.headers.get('Access-Control-Expose-Headers')).toBe('Retry-After');
-    expect(await soon.json()).toEqual({ error: 'too many attempts' });
+    expect(await soon.json()).toEqual({ error: 'too soon' });
     expect(mail.sent).toHaveLength(1);
 
     const code =

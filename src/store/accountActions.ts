@@ -15,6 +15,7 @@ import {
 import { base64ToBytes, DecryptError } from '@/data/crypto';
 import { passwordProblem } from '@/domain/passwordRules';
 import { migrateSnapshot, SchemaVersionError, type DataSnapshot } from '@/domain/snapshot';
+import { forgetPendingCode } from '@/lib/pendingCode';
 import { toast } from '@/lib/toast';
 import type { Platform } from '@/platform/types';
 import {
@@ -133,11 +134,23 @@ export class AccountError extends Error {
    * holds a button (such as "Send a new code") holds it for exactly this long. `null` for every other code.
    */
   readonly retryAfter: number | null;
-  constructor(code: AccountErrorCode, message?: string, retryAfter: number | null = null) {
+  /**
+   * For `limited` from asking for a code: the service's 30 s gap after a code to this address (it says
+   * `too soon`, which no limit says), so a code went there a moment ago. False for every limit, and
+   * for every other code.
+   */
+  readonly justSent: boolean;
+  constructor(
+    code: AccountErrorCode,
+    message?: string,
+    retryAfter: number | null = null,
+    { justSent = false }: { justSent?: boolean } = {},
+  ) {
     super(message ?? MESSAGES[code]);
     this.name = 'AccountError';
     this.code = code;
     this.retryAfter = retryAfter;
+    this.justSent = justSent;
   }
 }
 
@@ -203,6 +216,7 @@ function failed(reply: Reply, wrong?: string): AccountError {
         'limited',
         `Too many tries. Try again in ${minutesText(reply.retryAfter)}.`,
         reply.retryAfter,
+        { justSent: errorName(reply) === 'too soon' },
       );
     default:
       return new AccountError('unavailable');
@@ -491,7 +505,8 @@ export function createAccountActions(
    * Has the service mail a six-digit code to `email`, once `username` is known to be free (a taken name
    * is answered here, not after the code is typed). It makes no account and links nothing: `signUp`
    * does, with the code. A refusal throws an `AccountError`: `taken`, `limited` (with `retryAfter`, the
-   * seconds the service said to wait: hold "Send a new code" that long), `offline`, `unavailable`.
+   * seconds the service said to wait: hold "Send a new code" that long; and `justSent` when that is
+   * the 30 s gap after a code that went to the address a moment ago), `offline`, `unavailable`.
    * One at a time like the other actions, but the screen's button should be off while it runs.
    */
   async function requestCode({
@@ -611,8 +626,9 @@ export function createAccountActions(
     }
 
     if (mine !== session) throw new AccountError('locked');
-    // Made and ours: the keys are not needed again.
+    // Made and ours: the keys, and the sign-up waiting on its code, are not needed again.
     forgetKeys();
+    forgetPendingCode();
     await commit({
       username: name,
       email: address,
@@ -697,6 +713,8 @@ export function createAccountActions(
       dirty: !snapshot,
       tooBig: false,
     });
+    // This phone has its account: a sign-up it was waiting on a code for is not needed any more.
+    forgetPendingCode();
     if (!snapshot) void flush();
     return 'done';
   }

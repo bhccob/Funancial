@@ -45,6 +45,7 @@ import {
 } from '@/domain/snapshot';
 import type { SyncMessage } from '@/lib/broadcast';
 import { FIRST_STEP_KEYS } from '@/lib/firstSteps';
+import { dropStalePendingCode, forgetPendingCode } from '@/lib/pendingCode';
 import type { SafeStorage } from '@/lib/safeStorage';
 import type { BiometricVault } from '@/platform/types';
 
@@ -370,6 +371,8 @@ export function createAppStore(deps: AppDeps): StoreApi<AppState> {
 
       async boot() {
         set({ phase: 'booting' });
+        // A sign-up whose emailed code has run out is let go now, not when a sign-up screen next opens.
+        dropStalePendingCode(deps.safeStorage, deps.now());
         // Status only: requesting persistence can prompt (Firefox) and must not block boot.
         const persisted = await deps.storageStatus().catch(() => false);
         const namespace = readNamespace();
@@ -680,6 +683,8 @@ export function createAppStore(deps: AppDeps): StoreApi<AppState> {
         await deps.storage.remove(ns);
         deps.safeStorage.remove(NAMESPACE_KEY);
         for (const key of FIRST_STEP_KEYS) deps.safeStorage.remove(key);
+        // Everything typed on this phone goes: a sign-up's name and address waiting on a code too.
+        forgetPendingCode(deps.safeStorage);
         deps.channel.post({ type: 'reload', reason: 'delete' });
         await get().boot();
       },
@@ -688,6 +693,7 @@ export function createAppStore(deps: AppDeps): StoreApi<AppState> {
         const { data } = get();
         await get().restoreSnapshot(freshStart(data, deps.today(), nowIsoString()));
         for (const key of FIRST_STEP_KEYS) deps.safeStorage.remove(key);
+        forgetPendingCode(deps.safeStorage);
       },
     };
   });

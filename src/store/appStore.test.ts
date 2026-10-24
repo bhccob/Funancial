@@ -1,8 +1,14 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { dexieStorage } from '@/data/db';
 import { browserKeyring } from '@/data/keyring';
 import type { SyncMessage } from '@/lib/broadcast';
 import { FIRST_STEP_KEYS } from '@/lib/firstSteps';
+import {
+  keepPendingCode,
+  PENDING_CODE_KEY,
+  pendingCode,
+  type PendingCode,
+} from '@/lib/pendingCode';
 import type { SafeStorage } from '@/lib/safeStorage';
 import { buildDemoSnapshot } from '@/data/demoSeed';
 import { CURRENT_SCHEMA_VERSION } from '@/domain/snapshot';
@@ -61,6 +67,18 @@ async function reboot(deps: AppDeps) {
   await store.getState().boot();
   return store;
 }
+
+/**
+ * A sign-up waiting on its emailed code, sent `ago` ms before `deps.now()`: in memory, as the screens
+ * keep it, and on the phone as `deps.safeStorage` holds it (which is the app's own `safeStorage`).
+ */
+function waitingOnACode(deps: AppDeps, ago = 60_000): PendingCode {
+  const pending = { username: 'Robin', email: 'robin@example.com', sentAt: deps.now() - ago };
+  keepPendingCode(pending);
+  deps.safeStorage.set(PENDING_CODE_KEY, JSON.stringify(pending));
+  return pending;
+}
+afterEach(() => keepPendingCode(null));
 
 describe('first run', () => {
   it('boots to welcome, then startFresh unlocks with default settings', async () => {
@@ -310,6 +328,37 @@ describe('delete all data', () => {
     // Only those: the rest of what the phone keeps for itself is not Delete all data's.
     expect(deps.safeStorage.get('funancial.theme')).toBe('dark');
   });
+
+  it('forgets a sign-up waiting on its emailed code: its name and address go with everything else', async () => {
+    const { deps, store } = await freshStore();
+    waitingOnACode(deps);
+    await store.getState().deleteAllData();
+    expect(pendingCode()).toBeNull();
+    expect(deps.safeStorage.get(PENDING_CODE_KEY)).toBeNull();
+  });
+});
+
+describe('a sign-up waiting on its code, as the app boots', () => {
+  it('is let go once its code has run out, in memory and on the phone, and kept while it works', async () => {
+    const { deps } = testDeps();
+    const live = waitingOnACode(deps, 9 * 60_000);
+    await createAppStore(deps).getState().boot();
+    expect(pendingCode()).toEqual(live);
+    expect(deps.safeStorage.get(PENDING_CODE_KEY)).toBe(JSON.stringify(live));
+
+    // Ten minutes on, as after a lock the person never came back from: gone at the next boot.
+    waitingOnACode(deps, 10 * 60_000);
+    await createAppStore(deps).getState().boot();
+    expect(pendingCode()).toBeNull();
+    expect(deps.safeStorage.get(PENDING_CODE_KEY)).toBeNull();
+  });
+
+  it('lets go of what is on the phone and is not one of its records', async () => {
+    const { deps } = testDeps();
+    deps.safeStorage.set(PENDING_CODE_KEY, '{"username":"Robin"}');
+    await createAppStore(deps).getState().boot();
+    expect(deps.safeStorage.get(PENDING_CODE_KEY)).toBeNull();
+  });
 });
 
 describe('starting over', () => {
@@ -391,6 +440,14 @@ describe('starting over', () => {
     for (const key of FIRST_STEP_KEYS) deps.safeStorage.set(key, '1');
     await store.getState().startOver();
     for (const key of FIRST_STEP_KEYS) expect(deps.safeStorage.get(key), key).toBeNull();
+  });
+
+  it('forgets a sign-up waiting on its emailed code', async () => {
+    const { deps, store } = await filled();
+    waitingOnACode(deps);
+    await store.getState().startOver();
+    expect(pendingCode()).toBeNull();
+    expect(deps.safeStorage.get(PENDING_CODE_KEY)).toBeNull();
   });
 
   it('freshStart leaves no accounts, and no default account naming one', async () => {

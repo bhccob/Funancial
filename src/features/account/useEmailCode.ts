@@ -1,15 +1,15 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { KeyDerivationError } from '@/data/accountCrypto';
-import { toast } from '@/lib/toast';
-import { AccountError } from '@/store/accountActions';
-import { useAccountActions } from '@/store/useAccount';
 import {
   keepPendingCode,
   pendingCode,
   stillWorks,
   subscribePendingCode,
   type PendingCode,
-} from './pendingCode';
+} from '@/lib/pendingCode';
+import { toast } from '@/lib/toast';
+import { AccountError } from '@/store/accountActions';
+import { useAccountActions } from '@/store/useAccount';
 import { errorMessage } from './shared';
 
 /** The service mails a new code only this long after the last one. */
@@ -52,6 +52,8 @@ const trimmed = ({ username, email }: CodeOwner): CodeOwner => ({
 const reasonOf = (err: unknown) => (err instanceof AccountError ? err.code : null);
 /** The seconds a refusal said to wait, or `null` where it named none. */
 const waitOf = (err: unknown) => (err instanceof AccountError ? err.retryAfter : null);
+/** Whether a refusal was the service's 30 s gap after a code that went to the address a moment ago. */
+const justSent = (err: unknown) => err instanceof AccountError && err.justSent;
 
 function failed(err: unknown): CodeOutcome {
   const reason = reasonOf(err);
@@ -86,13 +88,15 @@ const secondsUntil = (end: number) => Math.max(0, Math.ceil((end - Date.now()) /
  * - Who the code was mailed for, and when, is kept outside the screen (`pendingCode`): the person
  *   goes to their email app for it, and may come back to a screen that a lock or a reload made anew.
  *   That screen refills its name and address from `restored`; the password is typed again, and
- *   Continue then goes back to the code without another mail. It is let go once the account is made,
- *   at `forget` (Skip) and when the address is changed (`addressChanged`).
+ *   Continue then goes back to the code without another mail. It is let go once the account is made
+ *   and at `forget` (Skip); a Continue with another address puts that address's code in its place
+ *   (an address edited and put back as it was still goes back to the code it has).
  * - Asking again with the same name and address while the code sent still works (10 minutes) goes
  *   back to it without a new mail. A changed name with the same address that the service holds back
- *   (`limited`) goes on to that address's code too: the name is checked again at Verify. So does a
- *   hold of 30 seconds or less on an address this screen sent nothing to: that is the gap after a
- *   code that went there a moment ago (one whose answer was lost, or one sent before a reload).
+ *   (`limited`) goes on to that address's code too: the name is checked again at Verify. So does the
+ *   service's 30 s gap (`justSent`, which it says in words no limit uses) on an address this screen
+ *   sent nothing to: a code went there a moment ago (one whose answer was lost, or one sent before a
+ *   reload). Any other limit, however little of it is left, says too many tries.
  * - Send a new code is held `RESEND_SECONDS` after each send, or as long as a refusal says
  *   (`retryAfter`), and let go at once after Verify meets an expired code or too many tries (the code
  *   may be spent). `resendLeft` counts the seconds down.
@@ -197,11 +201,12 @@ export function useEmailCode() {
           holdResend(wait ?? RESEND_SECONDS);
           return { kind: 'ok' };
         }
-        if (reason === 'limited' && wait !== null && wait <= RESEND_SECONDS) {
+        if (reason === 'limited' && justSent(err)) {
           // The gap after a code that went to this address a moment ago, which this screen did not
           // see go (its answer was lost, or it went before a lock or a reload): it is the code to
           // type, and a new one may be sent once the gap is over.
-          codeSent(key, RESEND_SECONDS - wait);
+          const left = Math.min(Math.max(wait ?? RESEND_SECONDS, 0), RESEND_SECONDS);
+          codeSent(key, RESEND_SECONDS - left);
           return { kind: 'ok' };
         }
         return failed(err);
@@ -302,11 +307,6 @@ export function useEmailCode() {
     request,
     resend,
     verify,
-    /** The address typed on the account step changed: a code sent to another is no longer the one. */
-    addressChanged(email: string) {
-      const pending = pendingCode();
-      if (pending && pending.email !== email.trim()) keepPendingCode(null);
-    },
     /**
      * Lets go of the keys a Verify keeps for another try with the same name and password: the name or
      * password changed, or the screen is being left.

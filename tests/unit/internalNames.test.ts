@@ -41,7 +41,7 @@ const PINNED: Array<[file: string, why: string, literals: string[]]> = [
     ["'funancial.first.balance'", "'funancial.first.subscriptions'"],
   ],
   [
-    'src/features/account/pendingCode.ts',
+    'src/lib/pendingCode.ts',
     'a sign-up waiting on its emailed code, kept for a reload',
     ["'funancial.signup.code'"],
   ],

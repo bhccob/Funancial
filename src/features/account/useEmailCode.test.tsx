@@ -194,7 +194,9 @@ describe('useEmailCode', () => {
       const account = fakeAccount();
       // A code went to this address 12 s ago (its answer was lost, or a reload forgot it).
       account.requestCode.mockRejectedValueOnce(
-        new AccountError('limited', 'Too many tries. Try again in a minute.', 18),
+        new AccountError('limited', 'Too many tries. Try again in a minute.', 18, {
+          justSent: true,
+        }),
       );
       const { run, advance, current } = setup(account);
       expect(await run((c) => c.request(ROBIN))).toEqual({ kind: 'ok' });
@@ -215,7 +217,9 @@ describe('useEmailCode', () => {
 
     it('takes the code to have gone when it was sent, for how long it works', async () => {
       const account = fakeAccount();
-      account.requestCode.mockRejectedValueOnce(new AccountError('limited', 'Too many tries.', 30));
+      account.requestCode.mockRejectedValueOnce(
+        new AccountError('limited', 'Too many tries.', 30, { justSent: true }),
+      );
       const { run, advance, current } = setup(account);
       await run((c) => c.request(ROBIN));
       expect(current().resendLeft).toBe(30);
@@ -227,6 +231,8 @@ describe('useEmailCode', () => {
 
     it.each([
       ['a longer hold (the hour)', 31],
+      ['a limit with ten seconds to go', 10],
+      ['a limit with half a minute to go', 30],
       ['one that names no wait', null],
     ])('says too many tries for %s, and goes nowhere', async (_, wait) => {
       const account = fakeAccount();
@@ -304,7 +310,7 @@ describe('useEmailCode', () => {
       });
       expect(account.requestCode).not.toHaveBeenCalled();
       hook.unmount();
-      (await import('./pendingCode')).keepPendingCode(null);
+      (await import('@/lib/pendingCode')).keepPendingCode(null);
     });
 
     it('is gone once the code has run out, on the phone too', async () => {
@@ -324,7 +330,7 @@ describe('useEmailCode', () => {
         JSON.stringify({ ...ROBIN, sentAt: Date.now() - 10 * 60_000 }),
       );
       vi.resetModules();
-      const fresh = await import('./pendingCode');
+      const fresh = await import('@/lib/pendingCode');
       expect(fresh.pendingCode()).toBeNull();
       expect(localStorage.getItem('funancial.signup.code')).toBeNull();
     });
@@ -333,7 +339,7 @@ describe('useEmailCode', () => {
       for (const stored of ['not json', '{"username":"Robin"}', '[1,2]']) {
         localStorage.setItem('funancial.signup.code', stored);
         vi.resetModules();
-        const fresh = await import('./pendingCode');
+        const fresh = await import('@/lib/pendingCode');
         expect(fresh.pendingCode(), stored).toBeNull();
       }
     });
@@ -357,14 +363,13 @@ describe('useEmailCode', () => {
       expect(first.account.forgetKeys).toHaveBeenCalled();
     });
 
-    it('is let go when the address changes, and kept while it does not', async () => {
-      const { run, current } = setup();
+    it('is put in the place of by a Continue with another address, which mails that one its code', async () => {
+      const { account, run, current } = setup();
       await run((c) => c.request(ROBIN));
-      act(() => current().addressChanged(' robin@example.com '));
-      expect(current().sentTo).toBe('robin@example.com');
-      act(() => current().addressChanged('robin@example.co'));
-      expect(current().sentTo).toBeNull();
-      expect(kept()).toBeNull();
+      await run((c) => c.request({ ...ROBIN, email: 'robin@mail.example' }));
+      expect(account.requestCode).toHaveBeenCalledTimes(2);
+      expect(current().sentTo).toBe('robin@mail.example');
+      expect(kept()).toMatchObject({ email: 'robin@mail.example' });
     });
 
     it('is still kept when the phone can keep nothing', async () => {

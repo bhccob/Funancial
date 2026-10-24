@@ -316,6 +316,17 @@ export function createAccounts({ store, masterKey, now, mailer, waitUntil }: Acc
     retryAfter,
   });
 
+  /**
+   * The 429 for a code asked for within 30 s of the last one to its address (or as another request's
+   * code was being written): a code went there a moment ago. It says `too soon`, which no limit says,
+   * so the phone can tell it from one, take the code just sent as the one to type, and hold "Send a
+   * new code" for `retryAfter`.
+   */
+  const codeTooSoon = (retryAfter: number): Result => ({
+    ...fail(429, 'too soon'),
+    retryAfter,
+  });
+
   /** Seconds before another code may be mailed to an address whose newest code is `last`; 0 or less when none. */
   const gapLeft = (last: CodeRecord | null) =>
     last ? Math.ceil((last.sentAt + CODE_GAP * 1000 - now()) / 1000) : 0;
@@ -648,7 +659,7 @@ export function createAccounts({ store, masterKey, now, mailer, waitUntil }: Acc
       const key = K.code(address);
       const last = await store.get<CodeRecord>(key);
       const wait = gapLeft(last);
-      if (wait > 0) return tooSoon(wait);
+      if (wait > 0) return codeTooSoon(wait);
 
       const limited = await throttle('code:email', address, 5, HOUR);
       if (limited) return limited;
@@ -670,7 +681,7 @@ export function createAccounts({ store, masterKey, now, mailer, waitUntil }: Acc
       const written = last
         ? await store.compareAndSet(key, last, record)
         : await store.setNx(key, record, CODE_SECONDS);
-      if (!written) return tooSoon(Math.max(1, gapLeft(await store.get<CodeRecord>(key))));
+      if (!written) return codeTooSoon(Math.max(1, gapLeft(await store.get<CodeRecord>(key))));
       // A write leaves the key without a lifetime. If this fails the person is told to try again; the
       // clock check on `sentAt` in takeCode and the next send's write bound what is left.
       if (last) await store.expire(key, CODE_SECONDS);

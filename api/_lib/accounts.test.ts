@@ -291,6 +291,12 @@ describe('the emailed code', () => {
     body: { error: 'too many attempts' },
     retryAfter,
   });
+  /** The 30 s gap after a code to the address: a body no limit has, so the phone can tell it apart. */
+  const TOO_SOON = (retryAfter: number) => ({
+    status: 429,
+    body: { error: 'too soon' },
+    retryAfter,
+  });
   const WRONG = { status: 401, body: { error: 'code' } };
   const EXPIRED = { status: 410, body: { error: 'expired' } };
   const TAKEN = { status: 409, body: { error: 'taken' } };
@@ -505,9 +511,9 @@ describe('the emailed code', () => {
     const { store, accounts, mail } = setupMailed();
     await ask(accounts);
     advance(10);
-    expect(await ask(accounts, {}, ipOf(1))).toEqual(TOO_MANY(20));
+    expect(await ask(accounts, {}, ipOf(1))).toEqual(TOO_SOON(20));
     advance(19);
-    expect(await ask(accounts, {}, ipOf(2))).toEqual(TOO_MANY(1));
+    expect(await ask(accounts, {}, ipOf(2))).toEqual(TOO_SOON(1));
     expect(mail.sent).toHaveLength(1);
     // A refusal for being too soon uses up none of the day's emails.
     expect(store.dump()['rl:code:global:all']).toBe(1);
@@ -528,9 +534,13 @@ describe('the emailed code', () => {
     // 155 s into the hour.
     expect(await ask(accounts, {}, ipOf(9))).toEqual(TOO_MANY(HOUR - 155));
     expect(mail.sent).toHaveLength(5);
+    // Ten seconds before the hour is up it is still the limit speaking, not the 30 s gap: the phone
+    // must not take it for a code that just went.
+    advance(HOUR - 165);
+    expect(await ask(accounts, {}, ipOf(10))).toEqual(TOO_MANY(10));
 
-    advance(HOUR - 155);
-    expect((await ask(accounts, {}, ipOf(10))).status).toBe(200);
+    advance(10);
+    expect((await ask(accounts, {}, ipOf(11))).status).toBe(200);
     expect(mail.sent).toHaveLength(6);
   });
 
@@ -717,7 +727,7 @@ describe('the emailed code', () => {
     held.open();
 
     // The key is not what it read, so it wrote nothing and sent nothing, and told the person to wait.
-    expect(await resend).toEqual(TOO_MANY(1));
+    expect(await resend).toEqual(TOO_SOON(1));
     expect(refused).not.toHaveBeenCalled();
     expect(mail.sent).toHaveLength(1);
     expect(store.dump()[CODE_KEY]).toBeUndefined();
@@ -736,7 +746,7 @@ describe('the emailed code', () => {
     ]);
     expect(answers.filter((r) => r.status === 200)).toHaveLength(1);
     // The others are told when the one that won will have its 30 s up.
-    for (const r of answers.filter((r) => r.status !== 200)) expect(r).toEqual(TOO_MANY(30));
+    for (const r of answers.filter((r) => r.status !== 200)) expect(r).toEqual(TOO_SOON(30));
     expect(mail.sent).toHaveLength(1);
     expect(store.dump()[CODE_KEY]).toEqual({
       hash: hashOf('ada@example.com', sentCode(mail)),

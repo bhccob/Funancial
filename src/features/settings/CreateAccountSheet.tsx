@@ -199,10 +199,7 @@ export function CreateAccountSheet({ open, onClose }: { open: boolean; onClose()
                   autoComplete="email"
                   value={email}
                   error={errors.email}
-                  onChange={(e) => {
-                    setEmail(e.target.value);
-                    emailCode.addressChanged(e.target.value);
-                  }}
+                  onChange={(e) => setEmail(e.target.value)}
                 />
                 <PasswordField
                   variant="row"
