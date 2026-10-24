@@ -34,3 +34,21 @@ export function historyEntries(data: DataSnapshot): Entry[] {
       entryDate(b).localeCompare(entryDate(a)) || b.item.createdAt.localeCompare(a.item.createdAt),
   );
 }
+
+/**
+ * Whether an entry moves money on the account: paid with it, into it, or out of it. A transaction
+ * is on both its ends, and a purchase or a correction on the one it has. An account's own lists (its
+ * sheet, "On this card") are History filtered by this.
+ */
+export function movesMoneyOn(entry: Entry, accountId: string): boolean {
+  switch (entry.kind) {
+    case 'expense':
+    case 'income':
+    case 'dividend':
+      return entry.item.accountId === accountId;
+    case 'sale':
+      return entry.item.toAccountId === accountId;
+    case 'transaction':
+      return entry.item.fromAccountId === accountId || entry.item.toAccountId === accountId;
+  }
+}

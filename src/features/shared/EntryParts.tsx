@@ -1,4 +1,4 @@
-import { cardLabel } from '@/domain/cardMark';
+import { markLabel } from '@/domain/cardMark';
 import { useMoney } from '@/store/useFinance';
 import type { EntryLine } from './entryLine';
 
@@ -41,7 +41,7 @@ export function EntryDetail({ line, day }: { line: EntryLine; day?: string }) {
     <>
       {mark.before}
       <CardMarkChip color={mark.color} />
-      {cardLabel(mark)}
+      {markLabel(mark)}
       {mark.after}
     </>
   ) : (

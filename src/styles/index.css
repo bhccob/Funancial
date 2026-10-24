@@ -324,6 +324,13 @@ main:has(> [data-shell-banners]:empty) [data-head-block] {
    * `motion-safe:animate-rise`, with `motion-reduce:animate-fade-in` beside it.
    */
   --animate-rise: rise var(--duration-standard) var(--ease-glass) backwards;
+  /*
+   * The "just now" badge on a card: in and out over the one --duration-just-now it stays for, the
+   * Cards tab taking it off the card when that is over. `motion-safe:animate-just-now` slides it 8px
+   * down into place and 8px up out; `motion-reduce:animate-just-now-fade` only fades.
+   */
+  --animate-just-now: just-now var(--duration-just-now) var(--ease-glass) both;
+  --animate-just-now-fade: just-now-fade var(--duration-just-now) var(--ease-glass) both;
   /* The soft colour shapes behind the welcome screen and setup; only used as `motion-safe:animate-blob-drift`. */
   --animate-blob-drift: blob-drift 18s ease-in-out infinite alternate;
 
@@ -372,6 +379,36 @@ main:has(> [data-shell-banners]:empty) [data-head-block] {
     from {
       opacity: 0;
       translate: 0 12px;
+    }
+  }
+
+  /* `translate`, not `transform`, as in rise. In for the first 8%, out for the last 10%. */
+  @keyframes just-now {
+    0% {
+      opacity: 0;
+      translate: 0 -8px;
+    }
+    8%,
+    90% {
+      opacity: 1;
+      translate: 0 0;
+    }
+    100% {
+      opacity: 0;
+      translate: 0 -8px;
+    }
+  }
+
+  @keyframes just-now-fade {
+    0% {
+      opacity: 0;
+    }
+    8%,
+    90% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
     }
   }
 

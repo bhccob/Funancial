@@ -229,6 +229,7 @@ it('holds src/lib/motion.ts to the motion variables: the :root timings in second
     '--duration-standard': inMs(MOTION.standard),
     '--stagger-rise': inMs(MOTION.stagger),
     '--duration-count': inMs(MOTION.countUp),
+    '--duration-just-now': inMs(MOTION.justNow),
     '--press-scale': String(MOTION.pressScale),
   });
   expect(declarations('@theme static')['--ease-glass']).toBe(
@@ -861,6 +862,64 @@ describe.each(THEMES)('the cards on the %s block', (id) => {
       }
     }
   });
+});
+
+/** The file that draws a card, and with it the "just now" badge on one. */
+const ACCOUNT_CARD_FILE = 'src/features/cards/AccountCard.tsx';
+
+/** The badge's classes, read from `const JUST_NOW_BADGE = '…'` in AccountCard. */
+function badgeClasses(): string {
+  const match = /const JUST_NOW_BADGE =\s*'([^']*)'/.exec(readFileSync(ACCOUNT_CARD_FILE, 'utf8'));
+  expect(match, `the "just now" badge in ${ACCOUNT_CARD_FILE}`).not.toBeNull();
+  return match![1]!;
+}
+
+/**
+ * Every colour a card's face can be under the "just now" badge: each tint over each point of the block
+ * under the veil, and the same lit by the sheen where it is brightest.
+ */
+function cardFaces(id: (typeof THEMES)[number]): string[] {
+  const t = tokensFor(id, 'light');
+  const { veil, sheen } = cardGlass()[DARK_BLOCK.has(id) ? 'dark' : 'light'];
+  return CARD_TINTS.flatMap((tint) =>
+    blockBackdrops(t).flatMap((backdrop) => {
+      const face = composite(veil, composite(tint.startsWith('--') ? t(tint) : tint, backdrop));
+      return [face, composite(sheen, face)];
+    }),
+  );
+}
+
+describe.each(CASES)(
+  'the "just now" badge on a card in the $id theme in $mode mode',
+  ({ id, mode }) => {
+    const t = tokensFor(id, mode);
+
+    it('is thick glass in the page ink, which it takes back from the block', () => {
+      // The card reads the block's ink; the badge is a piece of the page's glass on it, so on the dark
+      // page its glass is dark and its ink light, on the light page the other way round.
+      expect(badgeClasses().split(' ')).toEqual(
+        expect.arrayContaining(['glass-strong', 'page-ink', 'text-text']),
+      );
+    });
+
+    it('keeps its words at 4.5:1 or better on its glass, over every face a card can have', () => {
+      for (const face of cardFaces(id)) {
+        const glass = composite(t('--color-glass-strong'), face);
+        expect(contrast(t('--color-primary'), glass), `over ${face}`).toBeGreaterThanOrEqual(4.5);
+      }
+    });
+  },
+);
+
+it('measures the badge in a model that bites: the block ink it gives back would fail on its glass', () => {
+  // On a dark block the ink is white, and on the light page's glass over a dark card that is under 4.5:1.
+  const failsSomewhere = CASES.some(({ id, mode }) => {
+    const t = tokensFor(id, mode);
+    return cardFaces(id).some(
+      (face) => contrast(t('--head-ink'), composite(t('--color-glass-strong'), face)) < 4.5,
+    );
+  });
+  expect(failsSomewhere).toBe(true);
 });
 
 /**

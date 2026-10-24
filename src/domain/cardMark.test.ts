@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { makeAccount } from '@/test/fixtures';
 import { defaultsFor } from './accounts';
-import { cardMark, SKIN_COLORS } from './cardMark';
+import { cardMark, markLabel, SKIN_COLORS } from './cardMark';
 import type { AccountKind } from './entities';
 
 const SKINS = ['midnight', 'violet', 'mint', 'amber', 'ocean', 'rose'] as const;
@@ -38,5 +38,18 @@ describe('cardMark', () => {
       const { skin } = defaultsFor(kind);
       expect(Object.keys(SKIN_COLORS), `${kind}'s ${skin}`).toContain(skin);
     }
+  });
+});
+
+describe('markLabel', () => {
+  it('writes a card as its name and its last 4 digits, or the name alone with none', () => {
+    expect(markLabel({ name: 'Main account', last4: '4312' })).toBe('Main account ·· 4312');
+    expect(markLabel({ name: 'Cash wallet', last4: null })).toBe('Cash wallet');
+  });
+
+  it('takes an account or a mark alike', () => {
+    const account = makeAccount({ name: 'Visa', last4: '4242' });
+    expect(markLabel(account)).toBe('Visa ·· 4242');
+    expect(markLabel(cardMark(account))).toBe('Visa ·· 4242');
   });
 });

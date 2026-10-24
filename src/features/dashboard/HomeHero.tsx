@@ -4,7 +4,7 @@ import { Link } from 'react-router';
 import { CountUp } from '@/components/ui/CountUp';
 import { Menu } from '@/components/ui/Menu';
 import { heroFigure, type AccountRow } from '@/domain/balances';
-import { cardLabel } from '@/domain/cardMark';
+import { markLabel } from '@/domain/cardMark';
 import { moneyParts } from '@/domain/money';
 import { cn } from '@/lib/cn';
 import { HIDDEN_AMOUNT, useAmountsHidden } from '@/store/useAmountsHidden';
@@ -149,7 +149,7 @@ export function HomeHero({ row, frozenNote, onPick, onPay, onMove, onCorrect }: 
         className="press hit-44 text-head-dim mt-0.5 inline-flex min-h-8 items-center gap-[5px] px-1 text-[13px] font-semibold"
       >
         <Icon aria-hidden="true" className="size-[15px]" />
-        {cardLabel(account)}
+        {markLabel(account)}
         <ChevronDown aria-hidden="true" className="size-[13px]" />
         <span className="sr-only">, change account</span>
       </button>

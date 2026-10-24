@@ -10,6 +10,7 @@ import type { LimitStatus } from '@/domain/budget';
 import type { Account, Settings } from '@/domain/entities';
 import { emptySnapshot } from '@/domain/snapshot';
 import { toastStore } from '@/lib/toast';
+import { useLastSpend } from '@/store/useLastSpend';
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
 import { makeAccount, makeExpense, makeLimit, makeSettings } from '@/test/fixtures';
 import { AddScreen } from './AddScreen';
@@ -70,6 +71,7 @@ function status(level: LimitStatus['level'], pct: number): LimitStatus {
 
 beforeEach(() => {
   toastStore.setState({ toasts: [] });
+  useLastSpend.setState({ last: null });
   actions.addExpense.mockReset().mockResolvedValue({ expense: {}, alerts: [] });
   actions.updateExpense.mockReset().mockResolvedValue(undefined);
   actions.deleteExpense.mockReset().mockResolvedValue(undefined);
@@ -197,6 +199,64 @@ describe('Add expense', () => {
     await save();
     await userEvent.click(screen.getByRole('button', { name: 'Save anyway' }));
     expect(actions.addExpense).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('the last spend, for "just now" on the Cards tab', () => {
+  it('is the card and the amount of an expense once it is saved', async () => {
+    renderAdd();
+    await userEvent.type(screen.getByLabelText('Amount'), '40');
+    await userEvent.selectOptions(screen.getByLabelText('Paid with'), 'Visa (credit card)');
+    await save();
+    await screen.findByText('Expense saved.');
+    expect(useLastSpend.getState().last).toEqual({
+      accountId: 'card-1',
+      amount: 40_00,
+      at: expect.any(Number),
+    });
+  });
+
+  it('is left alone while the expense is refused, asked about or not saved', async () => {
+    actions.addExpense.mockRejectedValue(new Error('Could not save.'));
+    renderAdd();
+    await userEvent.type(screen.getByLabelText('Amount'), '5');
+    fireEvent.change(screen.getByLabelText('Date'), { target: { value: '2026-10-15' } });
+    await save();
+    expect(useLastSpend.getState().last).toBeNull();
+    fireEvent.change(screen.getByLabelText('Date'), { target: { value: TODAY } });
+    await save();
+    await screen.findByText('Could not save.');
+    expect(useLastSpend.getState().last).toBeNull();
+  });
+
+  it('waits for the answer to the limit question, and is left alone when it is Cancel', async () => {
+    actions.wouldCrossOver.mockReturnValue([status('over', 108)]);
+    renderAdd('/add', 'strict');
+    await userEvent.type(screen.getByLabelText('Amount'), '130');
+    await save();
+    await userEvent.click(
+      within(screen.getByRole('dialog', { name: 'Over your limit?' })).getByRole('button', {
+        name: 'Cancel',
+      }),
+    );
+    expect(useLastSpend.getState().last).toBeNull();
+    await save();
+    await userEvent.click(screen.getByRole('button', { name: 'Save anyway' }));
+    await screen.findByText('Expense saved.');
+    expect(useLastSpend.getState().last).toMatchObject({ accountId: 'acct-main', amount: 130_00 });
+  });
+
+  it('is not changed by editing an expense, which spends nothing new', async () => {
+    renderWithStore(
+      <ExpenseForm
+        expense={makeExpense({ id: 'exp-1', amount: 8_00, date: TODAY, accountId: 'acct-main' })}
+        onDone={() => {}}
+      />,
+      createStubStore({ data: dataWith([MAIN, SAVINGS, VISA]), today: TODAY }),
+    );
+    await save();
+    expect(actions.updateExpense).toHaveBeenCalled();
+    expect(useLastSpend.getState().last).toBeNull();
   });
 });
 

@@ -16,19 +16,25 @@ import type { AccountRow } from '@/domain/balances';
 import { categoryLabel, nextDueDate } from '@/domain/budget';
 import { categoryRows } from '@/domain/cardSpend';
 import type { Account, Subscription } from '@/domain/entities';
+import { entryDate, historyEntries, movesMoneyOn } from '@/domain/history';
 import type { FinanceView } from '@/domain/view';
 import { AvailableSheet } from '@/features/dashboard/AvailableSheet';
 import { CardSheet } from '@/features/goals/CardSheet';
 import { BillRow } from '@/features/shared/BillRow';
 import { CATEGORY_ICONS } from '@/features/shared/categories';
+import { entryLine } from '@/features/shared/entryLine';
+import { dayName, entryIcon } from '@/features/shared/entryLook';
+import { EntryRow } from '@/features/shared/EntryRow';
 import { EmptyRows as Empty, PlainSection, ROWS } from '@/features/shared/PlainSection';
 import { SubscriptionDialog } from '@/features/subscriptions/SubscriptionDialog';
 import { cn } from '@/lib/cn';
+import { useTopModalDialog } from '@/lib/dialogStack';
 import { formatDay, relativeDays } from '@/lib/format';
-import { useReducedMotion } from '@/lib/motion';
+import { MOTION, useReducedMotion } from '@/lib/motion';
 import { useAction } from '@/lib/useAction';
 import { useApp } from '@/store/AppStoreProvider';
 import { useFinanceActions, useFinanceView, useMoney, useToday } from '@/store/useFinance';
+import { useLastSpend, type LastSpend } from '@/store/useLastSpend';
 import { useSelectedAccount, useSelectedAccountRow } from '@/store/useSelectedAccount';
 import { AccountCard } from './AccountCard';
 import { AccountDialog, type AccountTarget } from './AccountDialog';
@@ -39,6 +45,49 @@ import { SpendChart } from './SpendChart';
 /** How long after the row comes to rest the person's slide is over (see `driving`). */
 const REST_MS = 150;
 
+/** How much of a card has to show for it to be on screen: half of it. */
+const ON_SCREEN = 0.5;
+
+/** How long after a spend its card can still say "just now" when it comes on screen, in ms. */
+const JUST_NOW_WINDOW_MS = 30_000;
+
+/** How many of the card's latest entries "On this card" lists. */
+const ON_THIS_CARD = 5;
+
+/**
+ * The spend a card says "just now" for, while it does. A spend is given its turn once a visit: when
+ * the card that took it is on screen (`onScreen` holds the ids showing, or is `null` where nothing
+ * can say, which counts every card) and no sheet or dialog is open over it (Pay's done step is one,
+ * so the badge comes when Done is tapped and not behind the sheet), and only when the spend is under
+ * 30 seconds old then. It then shows for `MOTION.justNow` seconds. Going away from the card and back,
+ * or a re-render, gives it no second turn; a newer spend gets its own.
+ */
+function useJustNow(onScreen: ReadonlySet<string> | null): LastSpend | null {
+  const last = useLastSpend((s) => s.last);
+  const covered = useTopModalDialog() !== null;
+  const [shown, setShown] = useState<LastSpend | null>(null);
+  // The latest spend that has had its turn, or its chance: shown, or too old when it was due.
+  const turned = useRef<LastSpend | null>(null);
+  const here = last !== null && (onScreen === null || onScreen.has(last.accountId));
+
+  useEffect(() => {
+    if (!last || !here || covered || turned.current === last) return;
+    turned.current = last;
+    // The badge starts the moment a spend, its card on screen and no sheet over it come together;
+    // the ref above lets that happen once per spend, so this is no cascade of renders.
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one render, once per spend
+    if (Date.now() - last.at < JUST_NOW_WINDOW_MS) setShown(last);
+  }, [last, here, covered]);
+
+  useEffect(() => {
+    if (!shown) return;
+    const timer = setTimeout(() => setShown(null), MOTION.justNow * 1000);
+    return () => clearTimeout(timer);
+  }, [shown]);
+
+  return shown;
+}
+
 /**
  * The cards in a row that scrolls sideways, each snapping to the middle. The card in the middle is
  * the selected one: a card the person taps is selected and glides to the middle, and while the person
@@ -47,7 +96,8 @@ const REST_MS = 150;
  * its own: it opens on the selected card without selecting it again, so a card the store falls back
  * to never overwrites the one that was picked; while the row glides to a card it reports nothing; and
  * once a slide has come to rest, a scroll the person did not make (Tab bringing a card into view, a
- * turned phone snapping the row again) selects nothing.
+ * turned phone snapping the row again) selects nothing. A second observer says which cards are on
+ * screen (half of them or more), which the card that last took a spend waits for to say "just now".
  */
 function Carousel({
   rows,
@@ -72,6 +122,11 @@ function Carousel({
   const centred = useRef<string | null>(null);
   // The first move to the selected card is a jump; later ones glide.
   const placed = useRef(false);
+  // The cards half on screen or more; `null` with no IntersectionObserver, where every card counts.
+  const [onScreen, setOnScreen] = useState<ReadonlySet<string> | null>(() =>
+    typeof IntersectionObserver === 'undefined' ? null : new Set(),
+  );
+  const justNow = useJustNow(onScreen);
   const pick = useRef(onSelect);
   useEffect(() => {
     pick.current = onSelect;
@@ -93,8 +148,29 @@ function Carousel({
       // A strip 2% wide down the middle of the row.
       { root: row, rootMargin: '0px -49% 0px -49%' },
     );
-    for (const card of cards.current.values()) observer.observe(card);
-    return () => observer.disconnect();
+    const visible = new IntersectionObserver(
+      (entries) => {
+        setOnScreen((now) => {
+          const next = new Set(now);
+          for (const entry of entries) {
+            const id = (entry.target as HTMLElement).dataset.accountId;
+            if (!id) continue;
+            if (entry.intersectionRatio >= ON_SCREEN) next.add(id);
+            else next.delete(id);
+          }
+          return next;
+        });
+      },
+      { root: row, threshold: ON_SCREEN },
+    );
+    for (const card of cards.current.values()) {
+      observer.observe(card);
+      visible.observe(card);
+    }
+    return () => {
+      observer.disconnect();
+      visible.disconnect();
+    };
   }, [ids]);
 
   // The selected card goes to the middle when it is not there: as the row opens, after a tap, and
@@ -163,9 +239,9 @@ function Carousel({
         resting.current = setTimeout(unlessMoved, REST_MS);
       }}
       // Out to the screen's edges, so a card can slide off them. From a tablet up the side room lets
-      // the first and last card reach the middle too: half the row less half a card (135px), where the
-      // 50% is of the box the row stands out of by 20px a side, so it is 115px.
-      className="relative -mx-5 flex snap-x snap-mandatory [scrollbar-width:none] gap-3 overflow-x-auto px-5 pt-4 pb-1.5 sm:px-[calc(50%-115px)] [&::-webkit-scrollbar]:hidden"
+      // the first and last card reach the middle too: half the row less half a card (150px), where the
+      // 50% is of the box the row stands out of by 20px a side, so it is 130px.
+      className="relative -mx-5 flex snap-x snap-mandatory [scrollbar-width:none] gap-3 overflow-x-auto px-5 pt-4 pb-1.5 sm:px-[calc(50%-130px)] [&::-webkit-scrollbar]:hidden"
     >
       {rows.map((row, i) => (
         <AccountCard
@@ -177,6 +253,7 @@ function Carousel({
           row={row}
           index={i}
           money={money}
+          justNow={justNow?.accountId === row.account.id ? justNow.amount : undefined}
           selected={row.account.id === selectedId}
           onSelect={() => {
             driving.current = false;
@@ -259,6 +336,44 @@ function CategoriesSection({ account }: { account: Account }) {
         </ul>
       ) : (
         <Empty>{`Nothing spent with ${account.name} this month.`}</Empty>
+      )}
+    </PlainSection>
+  );
+}
+
+/**
+ * The latest entries on one account, as Home's Recent writes them (an icon, the day) but seen from
+ * the card: a transfer reads as money out of it or into it, and no row names it again or draws its
+ * mark. They are only to look at; History, one tap away with View all, is where they are changed.
+ */
+function OnThisCardSection({ account }: { account: Account }) {
+  const data = useApp((s) => s.data);
+  const today = useToday();
+  const { account: accounts, debt: debts } = data.tables;
+  const entries = useMemo(
+    () =>
+      historyEntries(data)
+        .filter((e) => movesMoneyOn(e, account.id))
+        .slice(0, ON_THIS_CARD),
+    [data, account.id],
+  );
+  return (
+    <PlainSection title="On this card" to="/history">
+      {entries.length > 0 ? (
+        <ul className={cn('px-1', ROWS)}>
+          {entries.map((entry) => (
+            <EntryRow
+              key={entry.item.id}
+              entryId={entry.item.id}
+              line={entryLine(entry, { accounts, debts, perspective: account.id })}
+              icon={entryIcon(entry)}
+              day={dayName(entryDate(entry), today)}
+              danger
+            />
+          ))}
+        </ul>
+      ) : (
+        <Empty>{`Nothing on ${account.name} yet.`}</Empty>
       )}
     </PlainSection>
   );
@@ -349,7 +464,8 @@ function LoansSection({ view }: { view: FinanceView }) {
  * of any kind), the accounts in use as a carousel of glass cards with dots under it, and four
  * actions for the selected card: Pay, Freeze, View card and Settings. The selected card is the one
  * Home shows too (`useSelectedAccount`). Under the block: Available to spend over the block's edge,
- * then what the selected card spent (the chart and its categories), the next bills and the loans.
+ * then what the selected card spent (the chart), its latest entries (On this card), where it spent
+ * (the categories), the next bills and the loans.
  */
 export function CardsScreen() {
   const view = useFinanceView();
@@ -464,6 +580,7 @@ export function CardsScreen() {
           </Rise>
         )}
         <Rise index={3}>
+          {selected && <OnThisCardSection account={selected} />}
           {selected && <CategoriesSection account={selected} />}
           <BillsSection view={view} />
           <LoansSection view={view} />

@@ -12,6 +12,7 @@ import { formatDay } from '@/lib/format';
 import { safeStorage } from '@/lib/safeStorage';
 import { toastStore } from '@/lib/toast';
 import { useAmountsHidden } from '@/store/useAmountsHidden';
+import { useLastSpend } from '@/store/useLastSpend';
 import { useSelectedAccount } from '@/store/useSelectedAccount';
 import { createStubStore, renderWithStore } from '@/test/appStoreStub';
 import {
@@ -23,6 +24,7 @@ import {
   makeProfile,
   makeSettings,
   makeSubscription,
+  makeTransaction,
 } from '@/test/fixtures';
 import { freshRealStore } from '@/test/realStore';
 import { CardsScreen } from './CardsScreen';
@@ -41,7 +43,9 @@ afterEach(() => {
   localStorage.clear();
   useSelectedAccount.setState({ id: null });
   useAmountsHidden.setState({ hidden: false });
+  vi.useRealTimers();
   vi.unstubAllGlobals();
+  useLastSpend.setState({ last: null });
   toastStore.setState({ toasts: [] });
 });
 
@@ -98,6 +102,7 @@ function renderCards(data: DataSnapshot = baseData()) {
       { path: '/cards', element: <CardsScreen /> },
       { path: '/subscriptions', element: <h1>Bills page</h1> },
       { path: '/debts', element: <h1>Debts page</h1> },
+      { path: '/history', element: <h1>History page</h1> },
     ],
     { initialEntries: ['/cards'] },
   );
@@ -141,8 +146,8 @@ const carousel = () => screen.getByRole('group', { name: 'Your cards' });
 
 /**
  * Stands in for IntersectionObserver, which jsdom lacks, and returns `centre(name)`: the card whose
- * name starts with `name` is now in the carousel's middle strip. Only the carousel's observer (the
- * one watching the cards) is told; the block has an observer of its own.
+ * name starts with `name` is now in the carousel's middle strip, and fully on screen (the rest are not).
+ * Only the carousel's observers (the ones watching the cards) are told; the block has one of its own.
  */
 function stubObservers(): (name: string) => void {
   const observers: Array<{ callback: IntersectionObserverCallback; targets: Element[] }> = [];
@@ -171,6 +176,7 @@ function stubObservers(): (name: string) => void {
       const entries = targets.map((target) => ({
         target,
         isIntersecting: target.getAttribute('aria-label')?.startsWith(name) ?? false,
+        intersectionRatio: target.getAttribute('aria-label')?.startsWith(name) ? 1 : 0,
       }));
       callback(entries as never, {} as never);
     }
@@ -366,8 +372,7 @@ describe('Pay', () => {
     await userEvent.click(pay.getByRole('radio', { name: 'Transport' }));
     await userEvent.type(pay.getByLabelText('Note'), 'Bus');
     await userEvent.click(pay.getByRole('button', { name: 'Pay' }));
-    await waitFor(() => expect(pay.getByText('Paid')).toBeInTheDocument());
-    expect(pay.getByText(`${usd(12_50)} for Transport with Main account.`)).toBeInTheDocument();
+    expect(await pay.findByText(`Paid ${usd(12_50)}`)).toHaveAttribute('role', 'status');
     await waitFor(() =>
       expect(card('Main account')).toHaveAttribute(
         'aria-label',
@@ -396,7 +401,7 @@ describe('Pay', () => {
     const button = pay.getByRole('button', { name: 'Pay' });
     await userEvent.click(button);
     // Whatever moment the save is at, the button never offers a second payment.
-    await waitFor(() => expect(pay.getByText('Paid')).toBeInTheDocument());
+    await pay.findByText(`Paid ${usd(5_00)}`);
     expect(pay.queryByRole('button', { name: 'Pay' })).toBeNull();
   });
 
@@ -443,7 +448,7 @@ describe('Pay', () => {
     const ask = screen.getByRole('dialog', { name: 'Over your limit?' });
     expect(store.getState().data.tables.expense).toEqual([]);
     await userEvent.click(within(ask).getByRole('button', { name: 'Pay anyway' }));
-    await waitFor(() => expect(pay.getByText('Paid')).toBeInTheDocument());
+    await pay.findByText(`Paid ${usd(12_50)}`);
     expect(store.getState().data.tables.expense).toHaveLength(1);
     expect(screen.getAllByRole('status').some((s) => /Food/.test(s.textContent ?? ''))).toBe(true);
   });
@@ -479,13 +484,391 @@ describe('Pay', () => {
     const pay = within(sheet('Main account'));
     await userEvent.type(pay.getByLabelText('Amount'), '12.50');
     await userEvent.click(pay.getByRole('button', { name: 'Pay' }));
-    await waitFor(() => expect(pay.getByText('Paid')).toBeInTheDocument());
+    await pay.findByText(`Paid ${usd(12_50)}`);
     expect(screen.queryByRole('dialog', { name: 'Over your limit?' })).toBeNull();
     await waitFor(() =>
       expect(screen.getAllByRole('status').some((s) => /Food/.test(s.textContent ?? ''))).toBe(
         true,
       ),
     );
+  });
+});
+
+describe('the done step of Pay', () => {
+  const sheet = (name: string) => screen.getByRole('dialog', { name: `Pay with ${name}` });
+
+  /** Pays `amount` with the selected card, with a category and a note, and returns the sheet to look in. */
+  async function payToTheEnd(
+    name: string,
+    amount: string,
+    { category = 'Transport', note = 'Bus' }: { category?: string; note?: string } = {},
+  ) {
+    await userEvent.click(action('Pay'));
+    const pay = within(sheet(name));
+    await userEvent.type(pay.getByLabelText('Amount'), amount);
+    await userEvent.click(pay.getByRole('radio', { name: category }));
+    if (note) await userEvent.type(pay.getByLabelText('Note'), note);
+    await userEvent.click(pay.getByRole('button', { name: 'Pay' }));
+    return pay;
+  }
+
+  it('says what was paid, the shop and the category, and names the card, with no balance and no card picture', async () => {
+    await renderReal((data) => {
+      data.tables.account[0] = main({ last4: '4312' });
+    });
+    const pay = await payToTheEnd('Main account', '12.50');
+    const paid = await pay.findByText(`Paid ${usd(12_50)}`);
+    expect(paid).toHaveAttribute('role', 'status');
+    expect(pay.getByText('Bus · Transport')).toBeInTheDocument();
+    expect(pay.getByText('Paid with Main account ·· 4312')).toBeInTheDocument();
+    expect(pay.getByRole('button', { name: 'Done' })).toBeInTheDocument();
+
+    // What is left on the card is not on this step: no old-to-new balance, nothing drawn as a card.
+    const done = sheet('Main account');
+    expect(done).not.toHaveTextContent(usd(1_000_00));
+    expect(done).not.toHaveTextContent(usd(1_000_00 - 12_50));
+    expect(done.textContent).not.toMatch(/left|balance|→/i);
+    expect(done.querySelector('[data-account-id], [data-card-mark]')).toBeNull();
+    // The check, the three lines and Done: nothing else is drawn.
+    expect(done.querySelectorAll('p')).toHaveLength(3);
+    // It is still the Pay sheet, so it keeps its name; the words "Pay with Main account" are not
+    // drawn again over "Paid with Main account".
+    expect(pay.getByRole('heading', { name: 'Pay with Main account' })).toHaveClass('sr-only');
+  });
+
+  it.each([
+    ['Main account', 'Paid with Main account'],
+    ['Visa', 'Paid with Visa ·· 4242'],
+  ])('names %s as "%s", the last 4 digits only where it has them', async (name, line) => {
+    await renderReal();
+    if (name === 'Visa') await userEvent.click(card('Visa'));
+    const pay = await payToTheEnd(name, '12.50');
+    await pay.findByText(`Paid ${usd(12_50)}`);
+    expect(pay.getByText(line)).toBeInTheDocument();
+  });
+
+  it('says the category alone when there is no note', async () => {
+    await renderReal();
+    const pay = await payToTheEnd('Main account', '9', { category: 'Transport', note: '' });
+    await pay.findByText(`Paid ${usd(9_00)}`);
+    expect(pay.getByText('Transport')).toBeInTheDocument();
+  });
+
+  it('masks with the eye: the paid amount is hidden while amounts are hidden', async () => {
+    useAmountsHidden.setState({ hidden: true });
+    await renderReal();
+    const pay = await payToTheEnd('Main account', '12.50');
+    expect(await pay.findByText('Paid ••••')).toHaveAttribute('role', 'status');
+    expect(sheet('Main account').textContent).not.toMatch(/12[.,]50/);
+  });
+
+  it('closes on Done, and the next payment starts on the form again', async () => {
+    await renderReal();
+    const pay = await payToTheEnd('Main account', '12.50');
+    await pay.findByText(`Paid ${usd(12_50)}`);
+    await userEvent.click(pay.getByRole('button', { name: 'Done' }));
+    expect(screen.queryByRole('dialog', { name: 'Pay with Main account' })).toBeNull();
+    await userEvent.click(action('Pay'));
+    expect(within(sheet('Main account')).getByLabelText('Amount')).toHaveValue('');
+  });
+
+  it.each([
+    ['Escape', (dialog: HTMLElement) => fireEvent.keyDown(dialog, { key: 'Escape' })],
+    // The Android back gesture is a close request on the dialog.
+    [
+      'the back gesture',
+      (dialog: HTMLElement) => fireEvent(dialog, new Event('cancel', { cancelable: true })),
+    ],
+  ])('closes on %s as Done does', async (_, press) => {
+    await renderReal();
+    const pay = await payToTheEnd('Main account', '12.50');
+    await pay.findByText(`Paid ${usd(12_50)}`);
+    press(sheet('Main account'));
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'Pay with Main account' })).toBeNull(),
+    );
+    await userEvent.click(action('Pay'));
+    expect(within(sheet('Main account')).getByLabelText('Amount')).toHaveValue('');
+  });
+
+  it('records the spend on the card it was paid with, once it has gone through', async () => {
+    await renderReal();
+    await userEvent.click(card('Visa'));
+    const pay = await payToTheEnd('Visa', '12.50');
+    await pay.findByText(`Paid ${usd(12_50)}`);
+    expect(useLastSpend.getState().last).toEqual({
+      accountId: VISA,
+      amount: 12_50,
+      at: expect.any(Number),
+    });
+  });
+
+  it('records nothing for a payment that is asked about and not made', async () => {
+    const store = await renderReal((data) => {
+      data.tables.budgetLimit.push(
+        makeLimit({ category: 'food', amount: 10_00, period: 'monthly' }),
+      );
+    });
+    const settings = store.getState().data.tables.settings[0]!;
+    await act(() => store.getState().put('settings', { ...settings, warningTone: 'strict' }));
+    await userEvent.click(action('Pay'));
+    const pay = within(sheet('Main account'));
+    await userEvent.type(pay.getByLabelText('Amount'), '12.50');
+    await userEvent.click(pay.getByRole('button', { name: 'Pay' }));
+    await userEvent.click(
+      within(screen.getByRole('dialog', { name: 'Over your limit?' })).getByRole('button', {
+        name: 'Cancel',
+      }),
+    );
+    expect(useLastSpend.getState().last).toBeNull();
+  });
+});
+
+describe('just now', () => {
+  /** A clock the test moves: only the timers the badge reads are faked, so the rest of the screen runs as it does. */
+  function clock() {
+    vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
+    vi.setSystemTime(new Date('2026-10-14T10:00:00.000Z'));
+  }
+  const spend = (accountId: string, amount: number, age = 0) =>
+    useLastSpend.setState({ last: { accountId, amount, at: Date.now() - age } });
+  const badge = (text: string | RegExp) => screen.queryByText(text);
+  const JUST_NOW = `−${usd(12_50)} just now`;
+
+  it('shows what came off the card, on that card, for 4 seconds, in a small thick glass badge', () => {
+    clock();
+    spend(MAIN, 12_50);
+    renderCards();
+    const shown = within(card('Main account')).getByText(JUST_NOW);
+    expect(shown).toHaveClass('glass-strong');
+    // It is a piece of the card, not a second thing to tap, and the card keeps its own name.
+    expect(card('Main account')).toHaveAttribute(
+      'aria-label',
+      `Main account, debit, ${usd(1_000_00)}`,
+    );
+    act(() => vi.advanceTimersByTime(3_999));
+    expect(badge(JUST_NOW)).toBeInTheDocument();
+    act(() => vi.advanceTimersByTime(1));
+    expect(badge(JUST_NOW)).toBeNull();
+  });
+
+  it('is on the card that paid and no other', () => {
+    clock();
+    spend(VISA, 45_00);
+    renderCards();
+    expect(within(card('Visa')).getByText(`−${usd(45_00)} just now`)).toBeInTheDocument();
+    expect(within(card('Main account')).queryByText(/just now/)).toBeNull();
+    expect(within(card('Savings')).queryByText(/just now/)).toBeNull();
+  });
+
+  it('slides in and out, and under reduced motion only fades, by one pair of classes', () => {
+    clock();
+    spend(MAIN, 12_50);
+    renderCards();
+    expect(badge(JUST_NOW)).toHaveClass(
+      'motion-safe:animate-just-now',
+      'motion-reduce:animate-just-now-fade',
+    );
+  });
+
+  it('shows for a spend under 30 seconds old, and not for one 31 seconds old', () => {
+    clock();
+    spend(MAIN, 12_50, 29_000);
+    const fresh = renderCards();
+    expect(badge(JUST_NOW)).toBeInTheDocument();
+    fresh.unmount();
+    spend(MAIN, 12_50, 31_000);
+    renderCards();
+    expect(badge(JUST_NOW)).toBeNull();
+  });
+
+  it('shows nothing when nothing was spent', () => {
+    clock();
+    renderCards();
+    expect(badge(/just now/)).toBeNull();
+  });
+
+  it('masks with the eye: the amount is hidden while amounts are hidden', () => {
+    clock();
+    useAmountsHidden.setState({ hidden: true });
+    spend(MAIN, 12_50);
+    renderCards();
+    expect(within(card('Main account')).getByText('−•••• just now')).toBeInTheDocument();
+    expect(badge(/12[.,]50/)).toBeNull();
+  });
+
+  it('does not come back on a re-render, or on going back to the card', () => {
+    clock();
+    spend(MAIN, 12_50);
+    renderCards();
+    act(() => vi.advanceTimersByTime(4_000));
+    expect(badge(JUST_NOW)).toBeNull();
+    act(() => useAmountsHidden.setState({ hidden: true }));
+    act(() => useAmountsHidden.setState({ hidden: false }));
+    fireEvent.click(card('Visa'));
+    fireEvent.click(card('Main account'));
+    expect(badge(/just now/)).toBeNull();
+  });
+
+  it('waits for the card to come on screen, and counts its 30 seconds from then', () => {
+    clock();
+    const centre = stubObservers();
+    spend(VISA, 45_00, 20_000);
+    renderCards();
+    // Main is the card in the middle: the Visa is off to the side, and nothing shows yet.
+    expect(badge(/just now/)).toBeNull();
+    act(() => vi.advanceTimersByTime(5_000));
+    act(() => centre('Visa'));
+    expect(within(card('Visa')).getByText(`−${usd(45_00)} just now`)).toBeInTheDocument();
+    act(() => vi.advanceTimersByTime(4_000));
+    expect(badge(/just now/)).toBeNull();
+    // Away and back: it has had its turn.
+    act(() => centre('Main account'));
+    act(() => centre('Visa'));
+    expect(badge(/just now/)).toBeNull();
+  });
+
+  it('does not show for a card that comes on screen after the 30 seconds', () => {
+    clock();
+    const centre = stubObservers();
+    spend(VISA, 45_00, 20_000);
+    renderCards();
+    act(() => vi.advanceTimersByTime(10_000));
+    act(() => centre('Visa'));
+    expect(badge(/just now/)).toBeNull();
+  });
+
+  it('shows again for a newer spend while the tab is open', () => {
+    clock();
+    spend(MAIN, 12_50);
+    renderCards();
+    act(() => vi.advanceTimersByTime(4_000));
+    expect(badge(JUST_NOW)).toBeNull();
+    act(() => useLastSpend.getState().record(MAIN, 3_00));
+    expect(within(card('Main account')).getByText(`−${usd(3_00)} just now`)).toBeInTheDocument();
+  });
+
+  it('waits until the Pay sheet is closed, so it is seen on the card and not behind the sheet', async () => {
+    const store = await renderReal();
+    await userEvent.click(action('Pay'));
+    const pay = within(screen.getByRole('dialog', { name: 'Pay with Main account' }));
+    await userEvent.type(pay.getByLabelText('Amount'), '12.50');
+    await userEvent.click(pay.getByRole('button', { name: 'Pay' }));
+    await pay.findByText(`Paid ${usd(12_50)}`);
+    expect(store.getState().data.tables.expense).toHaveLength(1);
+    expect(badge(/just now/)).toBeNull();
+    await userEvent.click(pay.getByRole('button', { name: 'Done' }));
+    expect(await within(card('Main account')).findByText(JUST_NOW)).toBeInTheDocument();
+  });
+});
+
+describe('On this card', () => {
+  /** Main has seven coffees and a transfer to Savings, the Visa a fill-up, and Savings its own rent share. */
+  function withEntries(): DataSnapshot {
+    const data = baseData();
+    for (let day = 1; day <= 7; day++) {
+      data.tables.expense.push(
+        makeExpense({
+          amount: day * 1_00,
+          note: `Coffee ${day}`,
+          accountId: MAIN,
+          date: `2026-10-0${day}`,
+        }),
+      );
+    }
+    data.tables.expense.push(
+      makeExpense({ amount: 45_00, note: 'Fill-up', accountId: VISA, date: '2026-10-08' }),
+      makeExpense({ amount: 60_00, note: 'Rent share', accountId: SAVINGS, date: '2026-10-05' }),
+    );
+    data.tables.transaction.push(
+      makeTransaction({
+        amount: 200_00,
+        fromAccountId: MAIN,
+        toAccountId: SAVINGS,
+        date: '2026-10-09',
+        note: 'Top up',
+      }),
+    );
+    return data;
+  }
+  const section = () => screen.getByRole('region', { name: 'On this card' });
+  const titles = () =>
+    within(section())
+      .getAllByRole('listitem')
+      .map((li) => li.querySelector('b')?.textContent);
+
+  it('lists the selected card’s latest 5 entries, newest first, as History writes them from the card’s side', () => {
+    renderCards(withEntries());
+    // The transfer reads as money out of Main, and the coffees follow it.
+    expect(titles()).toEqual(['To Savings', 'Coffee 7', 'Coffee 6', 'Coffee 5', 'Coffee 4']);
+    const [first, second] = within(section()).getAllByRole('listitem');
+    expect(first).toHaveTextContent(
+      `To SavingsTransfer · Top up · ${formatDay('2026-10-09')}−${usd(200_00)}`,
+    );
+    expect(second).toHaveTextContent(`Coffee 7Food · ${formatDay('2026-10-07')}−${usd(7_00)}`);
+    // Seen from the card itself, no row names it again or draws its mark.
+    expect(section().querySelector('[data-card-mark]')).toBeNull();
+    expect(section()).not.toHaveTextContent('Main account');
+  });
+
+  it('follows the card that is picked', async () => {
+    renderCards(withEntries());
+    await userEvent.click(card('Visa'));
+    expect(titles()).toEqual(['Fill-up']);
+    await userEvent.click(card('Savings'));
+    expect(titles()).toEqual(['From Main account', 'Rent share']);
+    await userEvent.click(card('Main account'));
+    expect(titles()).toHaveLength(5);
+  });
+
+  it('sits under the chart and above the categories', () => {
+    renderCards(withEntries());
+    const follows = (a: HTMLElement, b: HTMLElement) =>
+      Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(follows(screen.getByRole('region', { name: 'Spending' }), section())).toBe(true);
+    expect(follows(section(), screen.getByRole('region', { name: 'Categories' }))).toBe(true);
+  });
+
+  it('has View all, which opens History', async () => {
+    const { router } = renderCards(withEntries());
+    await userEvent.click(within(section()).getByRole('link', { name: /View all/ }));
+    expect(router.state.location.pathname).toBe('/history');
+  });
+
+  it('says so when the card has no entries, and still has View all', () => {
+    renderCards();
+    expect(within(section()).getByText('Nothing on Main account yet.')).toBeInTheDocument();
+    expect(within(section()).queryAllByRole('listitem')).toHaveLength(0);
+    expect(within(section()).getByRole('link', { name: /View all/ })).toBeInTheDocument();
+  });
+
+  it('is only to look at: its rows open nothing and delete nothing (History does that)', () => {
+    renderCards(withEntries());
+    expect(within(section()).queryAllByRole('button')).toHaveLength(0);
+  });
+
+  it('masks with the eye: no amount shows while amounts are hidden', () => {
+    useAmountsHidden.setState({ hidden: true });
+    renderCards(withEntries());
+    expect(section()).toHaveTextContent('−••••');
+    expect(section().textContent).not.toMatch(/\d[.,]\d\d/);
+  });
+});
+
+describe('the cards’ size', () => {
+  it('is 300 by 186, with the amount at 26px', () => {
+    renderCards();
+    for (const name of ['Main account', 'Visa', 'Savings']) {
+      expect(card(name)).toHaveClass('h-[186px]', 'w-[300px]');
+      expect(card(name)).not.toHaveClass('h-[166px]', 'w-[270px]');
+    }
+    expect(within(card('Main account')).getByText(usd(1_000_00))).toHaveClass('text-[26px]');
+  });
+
+  it('leaves the row room for a card of that width on a wide screen: half the row less half a card', () => {
+    renderCards();
+    // 50% is of the box the row stands out of by 20px a side: half a card (150px) less those 20px.
+    expect(carousel()).toHaveClass('sm:px-[calc(50%-130px)]');
   });
 });
 

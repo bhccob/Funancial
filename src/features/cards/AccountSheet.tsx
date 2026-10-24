@@ -4,7 +4,7 @@ import { Sheet } from '@/components/ui/Sheet';
 import { archivedBy } from '@/domain/accounts';
 import { accountBalance } from '@/domain/balances';
 import type { Cycle } from '@/domain/entities';
-import { entryDate, historyEntries, type Entry } from '@/domain/history';
+import { entryDate, historyEntries, movesMoneyOn } from '@/domain/history';
 import { CardFacts, Fact } from '@/features/goals/CardSheet';
 import { PayDialog, type PayTarget } from '@/features/goals/PayDialog';
 import { ActualBalanceDialog } from '@/features/history/ActualBalanceDialog';
@@ -28,20 +28,6 @@ const PER: Record<Cycle, string> = {
 };
 
 const HEADING = 'text-muted mt-6 mb-1 text-[13px] font-bold';
-
-/** Whether a History entry moves money on the account: paid with it, into it, or out of it. */
-function names(entry: Entry, id: string): boolean {
-  switch (entry.kind) {
-    case 'expense':
-    case 'income':
-    case 'dividend':
-      return entry.item.accountId === id;
-    case 'sale':
-      return entry.item.toAccountId === id;
-    case 'transaction':
-      return entry.item.fromAccountId === id || entry.item.toAccountId === id;
-  }
-}
 
 /**
  * A plain row of the sheet: what it is (with a chip beside it, for income not counted yet), a line
@@ -105,7 +91,9 @@ export function AccountSheet({
   const account = data.tables.account.find((a) => a.id === accountId && !archivedBy(a, today));
   const balance = account ? accountBalance(account, data, today) : 0;
   const everything = useMemo(() => historyEntries(data), [data]);
-  const entries = account ? everything.filter((e) => names(e, account.id)).slice(0, LATEST) : [];
+  const entries = account
+    ? everything.filter((e) => movesMoneyOn(e, account.id)).slice(0, LATEST)
+    : [];
   const subscriptions = account
     ? data.tables.subscription.filter((s) => s.accountId === account.id && s.status === 'active')
     : [];

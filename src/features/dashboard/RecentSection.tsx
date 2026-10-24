@@ -1,55 +1,14 @@
-import {
-  ArrowDownLeft,
-  ArrowLeftRight,
-  Coins,
-  CreditCard,
-  HandCoins,
-  SlidersHorizontal,
-  TrendingUp,
-  type LucideIcon,
-} from 'lucide-react';
 import { activeAccounts } from '@/domain/accounts';
 import { accountBalance, heroFigure } from '@/domain/balances';
-import { addDays, type LocalDate } from '@/domain/dates';
 import { entryDate, type Entry } from '@/domain/history';
-import { CATEGORY_ICONS } from '@/features/shared/categories';
 import { entryLine, type EntryLine } from '@/features/shared/entryLine';
+import { entryIcon, dayName } from '@/features/shared/entryLook';
 import { EntryRow } from '@/features/shared/EntryRow';
 import { EmptyRows, PlainSection, ROWS } from '@/features/shared/PlainSection';
 import { useEntryActions } from '@/features/shared/useEntryActions';
 import { cn } from '@/lib/cn';
-import { formatDay } from '@/lib/format';
 import { useApp } from '@/store/AppStoreProvider';
 import { useMoney, useToday } from '@/store/useFinance';
-
-/** "Today", "Yesterday", else "Oct 12". */
-function dayName(day: LocalDate, today: LocalDate): string {
-  if (day === today) return 'Today';
-  if (day === addDays(today, -1)) return 'Yesterday';
-  return formatDay(day);
-}
-
-/** The icon a row of Recent starts with: the category of an expense, else the kind of entry. */
-function iconOf(entry: Entry): LucideIcon {
-  switch (entry.kind) {
-    case 'expense':
-      return CATEGORY_ICONS[entry.item.category];
-    case 'income':
-      return ArrowDownLeft;
-    case 'dividend':
-      return Coins;
-    case 'sale':
-      return TrendingUp;
-    case 'transaction':
-      return {
-        transfer: ArrowLeftRight,
-        card_payment: CreditCard,
-        adjustment: SlidersHorizontal,
-        investment: TrendingUp,
-        debt_payment: HandCoins,
-      }[entry.item.type];
-  }
-}
 
 /**
  * The newest entries History lists, as plain rows written as History writes them (`entryLine`),
@@ -92,7 +51,7 @@ export function RecentSection({ entries }: { entries: Entry[] }) {
                   key={entry.item.id}
                   entryId={entry.item.id}
                   line={line}
-                  icon={iconOf(entry)}
+                  icon={entryIcon(entry)}
                   day={dayName(entryDate(entry), today)}
                   left={i === 0 ? leftOn(entry, line) : undefined}
                   danger

@@ -180,6 +180,7 @@
   --duration-standard: 380ms;
   --stagger-rise: 60ms;
   --duration-count: 900ms;
+  --duration-just-now: 4000ms;
   --press-scale: 0.96;
   --page-blobs-strength: 1;
 }

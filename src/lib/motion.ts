@@ -17,6 +17,8 @@ export const MOTION = {
   /** The gap between one rising block and the next. */
   stagger: 0.06,
   countUp: 0.9,
+  /** How long the Cards tab's "just now" badge stays on a card. */
+  justNow: 4,
 } as const;
 
 const REDUCED_QUERY = '(prefers-reduced-motion: reduce)';

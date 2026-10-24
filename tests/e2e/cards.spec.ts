@@ -49,10 +49,19 @@ test('mobile: Cards pays 12.50 with Main account, then freezes it, and a frozen 
   await sheet.getByLabel('Amount').fill('12.50');
   await sheet.getByRole('radio', { name: 'Transport' }).check();
   await sheet.getByRole('button', { name: 'Pay', exact: true }).click();
-  await expect(sheet.getByText('Paid', { exact: true })).toBeVisible();
-  await expect(sheet.getByText('$12.50 for Transport with Main account.')).toBeVisible();
+  // The done step: what was paid, the category (no shop here), the card, and no balance line.
+  await expect(sheet.getByText('Paid $12.50', { exact: true })).toBeVisible();
+  await expect(sheet.getByText('Transport', { exact: true })).toBeVisible();
+  await expect(sheet.getByText('Paid with Main account', { exact: true })).toBeVisible();
+  await expect(sheet).not.toContainText('left');
+  // The badge waits for Done: it is not on the card behind the sheet.
+  await expect(main.getByText('−$12.50 just now')).toHaveCount(0);
   await sheet.getByRole('button', { name: 'Done' }).click();
   await expect(sheet).toBeHidden();
+  // Then the card says what came off it, sliding in, and takes it back after a few seconds.
+  const justNow = main.getByText('−$12.50 just now');
+  await expect(justNow).toBeVisible();
+  await expect(justNow).toHaveCSS('animation-name', 'just-now');
   // The card counts down to its new balance.
   await expect(main).toHaveAttribute('aria-label', 'Main account, debit, $987.50');
   await expect(main).toContainText('$987.50');
@@ -101,6 +110,38 @@ test('mobile: tapping a card selects it and centres it, and it is still selected
   await expect(cards(page).getByRole('button', { name: /^Savings,/ })).toBeInViewport();
 });
 
+for (const width of [375, 360]) {
+  test(`mobile: at ${width}px a card is 300 by 186, the next one shows beside it, and the row snaps card by card`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 812 });
+    await startDemo(page);
+    await page.goto('/cards');
+    const main = cards(page).getByRole('button', { name: /^Main account,/ });
+    const visa = cards(page).getByRole('button', { name: /^Demo Visa,/ });
+    const box = await main.boundingBox();
+    expect(Math.round(box!.width)).toBe(300);
+    expect(Math.round(box!.height)).toBe(186);
+    // The whole first card fits, and the second shows beside it, cut off by the screen's edge.
+    expect(box!.x).toBeGreaterThanOrEqual(0);
+    expect(box!.x + box!.width).toBeLessThanOrEqual(width);
+    const next = await visa.boundingBox();
+    expect(next!.x).toBeLessThan(width);
+    expect(next!.x + next!.width).toBeGreaterThan(width);
+
+    const row = await cards(page).boundingBox();
+    await page.mouse.move(row!.x + row!.width / 2, row!.y + row!.height / 2);
+    await page.mouse.wheel(312, 0);
+    await expect(visa).toHaveAttribute('aria-pressed', 'true');
+    await expect
+      .poll(async () => {
+        const moved = await visa.boundingBox();
+        return moved ? Math.abs(moved.x + moved.width / 2 - width / 2) : Infinity;
+      })
+      .toBeLessThan(4);
+  });
+}
+
 test('mobile: sliding the cards selects the one that comes to rest in the middle', async ({
   page,
 }) => {
@@ -114,7 +155,7 @@ test('mobile: sliding the cards selects the one that comes to rest in the middle
   const row = await cards(page).boundingBox();
   await page.mouse.move(row!.x + row!.width / 2, row!.y + row!.height / 2);
   // One card's width and gap to the right.
-  await page.mouse.wheel(282, 0);
+  await page.mouse.wheel(312, 0);
   await expect(visa).toHaveAttribute('aria-pressed', 'true');
   // The chart now follows the Visa.
   await expect(page.getByRole('region', { name: 'Spending' })).toBeVisible();
@@ -151,10 +192,12 @@ test('mobile: with reduced motion the frost only fades in, and the balance jumps
   const sheet = page.getByRole('dialog', { name: 'Pay with Main account' });
   await sheet.getByLabel('Amount').fill('100');
   await sheet.getByRole('button', { name: 'Pay', exact: true }).click();
-  await expect(sheet.getByText('Paid', { exact: true })).toBeVisible();
+  await expect(sheet.getByText('Paid $100.00', { exact: true })).toBeVisible();
   // No counting: read once, the moment it is paid, the card already shows the new balance.
   expect(await main.textContent()).toContain('$900.00');
   await sheet.getByRole('button', { name: 'Done' }).click();
+  // The badge only fades: it does not slide in or out.
+  await expect(main.getByText('−$100.00 just now')).toHaveCSS('animation-name', 'just-now-fade');
 
   await actions(page).getByRole('button', { name: 'Freeze' }).click();
   await expect(frost).toHaveCSS('opacity', '1');

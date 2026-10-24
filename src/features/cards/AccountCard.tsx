@@ -22,17 +22,29 @@ const TINTS = [
 ];
 
 /**
+ * The "just now" badge on a card: a small piece of the page's thick glass, in the page's ink (the
+ * card reads the block's, which is white on a dark block), where the card has room, under the
+ * contactless mark. Its words are checked over every face a card can have in tests/unit/tokens.test.ts,
+ * and it only slides under `motion-safe` (see `--animate-just-now`).
+ */
+const JUST_NOW_BADGE =
+  'glass-strong page-ink text-text pointer-events-none absolute top-[50px] right-3.5 z-[2] rounded-full px-2.5 py-1 text-[12px] leading-none font-extrabold whitespace-nowrap tabular-nums motion-safe:animate-just-now motion-reduce:animate-just-now-fade';
+
+/**
  * One account as a glass card on the theme's block, the carousel's `index`-th: its kind, the chip
  * and the contactless mark when it has a card number, what it holds (a credit card: what it owes,
  * and what is free on it), and its name and last 4 digits. The amount counts to a new value when it
  * changes. A frozen card is frosted over, the frost coming in over 380ms (only fading for reduced
- * motion). The whole card is the button that selects it; `selected` is said as pressed.
+ * motion). The whole card is the button that selects it; `selected` is said as pressed. `justNow` is
+ * an amount just spent on it, which a badge says ("−$12.50 just now") for the Cards tab to take off
+ * again; it is drawn for the eye only, as the screen's Pay already said it.
  */
 export function AccountCard({
   row,
   index,
   selected,
   money,
+  justNow,
   onSelect,
   ref,
 }: {
@@ -40,6 +52,7 @@ export function AccountCard({
   index: number;
   selected: boolean;
   money: (minor: number) => string;
+  justNow?: number;
   onSelect(): void;
   ref?: Ref<HTMLButtonElement>;
 }) {
@@ -61,7 +74,7 @@ export function AccountCard({
       aria-pressed={selected}
       onClick={onSelect}
       className={cn(
-        'glass-card press text-text flex h-[166px] w-[270px] flex-none snap-center flex-col rounded-[22px] px-[18px] py-4 text-left',
+        'glass-card press text-text flex h-[186px] w-[300px] flex-none snap-center flex-col rounded-[22px] px-[18px] py-4 text-left',
         TINTS[index % TINTS.length],
       )}
     >
@@ -84,13 +97,18 @@ export function AccountCard({
       <CountUp
         value={balance}
         format={money}
-        className="mt-auto text-[23px] leading-tight font-extrabold tracking-[-0.03em] whitespace-nowrap tabular-nums"
+        className="mt-auto text-[26px] leading-tight font-extrabold tracking-[-0.03em] whitespace-nowrap tabular-nums"
       />
       <span className="mt-0.5 min-w-0 truncate text-[12px] font-bold">
         {account.name}
         {account.last4 && ` · •••• ${account.last4}`}
       </span>
       <span className="truncate text-[12px] font-bold">{under}</span>
+      {justNow !== undefined && (
+        <span aria-hidden="true" className={JUST_NOW_BADGE}>
+          {`−${money(justNow)} just now`}
+        </span>
+      )}
       <span
         aria-hidden="true"
         data-testid="frost"

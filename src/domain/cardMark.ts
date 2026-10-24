@@ -39,5 +39,5 @@ export function cardMark(account: Pick<Account, 'name' | 'last4' | 'skin'>): Car
 }
 
 /** "Main account ·· 4312": a card by its name and, when it has them, its last 4 digits. */
-export const cardLabel = ({ name, last4 }: Pick<CardMark, 'name' | 'last4'>): string =>
+export const markLabel = ({ name, last4 }: Pick<CardMark, 'name' | 'last4'>): string =>
   last4 ? `${name} ·· ${last4}` : name;

@@ -12,6 +12,7 @@ import { toast } from '@/lib/toast';
 import { useAction } from '@/lib/useAction';
 import { useApp } from '@/store/AppStoreProvider';
 import type { ExpenseInput } from '@/store/financeActions';
+import { useLastSpend } from '@/store/useLastSpend';
 import { useCurrency, useFinanceActions, useToday } from '@/store/useFinance';
 import { CATEGORY_ICONS, CATEGORY_OPTIONS } from '@/features/shared/categories';
 import { AccountField, NOT_FROZEN, useStartAccountId } from '@/features/shared/AccountField';
@@ -29,13 +30,17 @@ const REPEAT_OPTIONS = [
   { value: 'yearly', label: 'Yearly' },
 ];
 
-/** Adds an expense, or edits `expense` when given (no repeat, no limit check, plus Delete). */
+/**
+ * Adds an expense, or edits `expense` when given (no repeat, no limit check, plus Delete). A new
+ * expense that is saved is the card's last spend (`useLastSpend`); an edit is not a new spend.
+ */
 export function ExpenseForm({ onDone, expense }: { onDone(): void; expense?: Expense }) {
   const actions = useFinanceActions();
   const currency = useCurrency();
   const today = useToday();
   const tone = useApp((s) => s.data.tables.settings[0]?.warningTone ?? 'motivational');
   const run = useAction();
+  const record = useLastSpend((s) => s.record);
 
   const [amount, setAmount] = useState<number | null>(expense?.amount ?? null);
   const [category, setCategory] = useState<Category>(expense?.category ?? 'food');
@@ -71,6 +76,7 @@ export function ExpenseForm({ onDone, expense }: { onDone(): void; expense?: Exp
     );
     setBusy(false);
     if (!saved) return;
+    record(expense.accountId, expense.amount);
     for (const alert of alerts) toast('warning', limitMessage(tone, alert));
     onDone();
   }

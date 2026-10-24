@@ -9,12 +9,14 @@ import { TextField } from '@/components/ui/TextField';
 import { ACCOUNT_FROZEN, archivedBy } from '@/domain/accounts';
 import { limitMessage } from '@/domain/alerts';
 import { categoryLabel, type LimitStatus } from '@/domain/budget';
+import { cardMark, markLabel } from '@/domain/cardMark';
 import type { Account, Category } from '@/domain/entities';
 import { CATEGORY_OPTIONS } from '@/features/shared/categories';
 import { toast } from '@/lib/toast';
 import { useAction } from '@/lib/useAction';
 import type { PaymentInput } from '@/services/payment';
 import { useApp } from '@/store/AppStoreProvider';
+import { useLastSpend } from '@/store/useLastSpend';
 import {
   useCurrency,
   useFinanceActions,
@@ -25,14 +27,14 @@ import {
 
 const ENTER = 'Enter an amount like 12.50';
 
-/** What was paid, said once it has gone through. */
-type Paid = { amount: number; category: Category };
+/** What was paid, said once it has gone through. `note` is the shop, or whatever the person wrote. */
+type Paid = { amount: number; category: Category; note: string };
 
 /**
  * The payment form: how much, for what, and a note, then Pay, which reads "Paying…" while it goes
  * through. It warns about limits as the expense form does: under the strict tone it asks before a
  * payment that would take a limit past 100%, and afterwards each limit the payment crossed is a
- * toast in the person's tone.
+ * toast in the person's tone. A payment that went through is the card's last spend (`useLastSpend`).
  */
 function PayForm({ account, onPaid }: { account: Account; onPaid(paid: Paid): void }) {
   const payments = usePaymentService();
@@ -41,6 +43,7 @@ function PayForm({ account, onPaid }: { account: Account; onPaid(paid: Paid): vo
   const today = useToday();
   const tone = useApp((s) => s.data.tables.settings[0]?.warningTone ?? 'motivational');
   const run = useAction();
+  const record = useLastSpend((s) => s.record);
   const [amount, setAmount] = useState<number | null>(null);
   const [category, setCategory] = useState<Category>('food');
   const [note, setNote] = useState('');
@@ -66,7 +69,8 @@ function PayForm({ account, onPaid }: { account: Account; onPaid(paid: Paid): vo
     setBusy(false);
     if (!done) return;
     for (const alert of alerts) toast('warning', limitMessage(tone, alert));
-    onPaid({ amount: payment.amount, category: payment.category });
+    record(payment.accountId, payment.amount);
+    onPaid({ amount: payment.amount, category: payment.category, note: payment.note });
   }
 
   function submit(e: FormEvent) {
@@ -140,14 +144,41 @@ function PayForm({ account, onPaid }: { account: Account; onPaid(paid: Paid): vo
 }
 
 /**
+ * The step after a payment: a check, what was paid, the shop and the category, one line naming the
+ * card it was paid with, and Done. There is no card picture and no balance line (what is left on
+ * the card is on the card, and Home's Recent says it). The amount is hidden with the eye, as
+ * everywhere; the card is named by its mark's words (`markLabel`), as Recent names it.
+ */
+function PaidStep({ paid, account, onDone }: { paid: Paid; account: Account; onDone(): void }) {
+  const money = useMoney();
+  return (
+    <div className="flex flex-col items-center gap-2 pt-2 pb-1 text-center">
+      <span className="btn-accent grid size-14 place-items-center rounded-full">
+        <Check aria-hidden="true" className="size-7" />
+      </span>
+      <p role="status" className="text-section mt-2">
+        {`Paid ${money(paid.amount)}`}
+      </p>
+      <p className="text-muted text-[15px] font-semibold">
+        {[paid.note, categoryLabel(paid.category)].filter(Boolean).join(' · ')}
+      </p>
+      <p className="text-[15px] font-semibold">{`Paid with ${markLabel(cardMark(account))}`}</p>
+      <Button size="lg" className="mt-4 w-full" onClick={onDone}>
+        Done
+      </Button>
+    </div>
+  );
+}
+
+/**
  * Pays with an account: the Pay of the Cards tab, and of Home. Open while `accountId` names an
  * account in use. The payment goes through the payment service (an expense on the account: a bank
- * account, cash or savings holds less, a credit card owes more), and the sheet then says it is done.
- * A frozen account can't pay, and says so.
+ * account, cash or savings holds less, a credit card owes more), and the sheet then ends on a done
+ * step (`PaidStep`) whose Done, Escape and the back gesture all close it. A frozen account can't pay,
+ * and says so.
  */
 export function PaySheet({ accountId, onClose }: { accountId: string | null; onClose(): void }) {
   const today = useToday();
-  const money = useMoney();
   const account = useApp((s) =>
     s.data.tables.account.find((a) => a.id === accountId && !archivedBy(a, today)),
   );
@@ -162,25 +193,13 @@ export function PaySheet({ accountId, onClose }: { accountId: string | null; onC
     <Sheet
       open={account !== undefined}
       title={account ? `Pay with ${account.name}` : ''}
-      showTitle
+      // The done step names the card itself, so it leaves the title to the sheet's name alone.
+      showTitle={paid === null}
       onClose={close}
     >
       {account &&
         (paid ? (
-          <div className="flex flex-col items-center gap-2 pt-2 pb-1 text-center">
-            <span className="btn-accent grid size-14 place-items-center rounded-full">
-              <Check aria-hidden="true" className="size-7" />
-            </span>
-            <p role="status" className="text-section mt-2">
-              Paid
-            </p>
-            <p className="text-muted text-[15px] font-semibold">
-              {`${money(paid.amount)} for ${categoryLabel(paid.category)} with ${account.name}.`}
-            </p>
-            <Button size="lg" className="mt-4 w-full" onClick={close}>
-              Done
-            </Button>
-          </div>
+          <PaidStep paid={paid} account={account} onDone={close} />
         ) : account.frozen ? (
           <p className="text-muted text-[15px] font-semibold">{ACCOUNT_FROZEN}</p>
         ) : (

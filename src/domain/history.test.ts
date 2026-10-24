@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { makeDividend, makeExpense, makeIncome, makeSale, makeTransaction } from '@/test/fixtures';
-import { entryDate, historyEntries } from './history';
+import { entryDate, historyEntries, movesMoneyOn, type Entry } from './history';
 import { emptySnapshot } from './snapshot';
 
 /** An ISO timestamp `minute` minutes into 1 Oct, to order rows made on the same day. */
@@ -90,5 +90,28 @@ describe('entryDate', () => {
     expect(entryDate({ kind: 'sale', item: makeSale({ soldOn: '2026-10-01' }) })).toBe(
       '2026-10-01',
     );
+  });
+});
+
+describe('movesMoneyOn', () => {
+  const on = (entry: Entry) => ['a', 'b'].filter((id) => movesMoneyOn(entry, id));
+
+  it('is the account an expense, an income or a dividend is on', () => {
+    expect(on({ kind: 'expense', item: makeExpense({ accountId: 'a' }) })).toEqual(['a']);
+    expect(on({ kind: 'income', item: makeIncome({ accountId: 'b' }) })).toEqual(['b']);
+    expect(on({ kind: 'dividend', item: makeDividend({ accountId: 'a' }) })).toEqual(['a']);
+    expect(on({ kind: 'dividend', item: makeDividend({ accountId: null }) })).toEqual([]);
+  });
+
+  it('is the account a sale was paid into', () => {
+    expect(on({ kind: 'sale', item: makeSale({ toAccountId: 'b' }) })).toEqual(['b']);
+  });
+
+  it('is both ends of a transaction, and the one end a purchase or a correction has', () => {
+    const move = (fromAccountId: string | null, toAccountId: string | null) =>
+      on({ kind: 'transaction', item: makeTransaction({ fromAccountId, toAccountId }) });
+    expect(move('a', 'b')).toEqual(['a', 'b']);
+    expect(move(null, 'b')).toEqual(['b']);
+    expect(move('a', null)).toEqual(['a']);
   });
 });
