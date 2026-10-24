@@ -395,6 +395,8 @@ for (const theme of GAME_THEMES) {
         // with an error among them, the log-in that rises over its first step, and "You're all set"
         // are scanned in the light and the dark.
         test('setup: each step, the code step with an error, and all set', async ({ page }) => {
+          // Twelve scans in one walk: three times the usual time.
+          test.slow();
           // A code is "mailed" for any name. No account is made: the code step's error is the one it
           // finds itself, a code that is too short (said before any sign-up, so no key work runs and
           // the scan cannot be slowed by it). The way on is the one a phone with no connection takes.
@@ -427,6 +429,8 @@ for (const theme of GAME_THEMES) {
           await step.getByLabel('Email', { exact: true }).fill('robin');
           await page.getByRole('button', { name: 'Continue' }).click();
           await expect(page.getByText('Enter a valid email address.')).toBeVisible();
+          // The strength word is drawn, so the scan reads it.
+          await expect(step.getByText('Strong', { exact: true })).toBeVisible();
           await expectReadable(page, 'setup, the account step with an error', look);
 
           // Step 2: the code, and a short one tried.
@@ -671,8 +675,16 @@ for (const theme of GAME_THEMES) {
         // Saved with nothing filled in (and a last 4 that is too short): every field says so.
         await dialog.getByLabel('Last 4 digits').fill('12');
         await dialog.getByRole('button', { name: 'Save', exact: true }).click();
-        await expect(dialog.getByText('Name the card.')).toBeVisible();
-        await expect(dialog.getByText('Give it a name.')).toBeVisible();
+        // Every error is drawn before the scan, so it reads each of them.
+        for (const error of [
+          'Name the card.',
+          'Use the last 4 digits.',
+          'Give it a name.',
+          'Enter an amount like 12.50',
+          'Pick the next renewal date.',
+        ]) {
+          await expect(dialog.getByText(error)).toBeVisible();
+        }
         await expectReadable(page, 'the subscription form with + New card and its errors', look);
       });
 

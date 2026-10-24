@@ -3,6 +3,7 @@ import { accountBalance, debtBalance } from '@/domain/balances';
 import { SubscriptionSchema, type Account, type CreditTerms } from '@/domain/entities';
 import { holdingRate, holdingValue } from '@/domain/portfolio';
 import type { DataSnapshot } from '@/domain/snapshot';
+import { dueGenerated } from '@/domain/sync';
 import { freshRealStore } from '@/test/realStore';
 import {
   makeAccount,
@@ -943,6 +944,56 @@ describe('a subscription can make its card', () => {
     expect(subscription).toHaveLength(1);
     expect(subscription[0]).toMatchObject({ amount: 35_00, accountId: account[2]!.id });
     expect(account[2]).toMatchObject({ name: 'Visa', id: edited.accountId });
+  });
+
+  it('moves an edited subscription onto its new card from the next renewal: a past charge stays where it was paid', async () => {
+    const { store, actions } = await setup();
+    // A gym membership on Main account that renewed on Oct 5: that charge was paid from Main.
+    await store
+      .getState()
+      .put(
+        'subscription',
+        makeSubscription({ ...gym, id: 'sub-gym', nextRenewal: '2026-10-05', anchorDay: 5 }),
+      );
+    await store.getState().sync();
+    const charges = () =>
+      store.getState().data.tables.expense.filter((e) => e.subscriptionId === 'sub-gym');
+    const [past] = charges();
+    expect(past).toMatchObject({ date: '2026-10-05', accountId: MAIN, amount: 30_00 });
+    const sub = store.getState().data.tables.subscription.find((s) => s.id === 'sub-gym')!;
+    expect(sub.nextRenewal).toBe('2026-11-05');
+    const mainBefore = balanceOf(store.getState().data, MAIN);
+
+    // Edited, and "+ New card" picked in Paid with.
+    const edited = await actions.saveSubscription({
+      id: sub.id,
+      name: sub.name,
+      amount: sub.amount,
+      cycle: sub.cycle,
+      nextRenewal: sub.nextRenewal,
+      category: sub.category,
+      accountId: MAIN,
+      newCard: visa,
+    });
+    const data = store.getState().data;
+    const card = data.tables.account.find((a) => a.id === edited.accountId)!;
+    expect(card).toMatchObject({ name: 'Visa', last4: '4312' });
+
+    // The past charge is untouched, still on Main account, and Main's balance with it.
+    expect(charges()).toEqual([past]);
+    expect(balanceOf(data, MAIN)).toBe(mainBefore);
+    expect(balanceOf(data, card.id)).toBe(0);
+
+    // The next renewal is charged to the card.
+    const next = dueGenerated(data, '2026-11-05').filter((r) => r.table === 'expense');
+    expect(next.map((r) => r.record)).toEqual([
+      expect.objectContaining({
+        date: '2026-11-05',
+        accountId: card.id,
+        amount: 30_00,
+        subscriptionId: 'sub-gym',
+      }),
+    ]);
   });
 
   it('without a card in the input, saves as before', async () => {
