@@ -135,6 +135,44 @@ describe('the reset page', () => {
     expect(changes()).toHaveLength(0);
   });
 
+  it('refuses a common password inline, and sends nothing', async () => {
+    await open();
+    await screen.findByText('Choose a new password for ada');
+    fill('password123');
+    fireEvent.click(submit());
+
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'That password is too common. Pick another one.',
+    );
+    expect(field('New password')).toHaveAttribute('aria-invalid', 'true');
+    expect(field('New password')).toHaveFocus();
+    expect(changes()).toHaveLength(0);
+  });
+
+  it('refuses one character repeated, in any case, and sends nothing', async () => {
+    await open();
+    await screen.findByText('Choose a new password for ada');
+    fill('zzzzzzzzzzzz');
+    fireEvent.click(submit());
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Use more than one character.');
+    expect(changes()).toHaveLength(0);
+  });
+
+  it('refuses the name the password is for, however it is spelled, and sends nothing', async () => {
+    info = { status: 200, body: { username: 'robin.smith1' } };
+    await open();
+    await screen.findByText('Choose a new password for robin.smith1');
+    fill('Robin.Smith1');
+    fireEvent.click(submit());
+
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      "Don't use your username or email as your password.",
+    );
+    expect(field('New password')).toHaveAttribute('aria-invalid', 'true');
+    expect(changes()).toHaveLength(0);
+  });
+
   it('takes a password of exactly 10 characters', async () => {
     await open();
     await screen.findByText('Choose a new password for ada');

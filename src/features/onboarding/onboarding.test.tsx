@@ -155,6 +155,37 @@ describe('the account step', () => {
     expect(screen.getByText('Step 1 of 6')).toBeInTheDocument();
   });
 
+  it('shows how strong the password is, and refuses a common one or the username before asking anyone', async () => {
+    const { account } = renderWizard();
+    await userEvent.type(screen.getByLabelText('Username'), 'robin.smith1');
+    await userEvent.type(
+      screen.getByLabelText('Email (for "forgot password")'),
+      'robin@example.com',
+    );
+    const password = screen.getByLabelText('Password');
+    expect(screen.queryByText(/^(Weak|Okay|Strong)$/)).not.toBeInTheDocument();
+
+    await userEvent.type(password, 'password123');
+    expect(screen.getByText('Weak')).toBeInTheDocument();
+    await next();
+    expect(screen.getByText('That password is too common. Pick another one.')).toBeInTheDocument();
+
+    await userEvent.clear(password);
+    await userEvent.type(password, 'ROBIN.smith1');
+    await next();
+    expect(
+      screen.getByText("Don't use your username or email as your password."),
+    ).toBeInTheDocument();
+
+    await userEvent.clear(password);
+    await userEvent.type(password, 'abcdefghijk');
+    expect(screen.getByText('Okay')).toBeInTheDocument();
+    await userEvent.clear(password);
+    await userEvent.type(password, 'Tr0ub4dor&3xyz');
+    expect(screen.getByText('Strong')).toBeInTheDocument();
+    expect(account.signUp).not.toHaveBeenCalled();
+  });
+
   it('makes the account with what was typed, then moves on to the next step', async () => {
     const { account } = renderWizard();
     await fillAccount();

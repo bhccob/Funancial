@@ -5,11 +5,14 @@ import {
   exportKek,
   KeyDerivationError,
 } from '@/data/accountCrypto';
+import { passwordProblem } from '@/domain/passwordRules';
 
 /*
  * The page an emailed reset link opens. The friend chooses a new password here; this derives the new
  * keys, exactly as the phone does, and hands the service `authKey` and `kek`, which it uses to set the
- * new password and lock the data key again. The password itself never leaves this page.
+ * new password and lock the data key again. The password itself never leaves this page. The service
+ * only sees a key made from it, so this page is where "password123" is refused, by the rules the app
+ * keeps (src/domain/passwordRules.ts).
  */
 
 const el = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -22,7 +25,6 @@ const again = el<HTMLInputElement>('reset-again');
 const error = el('reset-error');
 const submit = el<HTMLButtonElement>('reset-submit');
 
-const MIN_LENGTH = 10;
 const EXPIRED = 'This link has expired. Ask for a new one in the app.';
 // The address has no token: the link is opened again from the email (a reload gets here, as the token is taken out).
 const NO_TOKEN = 'Open the link in your email again to choose a new password.';
@@ -93,9 +95,8 @@ async function open() {
 async function change(event: SubmitEvent) {
   event.preventDefault();
   if (busy) return;
-  if (password.value.length < MIN_LENGTH) {
-    return complain(`Use at least ${MIN_LENGTH} characters.`, password);
-  }
+  const problem = passwordProblem(password.value, { username });
+  if (problem) return complain(problem, password);
   if (password.value !== again.value) {
     return complain("The two passwords don't match.", again);
   }

@@ -250,6 +250,26 @@ describe('sign-up', () => {
     expect(linkedState(actions)).toBeNull();
   });
 
+  it('refuses a common password, or the username or the email name as the password, before asking the service', async () => {
+    const { actions, server } = await setup();
+    for (const [bad, message] of [
+      [{ ...ME, password: 'Password123' }, 'That password is too common. Pick another one.'],
+      [{ ...ME, password: 'zzzzzzzzzzzz' }, 'Use more than one character.'],
+      [
+        { ...ME, username: 'Robin.Smith1', password: 'robin.smith1' },
+        "Don't use your username or email as your password.",
+      ],
+      [
+        { ...ME, email: 'Longer.Name1@example.com', password: 'longer.name1' },
+        "Don't use your username or email as your password.",
+      ],
+    ] as const) {
+      await expect(actions.signUp(bad)).rejects.toMatchObject({ code: 'invalid', message });
+    }
+    expect(server.calls).toEqual([]);
+    expect(linkedState(actions)).toBeNull();
+  });
+
   it('says a taken name is taken, without trying to log in', async () => {
     const { actions, server } = await setup();
     await server.seed({ username: 'robin', password: 'someone elses password' });
@@ -1004,6 +1024,20 @@ describe('changing the password', () => {
     await expect(actions.changePassword(ME.password, 'short')).rejects.toMatchObject({
       code: 'invalid',
     });
+    expect(server.sent('changePassword')).toEqual([]);
+  });
+
+  it('refuses a common password, or the email address of the account, as the new one', async () => {
+    const { actions, server } = await linked();
+    for (const [bad, message] of [
+      ['password123', 'That password is too common. Pick another one.'],
+      ['ROBIN@example.com', "Don't use your username or email as your password."],
+    ] as const) {
+      await expect(actions.changePassword(ME.password, bad)).rejects.toMatchObject({
+        code: 'invalid',
+        message,
+      });
+    }
     expect(server.sent('changePassword')).toEqual([]);
   });
 

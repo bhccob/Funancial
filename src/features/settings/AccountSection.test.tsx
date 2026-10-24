@@ -97,6 +97,40 @@ describe('Settings → Account without an account', () => {
     expect(await screen.findByText('Your account is ready.')).toBeInTheDocument();
   });
 
+  it('shows how strong the password is as it is typed, and refuses a common one or the username before any request', async () => {
+    const actions = show();
+    await userEvent.click(button('Create account'));
+    const dialog = screen.getByRole('dialog', { name: 'Create your account' });
+    const password = within(dialog).getByLabelText('Password');
+    await userEvent.type(within(dialog).getByLabelText('Username'), 'robin.smith1');
+    await userEvent.type(
+      within(dialog).getByLabelText('Email (for "forgot password")'),
+      'robin@example.com',
+    );
+
+    await userEvent.type(password, 'password123');
+    expect(within(dialog).getByText('Weak')).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Create account' }));
+    expect(
+      within(dialog).getByText('That password is too common. Pick another one.'),
+    ).toBeInTheDocument();
+
+    await userEvent.clear(password);
+    await userEvent.type(password, 'Robin.Smith1');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Create account' }));
+    expect(
+      within(dialog).getByText("Don't use your username or email as your password."),
+    ).toBeInTheDocument();
+
+    await userEvent.clear(password);
+    await userEvent.type(password, 'abcdefghijk');
+    expect(within(dialog).getByText('Okay')).toBeInTheDocument();
+    await userEvent.clear(password);
+    await userEvent.type(password, 'Tr0ub4dor&3xyz');
+    expect(within(dialog).getByText('Strong')).toBeInTheDocument();
+    expect(actions.signUp).not.toHaveBeenCalled();
+  });
+
   it('sends one request for two taps in the same instant', async () => {
     const actions = fakeAccount();
     actions.signUp.mockReturnValue(new Promise(() => {}));
@@ -438,6 +472,37 @@ describe('Settings → Account with an account', () => {
     const dialog = screen.getByRole('dialog', { name: 'Turn off and delete my copy?' });
     await userEvent.click(within(dialog).getByRole('button', { name: 'Delete my copy' }));
     expect(await within(dialog).findByRole('alert')).toHaveTextContent("You're offline.");
+  });
+
+  it('shows the strength of the new password, and refuses a common one or the account email', async () => {
+    const actions = show(fakeAccount(linkedAccount({ username: 'robin.smith1' })));
+    await userEvent.click(button('Change password'));
+    const dialog = screen.getByRole('dialog', { name: 'Change password' });
+    const fresh = within(dialog).getByLabelText('New password');
+    await userEvent.type(within(dialog).getByLabelText('Current password'), 'old password here');
+    // Only the new password gets a bar.
+    expect(within(dialog).queryAllByText(/^(Weak|Okay|Strong)$/)).toHaveLength(0);
+
+    await userEvent.type(fresh, 'password123');
+    expect(within(dialog).getAllByText(/^(Weak|Okay|Strong)$/)).toHaveLength(1);
+    expect(within(dialog).getByText('Weak')).toBeInTheDocument();
+    await userEvent.type(within(dialog).getByLabelText('Confirm new password'), 'password123');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Change password' }));
+    expect(
+      within(dialog).getByText('That password is too common. Pick another one.'),
+    ).toBeInTheDocument();
+
+    await userEvent.clear(fresh);
+    await userEvent.type(fresh, 'Robin.Smith1');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Change password' }));
+    expect(
+      within(dialog).getByText("Don't use your username or email as your password."),
+    ).toBeInTheDocument();
+
+    await userEvent.clear(fresh);
+    await userEvent.type(fresh, 'Tr0ub4dor&3xyz');
+    expect(within(dialog).getByText('Strong')).toBeInTheDocument();
+    expect(actions.changePassword).not.toHaveBeenCalled();
   });
 
   it('changes the password after checking the new one', async () => {

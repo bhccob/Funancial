@@ -225,7 +225,7 @@ export function OnboardingWizard({ onFinishing }: { onFinishing?(finishing: bool
     const found = {
       username: usernameProblem(username) ?? undefined,
       email: emailProblem(email) ?? undefined,
-      password: passwordProblem(password) ?? undefined,
+      password: passwordProblem(password, { username, email }) ?? undefined,
     };
     setAccountErrors(found);
     if (found.username || found.email || found.password) return;
@@ -379,6 +379,7 @@ export function OnboardingWizard({ onFinishing }: { onFinishing?(finishing: bool
               onChange={(e) => setEmail(e.target.value)}
             />
             <PasswordField
+              strength
               autoComplete="new-password"
               hint="At least 10 characters"
               value={password}

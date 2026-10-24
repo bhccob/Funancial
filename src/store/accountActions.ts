@@ -13,6 +13,7 @@ import {
   wrapDek,
 } from '@/data/accountCrypto';
 import { base64ToBytes, DecryptError } from '@/data/crypto';
+import { passwordProblem } from '@/domain/passwordRules';
 import { migrateSnapshot, SchemaVersionError, type DataSnapshot } from '@/domain/snapshot';
 import { toast } from '@/lib/toast';
 import type { Platform } from '@/platform/types';
@@ -133,8 +134,8 @@ export const usernameProblem = (name: string): string | null =>
     : 'Use 3 to 30 letters, numbers, dots, dashes or underscores.';
 export const emailProblem = (email: string): string | null =>
   z.email().max(254).safeParse(email.trim()).success ? null : 'Enter a valid email address.';
-export const passwordProblem = (password: string): string | null =>
-  password.length >= 10 ? null : 'Use at least 10 characters.';
+// The rules for a password are shared with the reset page: src/domain/passwordRules.ts.
+export { passwordProblem };
 /** What "forgot password" takes: a username or an email address, as the service reads them. */
 export const forgotProblem = (who: string): string | null =>
   usernameProblem(who) === null || emailProblem(who) === null
@@ -440,7 +441,10 @@ export function createAccountActions(
   }): Promise<void> {
     requireOpen();
     if (current()) throw new AccountError('linked');
-    const problem = usernameProblem(username) ?? emailProblem(email) ?? passwordProblem(password);
+    const problem =
+      usernameProblem(username) ??
+      emailProblem(email) ??
+      passwordProblem(password, { username, email });
     if (problem) throw new AccountError('invalid', problem);
 
     const name = canonicalUsername(username.trim());
@@ -581,7 +585,10 @@ export function createAccountActions(
     requireOpen();
     const state = current();
     if (!state || state.status !== 'linked') throw new AccountError('unlinked');
-    const problem = passwordProblem(newPassword);
+    const problem = passwordProblem(newPassword, {
+      username: state.username,
+      email: state.email ?? undefined,
+    });
     if (problem) throw new AccountError('invalid', problem);
 
     const old = await deriveAccountKeys(state.username, oldPassword, kdf);

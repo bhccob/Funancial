@@ -90,6 +90,20 @@ test('asks for a password of 10 characters that is typed twice', async ({ page }
   expect(posts).toHaveLength(0);
 });
 
+test('refuses a common password, as the app does, so forgot password cannot pick one', async ({
+  page,
+}) => {
+  const { posts } = await serveReset(page, { status: 200, body: { username: 'ada' } });
+  await page.goto(`/reset#token=${TOKEN}`);
+  await page.getByLabel('New password').fill('Password123');
+  await page.getByLabel('Type it again').fill('Password123');
+  await page.getByRole('button', { name: 'Change password' }).click();
+  await expect(page.getByRole('alert')).toHaveText(
+    'That password is too common. Pick another one.',
+  );
+  expect(posts).toHaveLength(0);
+});
+
 test('says an old link has expired', async ({ page }) => {
   await serveReset(page, { status: 410, body: { error: 'gone' } });
   await page.goto(`/reset#token=${TOKEN}`);

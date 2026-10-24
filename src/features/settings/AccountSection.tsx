@@ -42,7 +42,7 @@ function CreateAccountDialog({ open, onClose }: { open: boolean; onClose(): void
     const found = {
       username: usernameProblem(username) ?? undefined,
       email: emailProblem(email) ?? undefined,
-      password: passwordProblem(password) ?? undefined,
+      password: passwordProblem(password, { username, email }) ?? undefined,
     };
     if (found.username || found.email || found.password) return setErrors(found);
     setErrors({});
@@ -88,6 +88,7 @@ function CreateAccountDialog({ open, onClose }: { open: boolean; onClose(): void
             onChange={(e) => setEmail(e.target.value)}
           />
           <PasswordField
+            strength
             autoComplete="new-password"
             hint="At least 10 characters"
             value={password}
@@ -228,6 +229,7 @@ function LogInDialog({
 
 function ChangePasswordDialog({ open, onClose }: { open: boolean; onClose(): void }) {
   const { changePassword } = useAccountActions();
+  const { username, email } = useAccount();
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
   const [again, setAgain] = useState('');
@@ -244,7 +246,10 @@ function ChangePasswordDialog({ open, onClose }: { open: boolean; onClose(): voi
 
   async function submit(e: FormEvent) {
     e.preventDefault();
-    const problem = passwordProblem(next);
+    const problem = passwordProblem(next, {
+      username: username ?? undefined,
+      email: email ?? undefined,
+    });
     if (problem) return setErrors({ next: problem });
     if (next !== again) return setErrors({ again: "Those don't match." });
     setErrors({});
@@ -280,6 +285,7 @@ function ChangePasswordDialog({ open, onClose }: { open: boolean; onClose(): voi
             <PasswordField
               variant="row"
               label="New password"
+              strength
               autoComplete="new-password"
               hint="At least 10 characters"
               value={next}

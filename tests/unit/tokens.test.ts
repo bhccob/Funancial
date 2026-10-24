@@ -802,6 +802,23 @@ it.each(['src/features/dashboard/QuestShopStrip.tsx', 'src/features/dashboard/Ne
   },
 );
 
+it('draws the password strength bar in colours the pins above hold: the status colours for its marks, the page track for the empty ones, the muted ink for its word', () => {
+  // The marks are UI marks (3:1) and the word is text (4.5:1). The status colours and the muted ink are
+  // held at 4.5:1 on the page, on each shape behind it and on a sheet in every theme (ROW_TEXT, above),
+  // and the empty marks are the page track (1.5:1), as in every other bar. The bar names no colour of its own.
+  const source = readFileSync('src/features/account/parts.tsx', 'utf8');
+  const bar = source.slice(
+    source.indexOf('const STRENGTH'),
+    source.indexOf('export function PasswordField'),
+  );
+  expect(bar).toContain("fill: 'bg-danger'");
+  expect(bar).toContain("fill: 'bg-warning'");
+  expect(bar).toContain("fill: 'bg-success'");
+  expect(bar).toContain("'bg-track'");
+  expect(bar).toContain('text-muted');
+  for (const raw of ['#', 'rgb', 'hsl', 'bg-[', 'text-[']) expect(bar).not.toContain(raw);
+});
+
 /**
  * The glass of a tile on the page over each backdrop it can sit on: the page, and the peak of each
  * shape behind it at the mode's strength.

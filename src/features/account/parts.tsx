@@ -1,6 +1,8 @@
 import { ChevronLeft } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { TextField, type TextFieldProps } from '@/components/ui/TextField';
+import { passwordStrength, type PasswordStrength } from '@/domain/passwordRules';
+import { cn } from '@/lib/cn';
 
 export function Problem({ children }: { children?: string }) {
   return children ? (
@@ -25,17 +27,57 @@ export function BackButton({ onClick, disabled }: { onClick(): void; disabled?: 
   );
 }
 
+const STRENGTH: Record<PasswordStrength, { word: string; marks: number; fill: string }> = {
+  weak: { word: 'Weak', marks: 1, fill: 'bg-danger' },
+  okay: { word: 'Okay', marks: 2, fill: 'bg-warning' },
+  strong: { word: 'Strong', marks: 3, fill: 'bg-success' },
+};
+
+/**
+ * Three marks and a word for how strong a password is: one mark in danger for weak, two in warning
+ * for okay, three in success for strong, the rest in the page's track. The marks are drawn only; the
+ * word says it, politely, so a screen reader hears it change as the password is typed. Nothing
+ * shows while nothing is typed.
+ */
+function StrengthBar({ password }: { password: string }) {
+  const level = password === '' ? null : passwordStrength(password);
+  const strength = level && STRENGTH[level];
+  return (
+    <div className="flex items-center gap-2.5" data-strength={level ?? 'none'}>
+      <div aria-hidden="true" className="flex gap-1">
+        {[1, 2, 3].map((mark) => {
+          const on = strength !== null && mark <= strength.marks;
+          return (
+            <i
+              key={mark}
+              data-strength-mark={on ? 'on' : 'off'}
+              className={cn('block h-1.5 w-7 rounded-full', on ? strength.fill : 'bg-track')}
+            />
+          );
+        })}
+      </div>
+      <span aria-live="polite" className="text-muted min-w-12 text-sm font-bold">
+        {strength?.word}
+      </span>
+    </div>
+  );
+}
+
 /**
  * A password field with a Show toggle under it, to check what was typed on a small keyboard: the line
- * field of the setup and log-in screens, or with `variant="row"` the plain row of Settings.
+ * field of the setup and log-in screens, or with `variant="row"` the plain row of Settings. With
+ * `strength` a bar and a word beside the toggle say how strong the typed password is, for a field that
+ * chooses one (`passwordStrength`); it reads the field's `value`, so the field is controlled.
  */
 export function PasswordField({
   label = 'Password',
   variant = 'line',
+  strength = false,
   ...rest
 }: Omit<TextFieldProps, 'variant' | 'type' | 'label'> & {
   label?: string;
   variant?: 'line' | 'row';
+  strength?: boolean;
 }) {
   const [shown, setShown] = useState(false);
   return (
@@ -48,13 +90,16 @@ export function PasswordField({
         spellCheck={false}
         {...rest}
       />
-      <button
-        type="button"
-        onClick={() => setShown(!shown)}
-        className="text-accent-text -mb-1 inline-flex min-h-11 items-center self-end text-sm font-bold underline underline-offset-4"
-      >
-        {shown ? 'Hide password' : 'Show password'}
-      </button>
+      <div className="-mb-1 flex items-center justify-between gap-3">
+        {strength && <StrengthBar password={typeof rest.value === 'string' ? rest.value : ''} />}
+        <button
+          type="button"
+          onClick={() => setShown(!shown)}
+          className="text-accent-text ml-auto inline-flex min-h-11 items-center text-sm font-bold underline underline-offset-4"
+        >
+          {shown ? 'Hide password' : 'Show password'}
+        </button>
+      </div>
     </div>
   );
 }
