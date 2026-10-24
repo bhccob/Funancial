@@ -179,21 +179,36 @@ const PIXEL = Buffer.from(
   'base64',
 );
 
-test("the pie stands each holding's logo outside its ring, and every list starts with one", async ({
-  page,
-}) => {
-  const logoRequests: string[] = [];
+// A 1x1 PNG of navy (#0f3e99), for the tests that read a logo's colour.
+const NAVY = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGPgt5v5HwADLAHmGxh/FwAAAABJRU5ErkJggg==',
+  'base64',
+);
+
+/**
+ * Answers the logo route with `picture` for a request that sends the token (an <img> sends none, so the
+ * app fetches the picture itself), and every other route as the price service being down. Returns the
+ * symbols asked for.
+ */
+async function mockLogos(page: Page, picture: Buffer): Promise<string[]> {
+  const requested: string[] = [];
   await page.route('**/api/**', (route) => {
     const request = route.request();
     if (!request.url().includes('/api/logo')) {
       return route.fulfill({ status: 502, json: { error: 'upstream' } });
     }
-    logoRequests.push(new URL(request.url()).searchParams.get('symbol') ?? '');
-    // An <img> sends no token; the app fetches the picture itself and must send it.
+    requested.push(new URL(request.url()).searchParams.get('symbol') ?? '');
     return request.headers()['x-funancial-token'] === TOKEN
-      ? route.fulfill({ contentType: 'image/png', body: PIXEL })
+      ? route.fulfill({ contentType: 'image/png', body: picture })
       : route.fulfill({ status: 401, json: { error: 'unauthorized' } });
   });
+  return requested;
+}
+
+test("the pie stands each holding's logo outside its ring, and every list starts with one", async ({
+  page,
+}) => {
+  const logoRequests = await mockLogos(page, PIXEL);
   await startDemo(page);
   await page.goto('/invest');
 
@@ -203,7 +218,7 @@ test("the pie stands each holding's logo outside its ring, and every list starts
   // Four holdings: four on the pie, four in the legend, four in the rows, from four requests.
   await expect(page.locator('[data-logo] img')).toHaveCount(12);
   expect(logoRequests.sort()).toEqual(['AAPL', 'ASML', 'KO', 'VWRL']);
-  expect((await pie.locator('svg').first().boundingBox())?.width).toBe(220);
+  expect((await pie.locator('svg').first().boundingBox())?.width).toBe(200);
 
   // Each label is on the screen, and the page does not scroll sideways to reach one.
   const width = page.viewportSize()!.width;
@@ -216,6 +231,55 @@ test("the pie stands each holding's logo outside its ring, and every list starts
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
     width,
   );
+});
+
+test('mobile: the pie labels fit a 360px screen: none clipped, none over another, none dropped', async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== 'mobile-chromium', 'mobile layout only');
+  await page.setViewportSize({ width: 360, height: 812 });
+  await mockLogos(page, PIXEL);
+  await startDemo(page);
+  await page.goto('/invest');
+
+  const pie = page.getByRole('group', { name: 'All holdings' });
+  // One pill for each of the four slices, and the pie is not in a glass tile.
+  await expect(pie.locator('[data-label]')).toHaveCount(4);
+  await expect(pie.locator('xpath=ancestor::*[contains(@class, "glass")]')).toHaveCount(0);
+  const boxes = await pie
+    .locator('[data-label]')
+    .evaluateAll((els) => els.map((el) => el.getBoundingClientRect().toJSON() as DOMRect));
+  for (const [i, a] of boxes.entries()) {
+    expect(a.left, 'not clipped on the left').toBeGreaterThanOrEqual(0);
+    expect(a.right, 'not clipped on the right').toBeLessThanOrEqual(360);
+    for (const b of boxes.slice(i + 1)) {
+      const apart =
+        a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top;
+      expect(apart, `labels ${i} and ${boxes.indexOf(b)} apart`).toBe(true);
+    }
+  }
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(360);
+});
+
+test('a slice takes its company colour from the logo once it has loaded, and not for its neighbour', async ({
+  page,
+}) => {
+  // Every logo is navy, which holds 3:1 on the light page. The first slice takes it; the slice
+  // beside it, now the same colour as its neighbour, keeps its chart colour.
+  await mockLogos(page, NAVY);
+  await startDemo(page);
+  await page.goto('/invest');
+  const arcs = page
+    .getByRole('group', { name: 'All holdings' })
+    .locator('svg')
+    .first()
+    .locator('circle');
+  await expect(arcs.nth(1)).toHaveAttribute('stroke', '#0f3e99');
+  await expect(arcs.nth(2)).not.toHaveAttribute('stroke', '#0f3e99');
+  // The badge's ring on the pie is the slice colour as well.
+  await expect(
+    page.getByRole('group', { name: 'All holdings' }).locator('[data-label] [data-logo]').first(),
+  ).toHaveCSS('background-color', 'rgb(15, 62, 153)');
 });
 
 test('a holding opens on its own page with a price chart, and Edit saves back to it', async ({

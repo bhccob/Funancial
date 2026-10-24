@@ -176,14 +176,19 @@ Small hand-written SVG components in `src/components/charts/`, no chart library.
    text such as "$X left" or "$X over". Budget bars carry a pace mark showing how far through the
    period today is.
 5. The 7-day bars put today in ink and label it "Today"; the net-worth trend is a 30-day line.
-6. A donut can stand a label for each slice just outside the ring (`outsideLabels`): a logo over
-   its share, at the middle of the slice with a short leader line, the share in the text colour and
-   never the slice colour. Labels that would overlap are left out, the smallest slice's first, and
-   the legend always has every one. Invest's pie uses it: one pie, 220px, by holding, of everything
-   (All) or of just Stocks, ETFs or Other, chosen with underline tabs, with a full-width legend under
-   it. Each logo is the company's site icon from the price service (`/api/logo`), or its first
-   letter on a disc ringed in the slice colour; Other is a grey +N, N holdings folded into it. The
-   legend's rows and the holdings' rows start with the same logo.
+6. A donut can stand a label for each slice just outside the ring (`outsideLabels`). The default
+   is a logo over its share, at the middle of the slice with a short leader line; labels that would
+   overlap are left out, the smallest slice's first. `labelStyle="badge"` is a glass pill with a 24px
+   round badge and the share after it, with no leader line; pills that would overlap are nudged apart
+   along the ring and none is left out, the share in the text colour. The legend always has every
+   slice. Invest's pie uses the badge: one pie, 200px, standing on the page with no tile behind it,
+   by holding, of everything (All) or of just Stocks, ETFs or Other, with a full-width legend under it.
+   The badge is the company's site icon from the price service (`/api/logo`) on white inside a ring of
+   the slice colour, or, until it loads, its ticker (up to four letters, 9px or more, white or ink
+   whichever holds 4.5:1) on the slice colour; Other is a grey +N, N holdings folded into it. A slice
+   takes the colour of its company's logo where that holds 3:1 on the page and is at least ΔE 15 from
+   its neighbours, else its chart colour. The legend's rows and the holdings' rows start with the
+   same logo.
 7. A holding's price chart (`PriceLine`) is an ink line with a dashed line at what was paid per
    share, a dot where it starts and the latest price at its end. Touching it, or the arrow keys,
    read out a day and its price.

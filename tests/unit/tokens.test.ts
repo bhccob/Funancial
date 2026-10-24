@@ -1051,6 +1051,56 @@ it('keeps the Other chart colour at 3:1 or better against the page, light and da
   }
 });
 
+/** The file that draws the Invest pie's labels. */
+const DONUT_FILE = 'src/components/charts/Donut.tsx';
+
+/** The classes of a badge-style label, read from `const PILL = '…'` in Donut. */
+function pillClasses(): string[] {
+  const match = /const PILL =\s*'([^']*)'/.exec(readFileSync(DONUT_FILE, 'utf8'));
+  expect(match, `the pie label's pill in ${DONUT_FILE}`).not.toBeNull();
+  return match![1]!.split(' ');
+}
+
+describe.each(CASES)('the Invest pie labels in the $id theme in $mode mode', ({ id, mode }) => {
+  const t = tokensFor(id, mode);
+
+  it("are strong glass in the page's text colour", () => {
+    expect(pillClasses()).toEqual(expect.arrayContaining(['glass-strong', 'text-text']));
+  });
+
+  it('hold the percent at 4.5:1 or better on the page, on each shape behind it, and on the pill over any of them', () => {
+    // The pie stands on the page with no tile behind it, so a label's glass sits on the page and the
+    // shapes behind it; black and white bound whatever else can show through.
+    for (const backdrop of pageBackdrops(t)) {
+      expect(contrast(t('--color-text'), backdrop), `on ${backdrop}`).toBeGreaterThanOrEqual(4.5);
+    }
+    for (const backdrop of sheetBackdrops(t)) {
+      const pill = composite(t('--color-glass-strong'), backdrop);
+      expect(
+        contrast(t('--color-text'), pill),
+        `on the pill over ${backdrop}`,
+      ).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  it.each([1, 2, 3, 4, 5, 6, 'other'])(
+    'hold a ticker at 4.5:1 or better on the chart colour %s, in the ink the badge chooses',
+    async (series) => {
+      // A badge with no logo yet is filled with its slice's chart colour (a logo colour is chosen
+      // for the page, and its ink the same way, by src/lib/colorMath.ts).
+      const { readableInk } = await import('../../src/lib/colorMath');
+      const fill = t(`--color-chart-${series}`);
+      expect(contrast(readableInk(fill)!, fill), `on ${fill}`).toBeGreaterThanOrEqual(4.5);
+    },
+  );
+});
+
+it("keeps the badge's ink, the one it writes on a light slice, the light page's text colour", async () => {
+  const { readableInk } = await import('../../src/lib/colorMath');
+  // On white, white is no ink, so the answer is the ink itself.
+  expect(readableInk('#ffffff')).toBe(tokensFor('mono', 'light')('--color-text'));
+});
+
 /** The page, and the peak of each shape behind it at the mode's strength: what a mark on a plain row can sit on. */
 function pageBackdrops(t: (name: string) => string): string[] {
   const page = t('--color-bg');

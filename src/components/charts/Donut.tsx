@@ -3,10 +3,18 @@ import type { Slice } from '@/domain/charts';
 import { ROWS } from '@/features/shared/PlainSection';
 import { cn } from '@/lib/cn';
 import { sliceColors } from './colors';
-import { LABEL, layoutLabels } from './labelLayout';
+import { BADGE, badgeWidth, LABEL, layoutLabels } from './labelLayout';
 
 /** The space between neighbouring arcs, in px along the ring. */
 const GAP = 3;
+
+/**
+ * A badge-style label: strong glass in the text colour, the share in 12px bold. The share is held at
+ * 4.5:1 on the glass over the page and every shape behind it, in every theme and both modes
+ * (tests/unit/tokens.test.ts reads this string). Its size is the layout's (`BADGE`), set inline.
+ */
+const PILL =
+  'glass-strong text-text pointer-events-none absolute flex items-center rounded-full pr-[7px] pl-0.5 text-xs leading-none font-bold tabular-nums';
 
 /** What stands outside the ring for the slice with this key: a logo over a short text such as "27%". */
 export interface OutsideLabel {
@@ -31,9 +39,18 @@ export interface DonutProps {
   /**
    * A label for slices (matched by key), just outside the ring at the middle of the slice with a
    * leader line to it. A label that would overlap another is left out, the smaller slice's first.
-   * The donut then takes room around it for the labels.
+   * The donut then takes room around it for the labels. With `labelStyle="badge"` they are instead
+   * pills with no leader line, and none is left out.
    */
   outsideLabels?: OutsideLabel[];
+  /**
+   * How the outside labels look. Unset, each is a logo over its text with a leader line to the ring.
+   * `"badge"`: a glass pill with the label's `logo` as a 24px round badge and the `text` after it, just
+   * outside the slice with no leader line; pills that would meet are nudged apart along the ring.
+   */
+  labelStyle?: 'badge';
+  /** The colour of each slice, by position, in place of the chart series (a CSS colour; see `sliceColors`). */
+  colors?: readonly string[];
 }
 
 export function Donut({
@@ -47,11 +64,14 @@ export function Donut({
   selected,
   onSelect,
   outsideLabels,
+  labelStyle,
+  colors: given,
 }: DonutProps) {
   const [focused, setFocused] = useState<number | null>(null);
   const total = slices.reduce((sum, s) => sum + Math.max(0, s.amount), 0);
   const drawn = total > 0 ? slices : [];
-  const colors = sliceColors(drawn);
+  const series = sliceColors(drawn);
+  const colors = drawn.map((_, i) => given?.[i] ?? series[i]!);
   const chosen = selected !== null ? drawn[selected] : undefined;
   const pct = (slice: Slice) => Math.round((Math.max(0, slice.amount) / total) * 100);
 
@@ -68,11 +88,15 @@ export function Donut({
     };
   });
   const labelFor = new Map((outsideLabels ?? []).map((l) => [l.key, l]));
-  const placed = layoutLabels(
-    drawn.map((s) => Math.max(0, s.amount) / total),
-    size,
-    new Set(drawn.flatMap((s, i) => (labelFor.has(s.key) ? [i] : []))),
-  );
+  const shares = drawn.map((s) => Math.max(0, s.amount) / total);
+  const asked = new Set(drawn.flatMap((s, i) => (labelFor.has(s.key) ? [i] : [])));
+  const badge = labelStyle === 'badge';
+  const placed = badge ? [] : layoutLabels(shares, size, asked);
+  const pills = badge
+    ? layoutLabels(shares, size, asked, {
+        widths: drawn.map((s) => badgeWidth(labelFor.get(s.key)?.text ?? '')),
+      })
+    : [];
 
   const toggle = (i: number) => onSelect(i === selected ? null : i);
   const big = size >= 200;
@@ -87,9 +111,11 @@ export function Donut({
       style={{
         width: size,
         height: size,
-        margin: outsideLabels
-          ? `${LABEL.lead + LABEL.height}px ${LABEL.lead + LABEL.width}px`
-          : undefined,
+        margin: !outsideLabels
+          ? undefined
+          : badge
+            ? `${BADGE.lead + BADGE.height}px ${BADGE.reach}px`
+            : `${LABEL.lead + LABEL.height}px ${LABEL.lead + LABEL.width}px`,
       }}
     >
       <svg
@@ -157,6 +183,22 @@ export function Donut({
           ))}
         </svg>
       )}
+      {pills.map(({ index, box }) => {
+        const key = drawn[index]!.key;
+        const { logo, text } = labelFor.get(key)!;
+        return (
+          <div
+            key={key}
+            data-label={key}
+            aria-hidden="true"
+            className={PILL}
+            style={{ left: box.left, top: box.top, width: box.width, height: box.height }}
+          >
+            {logo}
+            <span className="ml-1">{text}</span>
+          </div>
+        );
+      })}
       {placed.map(({ index, box, above }) => {
         const key = drawn[index]!.key;
         const { logo, text } = labelFor.get(key)!;

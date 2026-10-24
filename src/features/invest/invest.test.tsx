@@ -1995,7 +1995,7 @@ describe('Invest in glass', () => {
     expect(screen.getByRole('button', { name: 'Refresh' })).toHaveClass('glass');
   });
 
-  it('keeps its sections plain and puts the value, profit and loss and pie in glass tiles', () => {
+  it('keeps its sections plain and puts the value and the profit and loss in glass tiles, with the pie on the page', () => {
     renderInvest(portfolioData());
     for (const name of ['Portfolio value', 'Profit & loss · all time']) {
       expect(region(name)).not.toHaveClass('glass');
@@ -2007,10 +2007,9 @@ describe('Invest in glass', () => {
     expect(tileOf(profit)).toHaveClass('rounded-[24px]', 'p-4');
     expect(within(tileOf(profit)!).getByRole('list')).toHaveClass(...PLAIN);
 
-    // The pie and the choice of what it shows are one tile.
-    const pie = tileOf(screen.getByRole('group', { name: 'All holdings' }));
-    expect(pie).toHaveClass('rounded-[24px]', 'p-4');
-    expect(tileOf(screen.getByRole('group', { name: 'Allocation' }))).toBe(pie);
+    // The pie and the choice of what it shows stand on the page, in no tile.
+    expect(tileOf(screen.getByRole('group', { name: 'All holdings' }))).toBeNull();
+    expect(tileOf(screen.getByRole('group', { name: 'Allocation' }))).toBeNull();
   });
 
   it('lists the holdings as plain rows with hairlines, with no box round them', () => {

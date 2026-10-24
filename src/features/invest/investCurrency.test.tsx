@@ -104,6 +104,12 @@ const chip = (currency: string) => screen.getByRole('button', { name: `Shown in 
 const region = (name: string) => screen.getByRole('region', { name });
 const fact = (label: string) => screen.getByText(label).parentElement!;
 const pie = (name: string) => screen.getByRole('group', { name });
+/** A holding's row in a pie's legend. The pie's own label says the ticker too, so the row is the text in a button. */
+const legendRow = (pieName: string, symbol: string) =>
+  within(pie(pieName))
+    .getAllByText(symbol)
+    .map((el) => el.closest('button'))
+    .find((button) => button !== null)!;
 const noRateNote = (chosen: string) => `Showing EUR until a ${chosen} rate loads.`;
 
 describe('Invest shown in another currency: Holdings', () => {
@@ -118,13 +124,13 @@ describe('Invest shown in another currency: Holdings', () => {
 
     // The pie of everything: its legend and its centre.
     const all = within(pie('All holdings'));
-    expect(all.getByText('KO').closest('button')).toHaveTextContent(`KO${usdWhole(660_00)}60%`);
-    expect(all.getByText('VUSA').closest('button')).toHaveTextContent(`VUSA${usdWhole(440_00)}40%`);
+    expect(legendRow('All holdings', 'KO')).toHaveTextContent(`KO${usdWhole(660_00)}60%`);
+    expect(legendRow('All holdings', 'VUSA')).toHaveTextContent(`VUSA${usdWhole(440_00)}40%`);
     expect(all.getByText(usdWhole(1_100_00))).toBeInTheDocument();
     // And of each type, with its own total in the centre.
     await userEvent.click(screen.getByRole('button', { name: 'Stocks' }));
     const stocks = within(pie('Stocks'));
-    expect(stocks.getByText('KO').closest('button')).toHaveTextContent(`KO${usdWhole(660_00)}100%`);
+    expect(legendRow('Stocks', 'KO')).toHaveTextContent(`KO${usdWhole(660_00)}100%`);
     expect(stocks.getAllByText(usdWhole(660_00)).length).toBeGreaterThanOrEqual(2);
     await userEvent.click(screen.getByRole('button', { name: 'ETFs' }));
     expect(within(pie('ETFs')).getAllByText(usdWhole(440_00)).length).toBeGreaterThanOrEqual(2);
@@ -148,7 +154,7 @@ describe('Invest shown in another currency: Holdings', () => {
 
   it('names a selected slice in the currency Invest is shown in', async () => {
     renderInvest(dataOf([ko(), vusa()], inDollars));
-    await userEvent.click(within(pie('All holdings')).getByText('KO').closest('button')!);
+    await userEvent.click(legendRow('All holdings', 'KO'));
     expect(within(pie('All holdings')).getAllByText(usd(660_00)).length).toBeGreaterThanOrEqual(1);
   });
 
@@ -228,7 +234,7 @@ describe('Invest shown in another currency: totals that add up', () => {
 
   it('names a selected slice by its row, so the pie adds up to the portfolio too', async () => {
     renderInvest(dataOf(twins(), inDollars));
-    await userEvent.click(within(pie('All holdings')).getByText('AAA').closest('button')!);
+    await userEvent.click(legendRow('All holdings', 'AAA'));
     expect(within(pie('All holdings')).getAllByText(usd(660_04)).length).toBeGreaterThanOrEqual(1);
   });
 });

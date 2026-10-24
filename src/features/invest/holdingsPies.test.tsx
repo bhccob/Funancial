@@ -119,9 +119,36 @@ describe('Holdings pie', () => {
     }
   });
 
-  it('draws one bigger pie, 220px wide', () => {
+  it('draws one pie, 200px wide: the room that is left for the labels at 360px', () => {
     renderTab(mixed());
-    expect(pie('All holdings').querySelector('svg')).toHaveAttribute('width', '220');
+    expect(pie('All holdings').querySelector('svg')).toHaveAttribute('width', '200');
+  });
+
+  it('stands the pie on the page: no glass tile behind the control, the pie or its legend', () => {
+    renderTab(mixed());
+    // The control is a glass track itself, so its own box is not looked at, only what holds it.
+    for (const el of [selector().parentElement!, pie('All holdings')]) {
+      expect(el.closest('.glass, .rounded-\\[24px\\]'), el.getAttribute('aria-label') ?? '').toBe(
+        null,
+      );
+    }
+    // Control, pie and legend share one block, and the legend is not boxed apart in it.
+    const block = pie('All holdings').parentElement!;
+    expect(block).toContainElement(selector());
+    for (const row of legendRows('All holdings')) expect(row.closest('.glass')).toBe(null);
+  });
+
+  it('keeps a label for every slice, however many there are, each in a glass pill', () => {
+    const many = ['A', 'B', 'C', 'D', 'E', 'F', 'G'].map((s, i) => worth(s, (7 - i) * 100));
+    renderTab(dataOf(...many));
+    // Five holdings and Other: six slices, six labels, none dropped.
+    const slices = within(pie('All holdings')).getAllByRole('button', { name: /, \d+%$/ });
+    expect(slices).toHaveLength(6);
+    const labels = outside('All holdings');
+    expect(labels).toHaveLength(slices.length);
+    for (const { el } of labels) expect(el).toHaveClass('glass-strong', 'rounded-full');
+    // No leader lines: the labels are only where their slices are.
+    expect(pie('All holdings').querySelectorAll('line')).toHaveLength(0);
   });
 
   it('shows only the stocks, or only the ETFs, when chosen, and keeps the choice in the address', async () => {
@@ -201,7 +228,7 @@ describe('Holdings pie', () => {
     expect(lists.map((l) => l.getAttribute('aria-label'))).toEqual(['Stocks', 'Other']);
   });
 
-  it("stands each holding's logo and share just outside its slice", () => {
+  it("stands each holding's badge and share just outside its slice", () => {
     // $10,000: 80%, 10%, 6% and 4%.
     renderTab(dataOf(worth('AAA', 8000), worth('BBB', 1000), worth('CCC', 600), worth('DDD', 400)));
     const labels = outside('All holdings');
@@ -210,10 +237,12 @@ describe('Holdings pie', () => {
     for (const { key, el } of labels) {
       const logo = el.querySelector('[data-logo]');
       expect(logo, key).toHaveAttribute('data-logo', key.toUpperCase());
-      expect(logo).toHaveTextContent(key.toUpperCase().slice(0, 1));
-      // The spec's 18px disc, in a box that holds it over the 12px share.
-      expect(logo).toHaveStyle({ width: '18px', height: '18px' });
-      expect(parseFloat(el.style.height)).toBeGreaterThanOrEqual(18 + 12);
+      // No logo yet: the ticker (up to four letters) on the slice's colour.
+      expect(logo).toHaveTextContent(key.toUpperCase());
+      // A 24px round badge, in a pill that holds it with the share after it.
+      expect(logo).toHaveStyle({ width: '24px', height: '24px' });
+      expect(parseFloat(el.style.height)).toBeGreaterThanOrEqual(24);
+      expect(parseFloat(el.style.width)).toBeGreaterThan(24);
     }
     // All four are in the legend with their share as well.
     expect(legend('All holdings')).toEqual([

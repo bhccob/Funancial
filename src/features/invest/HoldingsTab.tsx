@@ -1,8 +1,8 @@
 import { Plus } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
-import { sliceColors } from '@/components/charts/colors';
 import { Donut, DonutLegend } from '@/components/charts/Donut';
+import { BADGE } from '@/components/charts/labelLayout';
 import { Button } from '@/components/ui/Button';
 import { CompanyLogo, LogoDisc } from '@/components/ui/CompanyLogo';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -26,6 +26,7 @@ import { arrow, tone } from './gain';
 import { HoldingDialog } from './HoldingDialog';
 import { ProfitAndLoss } from './ProfitAndLoss';
 import { SoldList } from './SoldList';
+import { useSliceColors } from './useSliceColors';
 
 /** Stocks, then ETFs, then the rest: the order of the pie's choices and of the rows. */
 const TYPES: Array<Holding['type']> = ['stock', 'etf', 'other'];
@@ -83,9 +84,11 @@ function HoldingItem({ row }: { row: HoldingRow }) {
 }
 
 /**
- * One pie of these holdings (by holding, the biggest five and the rest as Other), 220px wide with
- * each holding's logo and share just outside its slice, and its legend full width under it, every
- * row starting with its logo and showing its share. Other's logo is a grey +N, N holdings folded in.
+ * One pie of these holdings (by holding, the biggest five and the rest as Other), 200px wide with a
+ * glass pill just outside each slice: the holding's logo as a round badge (its ticker on the slice's
+ * colour until the logo loads), then its share. A slice takes its company's colour, sampled from the
+ * logo, where that holds on the page; the legend is full width under the pie, every row starting
+ * with its logo and showing its share. Other's mark is a grey +N, N holdings folded in.
  */
 function PieBlock({ rows, label }: { rows: HoldingRow[]; label: string }) {
   const { formatConverted: money } = useInvestMoney();
@@ -93,16 +96,24 @@ function PieBlock({ rows, label }: { rows: HoldingRow[]; label: string }) {
   const slices = useMemo(() => allocation(rows), [rows]);
   const whole = (minor: number) => money(minor, { whole: true });
   const total = slices.reduce((sum, s) => sum + s.amount, 0);
-  const colors = sliceColors(slices);
   const holdings = new Map(rows.map((r) => [r.holding.id, r.holding]));
+  const { colors, report } = useSliceColors(slices, (key) => holdings.get(key)?.symbol);
   const folded =
     rows.filter((r) => r.value !== null).length - slices.filter((s) => s.key !== 'other').length;
-  const logo = (slice: Slice, i: number, size: number) => {
+  // The badge (on the pie) reports its logo's colour for the slice to take; the legend's logo does not.
+  const logo = (slice: Slice, i: number, size: number, badge = false) => {
     const holding = holdings.get(slice.key);
     return holding ? (
-      <CompanyLogo symbol={holding.symbol} name={holding.name} color={colors[i]!} size={size} />
+      <CompanyLogo
+        symbol={holding.symbol}
+        name={holding.name}
+        color={colors[i]!}
+        size={size}
+        badge={badge}
+        onColor={badge ? (color) => report(slice.key, color) : undefined}
+      />
     ) : (
-      <LogoDisc color={colors[i]!} size={size} logo="other">
+      <LogoDisc color={colors[i]!} size={size} logo="other" badge={badge}>
         {`+${folded}`}
       </LogoDisc>
     );
@@ -114,11 +125,13 @@ function PieBlock({ rows, label }: { rows: HoldingRow[]; label: string }) {
         <Donut
           label="Value by holding"
           slices={slices}
-          size={220}
+          size={200}
           thickness={22}
+          colors={colors}
+          labelStyle="badge"
           outsideLabels={slices.map((slice, i) => ({
             key: slice.key,
-            logo: logo(slice, i, 18),
+            logo: logo(slice, i, BADGE.disc, true),
             text: `${Math.round((slice.amount / total) * 100)}%`,
           }))}
           formatAmount={(minor) => money(minor)}
@@ -127,23 +140,26 @@ function PieBlock({ rows, label }: { rows: HoldingRow[]; label: string }) {
           onSelect={setSelected}
         />
       </div>
-      <DonutLegend
-        slices={slices}
-        showPercent
-        logos={Object.fromEntries(slices.map((slice, i) => [slice.key, logo(slice, i, 24)]))}
-        formatAmount={whole}
-        selected={selected}
-        onSelect={setSelected}
-      />
+      <div className="px-1">
+        <DonutLegend
+          slices={slices}
+          showPercent
+          logos={Object.fromEntries(slices.map((slice, i) => [slice.key, logo(slice, i, 24)]))}
+          formatAmount={whole}
+          selected={selected}
+          onSelect={setSelected}
+        />
+      </div>
     </div>
   );
 }
 
 /**
  * What the person holds: the portfolio's value and how it moved, and what the investments have made
- * in all, each in a glass tile; one pie of the holdings in another (All, or just Stocks, ETFs or
- * Other, the choice kept in `?pie=`); then the holdings by type as plain rows, each opening its own
- * page, and what was sold. `refresh` fetches prices for a new holding.
+ * in all, each in a glass tile; the pie of the holdings (All, or just Stocks, ETFs or Other, the
+ * choice kept in `?pie=`) standing on the page with its Allocation control and its legend, no tile
+ * behind them; then the holdings by type as plain rows, each opening its own page, and what was
+ * sold. `refresh` fetches prices for a new holding.
  */
 export function HoldingsTab({ refresh }: { refresh(): Promise<void> }) {
   // The portfolio is converted row by row, so what is written here adds up on the screen.
@@ -229,26 +245,24 @@ export function HoldingsTab({ refresh }: { refresh(): Promise<void> }) {
 
       {priced.length > 0 && (
         <div className="pt-[22px]">
-          <GlassTile>
-            <SegmentedControl<PieChoice>
-              label="Allocation"
-              tone="glass"
-              stretch
-              value={choice?.type ?? 'all'}
-              options={[
-                { value: 'all', label: 'All' },
-                ...priced.map((g) => ({ value: g.type, label: g.label })),
-              ]}
-              onChange={(value) => pick(value === 'all' ? null : value)}
-              className="mb-4"
-            />
-            {/* Keyed by the choice, so a slice picked on one pie is not still picked on the next. */}
-            <PieBlock
-              key={choice?.type ?? 'all'}
-              rows={choice ? choice.rows : rows}
-              label={choice ? choice.label : 'All holdings'}
-            />
-          </GlassTile>
+          <SegmentedControl<PieChoice>
+            label="Allocation"
+            tone="glass"
+            stretch
+            value={choice?.type ?? 'all'}
+            options={[
+              { value: 'all', label: 'All' },
+              ...priced.map((g) => ({ value: g.type, label: g.label })),
+            ]}
+            onChange={(value) => pick(value === 'all' ? null : value)}
+            className="mb-4"
+          />
+          {/* Keyed by the choice, so a slice picked on one pie is not still picked on the next. */}
+          <PieBlock
+            key={choice?.type ?? 'all'}
+            rows={choice ? choice.rows : rows}
+            label={choice ? choice.label : 'All holdings'}
+          />
         </div>
       )}
 
