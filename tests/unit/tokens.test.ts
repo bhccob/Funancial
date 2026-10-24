@@ -1099,6 +1099,94 @@ describe.each(THEMES)("Home's hero on the %s block", (id) => {
   });
 });
 
+/*
+ * The lock screen stands its PIN pad, its fingerprint button and its words on the theme's block (as
+ * Welcome stands its name there). Everything on the block reads the block's ink, not the page's, so
+ * the lock draws its own keys and buttons: Button's fills and the page glass are the page's colours,
+ * and the danger red is for the page, none of which hold on a dark block.
+ */
+describe('the lock screen on the block', () => {
+  const pad = readFileSync('src/features/lock/PinPad.tsx', 'utf8');
+  const lock = readFileSync('src/features/lock/LockScreen.tsx', 'utf8');
+
+  it('draws the keys in the block glass and the unlock key as its main button, and the PIN field in the block glass', () => {
+    expect(pad).toContain('glass-head');
+    expect(pad).toContain('rounded-key');
+    expect(pad).toContain('btn-head');
+    expect(pad).toContain('bg-(--hg-bg)');
+    expect(pad).toContain('border-head-dim');
+    expect(lock).toContain('bg-(--hg-bg)');
+    expect(lock).toContain('btn-head');
+    expect(lock).toContain('glass-head');
+  });
+
+  it('uses no colour of the page on the block: no Button, page glass, page surface, danger red or accent', () => {
+    for (const [name, text] of [
+      ['PinPad', pad],
+      ['LockScreen', lock],
+    ] as const) {
+      // What the code says, not what its comments do.
+      const source = text.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '');
+      expect(source, `${name} imports Button`).not.toMatch(/components\/ui\/Button/);
+      for (const page of [
+        'text-danger',
+        'bg-surface',
+        'border-border-strong',
+        'bg-primary',
+        'text-accent',
+        'text-primary',
+        'glass-strong',
+      ]) {
+        expect(source, `${name} uses ${page}`).not.toContain(page);
+      }
+      // The page's glass is the class `glass` alone, not `glass-head`.
+      expect(source, `${name} uses the page glass`).not.toMatch(/(?<![\w-])glass(?![\w-])/);
+    }
+  });
+
+  it('measures in a model that bites: the page glass, the danger red and the accent fail on a dark block', () => {
+    const t = tokensFor('mono', 'light');
+    const block = t('--head').match(/#[0-9a-f]{6}/gi)![0]!;
+    expect(contrast(t('--head-ink'), composite(t('--color-glass'), block))).toBeLessThan(4.5);
+    expect(contrast(t('--color-danger'), block)).toBeLessThan(4.5);
+    expect(contrast(t('--color-accent'), block)).toBeLessThan(3);
+  });
+});
+
+describe.each(CASES)(
+  "the lock screen's keys and PIN field in the $id theme in $mode mode",
+  ({ id, mode }) => {
+    const t = tokensFor(id, mode);
+
+    it('keeps the key labels, and the digits typed in the field, at 4.5:1 or better on the block glass over every point of the block', () => {
+      for (const backdrop of blockBackdrops(t)) {
+        const glass = composite(t('--hg-bg'), backdrop);
+        expect(
+          contrast(t('--head-ink'), glass),
+          `ink on key glass over ${backdrop}`,
+        ).toBeGreaterThanOrEqual(4.5);
+        // The ink the keys' words and the field's dots are written in, the block's own.
+        expect(contrast(t('--head-ink'), backdrop), `ink on ${backdrop}`).toBeGreaterThanOrEqual(
+          4.5,
+        );
+      }
+    });
+
+    it("keeps the field's edge, the ink at --color-head-dim, at 3:1 or better against the block and against the field's fill", () => {
+      for (const backdrop of blockBackdrops(t)) {
+        const fill = composite(t('--hg-bg'), backdrop);
+        // The edge is painted over the fill (the background runs under the border).
+        const edge = composite(mutedInk(t, '--color-head-dim'), fill);
+        expect(contrast(edge, backdrop), `edge on ${backdrop}`).toBeGreaterThanOrEqual(3);
+        expect(
+          contrast(edge, fill),
+          `edge against its fill over ${backdrop}`,
+        ).toBeGreaterThanOrEqual(3);
+      }
+    });
+  },
+);
+
 describe.each(CASES)('the edge ring in the $id theme in $mode mode', ({ id, mode }) => {
   const t = tokensFor(id, mode);
 

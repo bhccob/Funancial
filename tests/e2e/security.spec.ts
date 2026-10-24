@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { onboard, startFresh } from './helpers';
+import { onboard, startFresh, startLocked } from './helpers';
 
 test('set PIN → reload → locked → wrong → right → unlocked', async ({ page }) => {
   await startFresh(page, '/settings');
@@ -21,6 +21,79 @@ test('set PIN → reload → locked → wrong → right → unlocked', async ({ 
   await page.getByLabel('PIN').fill('2468');
   await page.getByLabel('PIN').press('Enter');
   await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible();
+});
+
+test('the lock screen stands its pad on the theme block: 44px keys, all on screen, and the page ink back in its dialog', async ({
+  page,
+}) => {
+  await startLocked(page);
+  const block = page.locator('[data-head-block]');
+  await expect(block.getByRole('heading', { level: 1, name: 'Welcome back' })).toBeVisible();
+  const viewport = page.viewportSize()!;
+  const blockBox = (await block.boundingBox())!;
+  expect(Math.round(blockBox.width), 'the block is as wide as the screen').toBe(viewport.width);
+  expect(Math.round(blockBox.y), 'the block starts at the top edge').toBe(0);
+
+  const keys = [...'0123456789', 'Delete', 'Unlock'];
+  for (const name of keys) {
+    const key = block.getByRole('button', { name, exact: true });
+    const box = (await key.boundingBox())!;
+    expect(box.width, `${name} is 44px wide`).toBeGreaterThanOrEqual(44);
+    expect(box.height, `${name} is 44px tall`).toBeGreaterThanOrEqual(44);
+    expect(box.x, `${name} is on the screen`).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width, `${name} is on the screen`).toBeLessThanOrEqual(viewport.width);
+  }
+  const forgot = block.getByRole('button', { name: 'Forgot your PIN?' });
+  expect((await forgot.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+    ),
+    'no sideways scroll',
+  ).toBe(true);
+
+  // The keys type into the real field, and the unlock key opens the app.
+  for (const digit of '2468') await block.getByRole('button', { name: digit, exact: true }).click();
+  await expect(page.getByLabel('PIN')).toHaveValue('2468');
+  await expect(block.getByRole('button', { name: 'Unlock' })).toBeEnabled();
+
+  // A wrong PIN, which says so on the block. Then every word and mark on the block is drawn in the
+  // block's own inks (axe cannot judge text over its gradient; the unit tests hold these inks).
+  await page.getByLabel('PIN').fill('1357');
+  await page.getByLabel('PIN').press('Enter');
+  await expect(block.getByRole('alert')).toHaveText("That didn't match. Try again.");
+  const strays = await block.evaluate((root) => {
+    const colorOf = (value: string) => {
+      const probe = document.createElement('i');
+      probe.style.color = value;
+      document.body.append(probe);
+      const color = getComputedStyle(probe).color;
+      probe.remove();
+      return color;
+    };
+    const inks = new Set(
+      ['var(--head-ink)', 'var(--color-head-dim)', 'var(--hmain-ink)'].map(colorOf),
+    );
+    const out: string[] = [];
+    for (const el of root.querySelectorAll('*')) {
+      const words = [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent?.trim());
+      if (!words && el.tagName !== 'svg') continue;
+      const color = getComputedStyle(el).color;
+      if (!inks.has(color)) out.push(`${el.tagName} ${el.textContent?.slice(0, 30)} ${color}`);
+    }
+    return out;
+  });
+  expect(strays, 'text and marks on the block in a colour that is not its ink').toEqual([]);
+
+  // The Erase dialog is off the block, so its words are the page's ink and not the block's white.
+  await forgot.click();
+  const dialog = page.getByRole('dialog', { name: 'Erase this device and start over?' });
+  await expect(dialog).toBeVisible();
+  const [r, g, b] = await dialog
+    .getByRole('heading', { level: 2 })
+    .evaluate((h) => getComputedStyle(h).color.match(/\d+/g)!.slice(0, 3).map(Number));
+  expect(r! + g! + b!, "the dialog's title is dark on its light sheet").toBeLessThan(300);
+  await expect(dialog.getByLabel('Type DELETE to confirm')).toHaveClass(/text-right/);
 });
 
 test('a Settings list has no hairline under its last row, and a form keeps the line under its last field', async ({

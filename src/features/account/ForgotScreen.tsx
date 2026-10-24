@@ -51,7 +51,7 @@ export function ForgotForm({
       {!sent && (
         <form className="flex flex-col gap-5" onSubmit={submit} noValidate>
           <TextField
-            variant="line"
+            variant="row"
             label="Username or email"
             autoComplete="username"
             autoCapitalize="none"

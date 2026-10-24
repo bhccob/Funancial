@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { Blobs } from '@/components/ui/Blobs';
 import { Button } from '@/components/ui/Button';
+import { HeadBlock } from '@/components/ui/HeadBlock';
 import { StepMotion, type StepDirection } from '@/components/ui/StepMotion';
+import { TextButton } from '@/components/ui/TextButton';
 import { ForgotScreen } from '@/features/account/ForgotScreen';
 import { LoginScreen } from '@/features/account/LoginScreen';
 import { useAction } from '@/lib/useAction';
@@ -11,9 +12,10 @@ const VIEWS = ['home', 'login', 'forgot'] as const;
 type View = (typeof VIEWS)[number];
 
 /**
- * The first screen (design A): the name over soft drifting colour, and the three ways in at the
- * bottom, where a thumb reaches. Log in and Forgot password rise in over it. `onHold` is for Log in:
- * it asks the app to keep this screen up while the phone moves on to its account's data.
+ * The first screen (design A): the name on the theme's block with its glowing shapes, as Home and
+ * Profile stand on it, and the three ways in at the bottom, where a thumb reaches, on the light page
+ * with its still shapes. Log in and Forgot password rise in over it, on that page. `onHold` is for
+ * Log in: it asks the app to keep this screen up while the phone moves on to its account's data.
  */
 export function WelcomeScreen({ onHold }: { onHold?(held: boolean): void }) {
   const startDemo = useApp((s) => s.startDemo);
@@ -45,12 +47,22 @@ export function WelcomeScreen({ onHold }: { onHold?(held: boolean): void }) {
       default:
         return (
           <>
-            <div className="flex flex-1 flex-col gap-2 pt-[16dvh]">
-              <h1 className="text-[56px] leading-none font-extrabold tracking-[-0.045em] outline-none">
-                Fun<span className="text-accent-text">cial</span>
-              </h1>
-              <p className="text-lg font-bold">Level up your real financial life.</p>
-            </div>
+            {/*
+              The block runs out to the screen's edges (past this column, on a wide screen too) and up
+              behind the status bar, over the column's own top padding; the name stands in the middle
+              of what is left of the screen.
+            */}
+            <HeadBlock
+              compact
+              className="mx-[calc(50%-50vw)] -mt-[max(1.5rem,env(safe-area-inset-top))] flex flex-1 flex-col justify-center px-[22px] pb-12"
+            >
+              <div className="mx-auto flex w-full max-w-md flex-col gap-2">
+                <h1 className="text-[56px] leading-none font-extrabold tracking-[-0.045em] outline-none">
+                  Fun<span className="text-head-dim">cial</span>
+                </h1>
+                <p className="text-lg font-bold">Level up your real financial life.</p>
+              </div>
+            </HeadBlock>
             <div className="flex flex-col gap-3">
               <Button size="lg" disabled={busy} onClick={run(startFresh)}>
                 Create an account
@@ -58,9 +70,10 @@ export function WelcomeScreen({ onHold }: { onHold?(held: boolean): void }) {
               <Button size="lg" variant="secondary" disabled={busy} onClick={() => go('login')}>
                 I have an account
               </Button>
-              <Button variant="ghost" size="sm" disabled={busy} onClick={run(startDemo)}>
+              {/* 0.13's R4: the demo is a quiet word, not a pill, so the two buttons above stay the choice. */}
+              <TextButton disabled={busy} onClick={run(startDemo)}>
                 Try with demo money
-              </Button>
+              </TextButton>
             </div>
             <p className="text-muted px-2 text-center text-sm">
               Funcial helps you track and plan your money. It isn&apos;t financial advice.
@@ -71,8 +84,7 @@ export function WelcomeScreen({ onHold }: { onHold?(held: boolean): void }) {
   }
 
   return (
-    <main className="relative isolate flex min-h-dvh flex-col overflow-hidden">
-      <Blobs step={VIEWS.indexOf(view)} />
+    <main className="page-blobs relative flex min-h-dvh flex-col overflow-hidden">
       <div className="mx-auto flex w-full max-w-md flex-1 flex-col px-[22px] pt-[max(1.5rem,env(safe-area-inset-top))] pb-[max(1.5rem,env(safe-area-inset-bottom))]">
         <StepMotion
           stepKey={view}

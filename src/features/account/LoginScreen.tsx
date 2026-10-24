@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Switch } from '@/components/ui/Switch';
+import { TextButton } from '@/components/ui/TextButton';
 import { TextField } from '@/components/ui/TextField';
 import { validateSecret } from '@/data/keys';
 import { toast } from '@/lib/toast';
@@ -53,40 +54,44 @@ function NewPhonePin({ onDone }: { onDone(): void }) {
         focus
       />
       <form className="flex flex-col gap-5" onSubmit={submit} noValidate>
-        <TextField
-          variant="line"
-          label="Choose a PIN"
-          type="password"
-          inputMode="numeric"
-          autoComplete="new-password"
-          hint="4 to 8 digits"
-          value={pin}
-          error={errors.pin}
-          onChange={(e) => setPin(e.target.value)}
-        />
-        <TextField
-          variant="line"
-          label="Confirm PIN"
-          type="password"
-          inputMode="numeric"
-          autoComplete="new-password"
-          value={confirm}
-          error={errors.confirm}
-          onChange={(e) => setConfirm(e.target.value)}
-        />
-        {biometricAvailable && (
-          <Switch
-            label="Also unlock with fingerprint or face"
-            checked={alsoBiometric}
-            onChange={setAlsoBiometric}
+        <div>
+          <TextField
+            variant="row"
+            label="Choose a PIN"
+            type="password"
+            inputMode="numeric"
+            autoComplete="new-password"
+            hint="4 to 8 digits"
+            value={pin}
+            error={errors.pin}
+            onChange={(e) => setPin(e.target.value)}
           />
-        )}
+          <TextField
+            variant="row"
+            label="Confirm PIN"
+            type="password"
+            inputMode="numeric"
+            autoComplete="new-password"
+            value={confirm}
+            error={errors.confirm}
+            onChange={(e) => setConfirm(e.target.value)}
+          />
+          {biometricAvailable && (
+            <Switch
+              variant="row"
+              label="Also unlock with fingerprint or face"
+              checked={alsoBiometric}
+              onChange={setAlsoBiometric}
+            />
+          )}
+        </div>
         <Button type="submit" size="lg" disabled={busy}>
           {busy ? 'Setting up…' : 'Set PIN'}
         </Button>
-        <Button variant="ghost" disabled={busy} onClick={onDone}>
+        {/* 0.13's R4: the way out is a quiet word under the main button, not a second pill. */}
+        <TextButton className="-my-1" disabled={busy} onClick={onDone}>
           Skip the lock
-        </Button>
+        </TextButton>
       </form>
     </>
   );
@@ -192,20 +197,23 @@ export function LoginScreen({
         }}
         noValidate
       >
-        <TextField
-          variant="line"
-          label="Username"
-          autoComplete="username"
-          autoCapitalize="none"
-          spellCheck={false}
-          value={username}
-          onChange={(e) => setUsername(e.target.value)}
-        />
-        <PasswordField
-          autoComplete="current-password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-        />
+        <div>
+          <TextField
+            variant="row"
+            label="Username"
+            autoComplete="username"
+            autoCapitalize="none"
+            spellCheck={false}
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+          />
+          <PasswordField
+            variant="row"
+            autoComplete="current-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+        </div>
         {offline && (
           <p className="text-muted text-sm">
             You&apos;re offline. Connect to the internet to log in.
@@ -215,14 +223,9 @@ export function LoginScreen({
         <Button type="submit" size="lg" disabled={busy || !username || !password}>
           {busy ? 'Logging in…' : 'Log in'}
         </Button>
-        <button
-          type="button"
-          onClick={onForgot}
-          disabled={busy}
-          className="text-accent-text -my-1 inline-flex min-h-11 items-center justify-center font-bold underline underline-offset-4 disabled:pointer-events-none disabled:opacity-45"
-        >
+        <TextButton className="-my-1" onClick={onForgot} disabled={busy}>
           Forgot password?
-        </button>
+        </TextButton>
       </form>
     </>
   );

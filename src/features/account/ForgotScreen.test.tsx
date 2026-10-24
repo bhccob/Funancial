@@ -22,7 +22,20 @@ describe('ForgotScreen', () => {
   it('asks for a username or an email, and says what will happen', () => {
     show();
     expect(screen.getByRole('heading', { level: 1, name: 'Forgot password?' })).toBeInTheDocument();
-    expect(screen.getByLabelText('Username or email')).toHaveClass('border-b', 'font-extrabold');
+    // A row of the glass look: the label left, the value right, a hairline under it.
+    const field = screen.getByLabelText('Username or email');
+    expect(field).toHaveClass('text-right', 'h-11');
+    expect(field).not.toHaveClass('rounded-md', 'border-b', 'font-extrabold');
+    expect(field.closest('.border-b')).toHaveClass('border-black/7', 'dark:border-white/8');
+    // The same page as Log in: a round glass Back, a page title and a solid main button.
+    expect(screen.getByRole('button', { name: 'Back' })).toHaveClass('glass', 'rounded-full');
+    expect(screen.getByRole('heading', { level: 1, name: 'Forgot password?' })).toHaveClass(
+      'text-page',
+    );
+    expect(screen.getByRole('button', { name: 'Email me a link' })).toHaveClass(
+      'bg-primary',
+      'h-14',
+    );
     expect(screen.getByText(/We.ll email you a link/)).toBeInTheDocument();
     expect(screen.queryByRole('status')).toBeEmptyDOMElement();
   });

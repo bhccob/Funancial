@@ -168,6 +168,24 @@ export async function startFresh(page: Page, path = '/') {
 }
 
 /**
+ * First run → setup with defaults → Settings → a PIN → a reload: the lock screen, which is the page
+ * the next thing the phone shows. The PIN is set from Settings, as a person sets it later.
+ */
+export async function startLocked(page: Page, pin = '2468') {
+  await startFresh(page, '/settings');
+  // A plain click: the radio only becomes checked once the dialog saves the PIN.
+  await page.getByRole('radio', { name: 'PIN' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Set a PIN' });
+  await dialog.getByLabel('New PIN').fill(pin);
+  await dialog.getByLabel('Confirm PIN').fill(pin);
+  await dialog.getByRole('button', { name: 'Save' }).click();
+  await expect(dialog).toBeHidden();
+  await expect(page.getByRole('radio', { name: 'PIN' })).toBeChecked();
+  await page.reload();
+  await expect(page.getByRole('heading', { level: 1, name: 'Welcome back' })).toBeVisible();
+}
+
+/**
  * On a phone: Home from the tab bar, then Profile from the avatar there, which holds the menu the
  * tab bar has no room for. Returns the page, where its rows are.
  */

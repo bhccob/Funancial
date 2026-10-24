@@ -346,17 +346,48 @@ test('forgot password says the same line and asks the service once', async ({ pa
   await expect(page.getByRole('heading', { level: 1, name: 'Log in' })).toBeVisible();
 });
 
+test('the welcome screen stands its name on a block that runs out to the screen edges and up to the top', async ({
+  page,
+}) => {
+  await page.goto('/');
+  const block = page.locator('[data-head-block]');
+  await expect(block).toBeVisible();
+  await expect(block.getByRole('heading', { level: 1, name: 'Funcial' })).toBeVisible();
+  // Settled: the screen rises in over 0.62s from 70px below, and the box is measured where it ends.
+  await expect
+    .poll(async () => {
+      const at = await block.boundingBox();
+      return at && { x: Math.round(at.x), y: Math.round(at.y) };
+    })
+    .toEqual({ x: 0, y: 0 });
+  const box = (await block.boundingBox())!;
+  expect(Math.round(box.width), 'the block is as wide as the screen').toBe(
+    page.viewportSize()!.width,
+  );
+  // The choices are under it, on the page, and no screen is wider than itself.
+  const create = page.getByRole('button', { name: 'Create an account' });
+  expect((await create.boundingBox())!.y).toBeGreaterThan(box.y + box.height);
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+    ),
+    'no sideways scroll',
+  ).toBe(true);
+});
+
 test.describe('the welcome screen and setup move', () => {
-  test('rise in from below, line by line, over drifting colour', async ({ page }) => {
+  test('rise in from below, line by line, over the page with its still shapes', async ({
+    page,
+  }) => {
     await page.emulateMedia({ reducedMotion: 'no-preference' });
     await page.goto('/');
     const layer = page.locator('[data-motion="current"]');
     await expect(layer).toHaveCSS('animation-name', 'step-in-up');
     await expect(layer).toHaveCSS('animation-duration', '0.62s');
     await expect(layer.locator('> :nth-child(2)')).toHaveCSS('animation-delay', '0.08s');
-    await expect(page.locator('[data-blob]').first()).toHaveCSS('animation-name', 'blob-drift');
-    // Composited once, so a blurred shape is not repainted as it drifts.
-    await expect(page.locator('[data-blob]').first()).toHaveCSS('will-change', 'transform');
+    // The shapes behind the page stand still (0.14 took the drifting colours off the welcome screen too).
+    await expect(page.locator('main')).toHaveClass(/page-blobs/);
+    await expect(page.locator('[data-blob]')).toHaveCount(0);
 
     await page.getByRole('button', { name: 'Create an account' }).click();
     await expect(page.locator('[data-motion="current"]')).toHaveCSS('animation-name', 'step-in-up');
@@ -369,8 +400,6 @@ test.describe('the welcome screen and setup move', () => {
     const layer = page.locator('[data-motion="current"]');
     await expect(layer).toHaveCSS('animation-name', 'fade-in');
     await expect(layer.locator('> :nth-child(2)')).toHaveCSS('animation-name', 'none');
-    await expect(page.locator('[data-blob]').first()).toHaveCSS('animation-name', 'none');
-    await expect(page.locator('[data-blob]').first()).toHaveCSS('will-change', 'auto');
 
     await page.getByRole('button', { name: 'Create an account' }).click();
     await expect(page.locator('[data-motion="current"]')).toHaveCSS('animation-name', 'fade-in');

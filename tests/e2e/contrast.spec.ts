@@ -1,7 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import { readFileSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
-import { startDemo, startFresh } from './helpers';
+import { startDemo, startFresh, startLocked } from './helpers';
 
 /**
  * Text contrast on every screen, in three game themes (Black & White, Sunny Sky and Midnight Navy:
@@ -280,15 +280,27 @@ async function settle(page: Page) {
  * wears no game theme (the app takes it off while locked), passes none. `settled: false` scans
  * without waiting for the page to hold still, for a state that goes away by itself within seconds
  * (the "just now" badge); the caller then holds that state still, and for as long as the scan takes.
+ * `overGradient` is for a screen whose text is all over the theme's block (the lock, and the Erase
+ * dialog over it): over a gradient axe judges nothing, so it reports each node as "incomplete" and
+ * none as a pass. The scan then proves it saw the text (nodes it could not judge) and fails on any
+ * violation; the ink on the block and the sheet is held by tests/unit/tokens.test.ts, and the colours
+ * the lock's text is drawn in by tests/e2e/security.spec.ts.
  */
-async function expectReadable(page: Page, where: string, look: Look | null, settled = true) {
+async function expectReadable(
+  page: Page,
+  where: string,
+  look: Look | null,
+  settled = true,
+  overGradient = false,
+) {
   if (look) await expectWorn(page, look);
   if (settled) await settle(page);
-  const { violations, passes } = await new AxeBuilder({ page })
+  const { violations, passes, incomplete } = await new AxeBuilder({ page })
     .withRules(['color-contrast'])
     .analyze();
   // A page that never drew would pass by having nothing to check.
-  expect(passes[0]?.nodes.length ?? 0, `${where}: text that was checked`).toBeGreaterThan(0);
+  const seen = (overGradient ? incomplete : passes)[0]?.nodes.length ?? 0;
+  expect(seen, `${where}: text that was checked`).toBeGreaterThan(0);
   const report = violations.flatMap((v) =>
     v.nodes.map((node) => {
       const data = node.any[0]?.data as
@@ -333,6 +345,32 @@ for (const theme of GAME_THEMES) {
           await expect(page.getByRole('button', { name: 'Try with demo money' })).toBeVisible();
           await expect(page.locator('html')).toHaveAttribute('data-theme', mode);
           await expectReadable(page, 'welcome', null);
+        });
+
+        // The two screens that rise in over the welcome screen, on the light page.
+        test('log in and forgot password', async ({ page }) => {
+          await page.goto('/');
+          await page.getByRole('button', { name: 'I have an account' }).click();
+          await expect(page.getByRole('heading', { level: 1, name: 'Log in' })).toBeVisible();
+          await expectReadable(page, 'log in', null);
+          await page.getByRole('button', { name: 'Forgot password?' }).click();
+          await expect(
+            page.getByRole('heading', { level: 1, name: 'Forgot password?' }),
+          ).toBeVisible();
+          await expectReadable(page, 'forgot password', null);
+        });
+
+        // The lock stands on the theme's block (Black & White while locked: the app wears no game
+        // theme until it is open). Its pad and words, and the Erase dialog's sheet over it, are over a
+        // gradient, which axe reports as "incomplete" (see expectReadable).
+        test('the lock screen, and its Erase dialog', async ({ page }) => {
+          await startLocked(page);
+          await expect(page.locator('html')).toHaveAttribute('data-theme', mode);
+          await expectReadable(page, 'the lock screen', null, true, true);
+          await page.getByRole('button', { name: 'Forgot your PIN?' }).click();
+          const dialog = page.getByRole('dialog', { name: 'Erase this device and start over?' });
+          await expect(dialog.getByLabel('Type DELETE to confirm')).toBeVisible();
+          await expectReadable(page, 'the Erase dialog on the lock screen', null, true, true);
         });
       }
 

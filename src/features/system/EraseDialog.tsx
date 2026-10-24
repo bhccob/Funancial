@@ -35,7 +35,7 @@ export function EraseDialog({
       {open && (
         <div className="flex flex-col gap-5">
           <TextField
-            variant="line"
+            variant="row"
             label="Type DELETE to confirm"
             autoComplete="off"
             autoCapitalize="characters"

@@ -37,6 +37,13 @@ async function fillIn(password = PASSWORD, username = 'Robin') {
   await userEvent.type(screen.getByLabelText('Username'), username);
   await userEvent.type(screen.getByLabelText('Password'), password);
 }
+/** A field in the glass look's `row`: the label left, the value right, a hairline under it. */
+function isRow(label: string) {
+  const field = screen.getByLabelText(label);
+  expect(field, label).toHaveClass('text-right', 'h-11');
+  expect(field, label).not.toHaveClass('rounded-md', 'border-b', 'font-extrabold');
+  expect(field.closest('.border-b'), label).toHaveClass('border-black/7', 'dark:border-white/8');
+}
 const logIn = async () => {
   await fillIn();
   await userEvent.click(screen.getByRole('button', { name: 'Log in' }));
@@ -47,13 +54,25 @@ describe('LoginScreen', () => {
     const { onBack, onForgot } = show();
     expect(screen.getByText('Welcome back')).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 1, name: 'Log in' })).toBeInTheDocument();
-    for (const label of ['Username', 'Password']) {
-      expect(screen.getByLabelText(label)).toHaveClass('border-b', 'font-extrabold');
-    }
+    for (const label of ['Username', 'Password']) isRow(label);
     await userEvent.click(screen.getByRole('button', { name: 'Forgot password?' }));
     expect(onForgot).toHaveBeenCalledTimes(1);
     await userEvent.click(screen.getByRole('button', { name: 'Back' }));
     expect(onBack).toHaveBeenCalledTimes(1);
+  });
+
+  it('has a round glass Back, a page title, row fields and a solid Log in', () => {
+    show();
+    expect(screen.getByRole('button', { name: 'Back' })).toHaveClass('glass', 'rounded-full');
+    expect(screen.getByRole('heading', { level: 1, name: 'Log in' })).toHaveClass('text-page');
+    expect(screen.getByRole('button', { name: 'Log in' })).toHaveClass('bg-primary', 'h-14');
+    // Forgot password? is the quiet text button, in the accent.
+    expect(screen.getByRole('button', { name: 'Forgot password?' })).toHaveClass(
+      'text-accent-text',
+      'underline',
+      'min-h-11',
+    );
+    expect(screen.getByRole('button', { name: 'Show password' })).toHaveClass('underline');
   });
 
   it('keeps the button off until both are typed, and can show the password', async () => {
@@ -184,6 +203,24 @@ describe('LoginScreen', () => {
       await vi.waitFor(() => expect(onHold).toHaveBeenLastCalledWith(false));
       expect(store.getState().setSecret).toHaveBeenCalledWith('2468', 'pin');
       expect(store.getState().enableBiometric).not.toHaveBeenCalled();
+    });
+
+    it('draws the PIN step in the glass look: row fields, a solid Set PIN and a quiet Skip the lock', async () => {
+      await loggedIn(fakeAccount(), createStubStore({ phase: 'welcome', biometric: 'off' }));
+      isRow('Choose a PIN');
+      isRow('Confirm PIN');
+      expect(screen.getByRole('heading', { level: 1, name: 'Lock this phone' })).toHaveClass(
+        'text-page',
+      );
+      // The switch is a row of the same list, not a loose line.
+      expect(
+        screen.getByRole('switch', { name: 'Also unlock with fingerprint or face' }).parentElement,
+      ).toHaveClass('min-h-[54px]');
+      expect(screen.getByRole('button', { name: 'Set PIN' })).toHaveClass('bg-primary', 'h-14');
+      // 0.13's R4: Skip the lock was a glass pill, and is now the quiet text button.
+      const skip = screen.getByRole('button', { name: 'Skip the lock' });
+      expect(skip).toHaveClass('text-accent-text', 'underline', 'min-h-11');
+      expect(skip).not.toHaveClass('glass', 'rounded-full', 'h-11');
     });
 
     it('refuses a PIN that is too short, or that does not match', async () => {

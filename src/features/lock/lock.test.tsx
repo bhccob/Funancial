@@ -297,3 +297,158 @@ describe('LockScreen after a throttle', () => {
     expect(screen.queryByText(/Too many tries/)).not.toBeInTheDocument();
   });
 });
+
+describe('LockScreen in the glass look', () => {
+  /** The theme's block the lock stands on. */
+  const blockOf = () =>
+    screen
+      .getByRole('heading', { level: 1, name: 'Welcome back' })
+      .closest<HTMLElement>('[data-head-block]');
+
+  it('stands the PIN pad, fingerprint and Forgot on the theme block, with its glow shapes', () => {
+    renderWithStore(
+      <LockScreen />,
+      createStubStore({ phase: 'locked', lockMode: 'pin', biometric: 'on' }),
+    );
+    const head = blockOf();
+    expect(head).toHaveClass('bg-head', 'rounded-b-hero');
+    for (const part of [
+      screen.getByLabelText('PIN'),
+      screen.getByRole('button', { name: '5' }),
+      screen.getByRole('button', { name: 'Unlock' }),
+      screen.getByRole('button', { name: 'Use fingerprint or face' }),
+      screen.getByRole('button', { name: 'Forgot your PIN?' }),
+    ]) {
+      expect(head).toContainElement(part);
+    }
+    // The block runs out to the screen's edges and down the screen, as the lock fills it.
+    expect(head).toHaveClass('mx-0', 'flex-1');
+  });
+
+  it('draws the keys 44px or more tall in the block glass, and the unlock key as the main button', () => {
+    renderWithStore(<LockScreen />, createStubStore({ phase: 'locked', lockMode: 'pin' }));
+    const keys = [...'0123456789'].map((d) => screen.getByRole('button', { name: d }));
+    keys.push(screen.getByRole('button', { name: 'Delete' }));
+    expect(keys).toHaveLength(11);
+    for (const key of keys) {
+      expect(key, key.textContent || 'Delete').toHaveClass(
+        'glass-head',
+        'h-14',
+        'rounded-key',
+        'press',
+      );
+      expect(key).not.toHaveClass('glass', 'bg-primary');
+    }
+    expect(screen.getByRole('button', { name: 'Unlock' })).toHaveClass(
+      'btn-head',
+      'h-14',
+      'rounded-key',
+    );
+    expect(screen.getByRole('button', { name: 'Unlock' })).not.toHaveClass('bg-primary');
+  });
+
+  it('draws the PIN in its own field on the block, in the ink the block reads, not the page surface', () => {
+    renderWithStore(<LockScreen />, createStubStore({ phase: 'locked', lockMode: 'pin' }));
+    const field = screen.getByLabelText('PIN');
+    expect(field).toHaveClass('h-14', 'rounded-full', 'text-text');
+    expect(field).not.toHaveClass('bg-surface', 'border-border-strong', 'rounded-md');
+  });
+
+  it('puts no glass inside glass', () => {
+    renderWithStore(
+      <LockScreen />,
+      createStubStore({ phase: 'locked', lockMode: 'pin', biometric: 'on' }),
+    );
+    const glass = [...document.querySelectorAll<HTMLElement>('.glass, .glass-head, .glass-strong')];
+    expect(glass.length).toBeGreaterThanOrEqual(12);
+    for (const piece of glass) {
+      const outer = piece.parentElement?.closest('.glass, .glass-head, .glass-strong');
+      expect(outer, piece.outerHTML).toBeNull();
+    }
+  });
+
+  it('is a glass pill for fingerprint or face, and a quiet text button for Forgot your PIN?', () => {
+    renderWithStore(
+      <LockScreen />,
+      createStubStore({ phase: 'locked', lockMode: 'pin', biometric: 'on' }),
+    );
+    expect(screen.getByRole('button', { name: 'Use fingerprint or face' })).toHaveClass(
+      'glass-head',
+      'h-12',
+      'rounded-full',
+    );
+    // 0.13's R4: a text button, in the ink of the block; a glass pill under the pad would be glass on glass.
+    const forgot = screen.getByRole('button', { name: 'Forgot your PIN?' });
+    expect(forgot).toHaveClass('text-text', 'underline', 'min-h-11');
+    expect(forgot).not.toHaveClass('glass', 'glass-head', 'rounded-full', 'h-11');
+  });
+
+  it("says a wrong PIN in the block's ink with a mark, as the danger red would not hold on a dark block", async () => {
+    const store = createStubStore({
+      phase: 'locked',
+      lockMode: 'pin',
+      unlock: vi.fn(async () => 'wrong' as const),
+    });
+    renderWithStore(<LockScreen />, store);
+    await userEvent.type(screen.getByLabelText('PIN'), '1357{Enter}');
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent("That didn't match. Try again.");
+    expect(alert).toHaveClass('font-bold');
+    expect(alert).not.toHaveClass('text-danger');
+    expect(alert.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
+    expect(blockOf()).toContainElement(alert);
+  });
+
+  it('keeps the throttle message and the checking line on the block, in its ink', () => {
+    renderWithStore(
+      <LockScreen />,
+      createStubStore({
+        phase: 'locked',
+        lockMode: 'pin',
+        checking: true,
+        lockedUntil: Date.now() + 30_000,
+      }),
+    );
+    expect(screen.getByRole('alert')).not.toHaveClass('text-danger');
+    expect(screen.getByText('Checking…')).not.toHaveClass('text-muted');
+    expect(blockOf()).toContainElement(screen.getByText('Checking…'));
+  });
+
+  it('gives a changed fingerprint note the page ink, as it is a pale card on the block', async () => {
+    const store = createStubStore({ phase: 'locked', lockMode: 'pin', biometric: 'on' });
+    store.setState({
+      unlockWithBiometric: vi.fn(async () => {
+        store.setState({ biometric: 'off' });
+        return 'changed' as const;
+      }),
+    });
+    renderWithStore(<LockScreen />, store);
+    const note = await screen.findByRole('status');
+    expect(note).toHaveTextContent('Your fingerprints or face changed');
+    expect(note).toHaveClass('page-ink', 'text-text');
+    expect(blockOf()).toContainElement(note);
+  });
+
+  it('opens the Erase dialog off the block, so its words keep the page ink, with a row field', async () => {
+    renderWithStore(<LockScreen />, createStubStore({ phase: 'locked', lockMode: 'pin' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Forgot your PIN?' }));
+    const dialog = screen.getByRole('dialog', { name: 'Erase this device and start over?' });
+    expect(dialog.closest('[data-head-block]')).toBeNull();
+    const field = within(dialog).getByLabelText('Type DELETE to confirm');
+    expect(field).toHaveClass('text-right', 'h-11');
+    expect(field).not.toHaveClass('border-b', 'font-extrabold', 'rounded-md');
+    expect(field.closest('.border-b')).toHaveClass('border-black/7', 'dark:border-white/8');
+  });
+
+  it('draws the passphrase form on the block too: its own field and the main button', () => {
+    renderWithStore(<LockScreen />, createStubStore({ phase: 'locked', lockMode: 'passphrase' }));
+    const field = screen.getByLabelText('Passphrase');
+    expect(blockOf()).toContainElement(field);
+    expect(field).toHaveClass('h-14', 'rounded-full', 'text-text');
+    expect(field).not.toHaveClass('bg-surface', 'border-border-strong');
+    expect(screen.getByRole('button', { name: 'Unlock' })).toHaveClass('btn-head', 'h-14');
+    expect(screen.getByRole('button', { name: 'Forgot your passphrase?' })).toHaveClass(
+      'underline',
+    );
+  });
+});

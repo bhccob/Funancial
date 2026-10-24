@@ -46,16 +46,55 @@ it('offers three choices, and the old first step of setup is gone', () => {
 
 it('puts the choices where a thumb reaches, 44px or more tall, with the demo the quietest', () => {
   show();
-  expect(choice('Create an account')).toHaveClass('h-14');
-  expect(choice('I have an account')).toHaveClass('h-14');
-  expect(choice('Try with demo money')).toHaveClass('h-11');
-  expect(choice('Try with demo money')).not.toHaveClass('bg-primary', 'border');
+  expect(choice('Create an account')).toHaveClass('h-14', 'bg-primary');
+  expect(choice('I have an account')).toHaveClass('h-14', 'glass');
+  // 0.13's R4: the demo is the quiet text button, not a glass pill.
+  expect(choice('Try with demo money')).toHaveClass('min-h-11', 'underline');
+  expect(choice('Try with demo money')).not.toHaveClass(
+    'glass',
+    'bg-primary',
+    'border',
+    'rounded-full',
+    'h-11',
+  );
 });
 
-it('has colour shapes behind it, which are decoration', () => {
+it('stands the name on the theme block, and the choices on the page', () => {
+  show();
+  const name = screen.getByRole('heading', { level: 1, name: 'Funcial' });
+  const block = name.closest<HTMLElement>('[data-head-block]');
+  expect(block).toHaveClass('bg-head', 'rounded-b-hero');
+  expect(block).toContainElement(screen.getByText('Level up your real financial life.'));
+  // The actions and the line under them are on the page, where a thumb reaches, not on the block.
+  for (const choiceName of ['Create an account', 'I have an account', 'Try with demo money']) {
+    expect(block, choiceName).not.toContainElement(choice(choiceName));
+  }
+  expect(block).not.toContainElement(
+    screen.getByText("Funcial helps you track and plan your money. It isn't financial advice."),
+  );
+  // The block runs out to the screen's edges, not just the column the choices stand in.
+  expect(block).toHaveClass('mx-[calc(50%-50vw)]');
+});
+
+it('stands on the page with its still shapes, not the moving colours', () => {
   const { container } = renderWithStore(<WelcomeScreen />, createStubStore({ phase: 'welcome' }));
-  expect(container.querySelectorAll('[data-blob]').length).toBeGreaterThanOrEqual(2);
-  expect(container.querySelector('[data-blob]')?.closest('[aria-hidden="true"]')).not.toBeNull();
+  expect(container.querySelector('main')).toHaveClass('page-blobs');
+  expect(container.querySelector('[data-blob]')).toBeNull();
+});
+
+it('keeps Log in and Forgot password on the light page, off the block', async () => {
+  show();
+  await userEvent.click(choice('I have an account'));
+  const login = screen.getByRole('heading', { level: 1, name: 'Log in' });
+  expect(login.closest('[data-head-block]')).toBeNull();
+  expect(login).toHaveClass('text-page');
+  expect(screen.getByRole('button', { name: 'Back' })).toHaveClass('glass', 'rounded-full');
+  expect(screen.getByRole('button', { name: 'Log in' })).toHaveClass('bg-primary');
+  await userEvent.click(screen.getByRole('button', { name: 'Forgot password?' }));
+  const forgot = screen.getByRole('heading', { level: 1, name: 'Forgot password?' });
+  expect(forgot.closest('[data-head-block]')).toBeNull();
+  expect(forgot).toHaveClass('text-page');
+  expect(screen.getByLabelText('Username or email')).toHaveClass('text-right', 'h-11');
 });
 
 it('brings the choices in with the same rise as setup', () => {

@@ -781,11 +781,6 @@ describe('Settings in glass', () => {
     expect(el, label).not.toHaveClass('border-b', 'font-extrabold', 'rounded-md');
     expect(el.closest('.border-b'), label).toHaveClass('border-black/7', 'dark:border-white/8');
   };
-  /** The line field the erase dialog keeps. */
-  const isLine = (el: HTMLElement, label: string) => {
-    expect(el, label).toHaveClass('border-b', 'font-extrabold');
-    expect(el, label).not.toHaveClass('rounded-md');
-  };
   /** One choice of a group: a glass pill, solid when it is the choice. */
   const isPill = (name: string, on: boolean) => {
     const pill = screen.getByText(name);
@@ -861,7 +856,7 @@ describe('Settings in glass', () => {
     isRow(screen.getByLabelText('At'), 'At');
   });
 
-  it('has row fields in the PIN dialog, and the erase dialog keeps its line field', async () => {
+  it('has row fields in the PIN dialog and in the erase dialog', async () => {
     renderWithStore(<SettingsScreen />, createStubStore({ lockMode: 'pin', data: snapshotWith() }));
 
     await userEvent.click(screen.getByRole('button', { name: 'Change PIN' }));
@@ -871,10 +866,10 @@ describe('Settings in glass', () => {
     }
     await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
 
-    // Shared with the lock screen, which keeps the line look until it is rebuilt.
+    // Shared with the lock screen: both draw its confirmation as a row (0.13's R9).
     await userEvent.click(screen.getByRole('button', { name: 'Delete all data' }));
     dialog = screen.getByRole('dialog', { name: 'Delete all data?' });
-    isLine(within(dialog).getByLabelText('Type DELETE to confirm'), 'Type DELETE to confirm');
+    isRow(within(dialog).getByLabelText('Type DELETE to confirm'), 'Type DELETE to confirm');
   });
 
   it('has a row select in the currency picker', async () => {
