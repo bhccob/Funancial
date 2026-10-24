@@ -230,10 +230,12 @@ describe('Goals', () => {
     ];
     renderGoals(data);
     const dialog = await openAddMoney();
-    // The sentence stands where the To picker would: no "To: Main account" beside it.
-    expect(
-      within(dialog).getByText('Add another account on the Cards tab to move money between them.'),
-    ).toBeInTheDocument();
+    // The sentence stands where the To picker would: no "To: Main account" beside it. Under the
+    // From row, it keeps a row's distance from its hairline.
+    const hint = within(dialog).getByText(
+      'Add another account on the Cards tab to move money between them.',
+    );
+    expect(hint).toHaveClass('pt-3');
     expect(within(dialog).queryByLabelText('To')).not.toBeInTheDocument();
     expect(within(dialog).getByLabelText('From')).toHaveValue(MAIN);
     const add = within(dialog).getByRole('button', { name: 'Add' });

@@ -642,7 +642,8 @@ describe('Home Move money', () => {
 
   it('Move money with one account explains why, in place of the To picker, and Move stays off', async () => {
     const { store, dialog } = await openMoveMoney(onlyMain());
-    expect(within(dialog).getByText(NOWHERE)).toBeInTheDocument();
+    // Among line fields, which keep their own gap: no row's padding.
+    expect(within(dialog).getByText(NOWHERE)).not.toHaveClass('pt-3');
     // The sentence stands where the picker would: no "To: Main account" beside it.
     expect(within(dialog).queryByLabelText('To')).not.toBeInTheDocument();
     expect(within(dialog).getByLabelText('From')).toHaveValue('acct-main');
@@ -872,7 +873,16 @@ describe('Home first steps', () => {
     expect(screen.queryByRole('button', { name: 'Not now' })).not.toBeInTheDocument();
     view.unmount();
 
-    // Each kind of entry on its own takes the balance card, and only that one.
+    // The 0.13 upgrader with no subscriptions: what they logged says they are using the app, so
+    // neither card comes to them either.
+    const noSubscriptions = afterSetup();
+    noSubscriptions.tables.expense = [makeExpense({ date: TODAY })];
+    const upgraded = renderHome(noSubscriptions);
+    expect(balanceCard()).not.toBeInTheDocument();
+    expect(subscriptionsCard()).not.toBeInTheDocument();
+    upgraded.unmount();
+
+    // Each kind of entry on its own takes both cards.
     const logged: Array<[string, (data: DataSnapshot) => void]> = [
       ['an expense', (d) => void (d.tables.expense = [makeExpense({ date: TODAY })])],
       ['an income', (d) => void (d.tables.income = [makeIncome({ date: TODAY })])],
@@ -889,9 +899,16 @@ describe('Home first steps', () => {
       log(data);
       const entry = renderHome(data);
       expect(balanceCard(), what).not.toBeInTheDocument();
-      expect(subscriptionsCard(), what).toBeInTheDocument();
+      expect(subscriptionsCard(), what).not.toBeInTheDocument();
       entry.unmount();
     }
+  });
+
+  it('an income that is only expected, or did not arrive, does not hide the subscriptions card', () => {
+    const skipped = afterSetup();
+    skipped.tables.income = [makeIncome({ date: TODAY, status: 'skipped' })];
+    renderHome(skipped);
+    expect(subscriptionsCard()).toBeInTheDocument();
   });
 
   it('an income that is only expected, or did not arrive, does not hide the balance card', () => {

@@ -1,5 +1,6 @@
 /* eslint-disable react-refresh/only-export-components -- the check sits with the field it decides */
 import type { RowVariant } from '@/components/ui/rowField';
+import { cn } from '@/lib/cn';
 import { AccountField, NOT_CREDIT, useAccountOptions } from './AccountField';
 
 /**
@@ -35,7 +36,14 @@ export function MoveToField({
   variant?: RowVariant;
 }) {
   const nowhere = useNowhereToMove();
-  if (nowhere) return <p className="text-muted text-[14px] font-semibold">{NO_OTHER_ACCOUNT}</p>;
+  if (nowhere) {
+    return (
+      // Under a row (the From above it), it keeps a row's distance from that row's hairline.
+      <p className={cn('text-muted text-[14px] font-semibold', variant === 'row' && 'pt-3')}>
+        {NO_OTHER_ACCOUNT}
+      </p>
+    );
+  }
   return (
     <AccountField
       variant={variant}

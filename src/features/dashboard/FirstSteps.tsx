@@ -44,11 +44,13 @@ function FirstStepCard({
 /**
  * The two first-time cards on Home, for real data only (the demo has its own). Setup asks for no
  * money, so Home asks once, softly:
- * - "What's in your Main account?" while Main account is in use, still opened at 0, and nothing has
- *   been logged on any account (no expense, no transaction, no income that arrived: a salary that is
- *   only expected has not changed the balance), so someone already using the app (an upgrade from
- *   0.13) never gets it. It goes when the balance is set, or answered (Not now, or a balance of 0).
+ * - "What's in your Main account?" while Main account is in use and still opened at 0. It goes when
+ *   the balance is set, or answered (Not now, or a balance of 0).
  * - "Got subscriptions?" once set up, while there are none. It goes when one is added, or at Not now.
+ *
+ * Both only while nothing has been logged on any account (no expense, no transaction, no income that
+ * arrived: a salary that is only expected has not changed the balance), so someone already using the
+ * app (an upgrade from 0.13, with or without subscriptions) never gets them.
  *
  * What was answered is kept on this phone (`answers`), not in the data, as the account reminder is,
  * and Delete all data forgets it. `onSetBalance` and `onAddSubscription` open the sheet and the form,
@@ -67,18 +69,20 @@ export function FirstSteps({
   after: RefObject<HTMLElement | null>;
 }) {
   const real = useApp((s) => s.namespace === 'real');
-  const mainAtZero = useApp((s) => {
-    const { account, expense, income, transaction } = s.data.tables;
-    const main = account.find((a) => a.id === MAIN_ACCOUNT_ID);
+  // Nothing logged on any account yet: no expense, no transaction, no income that arrived (only an
+  // income that arrived is in a balance: one expected, or marked as not arrived, is not). Someone
+  // who has logged something is already using the app, as a 0.13 upgrader is, and gets neither card.
+  const nothingLogged = useApp((s) => {
+    const { expense, income, transaction } = s.data.tables;
     return (
-      main !== undefined &&
-      !archivedBy(main, s.today) &&
-      main.openingBalance === 0 &&
       expense.length === 0 &&
       transaction.length === 0 &&
-      // Only an income that arrived is in the balance: one expected, or marked as not arrived, is not.
       income.every((i) => i.status !== 'confirmed')
     );
+  });
+  const mainAtZero = useApp((s) => {
+    const main = s.data.tables.account.find((a) => a.id === MAIN_ACCOUNT_ID);
+    return main !== undefined && !archivedBy(main, s.today) && main.openingBalance === 0;
   });
   // After setup (a profile), as the card says; Home before setup is not a screen anyone sees.
   const noSubscriptions = useApp(
@@ -88,8 +92,9 @@ export function FirstSteps({
   const subscriptionsAction = useRef<HTMLButtonElement>(null);
   if (!real) return null;
 
-  const showBalance = mainAtZero && !answers.has(FIRST_BALANCE_KEY);
-  const showSubscriptions = noSubscriptions && !answers.has(FIRST_SUBSCRIPTIONS_KEY);
+  const showBalance = nothingLogged && mainAtZero && !answers.has(FIRST_BALANCE_KEY);
+  const showSubscriptions =
+    nothingLogged && noSubscriptions && !answers.has(FIRST_SUBSCRIPTIONS_KEY);
   return (
     <>
       {showBalance && (
